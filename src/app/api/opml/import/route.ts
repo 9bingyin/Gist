@@ -97,6 +97,19 @@ async function processImport(taskId: string, items: OpmlItem[]) {
   });
 
   for (let i = 0; i < items.length; i++) {
+    // Check if task was cancelled
+    if (taskQueue.isCancelled(taskId)) {
+      taskQueue.update(taskId, {
+        progress: {
+          current: i,
+          total: items.length,
+          message: "Import cancelled",
+        },
+        result: { imported, skipped, failed },
+      });
+      return;
+    }
+
     const item = items[i];
 
     taskQueue.update(taskId, {
@@ -189,6 +202,11 @@ async function processImport(taskId: string, items: OpmlItem[]) {
       console.error(`Failed to import ${item.xmlUrl}:`, err);
       failed++;
     }
+
+    // Update result after each item so cancel can show correct counts
+    taskQueue.update(taskId, {
+      result: { imported, skipped, failed },
+    });
   }
 
   taskQueue.update(taskId, {

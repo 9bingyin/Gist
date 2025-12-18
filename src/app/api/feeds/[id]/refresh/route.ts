@@ -17,38 +17,86 @@ export async function POST(
   try {
     const parsed = await parseFeed(feed.url);
 
-    // Update feed icon if missing
+    // Update feed info
+    const updateData: { imageUrl?: string; title?: string; siteUrl?: string } = {};
+
     if (!feed.imageUrl && parsed.link) {
       const favicon = await getFavicon(parsed.link);
       if (favicon) {
-        await prisma.feed.update({
-          where: { id },
-          data: { imageUrl: favicon },
-        });
+        updateData.imageUrl = favicon;
       }
     }
 
-    for (const item of parsed.items) {
-      await prisma.article.upsert({
-        where: { link: item.link },
-        update: {},
-        create: {
-          title: item.title,
-          link: item.link,
-          content: item.content,
-          summary: item.summary,
-          imageUrl: item.imageUrl,
-          pubDate: item.pubDate,
-          feedId: id,
-        },
+    // Update title if it was a placeholder
+    if (feed.title === feed.url || feed.title.includes("not yet whitelisted")) {
+      updateData.title = parsed.title;
+    }
+
+    // Update site URL if missing
+    if (!feed.siteUrl && parsed.link) {
+      updateData.siteUrl = parsed.link;
+    }
+
+    if (Object.keys(updateData).length > 0) {
+      await prisma.feed.update({
+        where: { id },
+        data: updateData,
       });
     }
 
-    return NextResponse.json({ success: true });
+    let newCount = 0;
+    let updatedCount = 0;
+
+    for (const item of parsed.items) {
+      if (!item.link) continue;
+
+      const existing = await prisma.article.findUnique({
+        where: { link: item.link },
+      });
+
+      if (existing) {
+        // Update existing article if content changed
+        if (item.content && item.content !== existing.content) {
+          await prisma.article.update({
+            where: { link: item.link },
+            data: {
+              title: item.title,
+              content: item.content,
+              summary: item.summary,
+              imageUrl: item.imageUrl,
+            },
+          });
+          updatedCount++;
+        }
+      } else {
+        // Create new article
+        await prisma.article.create({
+          data: {
+            title: item.title,
+            link: item.link,
+            content: item.content,
+            summary: item.summary,
+            imageUrl: item.imageUrl,
+            pubDate: item.pubDate,
+            feedId: id,
+          },
+        });
+        newCount++;
+      }
+    }
+
+    console.log(`Refreshed feed ${feed.title}: ${newCount} new, ${updatedCount} updated`);
+
+    return NextResponse.json({
+      success: true,
+      new: newCount,
+      updated: updatedCount,
+      total: parsed.items.length,
+    });
   } catch (error) {
-    console.error("Failed to refresh feed:", error);
+    console.error(`Failed to refresh feed ${feed.title}:`, error);
     return NextResponse.json(
-      { error: "Failed to refresh feed" },
+      { error: error instanceof Error ? error.message : "Failed to refresh feed" },
       { status: 500 }
     );
   }

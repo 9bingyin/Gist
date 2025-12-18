@@ -1,11 +1,5 @@
 import Parser from "rss-parser";
-
-const parser = new Parser({
-  timeout: 10000,
-  headers: {
-    "User-Agent": "RSS Reader/1.0",
-  },
-});
+import { getUserAgent } from "@/lib/settings";
 
 export interface ParsedFeed {
   title: string;
@@ -49,6 +43,14 @@ type RssItem = {
 };
 
 export async function parseFeed(url: string): Promise<ParsedFeed> {
+  const userAgent = await getUserAgent();
+  const parser = new Parser({
+    timeout: 10000,
+    headers: {
+      "User-Agent": userAgent,
+    },
+  });
+
   const feed = await parser.parseURL(url);
 
   const items: ParsedArticle[] = (feed.items || []).map((item) => {

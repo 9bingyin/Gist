@@ -2,6 +2,8 @@
  * Fetch favicon for a website
  */
 
+import { getUserAgent } from "@/lib/settings";
+
 const FAVICON_TIMEOUT = 5000;
 
 /**
@@ -19,7 +21,7 @@ function getDomain(url: string): string {
 /**
  * Try to fetch favicon from website HTML
  */
-async function fetchFaviconFromHtml(siteUrl: string): Promise<string | null> {
+async function fetchFaviconFromHtml(siteUrl: string, userAgent: string): Promise<string | null> {
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), FAVICON_TIMEOUT);
@@ -27,7 +29,7 @@ async function fetchFaviconFromHtml(siteUrl: string): Promise<string | null> {
     const response = await fetch(siteUrl, {
       signal: controller.signal,
       headers: {
-        "User-Agent": "RSS Reader/1.0",
+        "User-Agent": userAgent,
       },
     });
     clearTimeout(timeoutId);
@@ -77,7 +79,7 @@ async function fetchFaviconFromHtml(siteUrl: string): Promise<string | null> {
 /**
  * Check if a favicon URL is accessible
  */
-async function checkFaviconUrl(url: string): Promise<boolean> {
+async function checkFaviconUrl(url: string, userAgent: string): Promise<boolean> {
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), FAVICON_TIMEOUT);
@@ -85,6 +87,9 @@ async function checkFaviconUrl(url: string): Promise<boolean> {
     const response = await fetch(url, {
       method: "HEAD",
       signal: controller.signal,
+      headers: {
+        "User-Agent": userAgent,
+      },
     });
     clearTimeout(timeoutId);
 
@@ -104,10 +109,11 @@ async function checkFaviconUrl(url: string): Promise<boolean> {
 export async function getFavicon(siteUrl: string): Promise<string | null> {
   if (!siteUrl) return null;
 
+  const userAgent = await getUserAgent();
   const domain = getDomain(siteUrl);
 
   // Method 1: Try to extract from HTML
-  const htmlFavicon = await fetchFaviconFromHtml(siteUrl);
+  const htmlFavicon = await fetchFaviconFromHtml(siteUrl, userAgent);
   if (htmlFavicon) {
     return htmlFavicon;
   }
@@ -120,7 +126,7 @@ export async function getFavicon(siteUrl: string): Promise<string | null> {
   ];
 
   for (const path of commonPaths) {
-    if (await checkFaviconUrl(path)) {
+    if (await checkFaviconUrl(path, userAgent)) {
       return path;
     }
   }

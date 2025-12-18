@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
-import { XIcon, CheckCircleIcon, AlertCircleIcon, LoaderIcon } from "lucide-react";
+import { XIcon, CheckCircleIcon, AlertCircleIcon, LoaderIcon, StopCircleIcon } from "lucide-react";
 import type { Task } from "@/lib/task-queue";
 
 interface TaskProgressProps {
@@ -13,42 +13,62 @@ interface TaskProgressProps {
 export function TaskProgress({ onTaskComplete }: TaskProgressProps) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
+  const notifiedIdsRef = useRef<Set<string>>(new Set());
+  const onTaskCompleteRef = useRef(onTaskComplete);
 
-  const fetchTasks = useCallback(async () => {
-    try {
-      const res = await fetch("/api/tasks");
-      if (res.ok) {
-        const data = await res.json();
-        setTasks(data);
-
-        // Check for newly completed tasks
-        for (const task of data) {
-          if (
-            task.status === "completed" &&
-            !dismissedIds.has(task.id)
-          ) {
-            onTaskComplete?.();
-          }
-        }
-      }
-    } catch (err) {
-      console.error("Failed to fetch tasks:", err);
-    }
-  }, [dismissedIds, onTaskComplete]);
+  // Keep the ref updated
+  useEffect(() => {
+    onTaskCompleteRef.current = onTaskComplete;
+  }, [onTaskComplete]);
 
   useEffect(() => {
+    const fetchTasks = async () => {
+      try {
+        const res = await fetch("/api/tasks");
+        if (res.ok) {
+          const data = await res.json();
+          setTasks(data);
+
+          // Check for newly completed tasks (only notify once per task)
+          for (const task of data) {
+            if (
+              task.status === "completed" &&
+              !notifiedIdsRef.current.has(task.id)
+            ) {
+              notifiedIdsRef.current.add(task.id);
+              onTaskCompleteRef.current?.();
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Failed to fetch tasks:", err);
+      }
+    };
+
     fetchTasks();
 
     // Poll for updates
     const interval = setInterval(fetchTasks, 1000);
 
     return () => clearInterval(interval);
-  }, [fetchTasks]);
+  }, []);
 
   const dismissTask = async (taskId: string) => {
     setDismissedIds((prev) => new Set(prev).add(taskId));
     try {
       await fetch(`/api/tasks/${taskId}`, { method: "DELETE" });
+    } catch {
+      // Ignore errors
+    }
+  };
+
+  const cancelTask = async (taskId: string) => {
+    try {
+      await fetch(`/api/tasks/${taskId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "cancel" }),
+      });
     } catch {
       // Ignore errors
     }
@@ -60,8 +80,10 @@ export function TaskProgress({ onTaskComplete }: TaskProgressProps) {
       !dismissedIds.has(task.id) &&
       (task.status === "running" ||
         task.status === "pending" ||
-        // Show completed/failed tasks for 10 seconds
-        (task.status === "completed" || task.status === "failed"))
+        // Show completed/failed/cancelled tasks
+        task.status === "completed" ||
+        task.status === "failed" ||
+        task.status === "cancelled")
   );
 
   if (visibleTasks.length === 0) {
@@ -71,7 +93,12 @@ export function TaskProgress({ onTaskComplete }: TaskProgressProps) {
   return (
     <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-sm">
       {visibleTasks.map((task) => (
-        <TaskCard key={task.id} task={task} onDismiss={() => dismissTask(task.id)} />
+        <TaskCard
+          key={task.id}
+          task={task}
+          onDismiss={() => dismissTask(task.id)}
+          onCancel={() => cancelTask(task.id)}
+        />
       ))}
     </div>
   );
@@ -80,9 +107,10 @@ export function TaskProgress({ onTaskComplete }: TaskProgressProps) {
 interface TaskCardProps {
   task: Task;
   onDismiss: () => void;
+  onCancel: () => void;
 }
 
-function TaskCard({ task, onDismiss }: TaskCardProps) {
+function TaskCard({ task, onDismiss, onCancel }: TaskCardProps) {
   const progress =
     task.progress.total > 0
       ? (task.progress.current / task.progress.total) * 100
@@ -93,6 +121,7 @@ function TaskCard({ task, onDismiss }: TaskCardProps) {
     running: <LoaderIcon className="size-4 animate-spin text-blue-500" />,
     completed: <CheckCircleIcon className="size-4 text-green-500" />,
     failed: <AlertCircleIcon className="size-4 text-red-500" />,
+    cancelled: <StopCircleIcon className="size-4 text-orange-500" />,
   }[task.status];
 
   const statusLabel = {
@@ -100,6 +129,7 @@ function TaskCard({ task, onDismiss }: TaskCardProps) {
     running: "Importing...",
     completed: "Completed",
     failed: "Failed",
+    cancelled: "Cancelled",
   }[task.status];
 
   return (
@@ -138,11 +168,31 @@ function TaskCard({ task, onDismiss }: TaskCardProps) {
               {task.progress.detail}
             </div>
           )}
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-2 w-full h-7 text-xs"
+            onClick={onCancel}
+          >
+            <StopCircleIcon className="size-3 mr-1" />
+            Cancel
+          </Button>
         </>
       ) : task.status === "completed" ? (
         <div className="text-sm">
           <span className="text-green-600">
             Imported {task.result?.imported || 0} feeds
+          </span>
+          {(task.result?.skipped || 0) > 0 && (
+            <span className="text-muted-foreground ml-2">
+              ({task.result?.skipped} skipped)
+            </span>
+          )}
+        </div>
+      ) : task.status === "cancelled" ? (
+        <div className="text-sm">
+          <span className="text-orange-600">
+            Cancelled - Imported {task.result?.imported || 0} feeds
           </span>
           {(task.result?.skipped || 0) > 0 && (
             <span className="text-muted-foreground ml-2">

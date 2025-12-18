@@ -1,4 +1,4 @@
-export type TaskStatus = "pending" | "running" | "completed" | "failed";
+export type TaskStatus = "pending" | "running" | "completed" | "failed" | "cancelled";
 
 export interface TaskProgress {
   current: number;
@@ -90,13 +90,31 @@ class TaskQueue {
     return this.tasks.delete(id);
   }
 
+  cancel(id: string): Task | undefined {
+    const task = this.tasks.get(id);
+    if (!task) return undefined;
+
+    // Only cancel if task is pending or running
+    if (task.status === "pending" || task.status === "running") {
+      task.status = "cancelled";
+      task.progress.message = "Cancelled by user";
+      task.updatedAt = new Date();
+    }
+    return task;
+  }
+
+  isCancelled(id: string): boolean {
+    const task = this.tasks.get(id);
+    return task?.status === "cancelled";
+  }
+
   cleanup(): void {
     const now = Date.now();
     const maxAge = 30 * 60 * 1000; // 30 minutes
 
     for (const [id, task] of this.tasks) {
       if (
-        (task.status === "completed" || task.status === "failed") &&
+        (task.status === "completed" || task.status === "failed" || task.status === "cancelled") &&
         now - task.updatedAt.getTime() > maxAge
       ) {
         this.tasks.delete(id);

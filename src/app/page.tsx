@@ -10,7 +10,6 @@ import type { Layout } from "react-resizable-panels";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { ArticleList } from "@/components/layout/article-list";
 import { ArticleDetail } from "@/components/layout/article-detail";
-import { TaskProgress } from "@/components/task-progress";
 import type { Feed, Article, Folder } from "@/lib/types";
 
 const LAYOUT_STORAGE_KEY = "rss-reader-layout";
@@ -179,8 +178,6 @@ export default function Home() {
   }
 
   return (
-    <>
-    <TaskProgress onTaskComplete={handleDataChange} />
     <ResizablePanelGroup
       id={LAYOUT_STORAGE_KEY}
       orientation="horizontal"
@@ -220,6 +217,5 @@ export default function Home() {
         <ArticleDetail article={selectedArticle} />
       </ResizablePanel>
     </ResizablePanelGroup>
-    </>
   );
 }

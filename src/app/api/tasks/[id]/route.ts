@@ -16,6 +16,27 @@ export async function GET(
   return NextResponse.json(task);
 }
 
+// Cancel a task
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+  const body = await request.json();
+
+  if (body.action === "cancel") {
+    const task = taskQueue.cancel(id);
+
+    if (!task) {
+      return NextResponse.json({ error: "Task not found" }, { status: 404 });
+    }
+
+    return NextResponse.json(task);
+  }
+
+  return NextResponse.json({ error: "Invalid action" }, { status: 400 });
+}
+
 // Delete a task
 export async function DELETE(
   request: NextRequest,

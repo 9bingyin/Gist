@@ -46,3 +46,9 @@ model Article {
   @@index([feedId])
   @@index([pubDate])
 }
+
+model Setting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}

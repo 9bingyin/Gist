@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useTheme } from "next-themes";
 import {
   SettingsIcon,
@@ -21,6 +21,10 @@ import {
   FolderIcon,
   PlusIcon,
   PencilIcon,
+  BugIcon,
+  LoaderIcon,
+  StopCircleIcon,
+  AlertCircleIcon,
 } from "lucide-react";
 import {
   Dialog,
@@ -32,6 +36,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import {
@@ -58,8 +63,9 @@ import {
 } from "@/components/ui/select";
 import { MoreHorizontalIcon } from "lucide-react";
 import type { Feed, Folder } from "@/lib/types";
+import type { Task } from "@/lib/task-queue";
 
-type SettingsTab = "feeds" | "folders" | "general" | "data" | "about";
+type SettingsTab = "feeds" | "folders" | "general" | "data" | "debug" | "about";
 
 interface SettingsDialogProps {
   feeds: Feed[];
@@ -80,6 +86,7 @@ const menuItems: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
   { id: "folders", label: "Folders", icon: <FolderIcon className="size-4" /> },
   { id: "general", label: "General", icon: <SettingsIcon className="size-4" /> },
   { id: "data", label: "Data", icon: <DatabaseIcon className="size-4" /> },
+  { id: "debug", label: "Debug", icon: <BugIcon className="size-4" /> },
   { id: "about", label: "About", icon: <GlobeIcon className="size-4" /> },
 ];
 
@@ -99,6 +106,8 @@ export function SettingsDialog({
   const [activeTab, setActiveTab] = useState<SettingsTab>("feeds");
   const [refreshingFeedId, setRefreshingFeedId] = useState<string | null>(null);
   const [refreshingAll, setRefreshingAll] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [open, setOpen] = useState(false);
 
   const handleRefreshFeed = async (feedId: string) => {
     setRefreshingFeedId(feedId);
@@ -120,8 +129,16 @@ export function SettingsDialog({
 
   const totalArticles = feeds.reduce((sum, feed) => sum + feed._count.articles, 0);
 
+  const handleOpenChange = (newOpen: boolean) => {
+    // Prevent closing while importing
+    if (!newOpen && isImporting) {
+      return;
+    }
+    setOpen(newOpen);
+  };
+
   return (
-    <Dialog>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
         {children || (
           <Button variant="ghost" size="icon">
@@ -129,7 +146,11 @@ export function SettingsDialog({
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="sm:max-w-4xl h-[600px] max-h-[90vh] p-0 gap-0 overflow-hidden">
+      <DialogContent
+        className="sm:max-w-4xl h-[600px] max-h-[90vh] p-0 gap-0 overflow-hidden"
+        onPointerDownOutside={(e) => isImporting && e.preventDefault()}
+        onEscapeKeyDown={(e) => isImporting && e.preventDefault()}
+      >
         <div className="flex h-full overflow-hidden">
           {/* Left menu */}
           <div className="w-[200px] border-r bg-muted/30 p-4 flex flex-col">
@@ -184,7 +205,14 @@ export function SettingsDialog({
               />
             )}
             {activeTab === "general" && <GeneralSettings />}
-            {activeTab === "data" && <DataSettings onDataChange={onDataChange} />}
+            {activeTab === "data" && (
+              <DataSettings
+                onDataChange={onDataChange}
+                isImporting={isImporting}
+                setIsImporting={setIsImporting}
+              />
+            )}
+            {activeTab === "debug" && <DebugSettings />}
             {activeTab === "about" && <AboutSettings />}
           </div>
         </div>
@@ -765,14 +793,80 @@ function GeneralSettings() {
 
 interface DataSettingsProps {
   onDataChange?: () => Promise<void>;
+  isImporting: boolean;
+  setIsImporting: (value: boolean) => void;
 }
 
-function DataSettings({ onDataChange }: DataSettingsProps) {
-  const [importing, setImporting] = useState(false);
+function DataSettings({ onDataChange, isImporting, setIsImporting }: DataSettingsProps) {
   const [markingAllRead, setMarkingAllRead] = useState(false);
   const [cleaning, setCleaning] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [importTask, setImportTask] = useState<Task | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const startPolling = useCallback((taskId: string) => {
+    // Clear any existing polling
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+    }
+
+    const poll = async () => {
+      try {
+        const res = await fetch(`/api/tasks/${taskId}`);
+        if (res.ok) {
+          const task: Task = await res.json();
+          setImportTask(task);
+
+          if (task.status === "completed" || task.status === "failed" || task.status === "cancelled") {
+            if (pollIntervalRef.current) {
+              clearInterval(pollIntervalRef.current);
+              pollIntervalRef.current = null;
+            }
+            setIsImporting(false);
+
+            if (task.status === "completed") {
+              onDataChange?.();
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Failed to poll task:", err);
+      }
+    };
+
+    poll();
+    pollIntervalRef.current = setInterval(poll, 500);
+  }, [setIsImporting, onDataChange]);
+
+  // Check for existing running tasks on mount
+  useEffect(() => {
+    const checkExistingTask = async () => {
+      try {
+        const res = await fetch("/api/tasks");
+        if (res.ok) {
+          const tasks: Task[] = await res.json();
+          const runningTask = tasks.find(
+            (t) => t.type === "opml-import" && (t.status === "running" || t.status === "pending")
+          );
+          if (runningTask) {
+            setImportTask(runningTask);
+            setIsImporting(true);
+            startPolling(runningTask.id);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to check existing tasks:", err);
+      }
+    };
+    checkExistingTask();
+
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+      }
+    };
+  }, [setIsImporting, startPolling]);
 
   const handleExportOpml = () => {
     window.open("/api/opml", "_blank");
@@ -782,8 +876,9 @@ function DataSettings({ onDataChange }: DataSettingsProps) {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    setImporting(true);
+    setIsImporting(true);
     setMessage(null);
+    setImportTask(null);
 
     try {
       const formData = new FormData();
@@ -800,23 +895,34 @@ function DataSettings({ onDataChange }: DataSettingsProps) {
         throw new Error(data.error || "Failed to import");
       }
 
-      // Task created successfully, progress will be shown in TaskProgress component
-      setMessage({
-        type: "success",
-        text: "Import started. Check progress in the bottom right corner.",
-      });
+      // Start polling for progress
+      startPolling(data.taskId);
     } catch (err) {
       setMessage({
         type: "error",
         text: err instanceof Error ? err.message : "Failed to import OPML",
       });
+      setIsImporting(false);
     } finally {
-      setImporting(false);
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
     }
-  }, []);
+  }, [setIsImporting, startPolling]);
+
+  const handleCancelImport = async () => {
+    if (!importTask) return;
+
+    try {
+      await fetch(`/api/tasks/${importTask.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "cancel" }),
+      });
+    } catch {
+      // Ignore errors
+    }
+  };
 
   const handleMarkAllRead = async () => {
     setMarkingAllRead(true);
@@ -902,28 +1008,106 @@ function DataSettings({ onDataChange }: DataSettingsProps) {
           <p className="text-sm text-muted-foreground">
             Import or export your subscriptions in OPML format
           </p>
-          <div className="mt-3 flex gap-2">
-            <Button variant="outline" size="sm" onClick={handleExportOpml}>
-              <DownloadIcon className="mr-2 size-4" />
-              Export
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={importing}
-            >
-              <UploadIcon className="mr-2 size-4" />
-              {importing ? "Importing..." : "Import"}
-            </Button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".opml,.xml"
-              onChange={handleImportOpml}
-              className="hidden"
-            />
-          </div>
+
+          {/* Import Progress */}
+          {importTask && (importTask.status === "running" || importTask.status === "pending") && (
+            <div className="mt-3 space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <div className="flex items-center gap-2">
+                  <LoaderIcon className="size-4 animate-spin text-blue-500" />
+                  <span>Importing...</span>
+                </div>
+                <span className="text-muted-foreground">
+                  {importTask.progress.current} / {importTask.progress.total}
+                </span>
+              </div>
+              <Progress
+                value={
+                  importTask.progress.total > 0
+                    ? (importTask.progress.current / importTask.progress.total) * 100
+                    : 0
+                }
+                className="h-2"
+              />
+              {importTask.progress.message && (
+                <div className="text-xs text-muted-foreground truncate">
+                  {importTask.progress.message}
+                  {importTask.progress.detail && ` - ${importTask.progress.detail}`}
+                </div>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full mt-2"
+                onClick={handleCancelImport}
+              >
+                <StopCircleIcon className="mr-2 size-4" />
+                Cancel Import
+              </Button>
+            </div>
+          )}
+
+          {/* Import Result */}
+          {importTask && importTask.status === "completed" && (
+            <div className="mt-3 rounded-lg bg-green-500/10 p-3 text-sm text-green-600">
+              <div className="flex items-center gap-2">
+                <CheckCircleIcon className="size-4" />
+                <span>
+                  Imported {importTask.result?.imported || 0} feeds
+                  {(importTask.result?.skipped || 0) > 0 && (
+                    <span className="text-muted-foreground ml-1">
+                      ({importTask.result?.skipped} skipped)
+                    </span>
+                  )}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {importTask && importTask.status === "cancelled" && (
+            <div className="mt-3 rounded-lg bg-orange-500/10 p-3 text-sm text-orange-600">
+              <div className="flex items-center gap-2">
+                <StopCircleIcon className="size-4" />
+                <span>
+                  Cancelled - Imported {importTask.result?.imported || 0} feeds
+                </span>
+              </div>
+            </div>
+          )}
+
+          {importTask && importTask.status === "failed" && (
+            <div className="mt-3 rounded-lg bg-red-500/10 p-3 text-sm text-red-600">
+              <div className="flex items-center gap-2">
+                <AlertCircleIcon className="size-4" />
+                <span>{importTask.result?.error || "Import failed"}</span>
+              </div>
+            </div>
+          )}
+
+          {/* Buttons */}
+          {!isImporting && (
+            <div className="mt-3 flex gap-2">
+              <Button variant="outline" size="sm" onClick={handleExportOpml}>
+                <DownloadIcon className="mr-2 size-4" />
+                Export
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <UploadIcon className="mr-2 size-4" />
+                Import
+              </Button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".opml,.xml"
+                onChange={handleImportOpml}
+                className="hidden"
+              />
+            </div>
+          )}
         </div>
 
         {/* Mark All Read */}
@@ -971,6 +1155,142 @@ function DataSettings({ onDataChange }: DataSettingsProps) {
               Older than 30 days
             </Button>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const DEFAULT_USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+
+function DebugSettings() {
+  const [userAgent, setUserAgent] = useState("");
+  const [savedUserAgent, setSavedUserAgent] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const res = await fetch("/api/settings?key=userAgent");
+        const value = await res.json();
+        const ua = value || "";
+        setUserAgent(ua);
+        setSavedUserAgent(ua);
+      } catch (err) {
+        console.error("Failed to fetch settings:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchSettings();
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    setMessage(null);
+
+    try {
+      const res = await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userAgent: userAgent || "" }),
+      });
+
+      if (!res.ok) {
+        throw new Error("Failed to save");
+      }
+
+      setSavedUserAgent(userAgent);
+      setMessage({ type: "success", text: "Settings saved" });
+    } catch {
+      setMessage({ type: "error", text: "Failed to save settings" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleReset = () => {
+    setUserAgent("");
+  };
+
+  const handleUseDefault = () => {
+    setUserAgent(DEFAULT_USER_AGENT);
+  };
+
+  const hasChanges = userAgent !== savedUserAgent;
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-lg font-semibold">Debug</h3>
+        <p className="text-sm text-muted-foreground">
+          Advanced settings for debugging
+        </p>
+      </div>
+
+      <Separator />
+
+      {message && (
+        <div
+          className={`rounded-lg p-3 text-sm ${
+            message.type === "success"
+              ? "bg-green-500/10 text-green-600"
+              : "bg-red-500/10 text-red-600"
+          }`}
+        >
+          {message.text}
+        </div>
+      )}
+
+      <div className="space-y-4">
+        <div className="rounded-lg border p-4">
+          <h4 className="font-medium">User-Agent</h4>
+          <p className="text-sm text-muted-foreground mb-3">
+            Custom User-Agent header for RSS fetching. Some feeds may require a browser-like UA.
+          </p>
+
+          {loading ? (
+            <div className="text-sm text-muted-foreground">Loading...</div>
+          ) : (
+            <>
+              <Input
+                value={userAgent}
+                onChange={(e) => setUserAgent(e.target.value)}
+                placeholder="Leave empty to use default"
+                className="mb-3 font-mono text-xs"
+              />
+
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleUseDefault}
+                >
+                  Use Chrome UA
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleReset}
+                >
+                  Clear
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handleSave}
+                  disabled={saving || !hasChanges}
+                >
+                  {saving ? "Saving..." : "Save"}
+                </Button>
+              </div>
+
+              <p className="text-xs text-muted-foreground mt-3">
+                Default: <code className="bg-muted px-1 py-0.5 rounded text-[10px]">{DEFAULT_USER_AGENT.slice(0, 50)}...</code>
+              </p>
+            </>
+          )}
         </div>
       </div>
     </div>
