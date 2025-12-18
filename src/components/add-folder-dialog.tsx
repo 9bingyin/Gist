@@ -35,7 +35,7 @@ export function AddFolderDialog({ onAdd, children }: AddFolderDialogProps) {
       setName("");
       setOpen(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create folder");
+      setError(err instanceof Error ? err.message : "创建文件夹失败");
     } finally {
       setLoading(false);
     }
@@ -52,11 +52,11 @@ export function AddFolderDialog({ onAdd, children }: AddFolderDialogProps) {
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>New Folder</DialogTitle>
+          <DialogTitle>新建文件夹</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <Input
-            placeholder="Folder name"
+            placeholder="文件夹名称"
             value={name}
             onChange={(e) => setName(e.target.value)}
             disabled={loading}
@@ -64,10 +64,11 @@ export function AddFolderDialog({ onAdd, children }: AddFolderDialogProps) {
           />
           {error && <p className="text-sm text-red-500">{error}</p>}
           <Button type="submit" disabled={loading || !name.trim()} className="w-full">
-            {loading ? "Creating..." : "Create Folder"}
+            {loading ? "创建中..." : "创建文件夹"}
           </Button>
         </form>
       </DialogContent>
     </Dialog>
   );
 }
+

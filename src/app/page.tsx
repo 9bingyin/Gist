@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -19,6 +19,7 @@ export default function Home() {
   const [folders, setFolders] = useState<Folder[]>([]);
   const [articles, setArticles] = useState<Article[]>([]);
   const [selectedFeedId, setSelectedFeedId] = useState<string | null>(null);
+  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
   const [loading, setLoading] = useState(false);
   const [defaultLayout, setDefaultLayout] = useState<Layout | undefined>(undefined);
@@ -50,13 +51,21 @@ export default function Home() {
     setFolders(data);
   }, []);
 
-  const fetchArticles = useCallback(async (feedId?: string | null) => {
+  const fetchArticles = useCallback(async (options: { feedId?: string | null; folderId?: string | null } = {}) => {
     setLoading(true);
-    const url = feedId ? `/api/articles?feedId=${feedId}` : "/api/articles";
+    let url = "/api/articles";
+    const params = new URLSearchParams();
+    if (options.feedId) params.append("feedId", options.feedId);
+    if (options.folderId) params.append("folderId", options.folderId);
+    
+    if (params.toString()) {
+      url += `?${params.toString()}`;
+    }
+
     const res = await fetch(url);
     const data: Article[] = await res.json();
     setArticles(data);
-    // Update selectedArticle if it exists in the new data
+    
     setSelectedArticle((prev) => {
       if (!prev) return prev;
       const updated = data.find((a) => a.id === prev.id);
@@ -71,9 +80,17 @@ export default function Home() {
     fetchArticles();
   }, [fetchFeeds, fetchFolders, fetchArticles]);
 
-  useEffect(() => {
-    fetchArticles(selectedFeedId);
-  }, [selectedFeedId, fetchArticles]);
+  const handleSelectFeed = (feedId: string | null) => {
+    setSelectedFeedId(feedId);
+    setSelectedFolderId(null);
+    fetchArticles({ feedId });
+  };
+
+  const handleSelectFolder = (folderId: string) => {
+    setSelectedFolderId(folderId);
+    setSelectedFeedId(null);
+    fetchArticles({ folderId });
+  };
 
   const handleAddFeed = async (url: string) => {
     const res = await fetch("/api/feeds", {
@@ -88,13 +105,13 @@ export default function Home() {
     }
 
     await fetchFeeds();
-    await fetchArticles(selectedFeedId);
+    await fetchArticles({ feedId: selectedFeedId, folderId: selectedFolderId });
   };
 
   const handleRefreshFeed = async (feedId: string) => {
     await fetch(`/api/feeds/${feedId}/refresh`, { method: "POST" });
     await fetchFeeds();
-    await fetchArticles(selectedFeedId);
+    await fetchArticles({ feedId: selectedFeedId, folderId: selectedFolderId });
   };
 
   const handleRefreshAllFeeds = async () => {
@@ -102,16 +119,17 @@ export default function Home() {
       await fetch(`/api/feeds/${feed.id}/refresh`, { method: "POST" });
     }
     await fetchFeeds();
-    await fetchArticles(selectedFeedId);
+    await fetchArticles({ feedId: selectedFeedId, folderId: selectedFolderId });
   };
 
   const handleDeleteFeed = async (feedId: string) => {
     await fetch(`/api/feeds?id=${feedId}`, { method: "DELETE" });
     if (selectedFeedId === feedId) {
-      setSelectedFeedId(null);
+      handleSelectFeed(null);
+    } else {
+      await fetchFeeds();
+      await fetchArticles({ feedId: selectedFeedId, folderId: selectedFolderId });
     }
-    await fetchFeeds();
-    await fetchArticles(selectedFeedId === feedId ? null : selectedFeedId);
   };
 
   const handleSelectArticle = async (article: Article) => {
@@ -133,16 +151,16 @@ export default function Home() {
     setLoading(true);
     try {
       if (selectedFeedId) {
-        // Refresh selected feed
         await fetch(`/api/feeds/${selectedFeedId}/refresh`, { method: "POST" });
       } else {
-        // Refresh all feeds
+        // Refresh all feeds (maybe optimize to refresh only folder feeds if folder selected?)
+        // For now, refreshing all is safer/simpler
         for (const feed of feeds) {
           await fetch(`/api/feeds/${feed.id}/refresh`, { method: "POST" });
         }
       }
       await fetchFeeds();
-      await fetchArticles(selectedFeedId);
+      await fetchArticles({ feedId: selectedFeedId, folderId: selectedFolderId });
     } finally {
       setLoading(false);
     }
@@ -165,6 +183,9 @@ export default function Home() {
 
   const handleDeleteFolder = async (folderId: string) => {
     await fetch(`/api/folders/${folderId}`, { method: "DELETE" });
+    if (selectedFolderId === folderId) {
+       handleSelectFeed(null); // Reset to 'All'
+    }
     await fetchFolders();
     await fetchFeeds();
   };
@@ -191,7 +212,7 @@ export default function Home() {
   const handleDataChange = async () => {
     await fetchFeeds();
     await fetchFolders();
-    await fetchArticles(selectedFeedId);
+    await fetchArticles({ feedId: selectedFeedId, folderId: selectedFolderId });
   };
 
   const handleArticleUpdate = useCallback((updatedArticle: Article) => {
@@ -200,6 +221,28 @@ export default function Home() {
       prev.map((a) => (a.id === updatedArticle.id ? updatedArticle : a))
     );
   }, []);
+
+  const handleMarkAllRead = async () => {
+    await fetch("/api/articles/mark-all-read", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ feedId: selectedFeedId }), // TODO: Update backend to support folderId
+    });
+    await fetchArticles({ feedId: selectedFeedId, folderId: selectedFolderId });
+    await fetchFeeds();
+  };
+
+  const listTitle = useMemo(() => {
+    if (selectedFeedId) {
+      const feed = feeds.find((f) => f.id === selectedFeedId);
+      return feed ? feed.title : "文章";
+    }
+    if (selectedFolderId) {
+      const folder = folders.find((f) => f.id === selectedFolderId);
+      return folder ? folder.name : "文章";
+    }
+    return "所有文章";
+  }, [selectedFeedId, selectedFolderId, feeds, folders]);
 
   if (!layoutLoaded) {
     return <div className="h-screen" />;
@@ -218,7 +261,9 @@ export default function Home() {
           feeds={feeds}
           folders={folders}
           selectedFeedId={selectedFeedId}
-          onSelectFeed={setSelectedFeedId}
+          selectedFolderId={selectedFolderId}
+          onSelectFeed={handleSelectFeed}
+          onSelectFolder={handleSelectFolder}
           onAddFeed={handleAddFeed}
           onRefreshFeed={handleRefreshFeed}
           onDeleteFeed={handleDeleteFeed}
@@ -230,13 +275,16 @@ export default function Home() {
           onDataChange={handleDataChange}
         />
       </ResizablePanel>
+
       <ResizableHandle />
       <ResizablePanel id="article-list" defaultSize="23%" minSize="10%" maxSize="40%">
         <ArticleList
+          title={listTitle}
           articles={articles}
           selectedArticleId={selectedArticle?.id ?? null}
           onSelectArticle={handleSelectArticle}
           onRefresh={handleRefresh}
+          onMarkAllRead={handleMarkAllRead}
           loading={loading}
         />
       </ResizablePanel>

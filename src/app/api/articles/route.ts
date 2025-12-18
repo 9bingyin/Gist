@@ -4,11 +4,17 @@ import { prisma } from "@/lib/db";
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const feedId = searchParams.get("feedId");
+  const folderId = searchParams.get("folderId");
   const unreadOnly = searchParams.get("unreadOnly") === "true";
 
-  const where: Record<string, unknown> = {};
+  const where: any = {};
   if (feedId) {
     where.feedId = feedId;
+  }
+  if (folderId) {
+    where.feed = {
+      folderId: folderId
+    };
   }
   if (unreadOnly) {
     where.isRead = false;

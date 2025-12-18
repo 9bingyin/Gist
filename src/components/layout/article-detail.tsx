@@ -5,7 +5,6 @@ import DOMPurify from "dompurify";
 import {
   ExternalLinkIcon,
   RssIcon,
-  UserIcon,
   ClockIcon,
   BookOpenIcon,
   Share2Icon,
@@ -37,17 +36,13 @@ function formatRelativeTime(dateStr: string | null): string {
   const diffMinutes = Math.floor(diffSeconds / 60);
   const diffHours = Math.floor(diffMinutes / 60);
   const diffDays = Math.floor(diffHours / 24);
-  const diffWeeks = Math.floor(diffDays / 7);
-  const diffMonths = Math.floor(diffDays / 30);
-  const diffYears = Math.floor(diffDays / 365);
 
   if (diffSeconds < 60) return "刚刚";
   if (diffMinutes < 60) return `${diffMinutes} 分钟前`;
   if (diffHours < 24) return `${diffHours} 小时前`;
   if (diffDays < 7) return `${diffDays} 天前`;
-  if (diffWeeks < 4) return `${diffWeeks} 周前`;
-  if (diffMonths < 12) return `${diffMonths} 个月前`;
-  return `${diffYears} 年前`;
+  
+  return date.toLocaleDateString("zh-CN", { year: "numeric", month: "long", day: "numeric" });
 }
 
 function sanitizeHtml(html: string): string {
@@ -118,19 +113,16 @@ export function ArticleDetail({ article, onArticleUpdate }: ArticleDetailProps) 
   const handleToggleReadability = useCallback(async () => {
     if (!article || isLoadingReadability) return;
 
-    // If turning off, just toggle
     if (useReadability) {
       setUseReadability(false);
       return;
     }
 
-    // If already have cached content, just toggle on
     if (article.readabilityContent) {
       setUseReadability(true);
       return;
     }
 
-    // Fetch readability content
     setIsLoadingReadability(true);
     try {
       const res = await fetch(`/api/articles/${article.id}/readability`, {
@@ -138,8 +130,7 @@ export function ArticleDetail({ article, onArticleUpdate }: ArticleDetailProps) 
       });
 
       if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || "Failed to fetch readable content");
+        throw new Error("Failed to fetch readable content");
       }
 
       const data = await res.json();
@@ -159,12 +150,9 @@ export function ArticleDetail({ article, onArticleUpdate }: ArticleDetailProps) 
 
   if (!article) {
     return (
-      <div className="flex h-full flex-col items-center justify-center text-muted-foreground">
-        <RssIcon className="mb-4 h-16 w-16 opacity-10" />
-        <p className="text-lg font-medium">Select an article to read</p>
-        <p className="mt-1 text-sm opacity-60">
-          Choose an article from the list to start reading
-        </p>
+      <div className="flex h-full flex-col items-center justify-center text-muted-foreground bg-background/50">
+        <RssIcon className="mb-4 h-12 w-12 opacity-10" />
+        <p className="text-lg font-medium">选择一篇文章开始阅读</p>
       </div>
     );
   }
@@ -180,7 +168,7 @@ export function ArticleDetail({ article, onArticleUpdate }: ArticleDetailProps) 
                 variant="ghost"
                 size="icon"
                 className={cn(
-                  "h-8 w-8",
+                  "h-8 w-8 text-muted-foreground hover:text-foreground",
                   useReadability && "bg-accent text-accent-foreground"
                 )}
                 onClick={handleToggleReadability}
@@ -194,96 +182,87 @@ export function ArticleDetail({ article, onArticleUpdate }: ArticleDetailProps) 
               </Button>
             </TooltipTrigger>
             <TooltipContent>
-              <p>{useReadability ? "Show Original" : "Readability"}</p>
+              <p>{useReadability ? "显示原文" : "阅读模式"}</p>
             </TooltipContent>
           </Tooltip>
+          
+          <div className="h-4 w-px bg-border/50 mx-1" />
+
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8">
+              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
                 <Share2Icon className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
             <TooltipContent>
-              <p>Share</p>
+              <p>分享</p>
             </TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8">
+              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
                 <BookmarkIcon className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
             <TooltipContent>
-              <p>Bookmark</p>
+              <p>收藏</p>
             </TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" asChild>
                 <a href={article.link} target="_blank" rel="noopener noreferrer">
                   <ExternalLinkIcon className="h-4 w-4" />
                 </a>
               </Button>
             </TooltipTrigger>
             <TooltipContent>
-              <p>Open Original</p>
+              <p>打开原文</p>
             </TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8">
+              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
                 <MoreHorizontalIcon className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
             <TooltipContent>
-              <p>More</p>
+              <p>更多</p>
             </TooltipContent>
           </Tooltip>
         </div>
       </TooltipProvider>
 
-      <div className="mx-auto max-w-3xl px-8 py-8">
+      <div className="mx-auto max-w-3xl px-8 py-10">
         {/* Article Header */}
         <header className="mb-8">
-          {/* Title */}
-          <h1 className="text-3xl font-bold leading-tight tracking-tight">
+          <h1 className="text-3xl font-bold leading-tight tracking-tight text-foreground">
             {article.title}
           </h1>
 
-          {/* Meta info: source | author | time */}
-          <div className="mt-4 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
-            {/* Source */}
-            <div className="flex items-center gap-1.5">
+          <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
+            <div className="flex items-center gap-1.5 hover:text-foreground transition-colors cursor-pointer">
               {article.feed.imageUrl ? (
                 <img
                   src={article.feed.imageUrl}
                   alt=""
-                  className="h-4 w-4 rounded object-cover"
+                  className="h-4 w-4 rounded-sm object-cover"
                 />
               ) : (
                 <RssIcon className="h-4 w-4" />
               )}
-              <span>{article.feed.title}</span>
+              <span className="font-medium">{article.feed.title}</span>
             </div>
 
-            {/* Author placeholder - use feed title */}
             <div className="flex items-center gap-1.5">
-              <UserIcon className="h-4 w-4" />
-              <span>{article.feed.title}</span>
+              <ClockIcon className="h-3.5 w-3.5" />
+              <span>{formatRelativeTime(article.pubDate)}</span>
             </div>
-
-            {/* Time */}
-            {article.pubDate && (
-              <div className="flex items-center gap-1.5">
-                <ClockIcon className="h-4 w-4" />
-                <span>{formatRelativeTime(article.pubDate)}</span>
-              </div>
-            )}
           </div>
         </header>
 
         {/* Article Content */}
-        <article className="article-content">
+        <article className="article-content max-w-none">
           {processedContent ? (
             <div dangerouslySetInnerHTML={{ __html: processedContent }} />
           ) : article.summary ? (
@@ -291,15 +270,15 @@ export function ArticleDetail({ article, onArticleUpdate }: ArticleDetailProps) 
               <p>{article.summary}</p>
             </div>
           ) : (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <RssIcon className="mb-4 h-12 w-12 text-muted-foreground/30" />
-              <p className="text-muted-foreground">
-                No content available for this article.
+            <div className="flex flex-col items-center justify-center py-12 text-center bg-muted/30 rounded-lg">
+              <RssIcon className="mb-4 h-10 w-10 text-muted-foreground/30" />
+              <p className="text-muted-foreground mb-4">
+                无法获取该文章的正文内容
               </p>
-              <Button variant="outline" size="sm" asChild className="mt-4">
+              <Button variant="outline" size="sm" asChild>
                 <a href={article.link} target="_blank" rel="noopener noreferrer">
                   <ExternalLinkIcon className="mr-2 h-4 w-4" />
-                  Open Original
+                  打开原文
                 </a>
               </Button>
             </div>
@@ -309,3 +288,4 @@ export function ArticleDetail({ article, onArticleUpdate }: ArticleDetailProps) 
     </div>
   );
 }
+

@@ -14,9 +14,10 @@ import { Input } from "@/components/ui/input";
 
 interface AddFeedDialogProps {
   onAdd: (url: string) => Promise<void>;
+  children?: React.ReactNode;
 }
 
-export function AddFeedDialog({ onAdd }: AddFeedDialogProps) {
+export function AddFeedDialog({ onAdd, children }: AddFeedDialogProps) {
   const [open, setOpen] = useState(false);
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
@@ -34,7 +35,7 @@ export function AddFeedDialog({ onAdd }: AddFeedDialogProps) {
       setUrl("");
       setOpen(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to add feed");
+      setError(err instanceof Error ? err.message : "添加订阅失败");
     } finally {
       setLoading(false);
     }
@@ -43,27 +44,32 @@ export function AddFeedDialog({ onAdd }: AddFeedDialogProps) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-8 w-8">
-          <PlusIcon className="h-4 w-4" />
-        </Button>
+        {children ? (
+          children
+        ) : (
+          <Button variant="ghost" size="icon" className="h-8 w-8">
+            <PlusIcon className="h-4 w-4" />
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Add RSS Feed</DialogTitle>
+          <DialogTitle>添加 RSS 订阅</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <Input
-            placeholder="Enter RSS feed URL"
+            placeholder="输入 RSS 订阅地址"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             disabled={loading}
           />
           {error && <p className="text-sm text-red-500">{error}</p>}
           <Button type="submit" disabled={loading || !url.trim()} className="w-full">
-            {loading ? "Adding..." : "Add Feed"}
+            {loading ? "添加中..." : "添加订阅"}
           </Button>
         </form>
       </DialogContent>
     </Dialog>
   );
 }
+

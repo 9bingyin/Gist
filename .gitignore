@@ -56,3 +56,4 @@ next-env.d.ts
 # AI assistants config
 .mcp.json
 .claude/
+.gemini-clipboard/
