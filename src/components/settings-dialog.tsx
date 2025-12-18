@@ -82,9 +82,9 @@ interface SettingsDialogProps {
 }
 
 const menuItems: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
+  { id: "general", label: "General", icon: <SettingsIcon className="size-4" /> },
   { id: "feeds", label: "Subscriptions", icon: <RssIcon className="size-4" /> },
   { id: "folders", label: "Folders", icon: <FolderIcon className="size-4" /> },
-  { id: "general", label: "General", icon: <SettingsIcon className="size-4" /> },
   { id: "data", label: "Data", icon: <DatabaseIcon className="size-4" /> },
   { id: "debug", label: "Debug", icon: <BugIcon className="size-4" /> },
   { id: "about", label: "About", icon: <GlobeIcon className="size-4" /> },
@@ -103,7 +103,7 @@ export function SettingsDialog({
   onDataChange,
   children,
 }: SettingsDialogProps) {
-  const [activeTab, setActiveTab] = useState<SettingsTab>("feeds");
+  const [activeTab, setActiveTab] = useState<SettingsTab>("general");
   const [refreshingFeedId, setRefreshingFeedId] = useState<string | null>(null);
   const [refreshingAll, setRefreshingAll] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
@@ -188,6 +188,7 @@ export function SettingsDialog({
           {/* Right content */}
           <div className="flex-1 overflow-y-auto p-8 scroll-smooth bg-background">
             <div className="max-w-3xl mx-auto">
+              {activeTab === "general" && <GeneralSettings />}
               {activeTab === "feeds" && (
                 <FeedsSettings
                   feeds={feeds}
@@ -210,7 +211,6 @@ export function SettingsDialog({
                   onRenameFolder={onRenameFolder}
                 />
               )}
-              {activeTab === "general" && <GeneralSettings />}
               {activeTab === "data" && (
                 <DataSettings
                   onDataChange={onDataChange}
@@ -307,11 +307,11 @@ function FeedsSettings({
 
       {/* Stats */}
       <div className="grid grid-cols-2 gap-4">
-        <div className="rounded-xl border bg-muted/30 p-5 transition-colors hover:bg-muted/50">
+        <div className="rounded-xl border border-muted/40 bg-card p-6 transition-all hover:border-muted-foreground/20 hover:shadow-sm">
           <div className="text-sm font-medium text-muted-foreground mb-1">Total Feeds</div>
           <div className="text-3xl font-bold tracking-tight">{feeds.length}</div>
         </div>
-        <div className="rounded-xl border bg-muted/30 p-5 transition-colors hover:bg-muted/50">
+        <div className="rounded-xl border border-muted/40 bg-card p-6 transition-all hover:border-muted-foreground/20 hover:shadow-sm">
           <div className="text-sm font-medium text-muted-foreground mb-1">Unread</div>
           <div className="text-3xl font-bold tracking-tight">{totalArticles}</div>
         </div>
@@ -370,7 +370,7 @@ function FeedsSettings({
             <p className="text-xs text-muted-foreground/60 mt-1">Add a feed to get started</p>
           </div>
         ) : (
-          <div className="rounded-xl border overflow-hidden bg-card">
+          <div className="rounded-xl border border-muted/40 overflow-hidden bg-card shadow-sm">
             <Table>
               <TableHeader className="bg-muted/30">
                 <TableRow className="hover:bg-transparent border-none">
@@ -638,7 +638,7 @@ function FoldersSettings({
         </div>
 
         {/* Folders List */}
-        <div className="rounded-xl border overflow-hidden bg-card">
+        <div className="rounded-xl border border-muted/40 overflow-hidden bg-card shadow-sm">
           <Table>
             <TableHeader className="bg-muted/30">
               <TableRow className="hover:bg-transparent border-none">
@@ -757,43 +757,39 @@ function GeneralSettings() {
       </div>
 
       <div className="space-y-6">
-        <div className="rounded-xl border p-6 bg-card">
-          <div className="flex items-center justify-between mb-6">
+        <div className="rounded-xl border border-muted/40 p-6 bg-card transition-all hover:border-muted-foreground/20">
+          <div className="flex items-center justify-between">
             <div>
-              <h4 className="font-semibold text-sm">Theme</h4>
+              <h4 className="font-semibold text-sm mb-1">Theme</h4>
               <p className="text-[12px] text-muted-foreground">
                 Select your preferred interface color scheme.
               </p>
             </div>
-          </div>
-          
-          <div className="grid grid-cols-3 gap-3">
-            {[
-              { id: "light", label: "Light", icon: <SunIcon className="size-4" /> },
-              { id: "dark", label: "Dark", icon: <MoonIcon className="size-4" /> },
-              { id: "system", label: "System", icon: <MonitorIcon className="size-4" /> },
-            ].map((t) => (
-              <button
-                key={t.id}
-                onClick={() => setTheme(t.id)}
-                className={`flex flex-col items-center gap-3 p-4 rounded-lg border-2 transition-all duration-200 ${
-                  theme === t.id
-                    ? "border-primary bg-primary/5 ring-4 ring-primary/5"
-                    : "border-muted bg-muted/10 hover:border-muted-foreground/20"
-                }`}
-              >
-                <div className={`${theme === t.id ? "text-primary" : "text-muted-foreground"}`}>
+
+            <div className="flex items-center gap-2 bg-muted/30 rounded-lg p-1">
+              {[
+                { id: "system", label: "System", icon: <MonitorIcon className="size-4" /> },
+                { id: "light", label: "Light", icon: <SunIcon className="size-4" /> },
+                { id: "dark", label: "Dark", icon: <MoonIcon className="size-4" /> },
+              ].map((t) => (
+                <button
+                  key={t.id}
+                  onClick={() => setTheme(t.id)}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200 ${
+                    theme === t.id
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
                   {t.icon}
-                </div>
-                <span className={`text-xs font-semibold ${theme === t.id ? "text-primary" : "text-muted-foreground"}`}>
                   {t.label}
-                </span>
-              </button>
-            ))}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
-        <div className="rounded-xl border p-6 bg-card">
+        <div className="rounded-xl border border-muted/40 p-6 bg-card transition-all hover:border-muted-foreground/20">
           <div className="flex items-center justify-between">
             <div>
               <h4 className="font-semibold text-sm">Language</h4>
@@ -1024,7 +1020,7 @@ function DataSettings({ onDataChange, isImporting, setIsImporting }: DataSetting
 
       <div className="space-y-4">
         {/* Import/Export OPML */}
-        <div className="rounded-xl border p-6 bg-card transition-colors hover:border-muted-foreground/20">
+        <div className="rounded-xl border border-muted/40 p-6 bg-card transition-all hover:border-muted-foreground/20">
           <div className="flex items-start justify-between">
             <div className="space-y-1">
               <h4 className="font-semibold text-sm">OPML Subscriptions</h4>
@@ -1099,7 +1095,7 @@ function DataSettings({ onDataChange, isImporting, setIsImporting }: DataSetting
         </div>
 
         {/* Mark All Read */}
-        <div className="rounded-xl border p-6 bg-card transition-colors hover:border-muted-foreground/20">
+        <div className="rounded-xl border border-muted/40 p-6 bg-card transition-all hover:border-muted-foreground/20">
           <div className="flex items-center justify-between">
             <div className="space-y-1">
               <h4 className="font-semibold text-sm">Mark All as Read</h4>
@@ -1125,7 +1121,7 @@ function DataSettings({ onDataChange, isImporting, setIsImporting }: DataSetting
         </div>
 
         {/* Cleanup */}
-        <div className="rounded-xl border p-6 bg-card transition-colors hover:border-muted-foreground/20">
+        <div className="rounded-xl border border-muted/40 p-6 bg-card transition-all hover:border-muted-foreground/20">
           <div className="space-y-1 mb-6">
             <h4 className="font-semibold text-sm">Clean Up</h4>
             <p className="text-[12px] text-muted-foreground">
@@ -1307,7 +1303,7 @@ function DebugSettings() {
 
       <div className="space-y-6">
         {/* Refresh Interval */}
-        <div className="rounded-xl border p-6 bg-card">
+        <div className="rounded-xl border border-muted/40 p-6 bg-card transition-all hover:border-muted-foreground/20">
           <h4 className="font-semibold text-sm mb-1">Auto Refresh Interval</h4>
           <p className="text-[12px] text-muted-foreground mb-6">
             Background sync frequency (in minutes).
@@ -1349,7 +1345,7 @@ function DebugSettings() {
         </div>
 
         {/* Gravatar Email */}
-        <div className="rounded-xl border p-6 bg-card">
+        <div className="rounded-xl border border-muted/40 p-6 bg-card transition-all hover:border-muted-foreground/20">
           <h4 className="font-semibold text-sm mb-1">Avatar Service</h4>
           <p className="text-[12px] text-muted-foreground mb-6">
             Your Gravatar email address for the sidebar.
@@ -1367,7 +1363,7 @@ function DebugSettings() {
         </div>
 
         {/* User-Agent */}
-        <div className="rounded-xl border p-6 bg-card">
+        <div className="rounded-xl border border-muted/40 p-6 bg-card transition-all hover:border-muted-foreground/20">
           <h4 className="font-semibold text-sm mb-1">Network User-Agent</h4>
           <p className="text-[12px] text-muted-foreground mb-6">
             Custom HTTP header for feed fetching.
@@ -1479,7 +1475,7 @@ function AboutSettings() {
       </div>
 
       <div className="grid grid-cols-2 gap-4">
-        <div className="rounded-xl border p-6 bg-card transition-colors hover:border-primary/20">
+        <div className="rounded-xl border border-muted/40 p-6 bg-card transition-all hover:border-primary/20 hover:shadow-sm">
           <h5 className="font-bold text-sm mb-3">Stack</h5>
           <div className="flex flex-wrap gap-1.5">
             {["Next.js", "React", "Prisma", "SQLite", "Tailwind"].map(t => (
@@ -1489,7 +1485,7 @@ function AboutSettings() {
             ))}
           </div>
         </div>
-        <div className="rounded-xl border p-6 bg-card transition-colors hover:border-primary/20">
+        <div className="rounded-xl border border-muted/40 p-6 bg-card transition-all hover:border-primary/20 hover:shadow-sm">
           <h5 className="font-bold text-sm mb-3">Community</h5>
           <div className="space-y-2">
             <a href="#" className="flex items-center gap-2 text-xs font-semibold text-primary hover:underline">
