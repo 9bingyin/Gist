@@ -147,73 +147,80 @@ export function SettingsDialog({
         )}
       </DialogTrigger>
       <DialogContent
-        className="sm:max-w-4xl h-[600px] max-h-[90vh] p-0 gap-0 overflow-hidden"
+        className="sm:max-w-4xl h-[650px] max-h-[90vh] p-0 gap-0 overflow-hidden border-none shadow-2xl"
         onPointerDownOutside={(e) => isImporting && e.preventDefault()}
         onEscapeKeyDown={(e) => isImporting && e.preventDefault()}
       >
-        <div className="flex h-full overflow-hidden">
+        <DialogTitle className="sr-only">Settings</DialogTitle>
+        <div className="flex h-full overflow-hidden bg-background">
           {/* Left menu */}
-          <div className="w-[200px] border-r bg-muted/30 p-4 flex flex-col">
-            <DialogHeader className="pb-4 shrink-0">
-              <DialogTitle className="flex items-center gap-2">
-                <div className="flex size-8 items-center justify-center rounded-lg bg-orange-500 text-white">
-                  <RssIcon className="size-4" />
-                </div>
-                <span>Settings</span>
-              </DialogTitle>
-            </DialogHeader>
-            <nav className="space-y-1 overflow-y-auto flex-1">
+          <div className="w-[220px] border-r bg-muted/20 p-6 flex flex-col">
+            <div className="mb-8 px-2">
+              <h2 className="text-xl font-semibold tracking-tight">Settings</h2>
+              <p className="text-[11px] text-muted-foreground uppercase tracking-wider font-medium mt-1">Preferences</p>
+            </div>
+            <nav className="space-y-1.5 flex-1">
               {menuItems.map((item) => (
                 <button
                   key={item.id}
                   onClick={() => setActiveTab(item.id)}
-                  className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors ${
+                  className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
                     activeTab === item.id
-                      ? "bg-background text-foreground shadow-sm"
-                      : "text-muted-foreground hover:bg-background/50 hover:text-foreground"
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
                   }`}
                 >
-                  {item.icon}
+                  <div className={activeTab === item.id ? "text-primary-foreground" : "text-muted-foreground/70"}>
+                    {item.icon}
+                  </div>
                   {item.label}
                 </button>
               ))}
             </nav>
+            
+            <div className="mt-auto pt-4 px-2">
+              <div className="flex items-center gap-2 text-[10px] text-muted-foreground font-mono opacity-50">
+                <span>GIST RSS v1.0.0</span>
+              </div>
+            </div>
           </div>
 
           {/* Right content */}
-          <div className="flex-1 overflow-y-auto p-6 scroll-smooth">
-            {activeTab === "feeds" && (
-              <FeedsSettings
-                feeds={feeds}
-                folders={folders}
-                totalArticles={totalArticles}
-                refreshingFeedId={refreshingFeedId}
-                refreshingAll={refreshingAll}
-                onRefreshFeed={handleRefreshFeed}
-                onDeleteFeed={onDeleteFeed}
-                onRefreshAll={handleRefreshAll}
-                onMoveFeedToFolder={onMoveFeedToFolder}
-              />
-            )}
-            {activeTab === "folders" && (
-              <FoldersSettings
-                folders={folders}
-                feeds={feeds}
-                onAddFolder={onAddFolder}
-                onDeleteFolder={onDeleteFolder}
-                onRenameFolder={onRenameFolder}
-              />
-            )}
-            {activeTab === "general" && <GeneralSettings />}
-            {activeTab === "data" && (
-              <DataSettings
-                onDataChange={onDataChange}
-                isImporting={isImporting}
-                setIsImporting={setIsImporting}
-              />
-            )}
-            {activeTab === "debug" && <DebugSettings />}
-            {activeTab === "about" && <AboutSettings />}
+          <div className="flex-1 overflow-y-auto p-8 scroll-smooth bg-background">
+            <div className="max-w-3xl mx-auto">
+              {activeTab === "feeds" && (
+                <FeedsSettings
+                  feeds={feeds}
+                  folders={folders}
+                  totalArticles={totalArticles}
+                  refreshingFeedId={refreshingFeedId}
+                  refreshingAll={refreshingAll}
+                  onRefreshFeed={handleRefreshFeed}
+                  onDeleteFeed={onDeleteFeed}
+                  onRefreshAll={handleRefreshAll}
+                  onMoveFeedToFolder={onMoveFeedToFolder}
+                />
+              )}
+              {activeTab === "folders" && (
+                <FoldersSettings
+                  folders={folders}
+                  feeds={feeds}
+                  onAddFolder={onAddFolder}
+                  onDeleteFolder={onDeleteFolder}
+                  onRenameFolder={onRenameFolder}
+                />
+              )}
+              {activeTab === "general" && <GeneralSettings />}
+              {activeTab === "data" && (
+                <DataSettings
+                  onDataChange={onDataChange}
+                  isImporting={isImporting}
+                  setIsImporting={setIsImporting}
+                />
+              )}
+              {activeTab === "debug" && <DebugSettings />}
+              {activeTab === "about" && <AboutSettings />}
+            </div>
           </div>
         </div>
       </DialogContent>
@@ -290,207 +297,203 @@ function FeedsSettings({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8 animate-in fade-in duration-500">
       <div>
-        <h3 className="text-lg font-semibold">Subscriptions</h3>
-        <p className="text-sm text-muted-foreground">
-          Manage your RSS feed subscriptions
+        <h3 className="text-2xl font-bold tracking-tight">Subscriptions</h3>
+        <p className="text-sm text-muted-foreground mt-1">
+          You are currently subscribed to {feeds.length} sources.
         </p>
       </div>
 
-      <Separator />
-
       {/* Stats */}
-      <div className="flex gap-4">
-        <div className="rounded-lg border bg-card p-4 flex-1">
-          <div className="text-2xl font-bold">{feeds.length}</div>
-          <div className="text-sm text-muted-foreground">Total Feeds</div>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="rounded-xl border bg-muted/30 p-5 transition-colors hover:bg-muted/50">
+          <div className="text-sm font-medium text-muted-foreground mb-1">Total Feeds</div>
+          <div className="text-3xl font-bold tracking-tight">{feeds.length}</div>
         </div>
-        <div className="rounded-lg border bg-card p-4 flex-1">
-          <div className="text-2xl font-bold">{totalArticles}</div>
-          <div className="text-sm text-muted-foreground">Unread Articles</div>
+        <div className="rounded-xl border bg-muted/30 p-5 transition-colors hover:bg-muted/50">
+          <div className="text-sm font-medium text-muted-foreground mb-1">Unread</div>
+          <div className="text-3xl font-bold tracking-tight">{totalArticles}</div>
         </div>
       </div>
 
-      {/* Actions */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <h4 className="font-medium">Feed List</h4>
-          {selectedIds.size > 0 && (
-            <div className="flex items-center gap-2 animate-in fade-in slide-in-from-left-2 duration-200">
-              <span className="text-xs text-muted-foreground mr-2">
-                {selectedIds.size} selected
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 text-xs"
-                onClick={handleBulkRefresh}
-                disabled={isBulkRefreshing || isBulkDeleting}
-              >
-                <RefreshCwIcon className={`mr-1 size-3 ${isBulkRefreshing ? "animate-spin" : ""}`} />
-                Refresh
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 text-xs text-red-600 hover:text-red-600 hover:bg-red-50"
-                onClick={handleBulkDelete}
-                disabled={isBulkRefreshing || isBulkDeleting}
-              >
-                <Trash2Icon className="mr-1 size-3" />
-                Delete
-              </Button>
-            </div>
-          )}
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={onRefreshAll}
-          disabled={refreshingAll || feeds.length === 0 || isBulkRefreshing || isBulkDeleting}
-        >
-          <RefreshCwIcon className={`mr-2 size-4 ${refreshingAll ? "animate-spin" : ""}`} />
-          Refresh All
-        </Button>
-      </div>
-
-      {/* Feeds table */}
-      {feeds.length === 0 ? (
-        <div className="flex h-[200px] items-center justify-center rounded-lg border border-dashed">
-          <div className="text-center text-muted-foreground">
-            <RssIcon className="mx-auto mb-2 size-8 opacity-50" />
-            <p>No feeds yet</p>
-            <p className="text-sm">Add a feed to get started</p>
+      <div className="space-y-4">
+        {/* Actions */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <h4 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground/70">Feed List</h4>
+            {selectedIds.size > 0 && (
+              <div className="flex items-center gap-2 animate-in slide-in-from-left-2 duration-300">
+                <Separator orientation="vertical" className="h-4 mx-1" />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 px-2 text-xs text-primary hover:bg-primary/10 rounded-md"
+                  onClick={handleBulkRefresh}
+                  disabled={isBulkRefreshing || isBulkDeleting}
+                >
+                  <RefreshCwIcon className={`mr-1.5 size-3 ${isBulkRefreshing ? "animate-spin" : ""}`} />
+                  Refresh
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 px-2 text-xs text-destructive hover:bg-destructive/10 rounded-md"
+                  onClick={handleBulkDelete}
+                  disabled={isBulkRefreshing || isBulkDeleting}
+                >
+                  <Trash2Icon className="mr-1.5 size-3" />
+                  Delete
+                </Button>
+              </div>
+            )}
           </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="rounded-md px-4 h-8 text-xs font-medium border-muted-foreground/20 hover:bg-muted"
+            onClick={onRefreshAll}
+            disabled={refreshingAll || feeds.length === 0 || isBulkRefreshing || isBulkDeleting}
+          >
+            <RefreshCwIcon className={`mr-2 size-3 ${refreshingAll ? "animate-spin" : ""}`} />
+            Refresh All
+          </Button>
         </div>
-      ) : (
-        <div className="rounded-lg border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[40px]">
-                  <Checkbox
-                    checked={selectedIds.size === feeds.length && feeds.length > 0}
-                    onCheckedChange={toggleSelectAll}
-                    aria-label="Select all"
-                  />
-                </TableHead>
-                <TableHead>Feed</TableHead>
-                <TableHead>Folder</TableHead>
-                <TableHead className="w-[80px] text-center">Unread</TableHead>
-                <TableHead className="w-[60px]"></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {feeds.map((feed) => (
-                <TableRow key={feed.id} className={selectedIds.has(feed.id) ? "bg-muted/50" : ""}>
-                  <TableCell>
+
+        {/* Feeds table */}
+        {feeds.length === 0 ? (
+          <div className="flex h-[240px] flex-col items-center justify-center rounded-xl border-2 border-dashed border-muted bg-muted/10">
+            <div className="rounded-full bg-muted p-4 mb-4">
+              <RssIcon className="size-6 text-muted-foreground/60" />
+            </div>
+            <p className="font-medium text-muted-foreground">No subscriptions yet</p>
+            <p className="text-xs text-muted-foreground/60 mt-1">Add a feed to get started</p>
+          </div>
+        ) : (
+          <div className="rounded-xl border overflow-hidden bg-card">
+            <Table>
+              <TableHeader className="bg-muted/30">
+                <TableRow className="hover:bg-transparent border-none">
+                  <TableHead className="w-[48px] pl-4">
                     <Checkbox
-                      checked={selectedIds.has(feed.id)}
-                      onCheckedChange={() => toggleSelect(feed.id)}
-                      aria-label={`Select ${feed.title}`}
+                      checked={selectedIds.size === feeds.length && feeds.length > 0}
+                      onCheckedChange={toggleSelectAll}
+                      className="rounded-[4px]"
                     />
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-3">
-                      {feed.imageUrl ? (
-                        <img
-                          src={feed.imageUrl}
-                          alt=""
-                          className="size-8 shrink-0 rounded"
-                        />
-                      ) : (
-                        <div className="flex size-8 shrink-0 items-center justify-center rounded bg-orange-500 text-xs font-bold text-white">
-                          {feed.title.charAt(0).toUpperCase()}
-                        </div>
-                      )}
-                      <div className="min-w-0">
-                        <div className="font-medium truncate max-w-[200px]">{feed.title}</div>
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <span className="truncate max-w-[200px]">{feed.url}</span>
-                          {feed.siteUrl && (
-                            <a
-                              href={feed.siteUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="shrink-0 hover:text-foreground"
-                            >
-                              <ExternalLinkIcon className="size-3" />
-                            </a>
-                          )}
+                  </TableHead>
+                  <TableHead className="text-xs font-bold uppercase tracking-wider text-muted-foreground/60">Source</TableHead>
+                  <TableHead className="text-xs font-bold uppercase tracking-wider text-muted-foreground/60">Folder</TableHead>
+                  <TableHead className="w-[100px] text-center text-xs font-bold uppercase tracking-wider text-muted-foreground/60">Unread</TableHead>
+                  <TableHead className="w-[48px] pr-4"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {feeds.map((feed) => (
+                  <TableRow 
+                    key={feed.id} 
+                    className={`border-muted/40 hover:bg-muted/20 transition-colors ${selectedIds.has(feed.id) ? "bg-muted/40" : ""}`}
+                  >
+                    <TableCell className="pl-4">
+                      <Checkbox
+                        checked={selectedIds.has(feed.id)}
+                        onCheckedChange={() => toggleSelect(feed.id)}
+                        className="rounded-[4px]"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-3 py-1">
+                        {feed.imageUrl ? (
+                          <img
+                            src={feed.imageUrl}
+                            alt=""
+                            className="size-7 shrink-0 rounded-md object-cover shadow-sm border border-black/5 dark:border-white/5"
+                          />
+                        ) : (
+                          <div className="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-[10px] font-bold text-primary">
+                            {feed.title.charAt(0).toUpperCase()}
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <div className="font-semibold text-[13px] truncate max-w-[220px]">{feed.title}</div>
+                          <div className="text-[11px] text-muted-foreground truncate max-w-[220px] opacity-70">
+                            {new URL(feed.url).hostname}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Select
-                      value={feed.folderId || "none"}
-                      onValueChange={(val) => onMoveFeedToFolder(feed.id, val === "none" ? null : val)}
-                    >
-                      <SelectTrigger className="h-8 w-[140px] text-xs">
-                        <SelectValue placeholder="No Folder" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">No Folder</SelectItem>
-                        {folders.map((folder) => (
-                          <SelectItem key={folder.id} value={folder.id}>
-                            {folder.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </TableCell>
-                  <TableCell className="text-center">
-                    {feed._count.articles > 0 ? (
-                      <Badge variant="secondary">{feed._count.articles}</Badge>
-                    ) : (
-                      <span className="text-muted-foreground">0</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="size-8">
-                          <MoreHorizontalIcon className="size-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem
-                          onClick={() => onRefreshFeed(feed.id)}
-                          disabled={refreshingFeedId === feed.id}
-                        >
-                          <RefreshCwIcon className={`mr-2 size-4 ${refreshingFeedId === feed.id ? "animate-spin" : ""}`} />
-                          Refresh
-                        </DropdownMenuItem>
-                        {feed.siteUrl && (
-                          <DropdownMenuItem asChild>
-                            <a
-                              href={feed.siteUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                            >
-                              <ExternalLinkIcon className="mr-2 size-4" />
-                              Visit Site
-                            </a>
+                    </TableCell>
+                    <TableCell>
+                      <Select
+                        value={feed.folderId || "none"}
+                        onValueChange={(val) => onMoveFeedToFolder(feed.id, val === "none" ? null : val)}
+                      >
+                        <SelectTrigger className="h-7 w-[120px] text-[11px] bg-transparent border-none hover:bg-muted/50 px-2 focus:ring-0">
+                          <SelectValue placeholder="No Folder" />
+                        </SelectTrigger>
+                        <SelectContent className="rounded-lg shadow-xl border-muted/40">
+                          <SelectItem value="none" className="text-[11px]">No Folder</SelectItem>
+                          {folders.map((folder) => (
+                            <SelectItem key={folder.id} value={folder.id} className="text-[11px]">
+                              {folder.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {feed._count.articles > 0 ? (
+                        <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-bold">
+                          {feed._count.articles}
+                        </span>
+                      ) : (
+                        <span className="text-[11px] text-muted-foreground opacity-40">0</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="pr-4">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="size-8 rounded-md hover:bg-muted/50">
+                            <MoreHorizontalIcon className="size-4 text-muted-foreground" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-40 rounded-lg shadow-xl border-muted/40 p-1">
+                          <DropdownMenuItem
+                            onClick={() => onRefreshFeed(feed.id)}
+                            disabled={refreshingFeedId === feed.id}
+                            className="rounded-md text-xs"
+                          >
+                            <RefreshCwIcon className={`mr-2 size-3.5 ${refreshingFeedId === feed.id ? "animate-spin" : ""}`} />
+                            Refresh
                           </DropdownMenuItem>
-                        )}
-                        <DropdownMenuItem
-                          onClick={() => onDeleteFeed(feed.id)}
-                          className="text-red-600"
-                        >
-                          <Trash2Icon className="mr-2 size-4" />
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      )}
+                          {feed.siteUrl && (
+                            <DropdownMenuItem asChild className="rounded-md text-xs">
+                              <a
+                                href={feed.siteUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                <ExternalLinkIcon className="mr-2 size-3.5" />
+                                Visit Site
+                              </a>
+                            </DropdownMenuItem>
+                          )}
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            onClick={() => onDeleteFeed(feed.id)}
+                            className="text-destructive focus:text-destructive focus:bg-destructive/10 rounded-md text-xs"
+                          >
+                            <Trash2Icon className="mr-2 size-3.5" />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -584,143 +587,158 @@ function FoldersSettings({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8 animate-in fade-in duration-500">
       <div>
-        <h3 className="text-lg font-semibold">Folders</h3>
-        <p className="text-sm text-muted-foreground">
-          Organize your feeds into folders
+        <h3 className="text-2xl font-bold tracking-tight">Folders</h3>
+        <p className="text-sm text-muted-foreground mt-1">
+          Organize your reading by grouping similar feeds together.
         </p>
       </div>
 
-      <Separator />
+      <div className="space-y-4">
+        {/* Actions & Add Folder */}
+        <div className="flex items-center justify-between gap-4">
+          <form onSubmit={handleAddFolder} className="flex flex-1 gap-2">
+            <div className="relative flex-1 max-w-[320px]">
+              <Input
+                placeholder="New folder name..."
+                value={newFolderName}
+                onChange={(e) => setNewFolderName(e.target.value)}
+                className="rounded-lg pl-4 pr-10 h-9 border-muted-foreground/20 bg-muted/20 focus-visible:ring-primary/20"
+              />
+              <Button 
+                type="submit" 
+                size="icon" 
+                variant="ghost" 
+                className="absolute right-1 top-1 size-7 rounded-md text-primary hover:bg-primary/10"
+                disabled={isSubmitting || !newFolderName.trim() || isBulkDeleting}
+              >
+                <PlusIcon className="size-4" />
+              </Button>
+            </div>
+          </form>
 
-      {/* Actions & Add Folder */}
-      <div className="flex items-center justify-between gap-4">
-        <form onSubmit={handleAddFolder} className="flex flex-1 gap-2">
-          <Input
-            placeholder="New folder name..."
-            value={newFolderName}
-            onChange={(e) => setNewFolderName(e.target.value)}
-            className="max-w-[300px]"
-          />
-          <Button type="submit" disabled={isSubmitting || !newFolderName.trim() || isBulkDeleting}>
-            <PlusIcon className="mr-2 size-4" />
-            Add Folder
-          </Button>
-        </form>
+          {selectedIds.size > 0 && (
+            <div className="flex items-center gap-2 animate-in slide-in-from-right-2 duration-300">
+              <span className="text-[11px] font-medium text-muted-foreground mr-2 uppercase tracking-wider">
+                {selectedIds.size} selected
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 px-3 rounded-md text-xs text-destructive hover:bg-destructive/10"
+                onClick={handleBulkDelete}
+                disabled={isBulkDeleting || isSubmitting}
+              >
+                <Trash2Icon className="mr-1.5 size-3" />
+                Delete Selected
+              </Button>
+            </div>
+          )}
+        </div>
 
-        {selectedIds.size > 0 && (
-          <div className="flex items-center gap-2 animate-in fade-in slide-in-from-right-2 duration-200">
-            <span className="text-xs text-muted-foreground mr-2">
-              {selectedIds.size} selected
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-9 text-xs text-red-600 hover:text-red-600 hover:bg-red-50"
-              onClick={handleBulkDelete}
-              disabled={isBulkDeleting || isSubmitting}
-            >
-              <Trash2Icon className="mr-1 size-3" />
-              Delete Selected
-            </Button>
-          </div>
-        )}
-      </div>
-
-      {/* Folders List */}
-      <div className="rounded-lg border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-[40px]">
-                <Checkbox
-                  checked={selectedIds.size === folders.length && folders.length > 0}
-                  onCheckedChange={toggleSelectAll}
-                  aria-label="Select all folders"
-                />
-              </TableHead>
-              <TableHead>Folder Name</TableHead>
-              <TableHead className="w-[100px] text-center">Feeds</TableHead>
-              <TableHead className="w-[120px] text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {folders.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
-                  No folders created yet.
-                </TableCell>
+        {/* Folders List */}
+        <div className="rounded-xl border overflow-hidden bg-card">
+          <Table>
+            <TableHeader className="bg-muted/30">
+              <TableRow className="hover:bg-transparent border-none">
+                <TableHead className="w-[48px] pl-4">
+                  <Checkbox
+                    checked={selectedIds.size === folders.length && folders.length > 0}
+                    onCheckedChange={toggleSelectAll}
+                    className="rounded-[4px]"
+                  />
+                </TableHead>
+                <TableHead className="text-xs font-bold uppercase tracking-wider text-muted-foreground/60">Folder Name</TableHead>
+                <TableHead className="w-[100px] text-center text-xs font-bold uppercase tracking-wider text-muted-foreground/60">Feeds</TableHead>
+                <TableHead className="w-[100px] pr-4 text-right text-xs font-bold uppercase tracking-wider text-muted-foreground/60">Actions</TableHead>
               </TableRow>
-            ) : (
-              folders.map((folder) => (
-                <TableRow key={folder.id} className={selectedIds.has(folder.id) ? "bg-muted/50" : ""}>
-                  <TableCell>
-                    <Checkbox
-                      checked={selectedIds.has(folder.id)}
-                      onCheckedChange={() => toggleSelect(folder.id)}
-                      aria-label={`Select ${folder.name}`}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    {editingId === folder.id ? (
-                      <div className="flex items-center gap-2">
-                        <Input
-                          value={editingName}
-                          onChange={(e) => setEditingName(e.target.value)}
-                          className="h-8 max-w-[200px]"
-                          autoFocus
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") handleSaveEdit();
-                            if (e.key === "Escape") setEditingId(null);
-                          }}
-                        />
-                        <Button size="sm" className="h-8" onClick={handleSaveEdit} disabled={isSubmitting}>
-                          Save
-                        </Button>
-                        <Button size="sm" variant="ghost" className="h-8" onClick={() => setEditingId(null)}>
-                          Cancel
-                        </Button>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <FolderIcon className="size-4 text-muted-foreground" />
-                        <span className="font-medium">{folder.name}</span>
-                      </div>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <Badge variant="secondary">
-                      {feeds.filter(f => f.folderId === folder.id).length}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-8"
-                        onClick={() => handleStartEdit(folder)}
-                        disabled={isBulkDeleting}
-                      >
-                        <PencilIcon className="size-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-8 text-red-600 hover:text-red-600 hover:bg-red-50"
-                        onClick={() => handleDeleteFolder(folder.id)}
-                        disabled={isBulkDeleting}
-                      >
-                        <Trash2Icon className="size-4" />
-                      </Button>
+            </TableHeader>
+            <TableBody>
+              {folders.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={4} className="h-32 text-center">
+                    <div className="flex flex-col items-center justify-center py-8">
+                      <FolderIcon className="size-8 text-muted-foreground/20 mb-2" />
+                      <p className="text-sm text-muted-foreground">No folders created yet</p>
                     </div>
                   </TableCell>
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+              ) : (
+                folders.map((folder) => (
+                  <TableRow 
+                    key={folder.id} 
+                    className={`border-muted/40 hover:bg-muted/20 transition-colors ${selectedIds.has(folder.id) ? "bg-muted/40" : ""}`}
+                  >
+                    <TableCell className="pl-4">
+                      <Checkbox
+                        checked={selectedIds.has(folder.id)}
+                        onCheckedChange={() => toggleSelect(folder.id)}
+                        className="rounded-[4px]"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      {editingId === folder.id ? (
+                        <div className="flex items-center gap-2">
+                          <Input
+                            value={editingName}
+                            onChange={(e) => setEditingName(e.target.value)}
+                            className="h-8 max-w-[200px] text-[13px] rounded-md border-primary/30"
+                            autoFocus
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") handleSaveEdit();
+                              if (e.key === "Escape") setEditingId(null);
+                            }}
+                          />
+                          <Button size="sm" className="h-8 rounded-md px-3" onClick={handleSaveEdit} disabled={isSubmitting}>
+                            Save
+                          </Button>
+                          <Button size="sm" variant="ghost" className="h-8 rounded-md" onClick={() => setEditingId(null)}>
+                            <Trash2Icon className="size-3.5" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 py-1">
+                          <div className="size-7 rounded-md bg-muted flex items-center justify-center text-muted-foreground/60">
+                            <FolderIcon className="size-3.5" />
+                          </div>
+                          <span className="font-semibold text-[13px]">{folder.name}</span>
+                        </div>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-full bg-muted text-muted-foreground text-[10px] font-bold">
+                        {feeds.filter(f => f.folderId === folder.id).length}
+                      </span>
+                    </TableCell>
+                    <TableCell className="pr-4 text-right">
+                      <div className="flex justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-8 rounded-md hover:bg-muted/50"
+                          onClick={() => handleStartEdit(folder)}
+                          disabled={isBulkDeleting}
+                        >
+                          <PencilIcon className="size-3.5 text-muted-foreground/70" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-8 rounded-md hover:bg-destructive/10 text-destructive/70 hover:text-destructive"
+                          onClick={() => handleDeleteFolder(folder.id)}
+                          disabled={isBulkDeleting}
+                        >
+                          <Trash2Icon className="size-3.5" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
       </div>
     </div>
   );
@@ -730,60 +748,62 @@ function GeneralSettings() {
   const { theme, setTheme } = useTheme();
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8 animate-in fade-in duration-500">
       <div>
-        <h3 className="text-lg font-semibold">General</h3>
-        <p className="text-sm text-muted-foreground">
-          Application settings and preferences
+        <h3 className="text-2xl font-bold tracking-tight">General</h3>
+        <p className="text-sm text-muted-foreground mt-1">
+          Customize your experience and appearance.
         </p>
       </div>
 
-      <Separator />
-
-      <div className="space-y-4">
-        <div className="rounded-lg border p-4">
-          <div className="flex items-center justify-between">
+      <div className="space-y-6">
+        <div className="rounded-xl border p-6 bg-card">
+          <div className="flex items-center justify-between mb-6">
             <div>
-              <h4 className="font-medium">Theme</h4>
-              <p className="text-sm text-muted-foreground">
-                Select the appearance theme
+              <h4 className="font-semibold text-sm">Theme</h4>
+              <p className="text-[12px] text-muted-foreground">
+                Select your preferred interface color scheme.
               </p>
             </div>
-            <Select value={theme} onValueChange={setTheme}>
-              <SelectTrigger className="w-[140px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="light">
-                  <div className="flex items-center gap-2">
-                    <SunIcon className="size-4" />
-                    Light
-                  </div>
-                </SelectItem>
-                <SelectItem value="dark">
-                  <div className="flex items-center gap-2">
-                    <MoonIcon className="size-4" />
-                    Dark
-                  </div>
-                </SelectItem>
-                <SelectItem value="system">
-                  <div className="flex items-center gap-2">
-                    <MonitorIcon className="size-4" />
-                    System
-                  </div>
-                </SelectItem>
-              </SelectContent>
-            </Select>
+          </div>
+          
+          <div className="grid grid-cols-3 gap-3">
+            {[
+              { id: "light", label: "Light", icon: <SunIcon className="size-4" /> },
+              { id: "dark", label: "Dark", icon: <MoonIcon className="size-4" /> },
+              { id: "system", label: "System", icon: <MonitorIcon className="size-4" /> },
+            ].map((t) => (
+              <button
+                key={t.id}
+                onClick={() => setTheme(t.id)}
+                className={`flex flex-col items-center gap-3 p-4 rounded-lg border-2 transition-all duration-200 ${
+                  theme === t.id
+                    ? "border-primary bg-primary/5 ring-4 ring-primary/5"
+                    : "border-muted bg-muted/10 hover:border-muted-foreground/20"
+                }`}
+              >
+                <div className={`${theme === t.id ? "text-primary" : "text-muted-foreground"}`}>
+                  {t.icon}
+                </div>
+                <span className={`text-xs font-semibold ${theme === t.id ? "text-primary" : "text-muted-foreground"}`}>
+                  {t.label}
+                </span>
+              </button>
+            ))}
           </div>
         </div>
 
-        <div className="rounded-lg border p-4">
-          <h4 className="font-medium">Language</h4>
-          <p className="text-sm text-muted-foreground">
-            Display language for the application
-          </p>
-          <div className="mt-2">
-            <Badge variant="outline">English</Badge>
+        <div className="rounded-xl border p-6 bg-card">
+          <div className="flex items-center justify-between">
+            <div>
+              <h4 className="font-semibold text-sm">Language</h4>
+              <p className="text-[12px] text-muted-foreground">
+                The application will use this language.
+              </p>
+            </div>
+            <div className="px-3 py-1 rounded-full bg-muted text-xs font-bold text-muted-foreground">
+              English
+            </div>
           </div>
         </div>
       </div>
@@ -979,42 +999,47 @@ function DataSettings({ onDataChange, isImporting, setIsImporting }: DataSetting
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8 animate-in fade-in duration-500">
       <div>
-        <h3 className="text-lg font-semibold">Data Management</h3>
-        <p className="text-sm text-muted-foreground">
-          Import, export, and manage your data
+        <h3 className="text-2xl font-bold tracking-tight">Data Management</h3>
+        <p className="text-sm text-muted-foreground mt-1">
+          Import, export, and manage your local reading database.
         </p>
       </div>
 
-      <Separator />
-
       {message && (
         <div
-          className={`rounded-lg p-3 text-sm ${
+          className={`rounded-lg p-4 text-sm font-medium animate-in slide-in-from-top-2 duration-300 ${
             message.type === "success"
-              ? "bg-green-500/10 text-green-600"
-              : "bg-red-500/10 text-red-600"
+              ? "bg-primary/10 text-primary border border-primary/20"
+              : "bg-destructive/10 text-destructive border border-destructive/20"
           }`}
         >
-          {message.text}
+          <div className="flex items-center gap-2">
+            {message.type === "success" ? <CheckCircleIcon className="size-4" /> : <AlertCircleIcon className="size-4" />}
+            {message.text}
+          </div>
         </div>
       )}
 
       <div className="space-y-4">
         {/* Import/Export OPML */}
-        <div className="rounded-lg border p-4">
-          <h4 className="font-medium">OPML</h4>
-          <p className="text-sm text-muted-foreground">
-            Import or export your subscriptions in OPML format
-          </p>
+        <div className="rounded-xl border p-6 bg-card transition-colors hover:border-muted-foreground/20">
+          <div className="flex items-start justify-between">
+            <div className="space-y-1">
+              <h4 className="font-semibold text-sm">OPML Subscriptions</h4>
+              <p className="text-[12px] text-muted-foreground">
+                Transfer your subscriptions to or from other RSS readers.
+              </p>
+            </div>
+          </div>
 
           {/* Import Progress */}
           {importTask && (importTask.status === "running" || importTask.status === "pending") && (
-            <div className="mt-3 space-y-2">
-              <div className="flex items-center justify-between text-sm">
-                <div className="flex items-center gap-2">
-                  <LoaderIcon className="size-4 animate-spin text-blue-500" />
+            <div className="mt-6 space-y-3 p-4 rounded-lg bg-muted/30 border border-muted/50">
+              <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider">
+                <div className="flex items-center gap-2 text-primary">
+                  <LoaderIcon className="size-3 animate-spin" />
                   <span>Importing...</span>
                 </div>
                 <span className="text-muted-foreground">
@@ -1027,76 +1052,39 @@ function DataSettings({ onDataChange, isImporting, setIsImporting }: DataSetting
                     ? (importTask.progress.current / importTask.progress.total) * 100
                     : 0
                 }
-                className="h-2"
+                className="h-1.5 bg-muted"
               />
               {importTask.progress.message && (
-                <div className="text-xs text-muted-foreground truncate">
+                <div className="text-[11px] text-muted-foreground truncate italic opacity-70">
                   {importTask.progress.message}
-                  {importTask.progress.detail && ` - ${importTask.progress.detail}`}
                 </div>
               )}
               <Button
-                variant="outline"
+                variant="ghost"
                 size="sm"
-                className="w-full mt-2"
+                className="w-full h-8 text-xs text-destructive hover:bg-destructive/10 rounded-md mt-1"
                 onClick={handleCancelImport}
               >
-                <StopCircleIcon className="mr-2 size-4" />
+                <StopCircleIcon className="mr-2 size-3.5" />
                 Cancel Import
               </Button>
             </div>
           )}
 
-          {/* Import Result */}
-          {importTask && importTask.status === "completed" && (
-            <div className="mt-3 rounded-lg bg-green-500/10 p-3 text-sm text-green-600">
-              <div className="flex items-center gap-2">
-                <CheckCircleIcon className="size-4" />
-                <span>
-                  Imported {importTask.result?.imported || 0} feeds
-                  {(importTask.result?.skipped || 0) > 0 && (
-                    <span className="text-muted-foreground ml-1">
-                      ({importTask.result?.skipped} skipped)
-                    </span>
-                  )}
-                </span>
-              </div>
-            </div>
-          )}
-
-          {importTask && importTask.status === "cancelled" && (
-            <div className="mt-3 rounded-lg bg-orange-500/10 p-3 text-sm text-orange-600">
-              <div className="flex items-center gap-2">
-                <StopCircleIcon className="size-4" />
-                <span>
-                  Cancelled - Imported {importTask.result?.imported || 0} feeds
-                </span>
-              </div>
-            </div>
-          )}
-
-          {importTask && importTask.status === "failed" && (
-            <div className="mt-3 rounded-lg bg-red-500/10 p-3 text-sm text-red-600">
-              <div className="flex items-center gap-2">
-                <AlertCircleIcon className="size-4" />
-                <span>{importTask.result?.error || "Import failed"}</span>
-              </div>
-            </div>
-          )}
-
           {/* Buttons */}
           {!isImporting && (
-            <div className="mt-3 flex gap-2">
-              <Button variant="outline" size="sm" onClick={handleExportOpml}>
-                <DownloadIcon className="mr-2 size-4" />
+            <div className="mt-6 flex gap-3">
+              <Button variant="outline" size="sm" onClick={handleExportOpml} className="rounded-md h-9 px-4 text-xs font-semibold">
+                <DownloadIcon className="mr-2 size-3.5" />
                 Export
               </Button>
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => fileInputRef.current?.click()}
+                className="rounded-md h-9 px-4 text-xs font-semibold"
               >
-                <UploadIcon className="mr-2 size-4" />
+                <UploadIcon className="mr-2 size-3.5" />
                 Import
               </Button>
               <input
@@ -1111,47 +1099,58 @@ function DataSettings({ onDataChange, isImporting, setIsImporting }: DataSetting
         </div>
 
         {/* Mark All Read */}
-        <div className="rounded-lg border p-4">
-          <h4 className="font-medium">Mark All as Read</h4>
-          <p className="text-sm text-muted-foreground">
-            Mark all articles across all feeds as read
-          </p>
-          <div className="mt-3">
+        <div className="rounded-xl border p-6 bg-card transition-colors hover:border-muted-foreground/20">
+          <div className="flex items-center justify-between">
+            <div className="space-y-1">
+              <h4 className="font-semibold text-sm">Mark All as Read</h4>
+              <p className="text-[12px] text-muted-foreground">
+                Set all current articles to read status.
+              </p>
+            </div>
             <Button
               variant="outline"
               size="sm"
               onClick={handleMarkAllRead}
               disabled={markingAllRead}
+              className="rounded-md h-9 px-4 text-xs font-semibold whitespace-nowrap"
             >
-              <CheckCircleIcon className="mr-2 size-4" />
-              {markingAllRead ? "Processing..." : "Mark All Read"}
+              {markingAllRead ? (
+                <LoaderIcon className="mr-2 size-3.5 animate-spin" />
+              ) : (
+                <CheckCircleIcon className="mr-2 size-3.5" />
+              )}
+              Mark All Read
             </Button>
           </div>
         </div>
 
         {/* Cleanup */}
-        <div className="rounded-lg border p-4">
-          <h4 className="font-medium">Clean Up</h4>
-          <p className="text-sm text-muted-foreground">
-            Delete old read articles to save space
-          </p>
-          <div className="mt-3 flex gap-2">
+        <div className="rounded-xl border p-6 bg-card transition-colors hover:border-muted-foreground/20">
+          <div className="space-y-1 mb-6">
+            <h4 className="font-semibold text-sm">Clean Up</h4>
+            <p className="text-[12px] text-muted-foreground">
+              Remove old read articles to keep your database fast.
+            </p>
+          </div>
+          <div className="flex gap-3">
             <Button
-              variant="outline"
+              variant="ghost"
               size="sm"
               onClick={() => handleCleanup(7)}
               disabled={cleaning}
+              className="rounded-md h-9 px-4 text-xs font-semibold hover:bg-muted"
             >
-              <Trash2Icon className="mr-2 size-4" />
+              <Trash2Icon className="mr-2 size-3.5" />
               Older than 7 days
             </Button>
             <Button
-              variant="outline"
+              variant="ghost"
               size="sm"
               onClick={() => handleCleanup(30)}
               disabled={cleaning}
+              className="rounded-md h-9 px-4 text-xs font-semibold hover:bg-muted"
             >
-              <Trash2Icon className="mr-2 size-4" />
+              <Trash2Icon className="mr-2 size-3.5" />
               Older than 30 days
             </Button>
           </div>
@@ -1286,176 +1285,144 @@ function DebugSettings() {
   const hasChanges = userAgent !== savedUserAgent || refreshInterval !== savedRefreshInterval || email !== savedEmail;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8 animate-in fade-in duration-500">
       <div>
-        <h3 className="text-lg font-semibold">Debug</h3>
-        <p className="text-sm text-muted-foreground">
-          Advanced settings for debugging
+        <h3 className="text-2xl font-bold tracking-tight">Advanced</h3>
+        <p className="text-sm text-muted-foreground mt-1">
+          Technical settings for power users and debugging.
         </p>
       </div>
 
-      <Separator />
-
       {message && (
         <div
-          className={`rounded-lg p-3 text-sm ${
+          className={`rounded-lg p-4 text-sm font-medium animate-in slide-in-from-top-2 duration-300 ${
             message.type === "success"
-              ? "bg-green-500/10 text-green-600"
-              : "bg-red-500/10 text-red-600"
+              ? "bg-primary/10 text-primary border border-primary/20"
+              : "bg-destructive/10 text-destructive border border-destructive/20"
           }`}
         >
           {message.text}
         </div>
       )}
 
-      <div className="space-y-4">
+      <div className="space-y-6">
         {/* Refresh Interval */}
-        <div className="rounded-lg border p-4">
-          <h4 className="font-medium">Auto Refresh Interval</h4>
-          <p className="text-sm text-muted-foreground mb-3">
-            How often to automatically refresh all feeds (in minutes). Set to 0 to disable.
+        <div className="rounded-xl border p-6 bg-card">
+          <h4 className="font-semibold text-sm mb-1">Auto Refresh Interval</h4>
+          <p className="text-[12px] text-muted-foreground mb-6">
+            Background sync frequency (in minutes).
           </p>
 
           {loading ? (
-            <div className="text-sm text-muted-foreground">Loading...</div>
+            <div className="h-20 flex items-center justify-center">
+              <LoaderIcon className="size-4 animate-spin text-muted-foreground/30" />
+            </div>
           ) : (
-            <>
-              <div className="flex items-center gap-2 mb-3">
+            <div className="space-y-6">
+              <div className="flex items-center gap-3">
                 <Input
                   type="number"
                   min="0"
                   max="1440"
                   value={refreshInterval}
                   onChange={(e) => setRefreshInterval(e.target.value)}
-                  className="w-24"
+                  className="w-24 rounded-md border-muted-foreground/20"
                 />
-                <span className="text-sm text-muted-foreground">minutes</span>
+                <span className="text-sm font-medium text-muted-foreground">minutes</span>
               </div>
 
               <div className="flex flex-wrap gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setRefreshInterval("5")}
-                >
-                  5 min
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setRefreshInterval("15")}
-                >
-                  15 min
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setRefreshInterval("30")}
-                >
-                  30 min
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setRefreshInterval("60")}
-                >
-                  1 hour
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setRefreshInterval("0")}
-                >
-                  Disable
-                </Button>
+                {["5", "15", "30", "60", "0"].map((v) => (
+                  <Button
+                    key={v}
+                    variant={refreshInterval === v ? "secondary" : "outline"}
+                    size="sm"
+                    onClick={() => setRefreshInterval(v)}
+                    className="rounded-full h-8 px-4 text-[11px] font-bold"
+                  >
+                    {v === "0" ? "Off" : v === "60" ? "1h" : `${v}m`}
+                  </Button>
+                ))}
               </div>
-
-              <p className="text-xs text-muted-foreground mt-3">
-                Default: {DEFAULT_REFRESH_INTERVAL} minutes
-              </p>
-            </>
+            </div>
           )}
         </div>
 
         {/* Gravatar Email */}
-        <div className="rounded-lg border p-4">
-          <h4 className="font-medium">Gravatar Email</h4>
-          <p className="text-sm text-muted-foreground mb-3">
-            Email address for Gravatar avatar. Leave empty to use default icon.
+        <div className="rounded-xl border p-6 bg-card">
+          <h4 className="font-semibold text-sm mb-1">Avatar Service</h4>
+          <p className="text-[12px] text-muted-foreground mb-6">
+            Your Gravatar email address for the sidebar.
           </p>
 
-          {loading ? (
-            <div className="text-sm text-muted-foreground">Loading...</div>
-          ) : (
+          {!loading && (
             <Input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="your@email.com"
-              className="max-w-[300px]"
+              className="max-w-[320px] rounded-md border-muted-foreground/20"
             />
           )}
         </div>
 
         {/* User-Agent */}
-        <div className="rounded-lg border p-4">
-          <h4 className="font-medium">User-Agent</h4>
-          <p className="text-sm text-muted-foreground mb-3">
-            Custom User-Agent header for RSS fetching. Some feeds may require a browser-like UA.
+        <div className="rounded-xl border p-6 bg-card">
+          <h4 className="font-semibold text-sm mb-1">Network User-Agent</h4>
+          <p className="text-[12px] text-muted-foreground mb-6">
+            Custom HTTP header for feed fetching.
           </p>
 
-          {loading ? (
-            <div className="text-sm text-muted-foreground">Loading...</div>
-          ) : (
-            <>
+          {!loading && (
+            <div className="space-y-4">
               <Input
                 value={userAgent}
                 onChange={(e) => setUserAgent(e.target.value)}
-                placeholder="Leave empty to use default"
-                className="mb-3 font-mono text-xs"
+                placeholder="Default agent"
+                className="font-mono text-[11px] rounded-md border-muted-foreground/20 bg-muted/20"
               />
 
-              <div className="flex flex-wrap gap-2">
+              <div className="flex gap-2">
                 <Button
-                  variant="outline"
+                  variant="ghost"
                   size="sm"
                   onClick={handleUseDefaultUA}
+                  className="rounded-md h-8 text-[11px] font-bold hover:bg-muted"
                 >
-                  Use Chrome UA
+                  Chrome Default
                 </Button>
                 <Button
-                  variant="outline"
+                  variant="ghost"
                   size="sm"
                   onClick={handleResetUA}
+                  className="rounded-md h-8 text-[11px] font-bold hover:bg-muted"
                 >
-                  Clear
+                  Reset
                 </Button>
               </div>
-
-              <p className="text-xs text-muted-foreground mt-3">
-                Default: <code className="bg-muted px-1 py-0.5 rounded text-[10px]">{DEFAULT_USER_AGENT.slice(0, 50)}...</code>
-              </p>
-            </>
+            </div>
           )}
         </div>
 
         {/* Save Button */}
-        <div className="flex justify-end">
+        <div className="flex justify-end pt-2">
           <Button
             onClick={handleSave}
             disabled={saving || !hasChanges}
+            className="rounded-md px-8 h-10 font-bold shadow-lg shadow-primary/20"
           >
-            {saving ? "Saving..." : "Save Settings"}
+            {saving ? <LoaderIcon className="size-4 animate-spin mr-2" /> : null}
+            Save Changes
           </Button>
         </div>
 
-        <Separator />
+        <Separator className="my-8" />
 
         {/* Clear Cache */}
-        <div className="rounded-lg border p-4">
-          <h4 className="font-medium">Clear Cache</h4>
-          <p className="text-sm text-muted-foreground mb-3">
-            Clear cached content. After clearing, refresh feeds to re-fetch content.
+        <div className="rounded-xl border border-destructive/20 p-6 bg-destructive/[0.02]">
+          <h4 className="font-semibold text-sm text-destructive mb-1">Danger Zone</h4>
+          <p className="text-[12px] text-muted-foreground mb-6">
+            Clear locally cached data. This will not delete your subscriptions.
           </p>
 
           <div className="flex flex-wrap gap-2">
@@ -1464,27 +1431,27 @@ function DebugSettings() {
               size="sm"
               onClick={() => handleClearCache("content")}
               disabled={clearingCache}
+              className="rounded-md h-9 text-[11px] font-bold border-destructive/20 hover:bg-destructive/10 hover:text-destructive"
             >
-              <Trash2Icon className="mr-2 size-4" />
-              {clearingCache ? "Clearing..." : "RSS Content"}
+              RSS Content
             </Button>
             <Button
               variant="outline"
               size="sm"
               onClick={() => handleClearCache("readability")}
               disabled={clearingCache}
+              className="rounded-md h-9 text-[11px] font-bold border-destructive/20 hover:bg-destructive/10 hover:text-destructive"
             >
-              <Trash2Icon className="mr-2 size-4" />
-              {clearingCache ? "Clearing..." : "Readability"}
+              Readability
             </Button>
             <Button
               variant="outline"
               size="sm"
               onClick={() => handleClearCache("all")}
               disabled={clearingCache}
+              className="rounded-md h-9 text-[11px] font-bold bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              <Trash2Icon className="mr-2 size-4" />
-              {clearingCache ? "Clearing..." : "All Cache"}
+              Clear All Cache
             </Button>
           </div>
         </div>
@@ -1495,49 +1462,52 @@ function DebugSettings() {
 
 function AboutSettings() {
   return (
-    <div className="space-y-6">
-      <div>
-        <h3 className="text-lg font-semibold">About</h3>
-        <p className="text-sm text-muted-foreground">
-          Application information
-        </p>
-      </div>
-
-      <Separator />
-
-      <div className="space-y-4">
-        <div className="flex items-center gap-4">
-          <div className="flex size-16 items-center justify-center rounded-xl bg-orange-500 text-white">
-            <RssIcon className="size-8" />
-          </div>
-          <div>
-            <h4 className="text-xl font-bold">RSS Reader</h4>
-            <p className="text-sm text-muted-foreground">Version 1.0.0</p>
-          </div>
+    <div className="space-y-8 animate-in fade-in duration-500">
+      <div className="flex flex-col items-center py-12 text-center">
+        <div className="flex size-24 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-2xl shadow-primary/40 mb-8 rotate-3 transition-transform hover:rotate-0">
+          <RssIcon className="size-12" />
         </div>
-
-        <Separator />
-
-        <div className="rounded-lg border p-4">
-          <h4 className="font-medium">Description</h4>
-          <p className="mt-1 text-sm text-muted-foreground">
-            A simple and elegant RSS reader built with Next.js, featuring a
-            clean three-column layout for managing and reading your favorite
-            RSS feeds.
+        <h4 className="text-4xl font-black tracking-tighter">GIST RSS</h4>
+        <p className="text-sm font-bold text-primary/60 tracking-widest uppercase mt-2">Version 1.0.0</p>
+        
+        <div className="max-w-[420px] mt-8">
+          <p className="text-base text-muted-foreground leading-relaxed">
+            A minimalist, high-performance RSS reader designed for focus. 
+            Built with modern web technologies for a seamless reading experience.
           </p>
         </div>
+      </div>
 
-        <div className="rounded-lg border p-4">
-          <h4 className="font-medium">Tech Stack</h4>
-          <div className="mt-2 flex flex-wrap gap-2">
-            <Badge variant="secondary">Next.js</Badge>
-            <Badge variant="secondary">React</Badge>
-            <Badge variant="secondary">TypeScript</Badge>
-            <Badge variant="secondary">Tailwind CSS</Badge>
-            <Badge variant="secondary">Prisma</Badge>
-            <Badge variant="secondary">SQLite</Badge>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="rounded-xl border p-6 bg-card transition-colors hover:border-primary/20">
+          <h5 className="font-bold text-sm mb-3">Stack</h5>
+          <div className="flex flex-wrap gap-1.5">
+            {["Next.js", "React", "Prisma", "SQLite", "Tailwind"].map(t => (
+              <span key={t} className="px-2 py-0.5 rounded-full bg-muted text-[10px] font-bold text-muted-foreground">
+                {t}
+              </span>
+            ))}
           </div>
         </div>
+        <div className="rounded-xl border p-6 bg-card transition-colors hover:border-primary/20">
+          <h5 className="font-bold text-sm mb-3">Community</h5>
+          <div className="space-y-2">
+            <a href="#" className="flex items-center gap-2 text-xs font-semibold text-primary hover:underline">
+              <GlobeIcon className="size-3" />
+              Website
+            </a>
+            <a href="#" className="flex items-center gap-2 text-xs font-semibold text-primary hover:underline">
+              <ExternalLinkIcon className="size-3" />
+              GitHub Repository
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <div className="pt-8 text-center">
+        <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-[0.2em]">
+          Made with love for the open web
+        </p>
       </div>
     </div>
   );

@@ -20,6 +20,23 @@ function formatDate(dateStr: string | null): string {
   const date = new Date(dateStr);
   const now = new Date();
   const diff = now.getTime() - date.getTime();
+
+  // Future date
+  if (diff < 0) {
+    const futureDiff = -diff;
+    const futureMinutes = Math.floor(futureDiff / (1000 * 60));
+    const futureHours = Math.floor(futureDiff / (1000 * 60 * 60));
+    const futureDays = Math.floor(futureHours / 24);
+
+    if (futureMinutes < 60) return `${futureMinutes}分钟后`;
+    if (futureHours < 24) return `${futureHours}小时后`;
+    if (futureDays === 1) return "明天";
+    if (futureDays < 7) return `${futureDays}天后`;
+
+    return date.toLocaleDateString("zh-CN", { month: "short", day: "numeric" });
+  }
+
+  // Past date
   const hours = Math.floor(diff / (1000 * 60 * 60));
   const minutes = Math.floor(diff / (1000 * 60));
 
@@ -39,6 +56,8 @@ function groupArticlesByDate(articles: Article[]): Map<string, Article[]> {
   today.setHours(0, 0, 0, 0);
   const yesterday = new Date(today);
   yesterday.setDate(yesterday.getDate() - 1);
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
 
   for (const article of articles) {
     const pubDate = article.pubDate ? new Date(article.pubDate) : new Date(article.createdAt);
@@ -49,6 +68,15 @@ function groupArticlesByDate(articles: Article[]): Map<string, Article[]> {
       key = "今天";
     } else if (pubDate.getTime() === yesterday.getTime()) {
       key = "昨天";
+    } else if (pubDate.getTime() === tomorrow.getTime()) {
+      key = "明天";
+    } else if (pubDate.getTime() > today.getTime()) {
+      // Future date - show full date with year for clarity
+      key = pubDate.toLocaleDateString("zh-CN", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      }) + " (计划)";
     } else {
       key = pubDate.toLocaleDateString("zh-CN", {
         year: "numeric",

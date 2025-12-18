@@ -247,15 +247,14 @@ export function AppSidebar({
                         <FolderIcon className="size-4 shrink-0" />
                       )}
                       <span className="truncate">{folder.name}</span>
-                      {unreadCount > 0 && (
-                        <span className={cn(
-                          "ml-auto text-xs transition-opacity duration-200 group-hover:opacity-0 group-has-[[data-state=open]]:opacity-0",
-                          selectedFolderId === folder.id ? "opacity-70" : "text-muted-foreground"
-                        )}>
-                          {unreadCount}
-                        </span>
-                      )}
                     </button>
+
+                    {/* Unread Count */}
+                    {unreadCount > 0 && (
+                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-normal opacity-70 transition-opacity duration-200 group-hover:opacity-0 group-has-[[data-state=open]]:opacity-0">
+                        {unreadCount}
+                      </span>
+                    )}
 
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
