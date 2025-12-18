@@ -17,7 +17,6 @@ import {
   LayoutGridIcon,
   UserIcon,
   InfoIcon,
-  ArrowUpDownIcon,
   ArrowDownAZIcon,
   CalendarIcon,
 } from "lucide-react";
@@ -242,7 +241,11 @@ export function AppSidebar({
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-foreground">
-                    <ArrowUpDownIcon className="h-3.5 w-3.5" />
+                    {sortBy === "name" ? (
+                      <ArrowDownAZIcon className="h-3.5 w-3.5" />
+                    ) : (
+                      <CalendarIcon className="h-3.5 w-3.5" />
+                    )}
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
