@@ -1169,6 +1169,8 @@ function DebugSettings() {
   const [savedUserAgent, setSavedUserAgent] = useState("");
   const [refreshInterval, setRefreshInterval] = useState(DEFAULT_REFRESH_INTERVAL.toString());
   const [savedRefreshInterval, setSavedRefreshInterval] = useState(DEFAULT_REFRESH_INTERVAL.toString());
+  const [email, setEmail] = useState("");
+  const [savedEmail, setSavedEmail] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [clearingCache, setClearingCache] = useState(false);
@@ -1181,10 +1183,13 @@ function DebugSettings() {
         const settings = await res.json();
         const ua = settings.userAgent || "";
         const interval = settings.refreshInterval || DEFAULT_REFRESH_INTERVAL.toString();
+        const em = settings.email || "";
         setUserAgent(ua);
         setSavedUserAgent(ua);
         setRefreshInterval(interval);
         setSavedRefreshInterval(interval);
+        setEmail(em);
+        setSavedEmail(em);
       } catch (err) {
         console.error("Failed to fetch settings:", err);
       } finally {
@@ -1205,6 +1210,7 @@ function DebugSettings() {
         body: JSON.stringify({
           userAgent: userAgent || "",
           refreshInterval: refreshInterval || DEFAULT_REFRESH_INTERVAL.toString(),
+          email: email || "",
         }),
       });
 
@@ -1214,6 +1220,7 @@ function DebugSettings() {
 
       setSavedUserAgent(userAgent);
       setSavedRefreshInterval(refreshInterval);
+      setSavedEmail(email);
 
       // Restart server-side auto refresh with new interval
       await fetch("/api/auto-refresh", { method: "POST" });
@@ -1276,7 +1283,7 @@ function DebugSettings() {
     }
   };
 
-  const hasChanges = userAgent !== savedUserAgent || refreshInterval !== savedRefreshInterval;
+  const hasChanges = userAgent !== savedUserAgent || refreshInterval !== savedRefreshInterval || email !== savedEmail;
 
   return (
     <div className="space-y-6">
@@ -1367,6 +1374,26 @@ function DebugSettings() {
                 Default: {DEFAULT_REFRESH_INTERVAL} minutes
               </p>
             </>
+          )}
+        </div>
+
+        {/* Gravatar Email */}
+        <div className="rounded-lg border p-4">
+          <h4 className="font-medium">Gravatar Email</h4>
+          <p className="text-sm text-muted-foreground mb-3">
+            Email address for Gravatar avatar. Leave empty to use default icon.
+          </p>
+
+          {loading ? (
+            <div className="text-sm text-muted-foreground">Loading...</div>
+          ) : (
+            <Input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="your@email.com"
+              className="max-w-[300px]"
+            />
           )}
         </div>
 

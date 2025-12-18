@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { getGravatarUrl } from "@/lib/gravatar";
 import {
   RssIcon,
   RefreshCwIcon,
@@ -14,6 +15,8 @@ import {
   FileTextIcon,
   PlusIcon,
   LayoutGridIcon,
+  UserIcon,
+  InfoIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -68,6 +71,14 @@ export function AppSidebar({
   onDataChange,
 }: AppSidebarProps) {
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
+  const [email, setEmail] = useState("");
+
+  useEffect(() => {
+    fetch("/api/settings")
+      .then((res) => res.json())
+      .then((settings) => setEmail(settings.email || ""))
+      .catch(() => {});
+  }, []);
 
   const totalUnread = feeds.reduce((sum, feed) => sum + feed._count.articles, 0);
   const uncategorizedFeeds = feeds.filter((feed) => !feed.folderId);
@@ -110,10 +121,51 @@ export function AppSidebar({
             </Button>
           </AddFolderDialog>
           <AddFeedDialog onAdd={onAddFeed}>
-             <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground">
+            <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground">
               <PlusIcon className="h-4 w-4" />
             </Button>
           </AddFeedDialog>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-7 w-7">
+                {email ? (
+                  <img
+                    src={getGravatarUrl(email, 40)}
+                    alt=""
+                    className="size-5 rounded-full"
+                  />
+                ) : (
+                  <div className="flex size-5 items-center justify-center rounded-full bg-muted">
+                    <UserIcon className="size-3 text-muted-foreground" />
+                  </div>
+                )}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              <SettingsDialog
+                feeds={feeds}
+                folders={folders}
+                onRefreshFeed={onRefreshFeed}
+                onDeleteFeed={onDeleteFeed}
+                onRefreshAllFeeds={onRefreshAllFeeds}
+                onAddFolder={onAddFolder}
+                onDeleteFolder={onDeleteFolder}
+                onRenameFolder={onRenameFolder}
+                onMoveFeedToFolder={onMoveFeedToFolder}
+                onDataChange={onDataChange}
+              >
+                <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                  <SettingsIcon className="mr-2 size-4" />
+                  设置
+                </DropdownMenuItem>
+              </SettingsDialog>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem disabled>
+                <InfoIcon className="mr-2 size-4" />
+                <span className="text-muted-foreground">Gist v1.0.0</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
@@ -150,14 +202,26 @@ export function AppSidebar({
 
               return (
                 <div key={folder.id} className="space-y-1">
-                  <div className="group relative flex items-center gap-0.5 rounded-md hover:bg-sidebar-accent/30 pr-8 transition-colors">
+                  <div
+                    className={cn(
+                      "group relative flex items-center gap-0.5 rounded-md pr-8 transition-colors",
+                      selectedFolderId === folder.id
+                        ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                        : "hover:bg-sidebar-accent/50"
+                    )}
+                  >
                     {/* Expand/Collapse Button */}
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
                         toggleFolder(folder.id);
                       }}
-                      className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-sidebar-accent/50 transition-colors"
+                      className={cn(
+                        "p-1.5 rounded-md transition-colors",
+                        selectedFolderId === folder.id
+                          ? "text-sidebar-accent-foreground"
+                          : "text-muted-foreground hover:text-foreground"
+                      )}
                     >
                       <ChevronRightIcon
                         className={cn(
@@ -172,9 +236,9 @@ export function AppSidebar({
                       onClick={() => onSelectFolder?.(folder.id)}
                       className={cn(
                         "flex-1 flex items-center gap-2 py-1.5 text-sm font-medium transition-colors rounded-md px-1.5",
-                        selectedFolderId === folder.id 
-                          ? "bg-sidebar-accent text-sidebar-accent-foreground" 
-                          : "text-foreground hover:text-foreground"
+                        selectedFolderId === folder.id
+                          ? "text-sidebar-accent-foreground"
+                          : "text-muted-foreground hover:text-foreground"
                       )}
                     >
                       {isExpanded ? (
@@ -184,7 +248,10 @@ export function AppSidebar({
                       )}
                       <span className="truncate">{folder.name}</span>
                       {unreadCount > 0 && (
-                        <span className="ml-auto text-xs text-muted-foreground transition-opacity duration-200 group-hover:opacity-0 group-has-[[data-state=open]]:opacity-0">
+                        <span className={cn(
+                          "ml-auto text-xs transition-opacity duration-200 group-hover:opacity-0 group-has-[[data-state=open]]:opacity-0",
+                          selectedFolderId === folder.id ? "opacity-70" : "text-muted-foreground"
+                        )}>
                           {unreadCount}
                         </span>
                       )}
@@ -264,27 +331,6 @@ export function AppSidebar({
             )}
           </div>
         )}
-      </div>
-
-      {/* Footer */}
-      <div className="p-3 mt-auto border-t border-border/50">
-        <SettingsDialog
-          feeds={feeds}
-          folders={folders}
-          onRefreshFeed={onRefreshFeed}
-          onDeleteFeed={onDeleteFeed}
-          onRefreshAllFeeds={onRefreshAllFeeds}
-          onAddFolder={onAddFolder}
-          onDeleteFolder={onDeleteFolder}
-          onRenameFolder={onRenameFolder}
-          onMoveFeedToFolder={onMoveFeedToFolder}
-          onDataChange={onDataChange}
-        >
-          <button className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-sidebar-accent/50 hover:text-foreground transition-colors">
-            <SettingsIcon className="size-4" />
-            <span>设置</span>
-          </button>
-        </SettingsDialog>
       </div>
     </div>
   );
