@@ -1,10 +1,11 @@
 "use client";
 
-import { RssIcon, RefreshCwIcon, Trash2Icon, MoreHorizontalIcon } from "lucide-react";
+import { RssIcon, RefreshCwIcon, Trash2Icon, MoreHorizontalIcon, SettingsIcon } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
   SidebarHeader,
+  SidebarFooter,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
@@ -20,6 +21,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { AddFeedDialog } from "@/components/add-feed-dialog";
+import { SettingsDialog } from "@/components/settings-dialog";
 import type { Feed } from "@/lib/types";
 
 interface AppSidebarProps {
@@ -29,6 +31,7 @@ interface AppSidebarProps {
   onAddFeed: (url: string) => Promise<void>;
   onRefreshFeed: (feedId: string) => Promise<void>;
   onDeleteFeed: (feedId: string) => Promise<void>;
+  onRefreshAllFeeds: () => Promise<void>;
 }
 
 export function AppSidebar({
@@ -38,6 +41,7 @@ export function AppSidebar({
   onAddFeed,
   onRefreshFeed,
   onDeleteFeed,
+  onRefreshAllFeeds,
 }: AppSidebarProps) {
   const totalUnread = feeds.reduce((sum, feed) => sum + feed._count.articles, 0);
 
@@ -139,6 +143,23 @@ export function AppSidebar({
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+      <SidebarFooter>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SettingsDialog
+              feeds={feeds}
+              onRefreshFeed={onRefreshFeed}
+              onDeleteFeed={onDeleteFeed}
+              onRefreshAllFeeds={onRefreshAllFeeds}
+            >
+              <SidebarMenuButton>
+                <SettingsIcon className="size-4" />
+                <span>Settings</span>
+              </SidebarMenuButton>
+            </SettingsDialog>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarFooter>
     </Sidebar>
   );
 }

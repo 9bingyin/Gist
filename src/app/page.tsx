@@ -60,6 +60,14 @@ export default function Home() {
     await fetchArticles(selectedFeedId);
   };
 
+  const handleRefreshAllFeeds = async () => {
+    for (const feed of feeds) {
+      await fetch(`/api/feeds/${feed.id}/refresh`, { method: "POST" });
+    }
+    await fetchFeeds();
+    await fetchArticles(selectedFeedId);
+  };
+
   const handleDeleteFeed = async (feedId: string) => {
     await fetch(`/api/feeds?id=${feedId}`, { method: "DELETE" });
     if (selectedFeedId === feedId) {
@@ -97,6 +105,7 @@ export default function Home() {
         onAddFeed={handleAddFeed}
         onRefreshFeed={handleRefreshFeed}
         onDeleteFeed={handleDeleteFeed}
+        onRefreshAllFeeds={handleRefreshAllFeeds}
       />
       <SidebarInset className="flex h-screen flex-row">
         <div className="w-[400px] shrink-0 overflow-hidden">
