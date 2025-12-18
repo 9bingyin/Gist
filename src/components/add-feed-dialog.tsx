@@ -1,0 +1,69 @@
+"use client";
+
+import { useState } from "react";
+import { PlusIcon } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+
+interface AddFeedDialogProps {
+  onAdd: (url: string) => Promise<void>;
+}
+
+export function AddFeedDialog({ onAdd }: AddFeedDialogProps) {
+  const [open, setOpen] = useState(false);
+  const [url, setUrl] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!url.trim()) return;
+
+    setLoading(true);
+    setError("");
+
+    try {
+      await onAdd(url.trim());
+      setUrl("");
+      setOpen(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to add feed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="ghost" size="icon" className="h-8 w-8">
+          <PlusIcon className="h-4 w-4" />
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Add RSS Feed</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <Input
+            placeholder="Enter RSS feed URL"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            disabled={loading}
+          />
+          {error && <p className="text-sm text-red-500">{error}</p>}
+          <Button type="submit" disabled={loading || !url.trim()} className="w-full">
+            {loading ? "Adding..." : "Add Feed"}
+          </Button>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}

@@ -1,0 +1,29 @@
+import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/db";
+
+export async function GET(request: NextRequest) {
+  const { searchParams } = new URL(request.url);
+  const feedId = searchParams.get("feedId");
+  const unreadOnly = searchParams.get("unreadOnly") === "true";
+
+  const where: Record<string, unknown> = {};
+  if (feedId) {
+    where.feedId = feedId;
+  }
+  if (unreadOnly) {
+    where.isRead = false;
+  }
+
+  const articles = await prisma.article.findMany({
+    where,
+    include: {
+      feed: {
+        select: { id: true, title: true, imageUrl: true },
+      },
+    },
+    orderBy: { pubDate: "desc" },
+    take: 100,
+  });
+
+  return NextResponse.json(articles);
+}
