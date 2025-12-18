@@ -55,11 +55,16 @@ export async function POST(
       });
 
       if (existing) {
-        // Update existing article if content changed or was cleared
-        const shouldUpdate = item.content && (
+        // Update existing article if content changed or was cleared, or pubDate changed
+        const contentChanged = item.content && (
           !existing.content || item.content !== existing.content
         );
-        if (shouldUpdate) {
+        const pubDateChanged = item.pubDate && (
+          !existing.pubDate ||
+          new Date(item.pubDate).getTime() !== new Date(existing.pubDate).getTime()
+        );
+
+        if (contentChanged || pubDateChanged) {
           await prisma.article.update({
             where: { link: item.link },
             data: {
@@ -67,6 +72,7 @@ export async function POST(
               content: item.content,
               summary: item.summary,
               imageUrl: item.imageUrl,
+              pubDate: item.pubDate,
             },
           });
           updatedCount++;

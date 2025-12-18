@@ -53,10 +53,15 @@ async function refreshAllFeeds() {
         });
 
         if (existing) {
-          const shouldUpdate = item.content && (
+          const contentChanged = item.content && (
             !existing.content || item.content !== existing.content
           );
-          if (shouldUpdate) {
+          const pubDateChanged = item.pubDate && (
+            !existing.pubDate ||
+            new Date(item.pubDate).getTime() !== new Date(existing.pubDate).getTime()
+          );
+
+          if (contentChanged || pubDateChanged) {
             await prisma.article.update({
               where: { link: item.link },
               data: {
@@ -64,6 +69,7 @@ async function refreshAllFeeds() {
                 content: item.content,
                 summary: item.summary,
                 imageUrl: item.imageUrl,
+                pubDate: item.pubDate,
               },
             });
           }

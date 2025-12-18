@@ -31,6 +31,11 @@ interface MediaContent {
   };
 }
 
+interface ContentType {
+  "acceptance-date-time"?: string[];
+  "filing-date"?: string[];
+}
+
 type RssItem = {
   enclosure?: { url?: string };
   "media:content"?: MediaContent;
@@ -41,6 +46,8 @@ type RssItem = {
   contentSnippet?: string;
   summary?: string;
   pubDate?: string;
+  isoDate?: string; // rss-parser converts Atom's updated/published to isoDate
+  contentType?: ContentType; // SEC EDGAR custom field
 };
 
 export async function parseFeed(url: string): Promise<ParsedFeed> {
@@ -49,6 +56,11 @@ export async function parseFeed(url: string): Promise<ParsedFeed> {
     timeout: 10000,
     headers: {
       "User-Agent": userAgent,
+    },
+    customFields: {
+      item: [
+        ["content-type", "contentType", { keepArray: false }],
+      ],
     },
   });
 
@@ -69,12 +81,31 @@ export async function parseFeed(url: string): Promise<ParsedFeed> {
       htmlContent = he.decode(htmlContent);
     }
 
+    // Parse date from multiple possible fields
+    // Priority: SEC's acceptance-date-time > filing-date > standard pubDate > isoDate
+    let dateStr: string | undefined;
+    if (rssItem.contentType?.["acceptance-date-time"]?.[0]) {
+      dateStr = rssItem.contentType["acceptance-date-time"][0];
+    } else if (rssItem.contentType?.["filing-date"]?.[0]) {
+      dateStr = rssItem.contentType["filing-date"][0];
+    } else {
+      dateStr = rssItem.pubDate || rssItem.isoDate;
+    }
+
+    let pubDate: Date | undefined;
+    if (dateStr) {
+      const parsed = new Date(dateStr);
+      if (!isNaN(parsed.getTime())) {
+        pubDate = parsed;
+      }
+    }
+
     return {
       title: rssItem.title || "Untitled",
       link: rssItem.link || "",
       content: htmlContent,
       summary: rssItem.contentSnippet,
-      pubDate: rssItem.pubDate ? new Date(rssItem.pubDate) : undefined,
+      pubDate,
       imageUrl,
     };
   });
