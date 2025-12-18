@@ -95,10 +95,12 @@ function processContent(content: string): string {
 export function ArticleDetail({ article, onArticleUpdate }: ArticleDetailProps) {
   const [isLoadingReadability, setIsLoadingReadability] = useState(false);
   const [useReadability, setUseReadability] = useState(false);
+  const [readabilityError, setReadabilityError] = useState<string | null>(null);
 
-  // Reset readability mode when article changes
+  // Reset readability mode and error when article changes
   useEffect(() => {
     setUseReadability(false);
+    setReadabilityError(null);
   }, [article?.id]);
 
   const processedContent = useMemo(() => {
@@ -124,16 +126,17 @@ export function ArticleDetail({ article, onArticleUpdate }: ArticleDetailProps) 
     }
 
     setIsLoadingReadability(true);
+    setReadabilityError(null);
     try {
       const res = await fetch(`/api/articles/${article.id}/readability`, {
         method: "POST",
       });
 
-      if (!res.ok) {
-        throw new Error("Failed to fetch readable content");
-      }
-
       const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to fetch readable content");
+      }
       if (data.content && onArticleUpdate) {
         onArticleUpdate({
           ...article,
@@ -142,6 +145,8 @@ export function ArticleDetail({ article, onArticleUpdate }: ArticleDetailProps) 
         setUseReadability(true);
       }
     } catch (error) {
+      const message = error instanceof Error ? error.message : "获取失败";
+      setReadabilityError(message);
       console.error("Readability error:", error);
     } finally {
       setIsLoadingReadability(false);
@@ -169,7 +174,8 @@ export function ArticleDetail({ article, onArticleUpdate }: ArticleDetailProps) 
                 size="icon"
                 className={cn(
                   "h-8 w-8 text-muted-foreground hover:text-foreground",
-                  useReadability && "bg-accent text-accent-foreground"
+                  useReadability && "bg-accent text-accent-foreground",
+                  readabilityError && "text-destructive hover:text-destructive"
                 )}
                 onClick={handleToggleReadability}
                 disabled={isLoadingReadability}
@@ -182,7 +188,7 @@ export function ArticleDetail({ article, onArticleUpdate }: ArticleDetailProps) 
               </Button>
             </TooltipTrigger>
             <TooltipContent>
-              <p>{useReadability ? "显示原文" : "阅读模式"}</p>
+              <p>{readabilityError || (useReadability ? "显示原文" : "阅读模式")}</p>
             </TooltipContent>
           </Tooltip>
           
