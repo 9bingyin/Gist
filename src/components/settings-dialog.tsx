@@ -1162,10 +1162,13 @@ function DataSettings({ onDataChange, isImporting, setIsImporting }: DataSetting
 }
 
 const DEFAULT_USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+const DEFAULT_REFRESH_INTERVAL = 15;
 
 function DebugSettings() {
   const [userAgent, setUserAgent] = useState("");
   const [savedUserAgent, setSavedUserAgent] = useState("");
+  const [refreshInterval, setRefreshInterval] = useState(DEFAULT_REFRESH_INTERVAL.toString());
+  const [savedRefreshInterval, setSavedRefreshInterval] = useState(DEFAULT_REFRESH_INTERVAL.toString());
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -1173,11 +1176,14 @@ function DebugSettings() {
   useEffect(() => {
     const fetchSettings = async () => {
       try {
-        const res = await fetch("/api/settings?key=userAgent");
-        const value = await res.json();
-        const ua = value || "";
+        const res = await fetch("/api/settings");
+        const settings = await res.json();
+        const ua = settings.userAgent || "";
+        const interval = settings.refreshInterval || DEFAULT_REFRESH_INTERVAL.toString();
         setUserAgent(ua);
         setSavedUserAgent(ua);
+        setRefreshInterval(interval);
+        setSavedRefreshInterval(interval);
       } catch (err) {
         console.error("Failed to fetch settings:", err);
       } finally {
@@ -1195,7 +1201,10 @@ function DebugSettings() {
       const res = await fetch("/api/settings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userAgent: userAgent || "" }),
+        body: JSON.stringify({
+          userAgent: userAgent || "",
+          refreshInterval: refreshInterval || DEFAULT_REFRESH_INTERVAL.toString(),
+        }),
       });
 
       if (!res.ok) {
@@ -1203,6 +1212,11 @@ function DebugSettings() {
       }
 
       setSavedUserAgent(userAgent);
+      setSavedRefreshInterval(refreshInterval);
+
+      // Restart server-side auto refresh with new interval
+      await fetch("/api/auto-refresh", { method: "POST" });
+
       setMessage({ type: "success", text: "Settings saved" });
     } catch {
       setMessage({ type: "error", text: "Failed to save settings" });
@@ -1211,15 +1225,19 @@ function DebugSettings() {
     }
   };
 
-  const handleReset = () => {
+  const handleResetUA = () => {
     setUserAgent("");
   };
 
-  const handleUseDefault = () => {
+  const handleUseDefaultUA = () => {
     setUserAgent(DEFAULT_USER_AGENT);
   };
 
-  const hasChanges = userAgent !== savedUserAgent;
+  const handleResetInterval = () => {
+    setRefreshInterval(DEFAULT_REFRESH_INTERVAL.toString());
+  };
+
+  const hasChanges = userAgent !== savedUserAgent || refreshInterval !== savedRefreshInterval;
 
   return (
     <div className="space-y-6">
@@ -1245,6 +1263,75 @@ function DebugSettings() {
       )}
 
       <div className="space-y-4">
+        {/* Refresh Interval */}
+        <div className="rounded-lg border p-4">
+          <h4 className="font-medium">Auto Refresh Interval</h4>
+          <p className="text-sm text-muted-foreground mb-3">
+            How often to automatically refresh all feeds (in minutes). Set to 0 to disable.
+          </p>
+
+          {loading ? (
+            <div className="text-sm text-muted-foreground">Loading...</div>
+          ) : (
+            <>
+              <div className="flex items-center gap-2 mb-3">
+                <Input
+                  type="number"
+                  min="0"
+                  max="1440"
+                  value={refreshInterval}
+                  onChange={(e) => setRefreshInterval(e.target.value)}
+                  className="w-24"
+                />
+                <span className="text-sm text-muted-foreground">minutes</span>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setRefreshInterval("5")}
+                >
+                  5 min
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setRefreshInterval("15")}
+                >
+                  15 min
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setRefreshInterval("30")}
+                >
+                  30 min
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setRefreshInterval("60")}
+                >
+                  1 hour
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setRefreshInterval("0")}
+                >
+                  Disable
+                </Button>
+              </div>
+
+              <p className="text-xs text-muted-foreground mt-3">
+                Default: {DEFAULT_REFRESH_INTERVAL} minutes
+              </p>
+            </>
+          )}
+        </div>
+
+        {/* User-Agent */}
         <div className="rounded-lg border p-4">
           <h4 className="font-medium">User-Agent</h4>
           <p className="text-sm text-muted-foreground mb-3">
@@ -1266,23 +1353,16 @@ function DebugSettings() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={handleUseDefault}
+                  onClick={handleUseDefaultUA}
                 >
                   Use Chrome UA
                 </Button>
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={handleReset}
+                  onClick={handleResetUA}
                 >
                   Clear
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={handleSave}
-                  disabled={saving || !hasChanges}
-                >
-                  {saving ? "Saving..." : "Save"}
                 </Button>
               </div>
 
@@ -1291,6 +1371,16 @@ function DebugSettings() {
               </p>
             </>
           )}
+        </div>
+
+        {/* Save Button */}
+        <div className="flex justify-end">
+          <Button
+            onClick={handleSave}
+            disabled={saving || !hasChanges}
+          >
+            {saving ? "Saving..." : "Save Settings"}
+          </Button>
         </div>
       </div>
     </div>
