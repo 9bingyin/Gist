@@ -17,7 +17,7 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const { url } = await request.json();
+  const { url, folderId } = await request.json();
 
   if (!url) {
     return NextResponse.json({ error: "URL is required" }, { status: 400 });
@@ -44,6 +44,7 @@ export async function POST(request: NextRequest) {
         siteUrl: parsed.link,
         description: parsed.description,
         imageUrl,
+        folderId: folderId || null,
         articles: {
           create: parsed.items.slice(0, 50).map((item) => ({
             title: item.title,

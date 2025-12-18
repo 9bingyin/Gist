@@ -1,3 +1,15 @@
+export interface Folder {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+  _count: {
+    feeds: number;
+  };
+  feeds?: Feed[];
+  unreadCount?: number;
+}
+
 export interface Feed {
   id: string;
   title: string;
@@ -7,6 +19,7 @@ export interface Feed {
   imageUrl: string | null;
   createdAt: string;
   updatedAt: string;
+  folderId: string | null;
   _count: {
     articles: number;
   };

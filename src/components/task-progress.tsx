@@ -1,0 +1,160 @@
+"use client";
+
+import { useState, useEffect, useCallback } from "react";
+import { Progress } from "@/components/ui/progress";
+import { Button } from "@/components/ui/button";
+import { XIcon, CheckCircleIcon, AlertCircleIcon, LoaderIcon } from "lucide-react";
+import type { Task } from "@/lib/task-queue";
+
+interface TaskProgressProps {
+  onTaskComplete?: () => void;
+}
+
+export function TaskProgress({ onTaskComplete }: TaskProgressProps) {
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
+
+  const fetchTasks = useCallback(async () => {
+    try {
+      const res = await fetch("/api/tasks");
+      if (res.ok) {
+        const data = await res.json();
+        setTasks(data);
+
+        // Check for newly completed tasks
+        for (const task of data) {
+          if (
+            task.status === "completed" &&
+            !dismissedIds.has(task.id)
+          ) {
+            onTaskComplete?.();
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Failed to fetch tasks:", err);
+    }
+  }, [dismissedIds, onTaskComplete]);
+
+  useEffect(() => {
+    fetchTasks();
+
+    // Poll for updates
+    const interval = setInterval(fetchTasks, 1000);
+
+    return () => clearInterval(interval);
+  }, [fetchTasks]);
+
+  const dismissTask = async (taskId: string) => {
+    setDismissedIds((prev) => new Set(prev).add(taskId));
+    try {
+      await fetch(`/api/tasks/${taskId}`, { method: "DELETE" });
+    } catch {
+      // Ignore errors
+    }
+  };
+
+  // Filter out dismissed tasks and only show recent ones
+  const visibleTasks = tasks.filter(
+    (task) =>
+      !dismissedIds.has(task.id) &&
+      (task.status === "running" ||
+        task.status === "pending" ||
+        // Show completed/failed tasks for 10 seconds
+        (task.status === "completed" || task.status === "failed"))
+  );
+
+  if (visibleTasks.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-sm">
+      {visibleTasks.map((task) => (
+        <TaskCard key={task.id} task={task} onDismiss={() => dismissTask(task.id)} />
+      ))}
+    </div>
+  );
+}
+
+interface TaskCardProps {
+  task: Task;
+  onDismiss: () => void;
+}
+
+function TaskCard({ task, onDismiss }: TaskCardProps) {
+  const progress =
+    task.progress.total > 0
+      ? (task.progress.current / task.progress.total) * 100
+      : 0;
+
+  const statusIcon = {
+    pending: <LoaderIcon className="size-4 animate-spin text-muted-foreground" />,
+    running: <LoaderIcon className="size-4 animate-spin text-blue-500" />,
+    completed: <CheckCircleIcon className="size-4 text-green-500" />,
+    failed: <AlertCircleIcon className="size-4 text-red-500" />,
+  }[task.status];
+
+  const statusLabel = {
+    pending: "Waiting...",
+    running: "Importing...",
+    completed: "Completed",
+    failed: "Failed",
+  }[task.status];
+
+  return (
+    <div className="bg-background border rounded-lg shadow-lg p-4 animate-in slide-in-from-right-5 duration-300">
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <div className="flex items-center gap-2">
+          {statusIcon}
+          <span className="text-sm font-medium">OPML Import</span>
+        </div>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-6 -mr-1 -mt-1"
+          onClick={onDismiss}
+        >
+          <XIcon className="size-4" />
+        </Button>
+      </div>
+
+      {task.status === "running" || task.status === "pending" ? (
+        <>
+          <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
+            <span>{statusLabel}</span>
+            <span>
+              {task.progress.current} / {task.progress.total} ({Math.round(progress)}%)
+            </span>
+          </div>
+          <Progress value={progress} className="h-2 mb-2" />
+          {task.progress.message && (
+            <div className="text-xs truncate">
+              <span className="text-foreground">{task.progress.message}</span>
+            </div>
+          )}
+          {task.progress.detail && (
+            <div className="text-xs text-muted-foreground truncate">
+              {task.progress.detail}
+            </div>
+          )}
+        </>
+      ) : task.status === "completed" ? (
+        <div className="text-sm">
+          <span className="text-green-600">
+            Imported {task.result?.imported || 0} feeds
+          </span>
+          {(task.result?.skipped || 0) > 0 && (
+            <span className="text-muted-foreground ml-2">
+              ({task.result?.skipped} skipped)
+            </span>
+          )}
+        </div>
+      ) : (
+        <div className="text-sm text-red-600">
+          {task.result?.error || "Import failed"}
+        </div>
+      )}
+    </div>
+  );
+}

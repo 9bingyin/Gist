@@ -10,12 +10,14 @@ import type { Layout } from "react-resizable-panels";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { ArticleList } from "@/components/layout/article-list";
 import { ArticleDetail } from "@/components/layout/article-detail";
-import type { Feed, Article } from "@/lib/types";
+import { TaskProgress } from "@/components/task-progress";
+import type { Feed, Article, Folder } from "@/lib/types";
 
 const LAYOUT_STORAGE_KEY = "rss-reader-layout";
 
 export default function Home() {
   const [feeds, setFeeds] = useState<Feed[]>([]);
+  const [folders, setFolders] = useState<Folder[]>([]);
   const [articles, setArticles] = useState<Article[]>([]);
   const [selectedFeedId, setSelectedFeedId] = useState<string | null>(null);
   const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
@@ -43,6 +45,12 @@ export default function Home() {
     setFeeds(data);
   }, []);
 
+  const fetchFolders = useCallback(async () => {
+    const res = await fetch("/api/folders");
+    const data = await res.json();
+    setFolders(data);
+  }, []);
+
   const fetchArticles = useCallback(async (feedId?: string | null) => {
     setLoading(true);
     const url = feedId ? `/api/articles?feedId=${feedId}` : "/api/articles";
@@ -54,8 +62,9 @@ export default function Home() {
 
   useEffect(() => {
     fetchFeeds();
+    fetchFolders();
     fetchArticles();
-  }, [fetchFeeds, fetchArticles]);
+  }, [fetchFeeds, fetchFolders, fetchArticles]);
 
   useEffect(() => {
     fetchArticles(selectedFeedId);
@@ -119,11 +128,59 @@ export default function Home() {
     fetchArticles(selectedFeedId);
   };
 
+  const handleAddFolder = async (name: string) => {
+    const res = await fetch("/api/folders", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.error || "Failed to create folder");
+    }
+
+    await fetchFolders();
+  };
+
+  const handleDeleteFolder = async (folderId: string) => {
+    await fetch(`/api/folders/${folderId}`, { method: "DELETE" });
+    await fetchFolders();
+    await fetchFeeds();
+  };
+
+  const handleRenameFolder = async (folderId: string, name: string) => {
+    await fetch(`/api/folders/${folderId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+    await fetchFolders();
+  };
+
+  const handleMoveFeedToFolder = async (feedId: string, folderId: string | null) => {
+    await fetch(`/api/feeds/${feedId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ folderId }),
+    });
+    await fetchFeeds();
+    await fetchFolders();
+  };
+
+  const handleDataChange = async () => {
+    await fetchFeeds();
+    await fetchFolders();
+    await fetchArticles(selectedFeedId);
+  };
+
   if (!layoutLoaded) {
     return <div className="h-screen" />;
   }
 
   return (
+    <>
+    <TaskProgress onTaskComplete={handleDataChange} />
     <ResizablePanelGroup
       id={LAYOUT_STORAGE_KEY}
       orientation="horizontal"
@@ -134,12 +191,18 @@ export default function Home() {
       <ResizablePanel id="sidebar" defaultSize="17%" minSize="10%" maxSize="30%">
         <AppSidebar
           feeds={feeds}
+          folders={folders}
           selectedFeedId={selectedFeedId}
           onSelectFeed={setSelectedFeedId}
           onAddFeed={handleAddFeed}
           onRefreshFeed={handleRefreshFeed}
           onDeleteFeed={handleDeleteFeed}
           onRefreshAllFeeds={handleRefreshAllFeeds}
+          onAddFolder={handleAddFolder}
+          onDeleteFolder={handleDeleteFolder}
+          onRenameFolder={handleRenameFolder}
+          onMoveFeedToFolder={handleMoveFeedToFolder}
+          onDataChange={handleDataChange}
         />
       </ResizablePanel>
       <ResizableHandle />
@@ -157,5 +220,6 @@ export default function Home() {
         <ArticleDetail article={selectedArticle} />
       </ResizablePanel>
     </ResizablePanelGroup>
+    </>
   );
 }
