@@ -1,11 +1,18 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@/components/ui/resizable";
+import type { Layout } from "react-resizable-panels";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { ArticleList } from "@/components/layout/article-list";
 import { ArticleDetail } from "@/components/layout/article-detail";
 import type { Feed, Article } from "@/lib/types";
+
+const LAYOUT_STORAGE_KEY = "rss-reader-layout";
 
 export default function Home() {
   const [feeds, setFeeds] = useState<Feed[]>([]);
@@ -13,6 +20,22 @@ export default function Home() {
   const [selectedFeedId, setSelectedFeedId] = useState<string | null>(null);
   const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
   const [loading, setLoading] = useState(false);
+  const [defaultLayout, setDefaultLayout] = useState<Layout | undefined>(undefined);
+  const [layoutLoaded, setLayoutLoaded] = useState(false);
+
+  useEffect(() => {
+    const saved = localStorage.getItem(LAYOUT_STORAGE_KEY);
+    if (saved) {
+      try {
+        setDefaultLayout(JSON.parse(saved));
+      } catch {}
+    }
+    setLayoutLoaded(true);
+  }, []);
+
+  const onLayoutChange = useCallback((layout: Layout) => {
+    localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(layout));
+  }, []);
 
   const fetchFeeds = useCallback(async () => {
     const res = await fetch("/api/feeds");
@@ -96,31 +119,43 @@ export default function Home() {
     fetchArticles(selectedFeedId);
   };
 
+  if (!layoutLoaded) {
+    return <div className="h-screen" />;
+  }
+
   return (
-    <SidebarProvider>
-      <AppSidebar
-        feeds={feeds}
-        selectedFeedId={selectedFeedId}
-        onSelectFeed={setSelectedFeedId}
-        onAddFeed={handleAddFeed}
-        onRefreshFeed={handleRefreshFeed}
-        onDeleteFeed={handleDeleteFeed}
-        onRefreshAllFeeds={handleRefreshAllFeeds}
-      />
-      <SidebarInset className="flex h-screen flex-row">
-        <div className="w-[400px] shrink-0 overflow-hidden">
-          <ArticleList
-            articles={articles}
-            selectedArticleId={selectedArticle?.id ?? null}
-            onSelectArticle={handleSelectArticle}
-            onRefresh={handleRefresh}
-            loading={loading}
-          />
-        </div>
-        <div className="flex-1 overflow-hidden">
-          <ArticleDetail article={selectedArticle} />
-        </div>
-      </SidebarInset>
-    </SidebarProvider>
+    <ResizablePanelGroup
+      id={LAYOUT_STORAGE_KEY}
+      orientation="horizontal"
+      className="h-screen"
+      defaultLayout={defaultLayout}
+      onLayoutChange={onLayoutChange}
+    >
+      <ResizablePanel id="sidebar" defaultSize="17%" minSize="10%" maxSize="30%">
+        <AppSidebar
+          feeds={feeds}
+          selectedFeedId={selectedFeedId}
+          onSelectFeed={setSelectedFeedId}
+          onAddFeed={handleAddFeed}
+          onRefreshFeed={handleRefreshFeed}
+          onDeleteFeed={handleDeleteFeed}
+          onRefreshAllFeeds={handleRefreshAllFeeds}
+        />
+      </ResizablePanel>
+      <ResizableHandle />
+      <ResizablePanel id="article-list" defaultSize="23%" minSize="10%" maxSize="40%">
+        <ArticleList
+          articles={articles}
+          selectedArticleId={selectedArticle?.id ?? null}
+          onSelectArticle={handleSelectArticle}
+          onRefresh={handleRefresh}
+          loading={loading}
+        />
+      </ResizablePanel>
+      <ResizableHandle />
+      <ResizablePanel id="article-detail" defaultSize="60%" minSize="30%">
+        <ArticleDetail article={selectedArticle} />
+      </ResizablePanel>
+    </ResizablePanelGroup>
   );
 }
