@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { parseFeed } from "@/lib/rss";
+import { getFavicon } from "@/lib/favicon";
 
 export async function GET() {
   const feeds = await prisma.feed.findMany({
@@ -30,13 +31,19 @@ export async function POST(request: NextRequest) {
   try {
     const parsed = await parseFeed(url);
 
+    // Get favicon if RSS feed doesn't have an image
+    let imageUrl = parsed.image;
+    if (!imageUrl && parsed.link) {
+      imageUrl = await getFavicon(parsed.link) ?? undefined;
+    }
+
     const feed = await prisma.feed.create({
       data: {
         title: parsed.title,
         url,
         siteUrl: parsed.link,
         description: parsed.description,
-        imageUrl: parsed.image,
+        imageUrl,
         articles: {
           create: parsed.items.slice(0, 50).map((item) => ({
             title: item.title,

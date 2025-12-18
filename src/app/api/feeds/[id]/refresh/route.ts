@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { parseFeed } from "@/lib/rss";
+import { getFavicon } from "@/lib/favicon";
 
 export async function POST(
   _request: NextRequest,
@@ -15,6 +16,17 @@ export async function POST(
 
   try {
     const parsed = await parseFeed(feed.url);
+
+    // Update feed icon if missing
+    if (!feed.imageUrl && parsed.link) {
+      const favicon = await getFavicon(parsed.link);
+      if (favicon) {
+        await prisma.feed.update({
+          where: { id },
+          data: { imageUrl: favicon },
+        });
+      }
+    }
 
     for (const item of parsed.items) {
       await prisma.article.upsert({

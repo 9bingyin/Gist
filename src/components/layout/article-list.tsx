@@ -2,7 +2,6 @@
 
 import { RefreshCwIcon, CheckIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import type { Article } from "@/lib/types";
 
@@ -89,7 +88,7 @@ export function ArticleList({
           </Button>
         </div>
       </div>
-      <ScrollArea className="flex-1">
+      <div className="flex-1 overflow-y-auto">
         {articles.length === 0 ? (
           <div className="flex h-full items-center justify-center p-8 text-center text-muted-foreground">
             <p>No articles yet. Add a feed to get started.</p>
@@ -152,7 +151,7 @@ export function ArticleList({
             ))}
           </div>
         )}
-      </ScrollArea>
+      </div>
     </div>
   );
 }
