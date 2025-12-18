@@ -54,8 +54,14 @@ export default function Home() {
     setLoading(true);
     const url = feedId ? `/api/articles?feedId=${feedId}` : "/api/articles";
     const res = await fetch(url);
-    const data = await res.json();
+    const data: Article[] = await res.json();
     setArticles(data);
+    // Update selectedArticle if it exists in the new data
+    setSelectedArticle((prev) => {
+      if (!prev) return prev;
+      const updated = data.find((a) => a.id === prev.id);
+      return updated || prev;
+    });
     setLoading(false);
   }, []);
 
@@ -123,8 +129,23 @@ export default function Home() {
     }
   };
 
-  const handleRefresh = () => {
-    fetchArticles(selectedFeedId);
+  const handleRefresh = async () => {
+    setLoading(true);
+    try {
+      if (selectedFeedId) {
+        // Refresh selected feed
+        await fetch(`/api/feeds/${selectedFeedId}/refresh`, { method: "POST" });
+      } else {
+        // Refresh all feeds
+        for (const feed of feeds) {
+          await fetch(`/api/feeds/${feed.id}/refresh`, { method: "POST" });
+        }
+      }
+      await fetchFeeds();
+      await fetchArticles(selectedFeedId);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleAddFolder = async (name: string) => {

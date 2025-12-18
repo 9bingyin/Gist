@@ -55,8 +55,11 @@ export async function POST(
       });
 
       if (existing) {
-        // Update existing article if content changed
-        if (item.content && item.content !== existing.content) {
+        // Update existing article if content changed or was cleared
+        const shouldUpdate = item.content && (
+          !existing.content || item.content !== existing.content
+        );
+        if (shouldUpdate) {
           await prisma.article.update({
             where: { link: item.link },
             data: {

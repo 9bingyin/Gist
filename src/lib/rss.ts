@@ -1,4 +1,5 @@
 import Parser from "rss-parser";
+import he from "he";
 import { getUserAgent } from "@/lib/settings";
 
 export interface ParsedFeed {
@@ -60,11 +61,19 @@ export async function parseFeed(url: string): Promise<ParsedFeed> {
       rssItem["media:content"]?.$?.url ||
       extractImageFromContent(rssItem.content || rssItem["content:encoded"]);
 
+    // For Atom feeds, HTML content might be in summary field instead of content
+    // Also decode HTML entities that may be double-encoded in Atom feeds
+    let htmlContent = rssItem["content:encoded"] || rssItem.content || rssItem.summary;
+    if (htmlContent) {
+      // Decode HTML entities (e.g., &lt;p&gt; -> <p>)
+      htmlContent = he.decode(htmlContent);
+    }
+
     return {
       title: rssItem.title || "Untitled",
       link: rssItem.link || "",
-      content: rssItem["content:encoded"] || rssItem.content,
-      summary: rssItem.contentSnippet || rssItem.summary,
+      content: htmlContent,
+      summary: rssItem.contentSnippet,
       pubDate: rssItem.pubDate ? new Date(rssItem.pubDate) : undefined,
       imageUrl,
     };

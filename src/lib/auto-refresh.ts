@@ -53,7 +53,10 @@ async function refreshAllFeeds() {
         });
 
         if (existing) {
-          if (item.content && item.content !== existing.content) {
+          const shouldUpdate = item.content && (
+            !existing.content || item.content !== existing.content
+          );
+          if (shouldUpdate) {
             await prisma.article.update({
               where: { link: item.link },
               data: {

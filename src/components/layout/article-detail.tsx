@@ -63,17 +63,18 @@ function sanitizeHtml(html: string): string {
       "blockquote", "pre", "code",
       "a", "img", "figure", "figcaption",
       "table", "thead", "tbody", "tr", "th", "td",
-      "hr", "div", "span", "sup", "sub",
+      "hr", "div", "span", "sup", "sub", "small", "mark", "abbr",
       "video", "source", "audio",
+      "dl", "dt", "dd", "details", "summary",
     ],
     ALLOWED_ATTR: [
-      "href", "src", "alt", "title", "class", "id",
+      "href", "src", "alt", "title", "class", "id", "style",
       "target", "rel", "width", "height",
       "controls", "autoplay", "loop", "muted", "poster",
-      "type", "colspan", "rowspan",
+      "type", "colspan", "rowspan", "datetime", "open",
     ],
     ADD_ATTR: ["target"],
-    FORBID_TAGS: ["script", "style", "iframe", "form", "input", "button"],
+    FORBID_TAGS: ["script", "iframe", "form", "input", "button"],
     FORBID_ATTR: ["onerror", "onload", "onclick", "onmouseover"],
   });
 }

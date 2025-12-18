@@ -1171,6 +1171,7 @@ function DebugSettings() {
   const [savedRefreshInterval, setSavedRefreshInterval] = useState(DEFAULT_REFRESH_INTERVAL.toString());
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [clearingCache, setClearingCache] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   useEffect(() => {
@@ -1235,6 +1236,44 @@ function DebugSettings() {
 
   const handleResetInterval = () => {
     setRefreshInterval(DEFAULT_REFRESH_INTERVAL.toString());
+  };
+
+  const handleClearCache = async (type: "readability" | "content" | "all") => {
+    setClearingCache(true);
+    setMessage(null);
+
+    try {
+      const res = await fetch("/api/cache/clear", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to clear cache");
+      }
+
+      const messages: string[] = [];
+      if (data.readabilityCleared > 0) {
+        messages.push(`${data.readabilityCleared} readability`);
+      }
+      if (data.contentCleared > 0) {
+        messages.push(`${data.contentCleared} content`);
+      }
+
+      setMessage({
+        type: "success",
+        text: messages.length > 0 ? `Cleared: ${messages.join(", ")}` : "No cache to clear",
+      });
+    } catch (err) {
+      setMessage({
+        type: "error",
+        text: err instanceof Error ? err.message : "Failed to clear cache",
+      });
+    } finally {
+      setClearingCache(false);
+    }
   };
 
   const hasChanges = userAgent !== savedUserAgent || refreshInterval !== savedRefreshInterval;
@@ -1381,6 +1420,46 @@ function DebugSettings() {
           >
             {saving ? "Saving..." : "Save Settings"}
           </Button>
+        </div>
+
+        <Separator />
+
+        {/* Clear Cache */}
+        <div className="rounded-lg border p-4">
+          <h4 className="font-medium">Clear Cache</h4>
+          <p className="text-sm text-muted-foreground mb-3">
+            Clear cached content. After clearing, refresh feeds to re-fetch content.
+          </p>
+
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleClearCache("content")}
+              disabled={clearingCache}
+            >
+              <Trash2Icon className="mr-2 size-4" />
+              {clearingCache ? "Clearing..." : "RSS Content"}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleClearCache("readability")}
+              disabled={clearingCache}
+            >
+              <Trash2Icon className="mr-2 size-4" />
+              {clearingCache ? "Clearing..." : "Readability"}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleClearCache("all")}
+              disabled={clearingCache}
+            >
+              <Trash2Icon className="mr-2 size-4" />
+              {clearingCache ? "Clearing..." : "All Cache"}
+            </Button>
+          </div>
         </div>
       </div>
     </div>
