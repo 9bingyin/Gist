@@ -31,17 +31,18 @@ model Feed {
 }
 
 model Article {
-  id        String    @id @default(cuid())
-  title     String
-  link      String    @unique
-  content   String?
-  summary   String?
-  imageUrl  String?
-  pubDate   DateTime?
-  isRead    Boolean   @default(false)
-  feedId    String
-  feed      Feed      @relation(fields: [feedId], references: [id], onDelete: Cascade)
-  createdAt DateTime  @default(now())
+  id                 String    @id @default(cuid())
+  title              String
+  link               String    @unique
+  content            String?
+  readabilityContent String?
+  summary            String?
+  imageUrl           String?
+  pubDate            DateTime?
+  isRead             Boolean   @default(false)
+  feedId             String
+  feed               Feed      @relation(fields: [feedId], references: [id], onDelete: Cascade)
+  createdAt          DateTime  @default(now())
 
   @@index([feedId])
   @@index([pubDate])

@@ -30,6 +30,7 @@ export interface Article {
   title: string;
   link: string;
   content: string | null;
+  readabilityContent: string | null;
   summary: string | null;
   imageUrl: string | null;
   pubDate: string | null;

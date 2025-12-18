@@ -173,6 +173,13 @@ export default function Home() {
     await fetchArticles(selectedFeedId);
   };
 
+  const handleArticleUpdate = useCallback((updatedArticle: Article) => {
+    setSelectedArticle(updatedArticle);
+    setArticles((prev) =>
+      prev.map((a) => (a.id === updatedArticle.id ? updatedArticle : a))
+    );
+  }, []);
+
   if (!layoutLoaded) {
     return <div className="h-screen" />;
   }
@@ -214,7 +221,10 @@ export default function Home() {
       </ResizablePanel>
       <ResizableHandle />
       <ResizablePanel id="article-detail" defaultSize="60%" minSize="30%">
-        <ArticleDetail article={selectedArticle} />
+        <ArticleDetail
+          article={selectedArticle}
+          onArticleUpdate={handleArticleUpdate}
+        />
       </ResizablePanel>
     </ResizablePanelGroup>
   );
