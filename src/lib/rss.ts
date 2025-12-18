@@ -30,21 +30,40 @@ function extractImageFromContent(content?: string): string | undefined {
   return imgMatch?.[1];
 }
 
+interface MediaContent {
+  $?: {
+    url?: string;
+  };
+}
+
+type RssItem = {
+  enclosure?: { url?: string };
+  "media:content"?: MediaContent;
+  content?: string;
+  "content:encoded"?: string;
+  title?: string;
+  link?: string;
+  contentSnippet?: string;
+  summary?: string;
+  pubDate?: string;
+};
+
 export async function parseFeed(url: string): Promise<ParsedFeed> {
   const feed = await parser.parseURL(url);
 
   const items: ParsedArticle[] = (feed.items || []).map((item) => {
+    const rssItem = item as RssItem;
     const imageUrl =
-      item.enclosure?.url ||
-      (item as Record<string, unknown>)["media:content"]?.["$"]?.url ||
-      extractImageFromContent(item.content || item["content:encoded"]);
+      rssItem.enclosure?.url ||
+      rssItem["media:content"]?.$?.url ||
+      extractImageFromContent(rssItem.content || rssItem["content:encoded"]);
 
     return {
-      title: item.title || "Untitled",
-      link: item.link || "",
-      content: item["content:encoded"] || item.content,
-      summary: item.contentSnippet || item.summary,
-      pubDate: item.pubDate ? new Date(item.pubDate) : undefined,
+      title: rssItem.title || "Untitled",
+      link: rssItem.link || "",
+      content: rssItem["content:encoded"] || rssItem.content,
+      summary: rssItem.contentSnippet || rssItem.summary,
+      pubDate: rssItem.pubDate ? new Date(rssItem.pubDate) : undefined,
       imageUrl,
     };
   });

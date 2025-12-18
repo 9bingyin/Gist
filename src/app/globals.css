@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@plugin "@tailwindcss/typography";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -121,5 +122,183 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+/* Article content styles */
+.article-content {
+  /* Base typography */
+  font-size: 1rem;
+  line-height: 1.75;
+  color: var(--foreground);
+
+  /* Headings */
+  & h1, & h2, & h3, & h4, & h5, & h6 {
+    font-weight: 600;
+    line-height: 1.3;
+    margin-top: 1.5em;
+    margin-bottom: 0.5em;
+    color: var(--foreground);
+  }
+
+  & h1 { font-size: 1.875rem; }
+  & h2 { font-size: 1.5rem; }
+  & h3 { font-size: 1.25rem; }
+  & h4 { font-size: 1.125rem; }
+
+  /* Paragraphs */
+  & p {
+    margin: 1em 0;
+  }
+
+  /* Links */
+  & a {
+    color: oklch(0.546 0.245 262.881);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    transition: color 0.15s ease;
+
+    &:hover {
+      color: oklch(0.488 0.243 264.376);
+    }
+  }
+
+  /* Images */
+  & img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 0.5rem;
+    margin: 1.5em 0;
+  }
+
+  /* Blockquotes */
+  & blockquote {
+    border-left: 4px solid oklch(0.488 0.243 264.376);
+    padding-left: 1em;
+    margin: 1.5em 0;
+    color: var(--muted-foreground);
+    font-style: italic;
+
+    & p {
+      margin: 0.5em 0;
+    }
+  }
+
+  /* Code */
+  & code {
+    background: var(--muted);
+    padding: 0.2em 0.4em;
+    border-radius: 0.25rem;
+    font-size: 0.875em;
+    font-family: var(--font-mono);
+  }
+
+  & pre {
+    background: var(--muted);
+    padding: 1em;
+    border-radius: 0.5rem;
+    overflow-x: auto;
+    margin: 1.5em 0;
+
+    & code {
+      background: transparent;
+      padding: 0;
+      font-size: 0.875rem;
+    }
+  }
+
+  /* Lists */
+  & ul, & ol {
+    padding-left: 1.5em;
+    margin: 1em 0;
+  }
+
+  & ul {
+    list-style-type: disc;
+  }
+
+  & ol {
+    list-style-type: decimal;
+  }
+
+  & li {
+    margin: 0.5em 0;
+
+    & > ul, & > ol {
+      margin: 0.25em 0;
+    }
+  }
+
+  /* Tables */
+  & table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1.5em 0;
+    font-size: 0.875rem;
+  }
+
+  & th, & td {
+    border: 1px solid var(--border);
+    padding: 0.75em 1em;
+    text-align: left;
+  }
+
+  & th {
+    background: var(--muted);
+    font-weight: 600;
+  }
+
+  & tr:nth-child(even) {
+    background: var(--muted);
+  }
+
+  /* Horizontal rule */
+  & hr {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 2em 0;
+  }
+
+  /* Figures and captions */
+  & figure {
+    margin: 1.5em 0;
+
+    & figcaption {
+      text-align: center;
+      font-size: 0.875rem;
+      color: var(--muted-foreground);
+      margin-top: 0.5em;
+    }
+  }
+
+  /* Video and iframe (for embedded content) */
+  & video, & iframe {
+    max-width: 100%;
+    border-radius: 0.5rem;
+    margin: 1.5em 0;
+  }
+
+  /* Remove margins from first and last children */
+  & > *:first-child {
+    margin-top: 0;
+  }
+
+  & > *:last-child {
+    margin-bottom: 0;
+  }
+}
+
+/* Dark mode adjustments for article content */
+.dark .article-content {
+  & a {
+    color: oklch(0.696 0.17 250);
+
+    &:hover {
+      color: oklch(0.75 0.17 250);
+    }
+  }
+
+  & blockquote {
+    border-left-color: oklch(0.696 0.17 250);
   }
 }
