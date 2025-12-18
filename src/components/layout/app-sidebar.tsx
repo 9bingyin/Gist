@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { getGravatarUrl } from "@/lib/gravatar";
 import {
   RssIcon,
@@ -17,6 +17,9 @@ import {
   LayoutGridIcon,
   UserIcon,
   InfoIcon,
+  ArrowUpDownIcon,
+  ArrowDownAZIcon,
+  CalendarIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -72,6 +75,7 @@ export function AppSidebar({
 }: AppSidebarProps) {
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
   const [email, setEmail] = useState("");
+  const [sortBy, setSortBy] = useState<"name" | "date">("name");
 
   useEffect(() => {
     fetch("/api/settings")
@@ -82,6 +86,46 @@ export function AppSidebar({
 
   const totalUnread = feeds.reduce((sum, feed) => sum + feed._count.articles, 0);
   const uncategorizedFeeds = feeds.filter((feed) => !feed.folderId);
+
+  // Custom sort function: ASCII (English/Numbers) first, then others (Chinese, etc.)
+  const compareNames = (nameA: string, nameB: string) => {
+    const isAsciiA = /^[\u0000-\u007f]/.test(nameA);
+    const isAsciiB = /^[\u0000-\u007f]/.test(nameB);
+
+    if (isAsciiA && !isAsciiB) return -1;
+    if (!isAsciiA && isAsciiB) return 1;
+
+    return nameA.localeCompare(nameB, "zh-CN");
+  };
+
+  // Memoized sorted data to ensure consistency and performance
+  const sortedFolders = useMemo(() => {
+    if (sortBy === "date") {
+      // Sort by createdAt asc (Oldest first)
+      return [...folders].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    }
+    // Default: Sort by name
+    return [...folders].sort((a, b) => compareNames(a.name, b.name));
+  }, [folders, sortBy]);
+
+  const sortedUncategorizedFeeds = useMemo(() => {
+    if (sortBy === "date") {
+      // Sort by createdAt asc (Oldest first)
+      return [...uncategorizedFeeds].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    }
+    // Default: Sort by name
+    return [...uncategorizedFeeds].sort((a, b) => compareNames(a.title, b.title));
+  }, [uncategorizedFeeds, sortBy]);
+
+  const getSortedFolderFeeds = (folderId: string) => {
+    const folderFeeds = feeds.filter((feed) => feed.folderId === folderId);
+    if (sortBy === "date") {
+      // Sort by createdAt asc (Oldest first)
+      return [...folderFeeds].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    }
+    // Default: Sort by name
+    return [...folderFeeds].sort((a, b) => compareNames(a.title, b.title));
+  };
 
   const toggleFolder = (folderId: string) => {
     setExpandedFolders((prev) => {
@@ -95,15 +139,10 @@ export function AppSidebar({
     });
   };
 
-  const getFolderFeeds = (folderId: string) => {
-    return feeds.filter((feed) => feed.folderId === folderId);
-  };
-
   const getFolderUnreadCount = (folderId: string) => {
-    return getFolderFeeds(folderId).reduce(
-      (sum, feed) => sum + feed._count.articles,
-      0
-    );
+    return feeds
+      .filter((feed) => feed.folderId === folderId)
+      .reduce((sum, feed) => sum + feed._count.articles, 0);
   };
 
   return (
@@ -195,9 +234,33 @@ export function AppSidebar({
         {/* Folders & Feeds */}
         {(folders.length > 0 || uncategorizedFeeds.length > 0) && (
           <div className="space-y-1">
-            {folders.map((folder) => {
+            {/* Sort Header */}
+            <div className="flex items-center justify-between px-2 mb-1">
+              <span className="text-xs font-medium text-muted-foreground/70 uppercase tracking-wider">
+                订阅源
+              </span>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-foreground">
+                    <ArrowUpDownIcon className="h-3.5 w-3.5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onSelect={() => setSortBy("name")} className={cn(sortBy === "name" && "bg-accent")}>
+                    <ArrowDownAZIcon className="mr-2 h-4 w-4" />
+                    按名称排序
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => setSortBy("date")} className={cn(sortBy === "date" && "bg-accent")}>
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    按添加时间排序
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+
+            {sortedFolders.map((folder) => {
               const isExpanded = expandedFolders.has(folder.id);
-              const folderFeeds = getFolderFeeds(folder.id);
+              const folderFeeds = getSortedFolderFeeds(folder.id);
               const unreadCount = getFolderUnreadCount(folder.id);
 
               return (
@@ -305,15 +368,15 @@ export function AppSidebar({
             })}
 
             {/* Uncategorized Feeds */}
-            {uncategorizedFeeds.length > 0 && (
+            {sortedUncategorizedFeeds.length > 0 && (
               <div className="pt-2">
-                {folders.length > 0 && (
+                {sortedFolders.length > 0 && (
                   <div className="mb-2 px-2 text-xs font-medium text-muted-foreground/70 uppercase tracking-wider">
                     未分类
                   </div>
                 )}
                 <div className="space-y-0.5">
-                  {uncategorizedFeeds.map((feed) => (
+                  {sortedUncategorizedFeeds.map((feed) => (
                     <FeedItem
                       key={feed.id}
                       feed={feed}
