@@ -25,6 +25,7 @@ import {
   LoaderIcon,
   StopCircleIcon,
   AlertCircleIcon,
+  SparklesIcon,
 } from "lucide-react";
 import {
   Dialog,
@@ -65,7 +66,7 @@ import { MoreHorizontalIcon } from "lucide-react";
 import type { Feed, Folder } from "@/lib/types";
 import type { Task } from "@/lib/task-queue";
 
-type SettingsTab = "feeds" | "folders" | "general" | "data" | "debug" | "about";
+type SettingsTab = "feeds" | "folders" | "ai" | "general" | "data" | "debug" | "about";
 
 interface SettingsDialogProps {
   feeds: Feed[];
@@ -85,6 +86,7 @@ const menuItems: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
   { id: "general", label: "General", icon: <SettingsIcon className="size-4" /> },
   { id: "feeds", label: "Subscriptions", icon: <RssIcon className="size-4" /> },
   { id: "folders", label: "Folders", icon: <FolderIcon className="size-4" /> },
+  { id: "ai", label: "AI", icon: <SparklesIcon className="size-4" /> },
   { id: "data", label: "Data", icon: <DatabaseIcon className="size-4" /> },
   { id: "debug", label: "Debug", icon: <BugIcon className="size-4" /> },
   { id: "about", label: "About", icon: <GlobeIcon className="size-4" /> },
@@ -211,6 +213,7 @@ export function SettingsDialog({
                   onRenameFolder={onRenameFolder}
                 />
               )}
+              {activeTab === "ai" && <AISettings />}
               {activeTab === "data" && (
                 <DataSettings
                   onDataChange={onDataChange}
@@ -1450,6 +1453,350 @@ function DebugSettings() {
               Clear All Cache
             </Button>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AISettings() {
+  const [aiProvider, setAiProvider] = useState<"openai" | "anthropic" | "openai-compatible">("openai");
+  const [savedAiProvider, setSavedAiProvider] = useState<"openai" | "anthropic" | "openai-compatible">("openai");
+  const [aiBaseUrl, setAiBaseUrl] = useState("");
+  const [savedAiBaseUrl, setSavedAiBaseUrl] = useState("");
+  const [aiApiKey, setAiApiKey] = useState("");
+  const [savedAiApiKey, setSavedAiApiKey] = useState("");
+  const [aiModel, setAiModel] = useState("");
+  const [savedAiModel, setSavedAiModel] = useState("");
+  const [aiLanguage, setAiLanguage] = useState("English");
+  const [savedAiLanguage, setSavedAiLanguage] = useState("English");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<string | null>(null);
+  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const res = await fetch("/api/settings");
+        const settings = await res.json();
+        const provider = (settings.aiProvider || "openai") as "openai" | "anthropic" | "openai-compatible";
+        const baseUrl = settings.aiBaseUrl || "";
+        const apiKey = settings.aiApiKey || "";
+        const model = settings.aiModel || "";
+        const language = settings.aiLanguage || "English";
+
+        setAiProvider(provider);
+        setSavedAiProvider(provider);
+        setAiBaseUrl(baseUrl);
+        setSavedAiBaseUrl(baseUrl);
+        setAiApiKey(apiKey);
+        setSavedAiApiKey(apiKey);
+        setAiModel(model);
+        setSavedAiModel(model);
+        setAiLanguage(language);
+        setSavedAiLanguage(language);
+      } catch (err) {
+        console.error("Failed to fetch AI settings:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchSettings();
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    setMessage(null);
+    setTestResult(null);
+
+    try {
+      const res = await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          aiProvider,
+          aiBaseUrl: aiBaseUrl || "",
+          aiApiKey: aiApiKey || "",
+          aiModel: aiModel || "",
+          aiLanguage: aiLanguage || "English",
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error("Failed to save");
+      }
+
+      setSavedAiProvider(aiProvider);
+      setSavedAiBaseUrl(aiBaseUrl);
+      setSavedAiApiKey(aiApiKey);
+      setSavedAiModel(aiModel);
+      setSavedAiLanguage(aiLanguage);
+
+      setMessage({ type: "success", text: "AI settings saved successfully" });
+    } catch {
+      setMessage({ type: "error", text: "Failed to save AI settings" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleTest = async () => {
+    if (!aiApiKey) {
+      setMessage({ type: "error", text: "Please enter an API key first" });
+      return;
+    }
+
+    setTesting(true);
+    setMessage(null);
+    setTestResult(null);
+
+    try {
+      const res = await fetch("/api/ai/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          provider: aiProvider,
+          baseUrl: aiBaseUrl || undefined,
+          apiKey: aiApiKey,
+          model: aiModel || undefined,
+          language: aiLanguage || "English",
+          prompt: "RSS is the best!",
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Test failed");
+      }
+
+      setTestResult(data.response);
+      setMessage({ type: "success", text: "AI connection test successful" });
+    } catch (err) {
+      setMessage({
+        type: "error",
+        text: err instanceof Error ? err.message : "Test failed",
+      });
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const handleResetBaseUrl = () => {
+    if (aiProvider === "openai") {
+      setAiBaseUrl("https://api.openai.com/v1");
+    } else if (aiProvider === "anthropic") {
+      setAiBaseUrl("https://api.anthropic.com/v1");
+    } else {
+      setAiBaseUrl("http://localhost:11434/v1");
+    }
+  };
+
+  const hasChanges =
+    aiProvider !== savedAiProvider ||
+    aiBaseUrl !== savedAiBaseUrl ||
+    aiApiKey !== savedAiApiKey ||
+    aiModel !== savedAiModel ||
+    aiLanguage !== savedAiLanguage;
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-500">
+      <div>
+        <h3 className="text-2xl font-bold tracking-tight">AI Configuration</h3>
+        <p className="text-sm text-muted-foreground mt-1">
+          Configure AI provider for intelligent features.
+        </p>
+      </div>
+
+      {message && (
+        <div
+          className={`rounded-lg p-3 text-sm font-medium animate-in slide-in-from-top-2 duration-300 ${
+            message.type === "success"
+              ? "bg-primary/10 text-primary border border-primary/20"
+              : "bg-destructive/10 text-destructive border border-destructive/20"
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {message.type === "success" ? <CheckCircleIcon className="size-4" /> : <AlertCircleIcon className="size-4" />}
+            {message.text}
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-4">
+        {/* AI Provider */}
+        <div className="rounded-xl border border-muted/40 p-5 bg-card transition-all hover:border-muted-foreground/20">
+          <h4 className="font-semibold text-sm mb-1">AI Provider</h4>
+          <p className="text-[12px] text-muted-foreground mb-4">
+            Select your preferred AI service provider.
+          </p>
+
+          {loading ? (
+            <div className="h-10 flex items-center justify-center">
+              <LoaderIcon className="size-4 animate-spin text-muted-foreground/30" />
+            </div>
+          ) : (
+            <Select value={aiProvider} onValueChange={(value) => setAiProvider(value as "openai" | "anthropic" | "openai-compatible")}>
+              <SelectTrigger className="w-full rounded-md border-muted-foreground/20 bg-muted/20">
+                <SelectValue placeholder="Select provider" />
+              </SelectTrigger>
+              <SelectContent className="rounded-lg shadow-xl border-muted/40">
+                <SelectItem value="openai">OpenAI</SelectItem>
+                <SelectItem value="anthropic">Anthropic</SelectItem>
+                <SelectItem value="openai-compatible">OpenAI Compatible</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
+        </div>
+
+        {/* Base URL */}
+        <div className="rounded-xl border border-muted/40 p-5 bg-card transition-all hover:border-muted-foreground/20">
+          <h4 className="font-semibold text-sm mb-1">Base URL</h4>
+          <p className="text-[12px] text-muted-foreground mb-4">
+            API endpoint URL. Leave empty to use the default provider endpoint.
+          </p>
+
+          {!loading && (
+            <div className="space-y-3">
+              <Input
+                value={aiBaseUrl}
+                onChange={(e) => setAiBaseUrl(e.target.value)}
+                placeholder={
+                  aiProvider === "openai"
+                    ? "https://api.openai.com/v1"
+                    : aiProvider === "anthropic"
+                    ? "https://api.anthropic.com/v1"
+                    : "http://localhost:11434/v1"
+                }
+                className="font-mono text-[11px] rounded-md border-muted-foreground/20 bg-muted/20"
+              />
+
+              <div className="flex gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleResetBaseUrl}
+                  className="rounded-md h-8 text-[11px] font-bold hover:bg-muted"
+                >
+                  Use Default
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setAiBaseUrl("")}
+                  className="rounded-md h-8 text-[11px] font-bold hover:bg-muted"
+                >
+                  Clear
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Model */}
+        <div className="rounded-xl border border-muted/40 p-5 bg-card transition-all hover:border-muted-foreground/20">
+          <h4 className="font-semibold text-sm mb-1">Model Name</h4>
+          <p className="text-[12px] text-muted-foreground mb-4">
+            The AI model to use. Leave empty to use the provider's default model.
+          </p>
+
+          {!loading && (
+            <Input
+              value={aiModel}
+              onChange={(e) => setAiModel(e.target.value)}
+              placeholder={
+                aiProvider === "openai"
+                  ? "gpt-4o-mini"
+                  : aiProvider === "anthropic"
+                  ? "claude-3-5-haiku-20241022"
+                  : "llama3.2"
+              }
+              className="font-mono text-[11px] rounded-md border-muted-foreground/20 bg-muted/20"
+            />
+          )}
+        </div>
+
+        {/* API Key */}
+        <div className="rounded-xl border border-muted/40 p-5 bg-card transition-all hover:border-muted-foreground/20">
+          <h4 className="font-semibold text-sm mb-1">API Key</h4>
+          <p className="text-[12px] text-muted-foreground mb-4">
+            Your API key for the selected provider. This is stored securely in your local database.
+          </p>
+
+          {!loading && (
+            <Input
+              type="password"
+              value={aiApiKey}
+              onChange={(e) => setAiApiKey(e.target.value)}
+              placeholder="sk-..."
+              className="font-mono text-[11px] rounded-md border-muted-foreground/20 bg-muted/20"
+            />
+          )}
+        </div>
+
+        {/* Output Language */}
+        <div className="rounded-xl border border-muted/40 p-5 bg-card transition-all hover:border-muted-foreground/20">
+          <h4 className="font-semibold text-sm mb-1">Output Language</h4>
+          <p className="text-[12px] text-muted-foreground mb-4">
+            The language AI should use in its responses.
+          </p>
+
+          {loading ? (
+            <div className="h-10 flex items-center justify-center">
+              <LoaderIcon className="size-4 animate-spin text-muted-foreground/30" />
+            </div>
+          ) : (
+            <Select value={aiLanguage} onValueChange={setAiLanguage}>
+              <SelectTrigger className="w-full rounded-md border-muted-foreground/20 bg-muted/20">
+                <SelectValue placeholder="Select language" />
+              </SelectTrigger>
+              <SelectContent className="rounded-lg shadow-xl border-muted/40">
+                <SelectItem value="English">English</SelectItem>
+                <SelectItem value="Chinese">Chinese</SelectItem>
+                <SelectItem value="Japanese">Japanese</SelectItem>
+                <SelectItem value="Korean">Korean</SelectItem>
+                <SelectItem value="French">French</SelectItem>
+                <SelectItem value="German">German</SelectItem>
+                <SelectItem value="Spanish">Spanish</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
+        </div>
+
+        {/* Test Result */}
+        {testResult && (
+          <div className="rounded-xl border border-muted/40 p-5 bg-card">
+            <h4 className="font-semibold text-sm mb-1">Test Response</h4>
+            <p className="text-[12px] text-muted-foreground mb-3">
+              Response from AI (prompt: "RSS is the best!")
+            </p>
+            <div className="p-3 rounded-lg bg-muted/30 text-sm leading-relaxed">
+              {testResult}
+            </div>
+          </div>
+        )}
+
+        {/* Action Buttons */}
+        <div className="flex justify-end gap-3 pt-1">
+          <Button
+            variant="outline"
+            onClick={handleTest}
+            disabled={testing || !aiApiKey}
+            className="rounded-md px-6 h-10 font-bold"
+          >
+            {testing ? <LoaderIcon className="size-4 animate-spin mr-2" /> : null}
+            Test Connection
+          </Button>
+          <Button
+            onClick={handleSave}
+            disabled={saving || !hasChanges}
+            className="rounded-md px-8 h-10 font-bold shadow-lg shadow-primary/20"
+          >
+            {saving ? <LoaderIcon className="size-4 animate-spin mr-2" /> : null}
+            Save Configuration
+          </Button>
         </div>
       </div>
     </div>

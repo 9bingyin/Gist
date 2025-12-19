@@ -11,6 +11,7 @@ import {
   BookmarkIcon,
   MoreHorizontalIcon,
   LoaderIcon,
+  SparklesIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -96,12 +97,61 @@ export function ArticleDetail({ article, onArticleUpdate }: ArticleDetailProps) 
   const [isLoadingReadability, setIsLoadingReadability] = useState(false);
   const [useReadability, setUseReadability] = useState(false);
   const [readabilityError, setReadabilityError] = useState<string | null>(null);
+  const [isLoadingSummary, setIsLoadingSummary] = useState(false);
+  const [aiSummary, setAiSummary] = useState<string | null>(null);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
 
-  // Reset readability mode and error when article changes
+  // Reset readability mode, summary and errors when article changes
   useEffect(() => {
     setUseReadability(false);
     setReadabilityError(null);
+    setAiSummary(null);
+    setSummaryError(null);
   }, [article?.id]);
+
+  // Regenerate summary when readability mode changes (if summary was already shown)
+  useEffect(() => {
+    const regenerateSummary = async () => {
+      if (!aiSummary || isLoadingSummary || !article) return;
+
+      setIsLoadingSummary(true);
+      setSummaryError(null);
+      try {
+        const content = useReadability
+          ? (article.readabilityContent || article.content || article.summary)
+          : (article.content || article.summary);
+
+        if (!content) {
+          throw new Error("无可用内容进行概括");
+        }
+
+        const res = await fetch("/api/ai/summarize", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            content,
+            title: article.title,
+          }),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          throw new Error(data.error || "生成摘要失败");
+        }
+
+        setAiSummary(data.summary);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "生成摘要失败";
+        setSummaryError(message);
+        console.error("Summary error:", error);
+      } finally {
+        setIsLoadingSummary(false);
+      }
+    };
+
+    regenerateSummary();
+  }, [useReadability]);
 
   const processedContent = useMemo(() => {
     if (!article) return null;
@@ -153,6 +203,50 @@ export function ArticleDetail({ article, onArticleUpdate }: ArticleDetailProps) 
     }
   }, [article, isLoadingReadability, useReadability, onArticleUpdate]);
 
+  const handleGenerateSummary = useCallback(async () => {
+    if (!article || isLoadingSummary) return;
+
+    if (aiSummary) {
+      setAiSummary(null);
+      return;
+    }
+
+    setIsLoadingSummary(true);
+    setSummaryError(null);
+    try {
+      const content = useReadability
+        ? (article.readabilityContent || article.content || article.summary)
+        : (article.content || article.summary);
+
+      if (!content) {
+        throw new Error("无可用内容进行概括");
+      }
+
+      const res = await fetch("/api/ai/summarize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          content,
+          title: article.title,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "生成摘要失败");
+      }
+
+      setAiSummary(data.summary);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "生成摘要失败";
+      setSummaryError(message);
+      console.error("Summary error:", error);
+    } finally {
+      setIsLoadingSummary(false);
+    }
+  }, [article, isLoadingSummary, aiSummary, useReadability]);
+
   if (!article) {
     return (
       <div className="flex h-full flex-col items-center justify-center text-muted-foreground bg-background/50">
@@ -191,7 +285,32 @@ export function ArticleDetail({ article, onArticleUpdate }: ArticleDetailProps) 
               <p>{readabilityError || (useReadability ? "显示原文" : "阅读模式")}</p>
             </TooltipContent>
           </Tooltip>
-          
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className={cn(
+                  "h-8 w-8 text-muted-foreground hover:text-foreground",
+                  aiSummary && "bg-accent text-accent-foreground",
+                  summaryError && "text-destructive hover:text-destructive"
+                )}
+                onClick={handleGenerateSummary}
+                disabled={isLoadingSummary}
+              >
+                {isLoadingSummary ? (
+                  <LoaderIcon className="h-4 w-4 animate-spin" />
+                ) : (
+                  <SparklesIcon className="h-4 w-4" />
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>{summaryError || (aiSummary ? "隐藏摘要" : "AI 概括")}</p>
+            </TooltipContent>
+          </Tooltip>
+
           <div className="h-4 w-px bg-border/50 mx-1" />
 
           <Tooltip>
@@ -265,6 +384,24 @@ export function ArticleDetail({ article, onArticleUpdate }: ArticleDetailProps) 
               <span>{formatRelativeTime(article.pubDate)}</span>
             </div>
           </div>
+
+          {/* AI Summary */}
+          {aiSummary && (
+            <div className="mt-6 rounded-lg border border-primary/20 bg-primary/5 p-5">
+              <div className="flex items-center gap-2 mb-3">
+                <SparklesIcon className="h-4 w-4 text-primary" />
+                <h3 className="text-sm font-semibold text-primary">AI 概括</h3>
+              </div>
+              <div className="text-sm leading-relaxed text-foreground space-y-2">
+                {aiSummary.split('\n').filter(line => line.trim()).map((point, index) => (
+                  <div key={index} className="flex gap-2">
+                    <span className="text-primary mt-1.5 shrink-0">•</span>
+                    <span className="flex-1">{point.trim()}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </header>
 
         {/* Article Content */}
