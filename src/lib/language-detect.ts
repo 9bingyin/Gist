@@ -1,4 +1,5 @@
 import { franc } from "franc-min";
+import striptags from "striptags";
 
 /**
  * Language detection using franc-min
@@ -36,8 +37,7 @@ export function detectLanguage(text: string): string | null {
   if (!text || text.length < 10) return null;
 
   // Clean text for better detection
-  const cleanText = text
-    .replace(/<[^>]*>/g, "") // Remove HTML tags
+  const cleanText = striptags(text)
     .replace(/https?:\/\/\S+/g, "") // Remove URLs
     .trim();
 

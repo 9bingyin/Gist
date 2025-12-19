@@ -2,6 +2,7 @@
  * Fetch favicon for a website
  */
 
+import { load } from "cheerio";
 import { getUserAgent } from "@/lib/settings";
 import { downloadAndSaveIcon } from "@/lib/icon-storage";
 
@@ -17,6 +18,20 @@ function getDomain(url: string): string {
   } catch {
     return url;
   }
+}
+
+/**
+ * Convert relative URL to absolute
+ */
+function toAbsoluteUrl(href: string, domain: string): string {
+  if (href.startsWith("//")) {
+    return `https:${href}`;
+  } else if (href.startsWith("/")) {
+    return `${domain}${href}`;
+  } else if (!href.startsWith("http")) {
+    return `${domain}/${href}`;
+  }
+  return href;
 }
 
 /**
@@ -42,36 +57,32 @@ async function fetchFaviconFromHtml(
 
     const html = await response.text();
     const domain = getDomain(siteUrl);
+    const $ = load(html);
 
-    // Try different favicon patterns in order of preference
-    const patterns = [
-      // Apple touch icon (usually higher quality)
-      /<link[^>]+?rel=["']apple-touch-icon["'][^>]+?href=["']([^"']+)["']/i,
-      /<link[^>]+?href=["']([^"']+)["'][^>]+?rel=["']apple-touch-icon["']/i,
-      // Standard favicon with sizes
-      /<link[^>]+?rel=["']icon["'][^>]+?sizes=["'](\d+)x\d+["'][^>]+?href=["']([^"']+)["']/i,
-      // Standard favicon
-      /<link[^>]+?rel=["'](?:shortcut )?icon["'][^>]+?href=["']([^"']+)["']/i,
-      /<link[^>]+?href=["']([^"']+)["'][^>]+?rel=["'](?:shortcut )?icon["']/i,
-    ];
+    // Try apple-touch-icon first (usually higher quality)
+    const appleTouchIcon = $('link[rel="apple-touch-icon"]').attr("href");
+    if (appleTouchIcon) {
+      return toAbsoluteUrl(appleTouchIcon, domain);
+    }
 
-    for (const pattern of patterns) {
-      const match = html.match(pattern);
-      if (match) {
-        // Handle sized icon pattern (has size as first capture group)
-        const href = match[2] || match[1];
-        if (href) {
-          // Convert relative URL to absolute
-          if (href.startsWith("//")) {
-            return `https:${href}`;
-          } else if (href.startsWith("/")) {
-            return `${domain}${href}`;
-          } else if (!href.startsWith("http")) {
-            return `${domain}/${href}`;
-          }
-          return href;
-        }
+    // Try to find the largest icon by sizes attribute
+    let bestHref: string | null = null;
+    let bestSize = 0;
+    $('link[rel="icon"], link[rel="shortcut icon"]').each((_, el) => {
+      const href = $(el).attr("href");
+      if (!href) return;
+
+      const sizes = $(el).attr("sizes");
+      const size = sizes ? parseInt(sizes.split("x")[0], 10) : 0;
+
+      if (!bestHref || size > bestSize) {
+        bestHref = href;
+        bestSize = size;
       }
+    });
+
+    if (bestHref) {
+      return toAbsoluteUrl(bestHref, domain);
     }
 
     return null;

@@ -1,5 +1,6 @@
 import Parser from "rss-parser";
 import he from "he";
+import { load } from "cheerio";
 import { getUserAgent } from "@/lib/settings";
 
 export interface ParsedFeed {
@@ -22,32 +23,29 @@ export interface ParsedArticle {
 function extractImageFromContent(content?: string): string | undefined {
   if (!content) return undefined;
 
-  // Match all img tags
-  const imgRegex = /<img[^>]+>/gi;
-  let match;
+  const $ = load(content);
+  let imageUrl: string | undefined;
 
-  while ((match = imgRegex.exec(content)) !== null) {
-    const imgTag = match[0];
+  $("img").each((_, el) => {
+    if (imageUrl) return false; // Already found, stop iterating
+
+    const $el = $(el);
+    const width = parseInt($el.attr("width") || "0", 10);
+    const height = parseInt($el.attr("height") || "0", 10);
 
     // Skip tracking pixels (small dimensions)
-    const widthMatch = imgTag.match(/width=["']?(\d+)/i);
-    const heightMatch = imgTag.match(/height=["']?(\d+)/i);
-
-    if (widthMatch && heightMatch) {
-      const width = parseInt(widthMatch[1], 10);
-      const height = parseInt(heightMatch[1], 10);
-      // Skip if dimensions are too small (likely tracking pixel)
-      if (width <= 10 || height <= 10) continue;
+    if (width > 0 && height > 0 && (width <= 10 || height <= 10)) {
+      return; // Continue to next image
     }
 
-    // Extract src from this img tag
-    const srcMatch = imgTag.match(/src=["']([^"']+)["']/i);
-    if (srcMatch?.[1]) {
-      return srcMatch[1];
+    const src = $el.attr("src");
+    if (src) {
+      imageUrl = src;
+      return false; // Stop iterating
     }
-  }
+  });
 
-  return undefined;
+  return imageUrl;
 }
 
 /**

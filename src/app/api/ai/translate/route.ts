@@ -3,6 +3,7 @@ import { generateText } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { createAnthropic } from "@ai-sdk/anthropic";
+import { parse as parseJson } from "best-effort-json-parser";
 import { prisma } from "@/lib/db";
 import { getAiCache, setAiCache } from "@/lib/ai-cache";
 import { withRateLimit } from "@/lib/ai-rate-limiter";
@@ -189,7 +190,7 @@ Example:
       // Try to extract JSON from the response (AI might include extra text)
       const jsonMatch = response.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
+        const parsed = parseJson(jsonMatch[0]);
         result = {
           title: parsed.title || null,
           summary: parsed.summary || null,

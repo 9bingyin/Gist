@@ -3,6 +3,8 @@ import { generateText } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { createAnthropic } from "@ai-sdk/anthropic";
+import { parse as parseJson } from "best-effort-json-parser";
+import striptags from "striptags";
 import { prisma } from "@/lib/db";
 import { getAiCacheBatch, setAiCacheBatch } from "@/lib/ai-cache";
 import { withRateLimit } from "@/lib/ai-rate-limiter";
@@ -87,7 +89,7 @@ export async function POST(request: NextRequest) {
     const articlesContent = uncachedArticles
       .map((article, index) => {
         const summaryPart = article.summary
-          ? `\n<summary>${article.summary.replace(/<[^>]*>/g, "").slice(0, 200)}</summary>`
+          ? `\n<summary>${striptags(article.summary).slice(0, 200)}</summary>`
           : "";
         return `<article id="${index}">
 <title>${article.title}</title>${summaryPart}
@@ -210,7 +212,7 @@ Return a JSON array:
       // Try to extract JSON array from the response
       const jsonMatch = response.match(/\[[\s\S]*\]/);
       if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]) as Array<{
+        const parsed = parseJson(jsonMatch[0]) as Array<{
           id: number;
           title: string;
           summary: string | null;

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useCallback, useState } from "react";
 import { RefreshCwIcon, CheckCircleIcon, MenuIcon } from "lucide-react";
+import striptags from "striptags";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { needsTranslation } from "@/lib/language-detect";
@@ -426,11 +427,11 @@ export function ArticleList({
 
                           {(article.translatedSummary || article.summary) && (
                             <p className="line-clamp-2 text-xs text-muted-foreground/80 leading-relaxed mt-0.5">
-                              {(
+                              {striptags(
                                 article.translatedSummary ||
-                                article.summary ||
-                                ""
-                              ).replace(/<[^>]*>/g, "")}
+                                  article.summary ||
+                                  ""
+                              )}
                             </p>
                           )}
                         </div>

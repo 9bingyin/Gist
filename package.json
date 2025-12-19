@@ -32,7 +32,9 @@
     "@serwist/next": "^9.2.3",
     "@tailwindcss/typography": "^0.5.19",
     "ai": "^5.0.115",
+    "best-effort-json-parser": "^1.2.1",
     "better-sqlite3": "^12.5.0",
+    "cheerio": "^1.1.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "dompurify": "^3.3.1",
@@ -56,6 +58,7 @@
     "react-resizable-panels": "^4.0.7",
     "rss-parser": "^3.13.0",
     "serwist": "^9.2.3",
+    "striptags": "^3.2.0",
     "tailwind-merge": "^3.4.0"
   },
   "devDependencies": {
