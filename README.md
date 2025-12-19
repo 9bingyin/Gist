@@ -8,8 +8,12 @@ A modern RSS reader application built with Next.js.
 # Install dependencies
 bun install
 
-# Generate Prisma client
+# Copy environment variables
+cp .env.example .env
+
+# Generate Prisma client and initialize database
 bunx prisma generate
+bunx prisma db push
 
 # Run development server
 bun run dev

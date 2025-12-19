@@ -53,6 +53,7 @@
     "react-dom": "19.2.1",
     "react-i18next": "^16.5.0",
     "react-resizable-panels": "^4.0.7",
+    "rss-parser": "^3.13.0",
     "serwist": "^9.2.3",
     "tailwind-merge": "^3.4.0"
   },
