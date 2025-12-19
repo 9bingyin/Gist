@@ -1565,6 +1565,10 @@ function AISettings() {
   const [savedAiModel, setSavedAiModel] = useState("");
   const [aiLanguage, setAiLanguage] = useState("English");
   const [savedAiLanguage, setSavedAiLanguage] = useState("English");
+  const [aiAutoTranslate, setAiAutoTranslate] = useState(false);
+  const [savedAiAutoTranslate, setSavedAiAutoTranslate] = useState(false);
+  const [aiQps, setAiQps] = useState("2");
+  const [savedAiQps, setSavedAiQps] = useState("2");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -1581,6 +1585,8 @@ function AISettings() {
         const apiKey = settings.aiApiKey || "";
         const model = settings.aiModel || "";
         const language = settings.aiLanguage || "English";
+        const autoTranslate = settings.aiAutoTranslate === "true";
+        const qps = settings.aiQps || "2";
 
         setAiProvider(provider);
         setSavedAiProvider(provider);
@@ -1592,6 +1598,10 @@ function AISettings() {
         setSavedAiModel(model);
         setAiLanguage(language);
         setSavedAiLanguage(language);
+        setAiAutoTranslate(autoTranslate);
+        setSavedAiAutoTranslate(autoTranslate);
+        setAiQps(qps);
+        setSavedAiQps(qps);
       } catch (err) {
         console.error("Failed to fetch AI settings:", err);
       } finally {
@@ -1616,6 +1626,8 @@ function AISettings() {
           aiApiKey: aiApiKey || "",
           aiModel: aiModel || "",
           aiLanguage: aiLanguage || "English",
+          aiAutoTranslate: aiAutoTranslate ? "true" : "false",
+          aiQps: aiQps || "2",
         }),
       });
 
@@ -1628,6 +1640,8 @@ function AISettings() {
       setSavedAiApiKey(aiApiKey);
       setSavedAiModel(aiModel);
       setSavedAiLanguage(aiLanguage);
+      setSavedAiAutoTranslate(aiAutoTranslate);
+      setSavedAiQps(aiQps);
 
       setMessage({ type: "success", text: "AI settings saved successfully" });
     } catch {
@@ -1694,7 +1708,9 @@ function AISettings() {
     aiBaseUrl !== savedAiBaseUrl ||
     aiApiKey !== savedAiApiKey ||
     aiModel !== savedAiModel ||
-    aiLanguage !== savedAiLanguage;
+    aiLanguage !== savedAiLanguage ||
+    aiAutoTranslate !== savedAiAutoTranslate ||
+    aiQps !== savedAiQps;
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -1857,6 +1873,75 @@ function AISettings() {
                 <SelectItem value="Spanish">Spanish</SelectItem>
               </SelectContent>
             </Select>
+          )}
+        </div>
+
+        {/* Auto Translate */}
+        <div className="rounded-xl border border-muted/40 p-5 bg-card transition-all hover:border-muted-foreground/20">
+          <div className="flex items-center justify-between">
+            <div className="space-y-1">
+              <h4 className="font-semibold text-sm">Auto Translate</h4>
+              <p className="text-[12px] text-muted-foreground">
+                Automatically translate non-target language articles. Only visible content will be translated to save tokens.
+              </p>
+            </div>
+
+            {!loading && (
+              <button
+                type="button"
+                role="switch"
+                aria-checked={aiAutoTranslate}
+                onClick={() => setAiAutoTranslate(!aiAutoTranslate)}
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${
+                  aiAutoTranslate ? "bg-primary" : "bg-muted"
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                    aiAutoTranslate ? "translate-x-5" : "translate-x-0"
+                  }`}
+                />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Rate Limit (QPS) */}
+        <div className="rounded-xl border border-muted/40 p-5 bg-card transition-all hover:border-muted-foreground/20">
+          <h4 className="font-semibold text-sm mb-1">Rate Limit (QPS)</h4>
+          <p className="text-[12px] text-muted-foreground mb-4">
+            Maximum AI requests per second. Lower values prevent API rate limit errors.
+          </p>
+
+          {!loading && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <Input
+                  type="number"
+                  min="0.1"
+                  max="10"
+                  step="0.1"
+                  value={aiQps}
+                  onChange={(e) => setAiQps(e.target.value)}
+                  className="w-24 rounded-md border-muted-foreground/20"
+                />
+                <span className="text-sm font-medium text-muted-foreground">requests/second</span>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                {["0.5", "1", "2", "5"].map((v) => (
+                  <Button
+                    key={v}
+                    variant={aiQps === v ? "secondary" : "outline"}
+                    size="sm"
+                    onClick={() => setAiQps(v)}
+                    className="rounded-full h-8 px-4 text-[11px] font-bold"
+                  >
+                    {v}/s
+                  </Button>
+                ))}
+              </div>
+            </div>
           )}
         </div>
 

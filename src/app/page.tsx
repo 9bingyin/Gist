@@ -24,6 +24,8 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [defaultLayout, setDefaultLayout] = useState<Layout | undefined>(undefined);
   const [layoutLoaded, setLayoutLoaded] = useState(false);
+  const [autoTranslate, setAutoTranslate] = useState(false);
+  const [targetLanguage, setTargetLanguage] = useState("Chinese");
 
   useEffect(() => {
     const saved = localStorage.getItem(LAYOUT_STORAGE_KEY);
@@ -33,6 +35,21 @@ export default function Home() {
       } catch {}
     }
     setLayoutLoaded(true);
+  }, []);
+
+  // Fetch auto-translate setting and target language
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const res = await fetch("/api/settings");
+        const settings = await res.json();
+        setAutoTranslate(settings.aiAutoTranslate === "true");
+        setTargetLanguage(settings.aiLanguage || "Chinese");
+      } catch (err) {
+        console.error("Failed to fetch settings:", err);
+      }
+    };
+    fetchSettings();
   }, []);
 
   const onLayoutChange = useCallback((layout: Layout) => {
@@ -57,18 +74,41 @@ export default function Home() {
     const params = new URLSearchParams();
     if (options.feedId) params.append("feedId", options.feedId);
     if (options.folderId) params.append("folderId", options.folderId);
-    
+
     if (params.toString()) {
       url += `?${params.toString()}`;
     }
 
     const res = await fetch(url);
     const data: Article[] = await res.json();
-    setArticles(data);
-    
+
+    // Preserve translation fields from existing articles
+    setArticles((prev) => {
+      const translationMap = new Map<string, { translatedTitle?: string; translatedSummary?: string }>();
+      for (const article of prev) {
+        if (article.translatedTitle || article.translatedSummary) {
+          translationMap.set(article.id, {
+            translatedTitle: article.translatedTitle,
+            translatedSummary: article.translatedSummary,
+          });
+        }
+      }
+
+      return data.map((article) => {
+        const translation = translationMap.get(article.id);
+        if (translation) {
+          return { ...article, ...translation };
+        }
+        return article;
+      });
+    });
+
     setSelectedArticle((prev) => {
       if (!prev) return prev;
       const updated = data.find((a) => a.id === prev.id);
+      if (updated && prev.translatedTitle) {
+        return { ...updated, translatedTitle: prev.translatedTitle, translatedSummary: prev.translatedSummary };
+      }
       return updated || prev;
     });
     setLoading(false);
@@ -228,6 +268,16 @@ export default function Home() {
     );
   }, []);
 
+  const handleUpdateArticles = useCallback((updatedArticles: Article[]) => {
+    setArticles(updatedArticles);
+    // Also update selected article if it was translated
+    setSelectedArticle((prev) => {
+      if (!prev) return prev;
+      const updated = updatedArticles.find((a) => a.id === prev.id);
+      return updated || prev;
+    });
+  }, []);
+
   const handleMarkAllRead = async () => {
     await fetch("/api/articles/mark-all-read", {
       method: "POST",
@@ -291,7 +341,10 @@ export default function Home() {
           onSelectArticle={handleSelectArticle}
           onRefresh={handleRefresh}
           onMarkAllRead={handleMarkAllRead}
+          onUpdateArticles={handleUpdateArticles}
           loading={loading}
+          autoTranslate={autoTranslate}
+          targetLanguage={targetLanguage}
         />
       </ResizablePanel>
       <ResizableHandle />
@@ -299,6 +352,8 @@ export default function Home() {
         <ArticleDetail
           article={selectedArticle}
           onArticleUpdate={handleArticleUpdate}
+          autoTranslate={autoTranslate}
+          targetLanguage={targetLanguage}
         />
       </ResizablePanel>
     </ResizablePanelGroup>

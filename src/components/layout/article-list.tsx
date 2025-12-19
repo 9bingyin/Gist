@@ -1,8 +1,10 @@
 "use client";
 
-import { RefreshCwIcon, CheckIcon, CheckCircleIcon } from "lucide-react";
+import { useEffect, useRef, useCallback, useState } from "react";
+import { RefreshCwIcon, CheckCircleIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { needsTranslation } from "@/lib/language-detect";
 import type { Article } from "@/lib/types";
 
 interface ArticleListProps {
@@ -12,7 +14,10 @@ interface ArticleListProps {
   onSelectArticle: (article: Article) => void;
   onRefresh: () => void;
   onMarkAllRead: () => Promise<void>;
+  onUpdateArticles?: (articles: Article[]) => void;
   loading?: boolean;
+  autoTranslate?: boolean;
+  targetLanguage?: string;
 }
 
 function formatDate(dateStr: string | null): string {
@@ -101,9 +106,183 @@ export function ArticleList({
   onSelectArticle,
   onRefresh,
   onMarkAllRead,
+  onUpdateArticles,
   loading,
+  autoTranslate,
+  targetLanguage,
 }: ArticleListProps) {
   const groupedArticles = groupArticlesByDate(articles);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const articleRefs = useRef<Map<string, HTMLElement>>(new Map());
+  const visibleArticleIds = useRef<Set<string>>(new Set());
+  const translatingIds = useRef<Set<string>>(new Set());
+  const translateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const observerRef = useRef<IntersectionObserver | null>(null);
+  const [isTranslating, setIsTranslating] = useState(false);
+
+  // Use ref to always have access to the latest articles (avoid closure issues)
+  const articlesRef = useRef(articles);
+  articlesRef.current = articles;
+
+  // Translate visible articles
+  const translateVisibleArticles = useCallback(async () => {
+    if (!autoTranslate || !onUpdateArticles || !targetLanguage) return;
+
+    // Use ref to get latest articles (avoid closure issues)
+    const currentArticles = articlesRef.current;
+
+    // Collect articles that need translation (visible, not yet translated, and not in target language)
+    const articlesToTranslate = currentArticles.filter(
+      (article) =>
+        visibleArticleIds.current.has(article.id) &&
+        !article.translatedTitle &&
+        !translatingIds.current.has(article.id) &&
+        needsTranslation(article.title, article.summary, targetLanguage)
+    );
+
+    if (articlesToTranslate.length === 0) return;
+
+    // Mark as translating
+    for (const article of articlesToTranslate) {
+      translatingIds.current.add(article.id);
+    }
+    setIsTranslating(true);
+
+    try {
+      const res = await fetch("/api/ai/translate-lite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          articles: articlesToTranslate.map((a) => ({
+            id: a.id,
+            title: a.title,
+            summary: a.summary,
+          })),
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error("Translation failed");
+      }
+
+      const data = await res.json();
+      const translations = data.translations as Record<
+        string,
+        { title: string; summary: string | null }
+      >;
+
+      // Update articles with translations (use latest ref)
+      const latestArticles = articlesRef.current;
+      const updatedArticles = latestArticles.map((article) => {
+        const translation = translations[article.id];
+        if (translation) {
+          return {
+            ...article,
+            translatedTitle: translation.title,
+            translatedSummary: translation.summary || undefined,
+          };
+        }
+        return article;
+      });
+
+      onUpdateArticles(updatedArticles);
+    } catch (error) {
+      console.error("Auto-translate error:", error);
+      // Remove from translating set on error so they can be retried
+      for (const article of articlesToTranslate) {
+        translatingIds.current.delete(article.id);
+      }
+    } finally {
+      setIsTranslating(false);
+    }
+  }, [autoTranslate, onUpdateArticles, targetLanguage]);
+
+  // Debounced translate trigger
+  const scheduleTranslation = useCallback(() => {
+    if (translateTimeoutRef.current) {
+      clearTimeout(translateTimeoutRef.current);
+    }
+    translateTimeoutRef.current = setTimeout(() => {
+      translateVisibleArticles();
+    }, 300);
+  }, [translateVisibleArticles]);
+
+  // Store scheduleTranslation in ref to avoid dependency issues
+  const scheduleTranslationRef = useRef(scheduleTranslation);
+  scheduleTranslationRef.current = scheduleTranslation;
+
+  // Set up Intersection Observer for visible articles detection
+  useEffect(() => {
+    // Disconnect previous observer
+    if (observerRef.current) {
+      observerRef.current.disconnect();
+      observerRef.current = null;
+    }
+
+    if (!autoTranslate) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          const articleId = entry.target.getAttribute("data-article-id");
+          if (!articleId) continue;
+
+          if (entry.isIntersecting) {
+            visibleArticleIds.current.add(articleId);
+          } else {
+            visibleArticleIds.current.delete(articleId);
+          }
+        }
+        scheduleTranslationRef.current();
+      },
+      {
+        root: containerRef.current,
+        rootMargin: "50px",
+        threshold: 0,
+      }
+    );
+
+    // Store observer in ref for dynamic observation
+    observerRef.current = observer;
+
+    // Observe all existing article elements
+    articleRefs.current.forEach((element) => {
+      observer.observe(element);
+    });
+
+    return () => {
+      observer.disconnect();
+      observerRef.current = null;
+      if (translateTimeoutRef.current) {
+        clearTimeout(translateTimeoutRef.current);
+      }
+    };
+  }, [autoTranslate]);
+
+  // Reset translating IDs only when article IDs change (not when translations are added)
+  const articleIdsKey = articles.map((a) => a.id).join(",");
+  useEffect(() => {
+    translatingIds.current.clear();
+    visibleArticleIds.current.clear();
+  }, [articleIdsKey]);
+
+  // Register article ref and observe for visibility
+  const registerArticleRef = useCallback((id: string, element: HTMLElement | null) => {
+    if (element) {
+      articleRefs.current.set(id, element);
+      // Observe new element if observer exists
+      if (observerRef.current) {
+        observerRef.current.observe(element);
+      }
+    } else {
+      const existingElement = articleRefs.current.get(id);
+      if (existingElement && observerRef.current) {
+        observerRef.current.unobserve(existingElement);
+      }
+      articleRefs.current.delete(id);
+      visibleArticleIds.current.delete(id);
+    }
+  }, []);
 
   return (
     <div className="flex h-full flex-col border-r bg-background">
@@ -131,7 +310,7 @@ export function ArticleList({
           </Button>
         </div>
       </div>
-      <div className="flex-1 overflow-y-auto">
+      <div ref={containerRef} className="flex-1 overflow-y-auto">
         {articles.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center p-8 text-center text-muted-foreground gap-2">
             <p>暂无文章</p>
@@ -148,6 +327,8 @@ export function ArticleList({
                   {dateArticles.map((article) => (
                     <button
                       key={article.id}
+                      ref={(el) => registerArticleRef(article.id, el)}
+                      data-article-id={article.id}
                       onClick={() => onSelectArticle(article)}
                       className={cn(
                         "group relative flex w-full gap-3 px-4 py-4 text-left transition-all hover:bg-accent/50",

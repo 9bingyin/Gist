@@ -53,3 +53,15 @@ model Setting {
   value     String
   updatedAt DateTime @updatedAt
 }
+
+model AiCache {
+  id        String   @id @default(cuid())
+  articleId String
+  type      String   // translate, translate-lite, summarize
+  language  String   // target language
+  result    String   // JSON string of cached result
+  createdAt DateTime @default(now())
+
+  @@unique([articleId, type, language])
+  @@index([articleId])
+}

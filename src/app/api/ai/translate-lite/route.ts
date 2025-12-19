@@ -4,22 +4,31 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { prisma } from "@/lib/db";
-import { getAiCache, setAiCache } from "@/lib/ai-cache";
+import { getAiCacheBatch, setAiCacheBatch } from "@/lib/ai-cache";
 import { withRateLimit } from "@/lib/ai-rate-limiter";
 
-export const maxDuration = 30;
+export const maxDuration = 60;
+
+interface ArticleToTranslate {
+  id: string;
+  title: string;
+  summary: string | null;
+}
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { articleId, content, title } = body;
+    const { articles } = body as { articles: ArticleToTranslate[] };
 
-    if (!content) {
+    if (!articles || !Array.isArray(articles) || articles.length === 0) {
       return NextResponse.json(
-        { error: "Content is required" },
+        { error: "Articles array is required" },
         { status: 400 }
       );
     }
+
+    // Limit batch size to prevent token overflow
+    const batchArticles = articles.slice(0, 10);
 
     // Get AI settings from database
     const settings = await prisma.setting.findMany({
@@ -39,18 +48,22 @@ export async function POST(request: NextRequest) {
     const baseUrl = settingsMap.aiBaseUrl || undefined;
     const apiKey = settingsMap.aiApiKey;
     const model = settingsMap.aiModel || undefined;
-    const language = settingsMap.aiLanguage || "English";
+    const language = settingsMap.aiLanguage || "Chinese";
 
     // Check cache first
-    if (articleId) {
-      const cached = await getAiCache<{ summary: string }>(
-        articleId,
-        "summarize",
-        language
-      );
-      if (cached) {
-        return NextResponse.json(cached);
-      }
+    const articleIds = batchArticles.map((a) => a.id);
+    const cachedTranslations = await getAiCacheBatch(articleIds, "translate-lite", language);
+
+    // Filter out already cached articles
+    const uncachedArticles = batchArticles.filter((a) => !cachedTranslations.has(a.id));
+
+    // If all articles are cached, return cached results
+    if (uncachedArticles.length === 0) {
+      const results: Record<string, { title: string; summary: string | null }> = {};
+      cachedTranslations.forEach((value, key) => {
+        results[key] = value;
+      });
+      return NextResponse.json({ translations: results });
     }
 
     if (!apiKey) {
@@ -60,34 +73,35 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create prompt for summarization
-    const languageInstruction = language ? `You must answer in ${language}.` : "";
-    const prompt = `${languageInstruction}
+    // Build articles content for translation (only uncached)
+    const articlesContent = uncachedArticles
+      .map((article, index) => {
+        const summaryPart = article.summary ? `\n<summary>${article.summary.replace(/<[^>]*>/g, '').slice(0, 200)}</summary>` : '';
+        return `<article id="${index}">
+<title>${article.title}</title>${summaryPart}
+</article>`;
+      })
+      .join("\n\n");
 
-<task>
-Summarize the following article by extracting 3-5 key points. Each point should be a concise statement of important information or main ideas.
-Use simple, clear language that is easy to understand for general readers.
+    const prompt = `<task>
+Translate the following article titles and summaries into ${language}.
 </task>
 
 <requirements>
-- Output in plain text format only
-- Do NOT use Markdown formatting
-- Do NOT use any prefixes: no asterisks (*), hyphens (-), numbers (1., 2.), or bullet symbols (•)
-- Start each point on a new line without any prefix
-- Each point should be a complete sentence
-- Focus on factual information and main ideas
-- Use plain, accessible language - avoid jargon and technical terms when possible
-- Write in a conversational, easy-to-understand style
+- Translate all text content into ${language}
+- Return a JSON array with the translated results
+- Each object should have: id (number), title (string), summary (string or null)
+- Do not add any explanations or notes
+- Keep the same order as input
 </requirements>
 
-<article>
-${title ? `<title>${title}</title>\n\n` : ''}<content>
-${content}
-</content>
-</article>
+<articles>
+${articlesContent}
+</articles>
 
 <output_format>
-Return only the key points, one per line, without any prefixes or formatting symbols.
+Return a JSON array:
+[{"id": 0, "title": "translated title", "summary": "translated summary or null"}, ...]
 </output_format>`;
 
     let response: string;
@@ -114,7 +128,7 @@ Return only the key points, one per line, without any prefixes or formatting sym
         throw new Error(
           err instanceof Error
             ? `OpenAI error: ${err.message}`
-            : "Failed to generate summary with OpenAI"
+            : "Failed to translate with OpenAI"
         );
       }
     } else if (provider === "openai-compatible") {
@@ -140,7 +154,7 @@ Return only the key points, one per line, without any prefixes or formatting sym
         throw new Error(
           err instanceof Error
             ? `OpenAI Compatible error: ${err.message}`
-            : "Failed to generate summary with OpenAI Compatible API"
+            : "Failed to translate with OpenAI Compatible API"
         );
       }
     } else if (provider === "anthropic") {
@@ -165,7 +179,7 @@ Return only the key points, one per line, without any prefixes or formatting sym
         throw new Error(
           err instanceof Error
             ? `Anthropic error: ${err.message}`
-            : "Failed to generate summary with Anthropic"
+            : "Failed to translate with Anthropic"
         );
       }
     } else {
@@ -175,31 +189,62 @@ Return only the key points, one per line, without any prefixes or formatting sym
       );
     }
 
-    const result = { summary: response };
+    // Parse JSON response from AI
+    const newTranslations = new Map<string, { title: string; summary: string | null }>();
+    try {
+      // Try to extract JSON array from the response
+      const jsonMatch = response.match(/\[[\s\S]*\]/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]) as Array<{
+          id: number;
+          title: string;
+          summary: string | null;
+        }>;
 
-    // Save to cache
-    if (articleId) {
-      await setAiCache(articleId, "summarize", language, result);
+        // Map back to original article IDs
+        for (const item of parsed) {
+          const originalArticle = uncachedArticles[item.id];
+          if (originalArticle) {
+            newTranslations.set(originalArticle.id, {
+              title: item.title,
+              summary: item.summary,
+            });
+          }
+        }
+      }
+    } catch {
+      // If JSON parsing fails, continue with empty new translations
     }
 
-    return NextResponse.json(result);
+    // Save new translations to cache
+    if (newTranslations.size > 0) {
+      await setAiCacheBatch(newTranslations, "translate-lite", language);
+    }
+
+    // Merge cached and new translations
+    const results: Record<string, { title: string; summary: string | null }> = {};
+    cachedTranslations.forEach((value, key) => {
+      results[key] = value;
+    });
+    newTranslations.forEach((value, key) => {
+      results[key] = value;
+    });
+
+    return NextResponse.json({ translations: results });
   } catch (error) {
-    console.error("AI summarize error:", error);
+    console.error("AI translate-lite error:", error);
 
     let errorMessage = "Unknown error occurred";
 
     if (error instanceof Error) {
       errorMessage = error.message;
 
-      // Handle common error patterns
       if (errorMessage.includes("401") || errorMessage.includes("Unauthorized")) {
         errorMessage = "Invalid API key";
       } else if (errorMessage.includes("404") || errorMessage.includes("model")) {
         errorMessage = "Invalid model name or model not found";
       } else if (errorMessage.includes("429")) {
         errorMessage = "Rate limit exceeded";
-      } else if (errorMessage.includes("Invalid time value")) {
-        errorMessage = "API response format error. Please check your API key and base URL.";
       }
     }
 

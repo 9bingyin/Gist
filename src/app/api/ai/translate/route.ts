@@ -4,13 +4,15 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { prisma } from "@/lib/db";
+import { getAiCache, setAiCache } from "@/lib/ai-cache";
+import { withRateLimit } from "@/lib/ai-rate-limiter";
 
 export const maxDuration = 60;
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { content, title, summary } = body;
+    const { articleId, content, title, summary } = body;
 
     if (!content) {
       return NextResponse.json(
@@ -38,6 +40,18 @@ export async function POST(request: NextRequest) {
     const apiKey = settingsMap.aiApiKey;
     const model = settingsMap.aiModel || undefined;
     const language = settingsMap.aiLanguage || "Chinese";
+
+    // Check cache first
+    if (articleId) {
+      const cached = await getAiCache<{ title: string | null; summary: string | null; content: string }>(
+        articleId,
+        "translate",
+        language
+      );
+      if (cached) {
+        return NextResponse.json(cached);
+      }
+    }
 
     if (!apiKey) {
       return NextResponse.json(
@@ -85,10 +99,12 @@ Example:
       const modelName = model || "gpt-4o-mini";
 
       try {
-        const result = await generateText({
-          model: openai(modelName),
-          prompt,
-        });
+        const result = await withRateLimit(() =>
+          generateText({
+            model: openai(modelName),
+            prompt,
+          })
+        );
 
         response = result.text;
       } catch (err) {
@@ -109,10 +125,12 @@ Example:
       const modelName = model || "llama3.2";
 
       try {
-        const result = await generateText({
-          model: compatible(modelName),
-          prompt,
-        });
+        const result = await withRateLimit(() =>
+          generateText({
+            model: compatible(modelName),
+            prompt,
+          })
+        );
 
         response = result.text;
       } catch (err) {
@@ -132,10 +150,12 @@ Example:
       const modelName = model || "claude-3-5-haiku-20241022";
 
       try {
-        const result = await generateText({
-          model: anthropic(modelName),
-          prompt,
-        });
+        const result = await withRateLimit(() =>
+          generateText({
+            model: anthropic(modelName),
+            prompt,
+          })
+        );
 
         response = result.text;
       } catch (err) {
@@ -154,22 +174,28 @@ Example:
     }
 
     // Parse JSON response from AI
+    let result = { title: null as string | null, summary: null as string | null, content: response };
     try {
       // Try to extract JSON from the response (AI might include extra text)
       const jsonMatch = response.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0]);
-        return NextResponse.json({
+        result = {
           title: parsed.title || null,
           summary: parsed.summary || null,
           content: parsed.content || response,
-        });
+        };
       }
     } catch {
-      // If JSON parsing fails, return raw response as content
+      // If JSON parsing fails, use raw response as content
     }
 
-    return NextResponse.json({ title: null, summary: null, content: response });
+    // Save to cache
+    if (articleId) {
+      await setAiCache(articleId, "translate", language, result);
+    }
+
+    return NextResponse.json(result);
   } catch (error) {
     console.error("AI translate error:", error);
 

@@ -22,11 +22,14 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { needsTranslation } from "@/lib/language-detect";
 import type { Article } from "@/lib/types";
 
 interface ArticleDetailProps {
   article: Article | null;
   onArticleUpdate?: (article: Article) => void;
+  autoTranslate?: boolean;
+  targetLanguage?: string;
 }
 
 function formatRelativeTime(dateStr: string | null): string {
@@ -162,7 +165,7 @@ function processContent(content: string, articleLink?: string): string {
   return processed;
 }
 
-export function ArticleDetail({ article, onArticleUpdate }: ArticleDetailProps) {
+export function ArticleDetail({ article, onArticleUpdate, autoTranslate, targetLanguage }: ArticleDetailProps) {
   const [isLoadingReadability, setIsLoadingReadability] = useState(false);
   const [useReadability, setUseReadability] = useState(false);
   const [readabilityError, setReadabilityError] = useState<string | null>(null);
@@ -187,6 +190,61 @@ export function ArticleDetail({ article, onArticleUpdate }: ArticleDetailProps) 
     setTranslationError(null);
   }, [article?.id]);
 
+  // Auto-translate when article changes and autoTranslate is enabled
+  useEffect(() => {
+    const autoTranslateContent = async () => {
+      if (!autoTranslate || !article || !targetLanguage || isLoadingTranslation || translatedContent) return;
+
+      // Skip if article is already in target language
+      if (!needsTranslation(article.title, article.summary, targetLanguage)) return;
+
+      const content = article.content || article.summary;
+      if (!content) return;
+
+      setIsLoadingTranslation(true);
+      setTranslationError(null);
+      try {
+        const res = await fetch("/api/ai/translate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            articleId: article.id,
+            content,
+            title: article.title,
+            summary: article.summary,
+          }),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          throw new Error(data.error || "Translation failed");
+        }
+
+        setTranslatedContent(data.content);
+        setTranslatedTitle(data.title);
+        setTranslatedSummary(data.summary);
+
+        // Update article with translated title/summary for article list
+        if (onArticleUpdate && (data.title || data.summary)) {
+          onArticleUpdate({
+            ...article,
+            translatedTitle: data.title || undefined,
+            translatedSummary: data.summary || undefined,
+          });
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Translation failed";
+        setTranslationError(message);
+        console.error("Auto-translate error:", error);
+      } finally {
+        setIsLoadingTranslation(false);
+      }
+    };
+
+    autoTranslateContent();
+  }, [article?.id, autoTranslate, targetLanguage]);
+
   // Regenerate summary when readability mode changes (if summary was already shown)
   useEffect(() => {
     const regenerateSummary = async () => {
@@ -207,6 +265,7 @@ export function ArticleDetail({ article, onArticleUpdate }: ArticleDetailProps) 
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
+            articleId: article.id,
             content,
             title: article.title,
           }),
@@ -324,6 +383,7 @@ export function ArticleDetail({ article, onArticleUpdate }: ArticleDetailProps) 
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          articleId: article.id,
           content,
           title: article.title,
         }),
@@ -378,6 +438,7 @@ export function ArticleDetail({ article, onArticleUpdate }: ArticleDetailProps) 
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          articleId: article.id,
           content,
           title: article.title,
           summary: article.summary,
