@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useCallback, useState } from "react";
-import { RefreshCwIcon, CheckCircleIcon } from "lucide-react";
+import { RefreshCwIcon, CheckCircleIcon, MenuIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { needsTranslation } from "@/lib/language-detect";
@@ -19,6 +19,8 @@ interface ArticleListProps {
   loading?: boolean;
   autoTranslate?: boolean;
   targetLanguage?: string;
+  showMenuButton?: boolean;
+  onMenuClick?: () => void;
 }
 
 export function ArticleList({
@@ -32,6 +34,8 @@ export function ArticleList({
   loading,
   autoTranslate,
   targetLanguage,
+  showMenuButton,
+  onMenuClick,
 }: ArticleListProps) {
   const { t, i18n } = useTranslation();
 
@@ -309,10 +313,22 @@ export function ArticleList({
 
   return (
     <div className="flex h-full flex-col border-r bg-background">
-      <div className="flex h-16 items-center justify-between px-4 shrink-0">
-        <h2 className="font-bold text-xl tracking-tight truncate min-w-0 flex-1 mr-2">
-          {title}
-        </h2>
+      <div className="flex h-14 items-center justify-between px-4 shrink-0 border-b md:h-16 md:border-b-0">
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          {showMenuButton && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onMenuClick}
+              className="h-8 w-8 shrink-0"
+            >
+              <MenuIcon className="h-5 w-5" />
+            </Button>
+          )}
+          <h2 className="font-bold text-lg md:text-xl tracking-tight truncate">
+            {title}
+          </h2>
+        </div>
         <div className="flex items-center gap-1 shrink-0">
           <Button
             variant="ghost"

@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { CHROME_USER_AGENT, DEFAULT_REFRESH_INTERVAL } from "@/lib/constants";
 import { useTheme } from "next-themes";
+import { useIsMobile } from "@/hooks/use-mobile";
 import {
   SettingsIcon,
   RssIcon,
@@ -115,6 +116,7 @@ export function SettingsDialog({
   const [isImporting, setIsImporting] = useState(false);
   const [open, setOpen] = useState(false);
   const { t } = useTranslation();
+  const isMobile = useIsMobile();
 
   const menuItems: { id: SettingsTab; label: string; icon: React.ReactNode }[] =
     [
@@ -196,56 +198,97 @@ export function SettingsDialog({
         )}
       </DialogTrigger>
       <DialogContent
-        className="sm:max-w-4xl h-[650px] max-h-[90vh] p-0 gap-0 overflow-hidden border-none shadow-2xl"
+        className={
+          isMobile
+            ? "w-full h-full max-w-full max-h-full p-0 gap-0 overflow-hidden border-none rounded-none"
+            : "sm:max-w-4xl h-[650px] max-h-[90vh] p-0 gap-0 overflow-hidden border-none shadow-2xl"
+        }
         onPointerDownOutside={(e) => isImporting && e.preventDefault()}
         onEscapeKeyDown={(e) => isImporting && e.preventDefault()}
       >
         <DialogTitle className="sr-only">{t("settings.title")}</DialogTitle>
-        <div className="flex h-full overflow-hidden bg-background">
-          {/* Left menu */}
-          <div className="w-[200px] border-r bg-muted/20 p-5 flex flex-col">
-            <div className="mb-6 px-2">
-              <h2 className="text-lg font-semibold tracking-tight">
-                {t("settings.title")}
-              </h2>
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium mt-0.5">
-                {t("settings.subtitle")}
-              </p>
-            </div>
-            <nav className="space-y-1 flex-1">
-              {menuItems.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => setActiveTab(item.id)}
-                  className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-[13px] font-medium transition-all duration-200 ${
-                    activeTab === item.id
-                      ? "bg-primary text-primary-foreground shadow-sm"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                  }`}
-                >
-                  <div
-                    className={
-                      activeTab === item.id
-                        ? "text-primary-foreground"
-                        : "text-muted-foreground/70"
-                    }
-                  >
-                    {item.icon}
-                  </div>
-                  {item.label}
-                </button>
-              ))}
-            </nav>
-
-            <div className="mt-auto pt-3 px-2">
-              <div className="flex items-center gap-2 text-[10px] text-muted-foreground font-mono opacity-50">
-                <span>{t("app.version")}</span>
+        <div className="flex flex-col md:flex-row h-full overflow-hidden bg-background">
+          {/* Mobile header with tabs */}
+          {isMobile ? (
+            <div className="border-b bg-muted/20 shrink-0">
+              <div className="px-4 py-3">
+                <h2 className="text-lg font-semibold tracking-tight">
+                  {t("settings.title")}
+                </h2>
+              </div>
+              <div className="overflow-x-auto">
+                <nav className="flex px-2 pb-2 gap-1 min-w-max">
+                  {menuItems.map((item) => (
+                    <button
+                      key={item.id}
+                      onClick={() => setActiveTab(item.id)}
+                      className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-all ${
+                        activeTab === item.id
+                          ? "bg-primary text-primary-foreground shadow-sm"
+                          : "text-muted-foreground hover:bg-muted"
+                      }`}
+                    >
+                      <div
+                        className={
+                          activeTab === item.id
+                            ? "text-primary-foreground"
+                            : "text-muted-foreground/70"
+                        }
+                      >
+                        {item.icon}
+                      </div>
+                      {item.label}
+                    </button>
+                  ))}
+                </nav>
               </div>
             </div>
-          </div>
+          ) : (
+            /* Desktop left menu */
+            <div className="w-[200px] border-r bg-muted/20 p-5 flex flex-col shrink-0">
+              <div className="mb-6 px-2">
+                <h2 className="text-lg font-semibold tracking-tight">
+                  {t("settings.title")}
+                </h2>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium mt-0.5">
+                  {t("settings.subtitle")}
+                </p>
+              </div>
+              <nav className="space-y-1 flex-1">
+                {menuItems.map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => setActiveTab(item.id)}
+                    className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-[13px] font-medium transition-all duration-200 ${
+                      activeTab === item.id
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                    }`}
+                  >
+                    <div
+                      className={
+                        activeTab === item.id
+                          ? "text-primary-foreground"
+                          : "text-muted-foreground/70"
+                      }
+                    >
+                      {item.icon}
+                    </div>
+                    {item.label}
+                  </button>
+                ))}
+              </nav>
 
-          {/* Right content */}
-          <div className="flex-1 overflow-y-auto p-6 scroll-smooth bg-background">
+              <div className="mt-auto pt-3 px-2">
+                <div className="flex items-center gap-2 text-[10px] text-muted-foreground font-mono opacity-50">
+                  <span>{t("app.version")}</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Content */}
+          <div className="flex-1 overflow-y-auto p-4 md:p-6 scroll-smooth bg-background">
             <div className="max-w-3xl mx-auto">
               {activeTab === "general" && <GeneralSettings />}
               {activeTab === "feeds" && (

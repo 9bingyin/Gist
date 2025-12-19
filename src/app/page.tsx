@@ -10,6 +10,8 @@ import type { Layout } from "react-resizable-panels";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { ArticleList } from "@/components/layout/article-list";
 import { ArticleDetail } from "@/components/layout/article-detail";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { useIsMobile } from "@/hooks/use-mobile";
 import type { Feed, Article, Folder } from "@/lib/types";
 import { useTranslation } from "react-i18next";
 
@@ -29,6 +31,9 @@ export default function Home() {
   const [layoutLoaded, setLayoutLoaded] = useState(false);
   const [autoTranslate, setAutoTranslate] = useState(false);
   const [targetLanguage, setTargetLanguage] = useState("Chinese");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [mobileView, setMobileView] = useState<"list" | "detail">("list");
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     const saved = localStorage.getItem(LAYOUT_STORAGE_KEY);
@@ -192,6 +197,9 @@ export default function Home() {
 
   const handleSelectArticle = async (article: Article) => {
     setSelectedArticle(article);
+    if (isMobile) {
+      setMobileView("detail");
+    }
     if (!article.isRead) {
       await fetch(`/api/articles/${article.id}`, {
         method: "PATCH",
@@ -204,6 +212,10 @@ export default function Home() {
       await fetchFeeds();
     }
   };
+
+  const handleBackToList = useCallback(() => {
+    setMobileView("list");
+  }, []);
 
   const handleRefresh = async () => {
     setLoading(true);
@@ -332,6 +344,73 @@ export default function Home() {
     return <div className="h-screen" />;
   }
 
+  // Sidebar component (shared between mobile and desktop)
+  const sidebarContent = (
+    <AppSidebar
+      feeds={feeds}
+      folders={folders}
+      selectedFeedId={selectedFeedId}
+      selectedFolderId={selectedFolderId}
+      onSelectFeed={(feedId) => {
+        handleSelectFeed(feedId);
+        setSidebarOpen(false);
+      }}
+      onSelectFolder={(folderId) => {
+        handleSelectFolder(folderId);
+        setSidebarOpen(false);
+      }}
+      onAddFeed={handleAddFeed}
+      onRefreshFeed={handleRefreshFeed}
+      onDeleteFeed={handleDeleteFeed}
+      onRefreshAllFeeds={handleRefreshAllFeeds}
+      onAddFolder={handleAddFolder}
+      onDeleteFolder={handleDeleteFolder}
+      onRenameFolder={handleRenameFolder}
+      onMoveFeedToFolder={handleMoveFeedToFolder}
+      onDataChange={handleDataChange}
+    />
+  );
+
+  // Mobile layout
+  if (isMobile) {
+    return (
+      <div className="h-screen flex flex-col">
+        {mobileView === "list" ? (
+          <>
+            <ArticleList
+              title={listTitle}
+              articles={articles}
+              selectedArticleId={selectedArticle?.id ?? null}
+              onSelectArticle={handleSelectArticle}
+              onRefresh={handleRefresh}
+              onMarkAllRead={handleMarkAllRead}
+              onUpdateArticles={handleUpdateArticles}
+              loading={loading}
+              autoTranslate={autoTranslate}
+              targetLanguage={targetLanguage}
+              showMenuButton
+              onMenuClick={() => setSidebarOpen(true)}
+            />
+            <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
+              <SheetContent side="left" className="w-[280px] p-0" hideCloseButton>
+                {sidebarContent}
+              </SheetContent>
+            </Sheet>
+          </>
+        ) : (
+          <ArticleDetail
+            article={selectedArticle}
+            onArticleUpdate={handleArticleUpdate}
+            autoTranslate={autoTranslate}
+            targetLanguage={targetLanguage}
+            onBack={handleBackToList}
+          />
+        )}
+      </div>
+    );
+  }
+
+  // Desktop layout
   return (
     <ResizablePanelGroup
       id={LAYOUT_STORAGE_KEY}
@@ -346,23 +425,7 @@ export default function Home() {
         minSize="10%"
         maxSize="30%"
       >
-        <AppSidebar
-          feeds={feeds}
-          folders={folders}
-          selectedFeedId={selectedFeedId}
-          selectedFolderId={selectedFolderId}
-          onSelectFeed={handleSelectFeed}
-          onSelectFolder={handleSelectFolder}
-          onAddFeed={handleAddFeed}
-          onRefreshFeed={handleRefreshFeed}
-          onDeleteFeed={handleDeleteFeed}
-          onRefreshAllFeeds={handleRefreshAllFeeds}
-          onAddFolder={handleAddFolder}
-          onDeleteFolder={handleDeleteFolder}
-          onRenameFolder={handleRenameFolder}
-          onMoveFeedToFolder={handleMoveFeedToFolder}
-          onDataChange={handleDataChange}
-        />
+        {sidebarContent}
       </ResizablePanel>
 
       <ResizableHandle />

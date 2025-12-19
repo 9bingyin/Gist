@@ -13,6 +13,7 @@ import {
   LoaderIcon,
   SparklesIcon,
   LanguagesIcon,
+  ArrowLeftIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,6 +32,7 @@ interface ArticleDetailProps {
   onArticleUpdate?: (article: Article) => void;
   autoTranslate?: boolean;
   targetLanguage?: string;
+  onBack?: () => void;
 }
 
 // formatRelativeTime is implemented inside the component to access translations
@@ -202,6 +204,7 @@ export function ArticleDetail({
   onArticleUpdate,
   autoTranslate,
   targetLanguage,
+  onBack,
 }: ArticleDetailProps) {
   const { t, i18n } = useTranslation();
 
@@ -549,9 +552,23 @@ export function ArticleDetail({
 
   if (!article) {
     return (
-      <div className="flex h-full flex-col items-center justify-center text-muted-foreground bg-background/50">
-        <RssIcon className="mb-4 h-12 w-12 opacity-10" />
-        <p className="text-lg font-medium">选择一篇文章开始阅读</p>
+      <div className="flex h-full flex-col bg-background/50">
+        {onBack && (
+          <div className="flex h-14 items-center border-b px-4 shrink-0">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onBack}
+              className="h-8 w-8"
+            >
+              <ArrowLeftIcon className="h-5 w-5" />
+            </Button>
+          </div>
+        )}
+        <div className="flex flex-1 flex-col items-center justify-center text-muted-foreground">
+          <RssIcon className="mb-4 h-12 w-12 opacity-10" />
+          <p className="text-lg font-medium">Select an article to read</p>
+        </div>
       </div>
     );
   }
@@ -560,162 +577,176 @@ export function ArticleDetail({
     <div className="h-full overflow-y-auto bg-background">
       {/* Toolbar */}
       <TooltipProvider>
-        <div className="sticky top-0 z-10 flex items-center justify-end gap-1 border-b bg-background/95 px-4 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className={cn(
-                  "h-8 w-8 text-muted-foreground hover:text-foreground",
-                  useReadability && "bg-accent text-accent-foreground",
-                  readabilityError && "text-destructive hover:text-destructive",
-                )}
-                onClick={handleToggleReadability}
-                disabled={isLoadingReadability}
-              >
-                {isLoadingReadability ? (
-                  <LoaderIcon className="h-4 w-4 animate-spin" />
-                ) : (
-                  <BookOpenIcon className="h-4 w-4" />
-                )}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>
-                {readabilityError ||
-                  (useReadability
-                    ? t("article.readability.show_original")
-                    : t("article.readability.read_mode"))}
-              </p>
-            </TooltipContent>
-          </Tooltip>
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className={cn(
-                  "h-8 w-8 text-muted-foreground hover:text-foreground",
-                  aiSummary && "bg-accent text-accent-foreground",
-                  summaryError && "text-destructive hover:text-destructive",
-                )}
-                onClick={handleGenerateSummary}
-                disabled={isLoadingSummary}
-              >
-                {isLoadingSummary ? (
-                  <LoaderIcon className="h-4 w-4 animate-spin" />
-                ) : (
-                  <SparklesIcon className="h-4 w-4" />
-                )}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>
-                {summaryError ||
-                  (aiSummary
-                    ? t("article.summary.hide")
-                    : t("article.summary.generate"))}
-              </p>
-            </TooltipContent>
-          </Tooltip>
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className={cn(
-                  "h-8 w-8 text-muted-foreground hover:text-foreground",
-                  translateEnabled && "bg-accent text-accent-foreground",
-                  translationError && "text-destructive hover:text-destructive",
-                )}
-                onClick={handleTranslate}
-                disabled={isLoadingTranslation}
-              >
-                {isLoadingTranslation ? (
-                  <LoaderIcon className="h-4 w-4 animate-spin" />
-                ) : (
-                  <LanguagesIcon className="h-4 w-4" />
-                )}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>
-                {translationError ||
-                  (translateEnabled
-                    ? t("article.translate.show_original")
-                    : t("article.translate.ai_translate"))}
-              </p>
-            </TooltipContent>
-          </Tooltip>
-
-          <div className="h-4 w-px bg-border/50 mx-1" />
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 text-muted-foreground hover:text-foreground"
-              >
-                <Share2Icon className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>{t("article.actions.share")}</p>
-            </TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 text-muted-foreground hover:text-foreground"
-              >
-                <BookmarkIcon className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>{t("article.actions.bookmark")}</p>
-            </TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                asChild
-              >
-                <a
-                  href={article.link}
-                  target="_blank"
-                  rel="noopener noreferrer"
+        <div className="sticky top-0 z-10 flex items-center gap-1 border-b bg-background/95 px-4 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+          {onBack && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onBack}
+              className="h-8 w-8 mr-auto"
+            >
+              <ArrowLeftIcon className="h-5 w-5" />
+            </Button>
+          )}
+          <div className="flex items-center gap-1 ml-auto">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={cn(
+                    "h-8 w-8 text-muted-foreground hover:text-foreground",
+                    useReadability && "bg-accent text-accent-foreground",
+                    readabilityError &&
+                      "text-destructive hover:text-destructive",
+                  )}
+                  onClick={handleToggleReadability}
+                  disabled={isLoadingReadability}
                 >
-                  <ExternalLinkIcon className="h-4 w-4" />
-                </a>
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>{t("article.actions.open_original")}</p>
-            </TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 text-muted-foreground hover:text-foreground"
-              >
-                <MoreHorizontalIcon className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>{t("article.actions.more")}</p>
-            </TooltipContent>
-          </Tooltip>
+                  {isLoadingReadability ? (
+                    <LoaderIcon className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <BookOpenIcon className="h-4 w-4" />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>
+                  {readabilityError ||
+                    (useReadability
+                      ? t("article.readability.show_original")
+                      : t("article.readability.read_mode"))}
+                </p>
+              </TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={cn(
+                    "h-8 w-8 text-muted-foreground hover:text-foreground",
+                    aiSummary && "bg-accent text-accent-foreground",
+                    summaryError && "text-destructive hover:text-destructive",
+                  )}
+                  onClick={handleGenerateSummary}
+                  disabled={isLoadingSummary}
+                >
+                  {isLoadingSummary ? (
+                    <LoaderIcon className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <SparklesIcon className="h-4 w-4" />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>
+                  {summaryError ||
+                    (aiSummary
+                      ? t("article.summary.hide")
+                      : t("article.summary.generate"))}
+                </p>
+              </TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={cn(
+                    "h-8 w-8 text-muted-foreground hover:text-foreground",
+                    translateEnabled && "bg-accent text-accent-foreground",
+                    translationError &&
+                      "text-destructive hover:text-destructive",
+                  )}
+                  onClick={handleTranslate}
+                  disabled={isLoadingTranslation}
+                >
+                  {isLoadingTranslation ? (
+                    <LoaderIcon className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <LanguagesIcon className="h-4 w-4" />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>
+                  {translationError ||
+                    (translateEnabled
+                      ? t("article.translate.show_original")
+                      : t("article.translate.ai_translate"))}
+                </p>
+              </TooltipContent>
+            </Tooltip>
+
+            <div className="h-4 w-px bg-border/50 mx-1" />
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                >
+                  <Share2Icon className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>{t("article.actions.share")}</p>
+              </TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                >
+                  <BookmarkIcon className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>{t("article.actions.bookmark")}</p>
+              </TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                  asChild
+                >
+                  <a
+                    href={article.link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <ExternalLinkIcon className="h-4 w-4" />
+                  </a>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>{t("article.actions.open_original")}</p>
+              </TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                >
+                  <MoreHorizontalIcon className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>{t("article.actions.more")}</p>
+              </TooltipContent>
+            </Tooltip>
+          </div>
         </div>
       </TooltipProvider>
 
