@@ -88,7 +88,7 @@ const menuItems: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
   { id: "folders", label: "Folders", icon: <FolderIcon className="size-4" /> },
   { id: "ai", label: "AI", icon: <SparklesIcon className="size-4" /> },
   { id: "data", label: "Data", icon: <DatabaseIcon className="size-4" /> },
-  { id: "debug", label: "Debug", icon: <BugIcon className="size-4" /> },
+  { id: "debug", label: "Advanced", icon: <BugIcon className="size-4" /> },
   { id: "about", label: "About", icon: <GlobeIcon className="size-4" /> },
 ];
 
@@ -156,17 +156,17 @@ export function SettingsDialog({
         <DialogTitle className="sr-only">Settings</DialogTitle>
         <div className="flex h-full overflow-hidden bg-background">
           {/* Left menu */}
-          <div className="w-[220px] border-r bg-muted/20 p-6 flex flex-col">
-            <div className="mb-8 px-2">
-              <h2 className="text-xl font-semibold tracking-tight">Settings</h2>
-              <p className="text-[11px] text-muted-foreground uppercase tracking-wider font-medium mt-1">Preferences</p>
+          <div className="w-[200px] border-r bg-muted/20 p-5 flex flex-col">
+            <div className="mb-6 px-2">
+              <h2 className="text-lg font-semibold tracking-tight">Settings</h2>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium mt-0.5">Preferences</p>
             </div>
-            <nav className="space-y-1.5 flex-1">
+            <nav className="space-y-1 flex-1">
               {menuItems.map((item) => (
                 <button
                   key={item.id}
                   onClick={() => setActiveTab(item.id)}
-                  className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
+                  className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-[13px] font-medium transition-all duration-200 ${
                     activeTab === item.id
                       ? "bg-primary text-primary-foreground shadow-sm"
                       : "text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -180,7 +180,7 @@ export function SettingsDialog({
               ))}
             </nav>
             
-            <div className="mt-auto pt-4 px-2">
+            <div className="mt-auto pt-3 px-2">
               <div className="flex items-center gap-2 text-[10px] text-muted-foreground font-mono opacity-50">
                 <span>GIST RSS v1.0.0</span>
               </div>
@@ -188,7 +188,7 @@ export function SettingsDialog({
           </div>
 
           {/* Right content */}
-          <div className="flex-1 overflow-y-auto p-8 scroll-smooth bg-background">
+          <div className="flex-1 overflow-y-auto p-6 scroll-smooth bg-background">
             <div className="max-w-3xl mx-auto">
               {activeTab === "general" && <GeneralSettings />}
               {activeTab === "feeds" && (
@@ -300,23 +300,23 @@ function FeedsSettings({
   };
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
+    <div className="space-y-6 animate-in fade-in duration-500">
       <div>
-        <h3 className="text-2xl font-bold tracking-tight">Subscriptions</h3>
-        <p className="text-sm text-muted-foreground mt-1">
+        <h3 className="text-xl font-bold tracking-tight">Subscriptions</h3>
+        <p className="text-xs text-muted-foreground mt-0.5">
           You are currently subscribed to {feeds.length} sources.
         </p>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 gap-4">
-        <div className="rounded-xl border border-muted/40 bg-card p-6 transition-all hover:border-muted-foreground/20 hover:shadow-sm">
-          <div className="text-sm font-medium text-muted-foreground mb-1">Total Feeds</div>
-          <div className="text-3xl font-bold tracking-tight">{feeds.length}</div>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="rounded-xl border border-muted/40 bg-card p-4 transition-all hover:border-muted-foreground/20 hover:shadow-sm">
+          <div className="text-xs font-medium text-muted-foreground mb-1">Total Feeds</div>
+          <div className="text-2xl font-bold tracking-tight">{feeds.length}</div>
         </div>
-        <div className="rounded-xl border border-muted/40 bg-card p-6 transition-all hover:border-muted-foreground/20 hover:shadow-sm">
-          <div className="text-sm font-medium text-muted-foreground mb-1">Unread</div>
-          <div className="text-3xl font-bold tracking-tight">{totalArticles}</div>
+        <div className="rounded-xl border border-muted/40 bg-card p-4 transition-all hover:border-muted-foreground/20 hover:shadow-sm">
+          <div className="text-xs font-medium text-muted-foreground mb-1">Unread</div>
+          <div className="text-2xl font-bold tracking-tight">{totalArticles}</div>
         </div>
       </div>
 
@@ -590,10 +590,10 @@ function FoldersSettings({
   };
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
+    <div className="space-y-6 animate-in fade-in duration-500">
       <div>
-        <h3 className="text-2xl font-bold tracking-tight">Folders</h3>
-        <p className="text-sm text-muted-foreground mt-1">
+        <h3 className="text-xl font-bold tracking-tight">Folders</h3>
+        <p className="text-xs text-muted-foreground mt-0.5">
           Organize your reading by grouping similar feeds together.
         </p>
       </div>
@@ -751,20 +751,20 @@ function GeneralSettings() {
   const { theme, setTheme } = useTheme();
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
+    <div className="space-y-6 animate-in fade-in duration-500">
       <div>
-        <h3 className="text-2xl font-bold tracking-tight">General</h3>
-        <p className="text-sm text-muted-foreground mt-1">
+        <h3 className="text-xl font-bold tracking-tight">General</h3>
+        <p className="text-xs text-muted-foreground mt-0.5">
           Customize your experience and appearance.
         </p>
       </div>
 
-      <div className="space-y-6">
-        <div className="rounded-xl border border-muted/40 p-6 bg-card transition-all hover:border-muted-foreground/20">
+      <div className="space-y-4">
+        <div className="rounded-xl border border-muted/40 p-4 bg-card transition-all hover:border-muted-foreground/20">
           <div className="flex items-center justify-between">
             <div>
               <h4 className="font-semibold text-sm mb-1">Theme</h4>
-              <p className="text-[12px] text-muted-foreground">
+              <p className="text-[11px] text-muted-foreground">
                 Select your preferred interface color scheme.
               </p>
             </div>
@@ -778,7 +778,7 @@ function GeneralSettings() {
                 <button
                   key={t.id}
                   onClick={() => setTheme(t.id)}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200 ${
+                  className={`flex items-center gap-2 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all duration-200 ${
                     theme === t.id
                       ? "bg-background text-foreground shadow-sm"
                       : "text-muted-foreground hover:text-foreground"
@@ -788,20 +788,6 @@ function GeneralSettings() {
                   {t.label}
                 </button>
               ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="rounded-xl border border-muted/40 p-6 bg-card transition-all hover:border-muted-foreground/20">
-          <div className="flex items-center justify-between">
-            <div>
-              <h4 className="font-semibold text-sm">Language</h4>
-              <p className="text-[12px] text-muted-foreground">
-                The application will use this language.
-              </p>
-            </div>
-            <div className="px-3 py-1 rounded-full bg-muted text-xs font-bold text-muted-foreground">
-              English
             </div>
           </div>
         </div>
@@ -1028,17 +1014,17 @@ function DataSettings({ onDataChange, isImporting, setIsImporting }: DataSetting
   };
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
+    <div className="space-y-6 animate-in fade-in duration-500">
       <div>
-        <h3 className="text-2xl font-bold tracking-tight">Data Management</h3>
-        <p className="text-sm text-muted-foreground mt-1">
+        <h3 className="text-xl font-bold tracking-tight">Data Management</h3>
+        <p className="text-xs text-muted-foreground mt-0.5">
           Import, export, and manage your local reading database.
         </p>
       </div>
 
       {message && (
         <div
-          className={`rounded-lg p-4 text-sm font-medium animate-in slide-in-from-top-2 duration-300 ${
+          className={`rounded-lg p-3 text-sm font-medium animate-in slide-in-from-top-2 duration-300 ${
             message.type === "success"
               ? "bg-primary/10 text-primary border border-primary/20"
               : "bg-destructive/10 text-destructive border border-destructive/20"
@@ -1053,11 +1039,11 @@ function DataSettings({ onDataChange, isImporting, setIsImporting }: DataSetting
 
       <div className="space-y-4">
         {/* Import/Export OPML */}
-        <div className="rounded-xl border border-muted/40 p-6 bg-card transition-all hover:border-muted-foreground/20">
+        <div className="rounded-xl border border-muted/40 p-4 bg-card transition-all hover:border-muted-foreground/20">
           <div className="flex items-start justify-between">
             <div className="space-y-1">
               <h4 className="font-semibold text-sm">OPML Subscriptions</h4>
-              <p className="text-[12px] text-muted-foreground">
+              <p className="text-[11px] text-muted-foreground">
                 Transfer your subscriptions to or from other RSS readers.
               </p>
             </div>
@@ -1065,7 +1051,7 @@ function DataSettings({ onDataChange, isImporting, setIsImporting }: DataSetting
 
           {/* Import Progress */}
           {importTask && (importTask.status === "running" || importTask.status === "pending") && (
-            <div className="mt-6 space-y-3 p-4 rounded-lg bg-muted/30 border border-muted/50">
+            <div className="mt-4 space-y-3 p-3 rounded-lg bg-muted/30 border border-muted/50">
               <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider">
                 <div className="flex items-center gap-2 text-primary">
                   <LoaderIcon className="size-3 animate-spin" />
@@ -1102,8 +1088,8 @@ function DataSettings({ onDataChange, isImporting, setIsImporting }: DataSetting
 
           {/* Buttons */}
           {!isImporting && (
-            <div className="mt-6 flex gap-3">
-              <Button variant="outline" size="sm" onClick={handleExportOpml} className="rounded-md h-9 px-4 text-xs font-semibold">
+            <div className="mt-4 flex gap-3">
+              <Button variant="outline" size="sm" onClick={handleExportOpml} className="rounded-md h-8 px-3 text-xs font-semibold">
                 <DownloadIcon className="mr-2 size-3.5" />
                 Export
               </Button>
@@ -1111,7 +1097,7 @@ function DataSettings({ onDataChange, isImporting, setIsImporting }: DataSetting
                 variant="outline"
                 size="sm"
                 onClick={() => fileInputRef.current?.click()}
-                className="rounded-md h-9 px-4 text-xs font-semibold"
+                className="rounded-md h-8 px-3 text-xs font-semibold"
               >
                 <UploadIcon className="mr-2 size-3.5" />
                 Import
@@ -1128,11 +1114,11 @@ function DataSettings({ onDataChange, isImporting, setIsImporting }: DataSetting
         </div>
 
         {/* Mark All Read */}
-        <div className="rounded-xl border border-muted/40 p-6 bg-card transition-all hover:border-muted-foreground/20">
+        <div className="rounded-xl border border-muted/40 p-4 bg-card transition-all hover:border-muted-foreground/20">
           <div className="flex items-center justify-between">
             <div className="space-y-1">
               <h4 className="font-semibold text-sm">Mark All as Read</h4>
-              <p className="text-[12px] text-muted-foreground">
+              <p className="text-[11px] text-muted-foreground">
                 Set all current articles to read status.
               </p>
             </div>
@@ -1141,7 +1127,7 @@ function DataSettings({ onDataChange, isImporting, setIsImporting }: DataSetting
               size="sm"
               onClick={handleMarkAllRead}
               disabled={markingAllRead}
-              className="rounded-md h-9 px-4 text-xs font-semibold whitespace-nowrap"
+              className="rounded-md h-8 px-3 text-xs font-semibold whitespace-nowrap"
             >
               {markingAllRead ? (
                 <LoaderIcon className="mr-2 size-3.5 animate-spin" />
@@ -1154,10 +1140,10 @@ function DataSettings({ onDataChange, isImporting, setIsImporting }: DataSetting
         </div>
 
         {/* Cleanup */}
-        <div className="rounded-xl border border-muted/40 p-6 bg-card transition-all hover:border-muted-foreground/20">
-          <div className="space-y-1 mb-6">
+        <div className="rounded-xl border border-muted/40 p-4 bg-card transition-all hover:border-muted-foreground/20">
+          <div className="space-y-1 mb-4">
             <h4 className="font-semibold text-sm">Clean Up</h4>
-            <p className="text-[12px] text-muted-foreground">
+            <p className="text-[11px] text-muted-foreground">
               Remove old read articles to keep your database fast.
             </p>
           </div>
@@ -1167,7 +1153,7 @@ function DataSettings({ onDataChange, isImporting, setIsImporting }: DataSetting
               size="sm"
               onClick={() => handleCleanup(7)}
               disabled={cleaning}
-              className="rounded-md h-9 px-4 text-xs font-semibold hover:bg-muted"
+              className="rounded-md h-8 px-3 text-xs font-semibold hover:bg-muted"
             >
               <Trash2Icon className="mr-2 size-3.5" />
               Older than 7 days
@@ -1177,7 +1163,7 @@ function DataSettings({ onDataChange, isImporting, setIsImporting }: DataSetting
               size="sm"
               onClick={() => handleCleanup(30)}
               disabled={cleaning}
-              className="rounded-md h-9 px-4 text-xs font-semibold hover:bg-muted"
+              className="rounded-md h-8 px-3 text-xs font-semibold hover:bg-muted"
             >
               <Trash2Icon className="mr-2 size-3.5" />
               Older than 30 days
@@ -1186,11 +1172,11 @@ function DataSettings({ onDataChange, isImporting, setIsImporting }: DataSetting
         </div>
 
         {/* Clear Icon Cache */}
-        <div className="rounded-xl border border-muted/40 p-6 bg-card transition-all hover:border-muted-foreground/20">
+        <div className="rounded-xl border border-muted/40 p-4 bg-card transition-all hover:border-muted-foreground/20">
           <div className="flex items-center justify-between">
             <div className="space-y-1">
               <h4 className="font-semibold text-sm">Clear Icon Cache</h4>
-              <p className="text-[12px] text-muted-foreground">
+              <p className="text-[11px] text-muted-foreground">
                 Force re-fetch all feed icons. Useful if icons are broken or outdated.
               </p>
             </div>
@@ -1199,7 +1185,7 @@ function DataSettings({ onDataChange, isImporting, setIsImporting }: DataSetting
               size="sm"
               onClick={handleClearIcons}
               disabled={clearingIcons}
-              className="rounded-md h-9 px-4 text-xs font-semibold whitespace-nowrap"
+              className="rounded-md h-8 px-3 text-xs font-semibold whitespace-nowrap"
             >
               {clearingIcons ? (
                 <LoaderIcon className="mr-2 size-3.5 animate-spin" />
@@ -1369,17 +1355,17 @@ function DebugSettings() {
   const hasChanges = userAgent !== savedUserAgent || refreshInterval !== savedRefreshInterval || email !== savedEmail;
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
+    <div className="space-y-6 animate-in fade-in duration-500">
       <div>
-        <h3 className="text-2xl font-bold tracking-tight">Advanced</h3>
-        <p className="text-sm text-muted-foreground mt-1">
+        <h3 className="text-xl font-bold tracking-tight">Advanced</h3>
+        <p className="text-xs text-muted-foreground mt-0.5">
           Technical settings for power users and debugging.
         </p>
       </div>
 
       {message && (
         <div
-          className={`rounded-lg p-4 text-sm font-medium animate-in slide-in-from-top-2 duration-300 ${
+          className={`rounded-lg p-3 text-sm font-medium animate-in slide-in-from-top-2 duration-300 ${
             message.type === "success"
               ? "bg-primary/10 text-primary border border-primary/20"
               : "bg-destructive/10 text-destructive border border-destructive/20"
@@ -1391,9 +1377,9 @@ function DebugSettings() {
 
       <div className="space-y-6">
         {/* Refresh Interval */}
-        <div className="rounded-xl border border-muted/40 p-6 bg-card transition-all hover:border-muted-foreground/20">
+        <div className="rounded-xl border border-muted/40 p-4 bg-card transition-all hover:border-muted-foreground/20">
           <h4 className="font-semibold text-sm mb-1">Auto Refresh Interval</h4>
-          <p className="text-[12px] text-muted-foreground mb-6">
+          <p className="text-[11px] text-muted-foreground mb-4">
             Background sync frequency (in minutes).
           </p>
 
@@ -1402,7 +1388,7 @@ function DebugSettings() {
               <LoaderIcon className="size-4 animate-spin text-muted-foreground/30" />
             </div>
           ) : (
-            <div className="space-y-6">
+            <div className="space-y-4">
               <div className="flex items-center gap-3">
                 <Input
                   type="number"
@@ -1422,7 +1408,7 @@ function DebugSettings() {
                     variant={refreshInterval === v ? "secondary" : "outline"}
                     size="sm"
                     onClick={() => setRefreshInterval(v)}
-                    className="rounded-full h-8 px-4 text-[11px] font-bold"
+                    className="rounded-md h-8 px-4 text-[11px] font-bold"
                   >
                     {v === "0" ? "Off" : v === "60" ? "1h" : `${v}m`}
                   </Button>
@@ -1433,9 +1419,9 @@ function DebugSettings() {
         </div>
 
         {/* Gravatar Email */}
-        <div className="rounded-xl border border-muted/40 p-6 bg-card transition-all hover:border-muted-foreground/20">
+        <div className="rounded-xl border border-muted/40 p-4 bg-card transition-all hover:border-muted-foreground/20">
           <h4 className="font-semibold text-sm mb-1">Avatar Service</h4>
-          <p className="text-[12px] text-muted-foreground mb-6">
+          <p className="text-[11px] text-muted-foreground mb-4">
             Your Gravatar email address for the sidebar.
           </p>
 
@@ -1451,9 +1437,9 @@ function DebugSettings() {
         </div>
 
         {/* User-Agent */}
-        <div className="rounded-xl border border-muted/40 p-6 bg-card transition-all hover:border-muted-foreground/20">
+        <div className="rounded-xl border border-muted/40 p-4 bg-card transition-all hover:border-muted-foreground/20">
           <h4 className="font-semibold text-sm mb-1">Network User-Agent</h4>
-          <p className="text-[12px] text-muted-foreground mb-6">
+          <p className="text-[11px] text-muted-foreground mb-4">
             Custom HTTP header for feed fetching.
           </p>
 
@@ -1493,7 +1479,7 @@ function DebugSettings() {
           <Button
             onClick={handleSave}
             disabled={saving || !hasChanges}
-            className="rounded-md px-8 h-10 font-bold shadow-lg shadow-primary/20"
+            className="rounded-md px-6 h-9 font-bold shadow-lg shadow-primary/20"
           >
             {saving ? <LoaderIcon className="size-4 animate-spin mr-2" /> : null}
             Save Changes
@@ -1503,9 +1489,9 @@ function DebugSettings() {
         <Separator className="my-8" />
 
         {/* Clear Cache */}
-        <div className="rounded-xl border border-destructive/20 p-6 bg-destructive/[0.02]">
+        <div className="rounded-xl border border-destructive/20 p-4 bg-destructive/[0.02]">
           <h4 className="font-semibold text-sm text-destructive mb-1">Danger Zone</h4>
-          <p className="text-[12px] text-muted-foreground mb-6">
+          <p className="text-[11px] text-muted-foreground mb-4">
             Clear locally cached data. This will not delete your subscriptions.
           </p>
 
@@ -1515,7 +1501,7 @@ function DebugSettings() {
               size="sm"
               onClick={() => handleClearCache("content")}
               disabled={clearingCache || clearingIcons}
-              className="rounded-md h-9 text-[11px] font-bold border-destructive/20 hover:bg-destructive/10 hover:text-destructive"
+              className="rounded-md h-8 text-[11px] font-bold border-destructive/20 hover:bg-destructive/10 hover:text-destructive"
             >
               RSS Content
             </Button>
@@ -1524,7 +1510,7 @@ function DebugSettings() {
               size="sm"
               onClick={() => handleClearCache("readability")}
               disabled={clearingCache || clearingIcons}
-              className="rounded-md h-9 text-[11px] font-bold border-destructive/20 hover:bg-destructive/10 hover:text-destructive"
+              className="rounded-md h-8 text-[11px] font-bold border-destructive/20 hover:bg-destructive/10 hover:text-destructive"
             >
               Readability
             </Button>
@@ -1533,7 +1519,7 @@ function DebugSettings() {
               size="sm"
               onClick={handleClearIcons}
               disabled={clearingCache || clearingIcons}
-              className="rounded-md h-9 text-[11px] font-bold border-destructive/20 hover:bg-destructive/10 hover:text-destructive"
+              className="rounded-md h-8 text-[11px] font-bold border-destructive/20 hover:bg-destructive/10 hover:text-destructive"
             >
               {clearingIcons && <LoaderIcon className="mr-1.5 size-3 animate-spin" />}
               Feed Icons
@@ -1543,7 +1529,7 @@ function DebugSettings() {
               size="sm"
               onClick={() => handleClearCache("all")}
               disabled={clearingCache || clearingIcons}
-              className="rounded-md h-9 text-[11px] font-bold bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className="rounded-md h-8 text-[11px] font-bold bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               Clear All Cache
             </Button>
@@ -1715,8 +1701,8 @@ function AISettings() {
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div>
-        <h3 className="text-2xl font-bold tracking-tight">AI Configuration</h3>
-        <p className="text-sm text-muted-foreground mt-1">
+        <h3 className="text-xl font-bold tracking-tight">AI Configuration</h3>
+        <p className="text-xs text-muted-foreground mt-0.5">
           Configure AI provider for intelligent features.
         </p>
       </div>
@@ -1738,9 +1724,9 @@ function AISettings() {
 
       <div className="space-y-4">
         {/* AI Provider */}
-        <div className="rounded-xl border border-muted/40 p-5 bg-card transition-all hover:border-muted-foreground/20">
+        <div className="rounded-xl border border-muted/40 p-4 bg-card transition-all hover:border-muted-foreground/20">
           <h4 className="font-semibold text-sm mb-1">AI Provider</h4>
-          <p className="text-[12px] text-muted-foreground mb-4">
+          <p className="text-[11px] text-muted-foreground mb-3">
             Select your preferred AI service provider.
           </p>
 
@@ -1763,9 +1749,9 @@ function AISettings() {
         </div>
 
         {/* Base URL */}
-        <div className="rounded-xl border border-muted/40 p-5 bg-card transition-all hover:border-muted-foreground/20">
+        <div className="rounded-xl border border-muted/40 p-4 bg-card transition-all hover:border-muted-foreground/20">
           <h4 className="font-semibold text-sm mb-1">Base URL</h4>
-          <p className="text-[12px] text-muted-foreground mb-4">
+          <p className="text-[11px] text-muted-foreground mb-3">
             API endpoint URL. Leave empty to use the default provider endpoint.
           </p>
 
@@ -1807,9 +1793,9 @@ function AISettings() {
         </div>
 
         {/* Model */}
-        <div className="rounded-xl border border-muted/40 p-5 bg-card transition-all hover:border-muted-foreground/20">
+        <div className="rounded-xl border border-muted/40 p-4 bg-card transition-all hover:border-muted-foreground/20">
           <h4 className="font-semibold text-sm mb-1">Model Name</h4>
-          <p className="text-[12px] text-muted-foreground mb-4">
+          <p className="text-[11px] text-muted-foreground mb-3">
             The AI model to use. Leave empty to use the provider's default model.
           </p>
 
@@ -1830,9 +1816,9 @@ function AISettings() {
         </div>
 
         {/* API Key */}
-        <div className="rounded-xl border border-muted/40 p-5 bg-card transition-all hover:border-muted-foreground/20">
+        <div className="rounded-xl border border-muted/40 p-4 bg-card transition-all hover:border-muted-foreground/20">
           <h4 className="font-semibold text-sm mb-1">API Key</h4>
-          <p className="text-[12px] text-muted-foreground mb-4">
+          <p className="text-[11px] text-muted-foreground mb-3">
             Your API key for the selected provider. This is stored securely in your local database.
           </p>
 
@@ -1848,9 +1834,9 @@ function AISettings() {
         </div>
 
         {/* Output Language */}
-        <div className="rounded-xl border border-muted/40 p-5 bg-card transition-all hover:border-muted-foreground/20">
+        <div className="rounded-xl border border-muted/40 p-4 bg-card transition-all hover:border-muted-foreground/20">
           <h4 className="font-semibold text-sm mb-1">Output Language</h4>
-          <p className="text-[12px] text-muted-foreground mb-4">
+          <p className="text-[11px] text-muted-foreground mb-3">
             The language AI should use in its responses.
           </p>
 
@@ -1877,11 +1863,11 @@ function AISettings() {
         </div>
 
         {/* Auto Translate */}
-        <div className="rounded-xl border border-muted/40 p-5 bg-card transition-all hover:border-muted-foreground/20">
+        <div className="rounded-xl border border-muted/40 p-4 bg-card transition-all hover:border-muted-foreground/20">
           <div className="flex items-center justify-between">
             <div className="space-y-1">
               <h4 className="font-semibold text-sm">Auto Translate</h4>
-              <p className="text-[12px] text-muted-foreground">
+              <p className="text-[11px] text-muted-foreground">
                 Automatically translate non-target language articles. Only visible content will be translated to save tokens.
               </p>
             </div>
@@ -1907,9 +1893,9 @@ function AISettings() {
         </div>
 
         {/* Rate Limit (QPS) */}
-        <div className="rounded-xl border border-muted/40 p-5 bg-card transition-all hover:border-muted-foreground/20">
+        <div className="rounded-xl border border-muted/40 p-4 bg-card transition-all hover:border-muted-foreground/20">
           <h4 className="font-semibold text-sm mb-1">Rate Limit (QPS)</h4>
-          <p className="text-[12px] text-muted-foreground mb-4">
+          <p className="text-[11px] text-muted-foreground mb-3">
             Maximum AI requests per second. Lower values prevent API rate limit errors.
           </p>
 
@@ -1935,7 +1921,7 @@ function AISettings() {
                     variant={aiQps === v ? "secondary" : "outline"}
                     size="sm"
                     onClick={() => setAiQps(v)}
-                    className="rounded-full h-8 px-4 text-[11px] font-bold"
+                    className="rounded-md h-8 px-3 text-[11px] font-bold"
                   >
                     {v}/s
                   </Button>
@@ -1947,9 +1933,9 @@ function AISettings() {
 
         {/* Test Result */}
         {testResult && (
-          <div className="rounded-xl border border-muted/40 p-5 bg-card">
+          <div className="rounded-xl border border-muted/40 p-4 bg-card">
             <h4 className="font-semibold text-sm mb-1">Test Response</h4>
-            <p className="text-[12px] text-muted-foreground mb-3">
+            <p className="text-[11px] text-muted-foreground mb-2">
               Response from AI (prompt: "RSS is the best!")
             </p>
             <div className="p-3 rounded-lg bg-muted/30 text-sm leading-relaxed">
@@ -1964,7 +1950,7 @@ function AISettings() {
             variant="outline"
             onClick={handleTest}
             disabled={testing || !aiApiKey}
-            className="rounded-md px-6 h-10 font-bold"
+            className="rounded-md px-5 h-9 font-bold"
           >
             {testing ? <LoaderIcon className="size-4 animate-spin mr-2" /> : null}
             Test Connection
@@ -1972,7 +1958,7 @@ function AISettings() {
           <Button
             onClick={handleSave}
             disabled={saving || !hasChanges}
-            className="rounded-md px-8 h-10 font-bold shadow-lg shadow-primary/20"
+            className="rounded-md px-6 h-9 font-bold shadow-lg shadow-primary/20"
           >
             {saving ? <LoaderIcon className="size-4 animate-spin mr-2" /> : null}
             Save Configuration
@@ -1985,53 +1971,22 @@ function AISettings() {
 
 function AboutSettings() {
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
-      <div className="flex flex-col items-center py-12 text-center">
-        <div className="flex size-24 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-2xl shadow-primary/40 mb-8 rotate-3 transition-transform hover:rotate-0">
-          <RssIcon className="size-12" />
+    <div className="space-y-6 animate-in fade-in duration-500">
+      <div className="flex flex-col items-center py-8 text-center">
+        <div className="flex size-20 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-2xl shadow-primary/40 mb-6 rotate-3 transition-transform hover:rotate-0">
+          <RssIcon className="size-10" />
         </div>
-        <h4 className="text-4xl font-black tracking-tighter">GIST RSS</h4>
-        <p className="text-sm font-bold text-primary/60 tracking-widest uppercase mt-2">Version 1.0.0</p>
+        <h4 className="text-3xl font-black tracking-tighter">GIST RSS</h4>
+        <p className="text-xs font-bold text-primary/60 tracking-widest uppercase mt-1.5">Version 1.0.0</p>
         
-        <div className="max-w-[420px] mt-8">
-          <p className="text-base text-muted-foreground leading-relaxed">
+        <div className="max-w-[420px] mt-6">
+          <p className="text-sm text-muted-foreground leading-relaxed">
             A minimalist, high-performance RSS reader designed for focus. 
             Built with modern web technologies for a seamless reading experience.
           </p>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div className="rounded-xl border border-muted/40 p-6 bg-card transition-all hover:border-primary/20 hover:shadow-sm">
-          <h5 className="font-bold text-sm mb-3">Stack</h5>
-          <div className="flex flex-wrap gap-1.5">
-            {["Next.js", "React", "Prisma", "SQLite", "Tailwind"].map(t => (
-              <span key={t} className="px-2 py-0.5 rounded-full bg-muted text-[10px] font-bold text-muted-foreground">
-                {t}
-              </span>
-            ))}
-          </div>
-        </div>
-        <div className="rounded-xl border border-muted/40 p-6 bg-card transition-all hover:border-primary/20 hover:shadow-sm">
-          <h5 className="font-bold text-sm mb-3">Community</h5>
-          <div className="space-y-2">
-            <a href="#" className="flex items-center gap-2 text-xs font-semibold text-primary hover:underline">
-              <GlobeIcon className="size-3" />
-              Website
-            </a>
-            <a href="#" className="flex items-center gap-2 text-xs font-semibold text-primary hover:underline">
-              <ExternalLinkIcon className="size-3" />
-              GitHub Repository
-            </a>
-          </div>
-        </div>
-      </div>
-
-      <div className="pt-8 text-center">
-        <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-[0.2em]">
-          Made with love for the open web
-        </p>
-      </div>
     </div>
   );
 }
