@@ -1,8 +1,7 @@
 import { prisma } from "@/lib/db";
+import { DEFAULT_USER_AGENT, DEFAULT_REFRESH_INTERVAL } from "@/lib/constants";
 
-export const DEFAULT_USER_AGENT =
-  "Mozilla/5.0 (compatible; Gist/0.1.0; +https://github.com/9bingyin/Gist)";
-export const DEFAULT_REFRESH_INTERVAL = 15; // minutes
+export { DEFAULT_USER_AGENT, DEFAULT_REFRESH_INTERVAL };
 
 export async function getSetting(key: string): Promise<string | null> {
   const setting = await prisma.setting.findUnique({

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
+import { CHROME_USER_AGENT, DEFAULT_REFRESH_INTERVAL } from "@/lib/constants";
 import { useTheme } from "next-themes";
 import {
   SettingsIcon,
@@ -1466,10 +1467,6 @@ function DataSettings({
   );
 }
 
-const DEFAULT_USER_AGENT =
-  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
-const DEFAULT_REFRESH_INTERVAL = 15;
-
 function DebugSettings() {
   const { t } = useTranslation();
   const [userAgent, setUserAgent] = useState("");
@@ -1555,7 +1552,7 @@ function DebugSettings() {
   };
 
   const handleUseDefaultUA = () => {
-    setUserAgent(DEFAULT_USER_AGENT);
+    setUserAgent(CHROME_USER_AGENT);
   };
 
   const handleResetInterval = () => {
