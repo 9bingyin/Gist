@@ -180,7 +180,7 @@ export function ArticleList({
                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
                           <span className="truncate font-medium text-foreground/70">{article.feed.title}</span>
                           <span>·</span>
-                          <span className="shrink-0">{formatDate(article.pubDate)}</span>
+                          <span className="shrink-0">{formatDate(article.pubDate || article.createdAt)}</span>
                         </div>
                         
                         <h3 className={cn(
