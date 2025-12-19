@@ -156,6 +156,9 @@
     "user_agent_title": "Network User-Agent",
     "user_agent_desc": "Custom HTTP header for feed fetching.",
     "chrome_default": "Chrome Default",
+    "fallback_ua_title": "Fallback User-Agent",
+    "fallback_ua_desc": "Use an alternative User-Agent when requests are blocked (e.g., SEC EDGAR requires email in UA).",
+    "fallback_ua_hint": "Format: AppName/Version (your-email@example.com)",
     "cleared_summary": "Cleared: {{items}}",
     "no_cache": "No cache to clear",
     "failed_clear_cache": "Failed to clear cache",
@@ -169,7 +172,8 @@
   },
   "common": {
     "off": "Off",
-    "1h": "1h"
+    "1h": "1h",
+    "enabled": "Enabled"
   },
   "danger": {
     "title": "Danger Zone",

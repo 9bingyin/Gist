@@ -6,11 +6,11 @@ export const APP_REPO = "https://github.com/9bingyin/Gist";
 // Gist User-Agent (identifies as Gist RSS reader)
 export const GIST_USER_AGENT = `Mozilla/5.0 (compatible; ${APP_NAME}/${APP_VERSION}; +${APP_REPO})`;
 
-// Chrome User-Agent (for bypassing bot detection)
+// Chrome User-Agent (for sites that block non-browser UA)
 export const CHROME_USER_AGENT =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
-// Default User-Agent for RSS fetching (uses Gist UA by default)
+// Default User-Agent for RSS fetching
 export const DEFAULT_USER_AGENT = GIST_USER_AGENT;
 
 // Default settings

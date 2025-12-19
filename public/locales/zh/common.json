@@ -156,6 +156,9 @@
     "user_agent_title": "网络 User-Agent",
     "user_agent_desc": "抓取订阅时使用的自定义 HTTP 头。",
     "chrome_default": "Chrome 默认",
+    "fallback_ua_title": "备用 User-Agent",
+    "fallback_ua_desc": "当请求被拦截时使用备用 UA（如 SEC EDGAR 要求 UA 中包含邮箱）。",
+    "fallback_ua_hint": "格式：AppName/Version (your-email@example.com)",
     "cleared_summary": "已清理：{{items}}",
     "no_cache": "没有要清理的缓存",
     "failed_clear_cache": "清理缓存失败",
@@ -169,7 +172,8 @@
   },
   "common": {
     "off": "关闭",
-    "1h": "1 小时"
+    "1h": "1 小时",
+    "enabled": "启用"
   },
   "danger": {
     "title": "危险操作",

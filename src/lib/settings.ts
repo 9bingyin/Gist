@@ -1,5 +1,8 @@
 import { prisma } from "@/lib/db";
-import { DEFAULT_USER_AGENT, DEFAULT_REFRESH_INTERVAL } from "@/lib/constants";
+import {
+  DEFAULT_USER_AGENT,
+  DEFAULT_REFRESH_INTERVAL,
+} from "@/lib/constants";
 
 export { DEFAULT_USER_AGENT, DEFAULT_REFRESH_INTERVAL };
 
@@ -13,6 +16,12 @@ export async function getSetting(key: string): Promise<string | null> {
 export async function getUserAgent(): Promise<string> {
   const customUA = await getSetting("userAgent");
   return customUA || DEFAULT_USER_AGENT;
+}
+
+export async function getFallbackUserAgent(): Promise<string | null> {
+  const customFallbackUA = await getSetting("fallbackUserAgent");
+  // Only return if user has set a custom fallback UA
+  return customFallbackUA || null;
 }
 
 export async function getRefreshInterval(): Promise<number> {

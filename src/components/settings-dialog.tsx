@@ -1516,6 +1516,8 @@ function DebugSettings() {
   const { t } = useTranslation();
   const [userAgent, setUserAgent] = useState("");
   const [savedUserAgent, setSavedUserAgent] = useState("");
+  const [fallbackUserAgent, setFallbackUserAgent] = useState("");
+  const [savedFallbackUserAgent, setSavedFallbackUserAgent] = useState("");
   const [refreshInterval, setRefreshInterval] = useState(
     DEFAULT_REFRESH_INTERVAL.toString(),
   );
@@ -1539,11 +1541,14 @@ function DebugSettings() {
         const res = await fetch("/api/settings");
         const settings = await res.json();
         const ua = settings.userAgent || "";
+        const fallbackUa = settings.fallbackUserAgent || "";
         const interval =
           settings.refreshInterval || DEFAULT_REFRESH_INTERVAL.toString();
         const em = settings.email || "";
         setUserAgent(ua);
         setSavedUserAgent(ua);
+        setFallbackUserAgent(fallbackUa);
+        setSavedFallbackUserAgent(fallbackUa);
         setRefreshInterval(interval);
         setSavedRefreshInterval(interval);
         setEmail(em);
@@ -1567,6 +1572,7 @@ function DebugSettings() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userAgent: userAgent || "",
+          fallbackUserAgent: fallbackUserAgent || "",
           refreshInterval:
             refreshInterval || DEFAULT_REFRESH_INTERVAL.toString(),
           email: email || "",
@@ -1578,6 +1584,7 @@ function DebugSettings() {
       }
 
       setSavedUserAgent(userAgent);
+      setSavedFallbackUserAgent(fallbackUserAgent);
       setSavedRefreshInterval(refreshInterval);
       setSavedEmail(email);
 
@@ -1682,6 +1689,7 @@ function DebugSettings() {
 
   const hasChanges =
     userAgent !== savedUserAgent ||
+    fallbackUserAgent !== savedFallbackUserAgent ||
     refreshInterval !== savedRefreshInterval ||
     email !== savedEmail;
 
@@ -1815,6 +1823,30 @@ function DebugSettings() {
                   {t("actions.reset")}
                 </Button>
               </div>
+            </div>
+          )}
+        </div>
+
+        {/* Fallback User-Agent */}
+        <div className="rounded-xl border border-muted/40 p-4 bg-card transition-all hover:border-muted-foreground/20">
+          <h4 className="font-semibold text-sm mb-1">
+            {t("advanced.fallback_ua_title")}
+          </h4>
+          <p className="text-[11px] text-muted-foreground mb-4">
+            {t("advanced.fallback_ua_desc")}
+          </p>
+
+          {!loading && (
+            <div className="space-y-2">
+              <Input
+                value={fallbackUserAgent}
+                onChange={(e) => setFallbackUserAgent(e.target.value)}
+                placeholder="Gist/1.0.0 (your-email@example.com)"
+                className="font-mono text-[11px] rounded-md border-muted-foreground/20 bg-muted/20"
+              />
+              <p className="text-[10px] text-muted-foreground">
+                {t("advanced.fallback_ua_hint")}
+              </p>
             </div>
           )}
         </div>

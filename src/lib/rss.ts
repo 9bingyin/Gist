@@ -1,7 +1,7 @@
 import Parser from "rss-parser";
 import he from "he";
 import { load } from "cheerio";
-import { getUserAgent } from "@/lib/settings";
+import { getUserAgent, getFallbackUserAgent } from "@/lib/settings";
 
 export interface ParsedFeed {
   title: string;
@@ -114,8 +114,7 @@ type RssItem = {
   contentType?: ContentType; // SEC EDGAR custom field
 };
 
-export async function parseFeed(url: string): Promise<ParsedFeed> {
-  const userAgent = await getUserAgent();
+async function fetchFeedWithUA(url: string, userAgent: string) {
   const parser = new Parser({
     timeout: 10000,
     headers: {
@@ -125,8 +124,25 @@ export async function parseFeed(url: string): Promise<ParsedFeed> {
       item: [["content-type", "contentType", { keepArray: false }]],
     },
   });
+  return parser.parseURL(url);
+}
 
-  const feed = await parser.parseURL(url);
+export async function parseFeed(url: string): Promise<ParsedFeed> {
+  const userAgent = await getUserAgent();
+
+  let feed;
+  try {
+    feed = await fetchFeedWithUA(url, userAgent);
+  } catch (error) {
+    // If failed with 403/blocked, try fallback UA
+    const fallbackUA = await getFallbackUserAgent();
+    if (fallbackUA && error instanceof Error && error.message.includes("403")) {
+      console.log(`Retrying ${url} with fallback UA`);
+      feed = await fetchFeedWithUA(url, fallbackUA);
+    } else {
+      throw error;
+    }
+  }
 
   const items: ParsedArticle[] = (feed.items || []).map((item) => {
     const rssItem = item as RssItem;
