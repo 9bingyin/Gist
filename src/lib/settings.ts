@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/db";
 
-export const DEFAULT_USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+export const DEFAULT_USER_AGENT = "Mozilla/5.0 (compatible; Gist/0.1.0; +https://github.com/9bingyin/Gist)";
 export const DEFAULT_REFRESH_INTERVAL = 15; // minutes
 
 export async function getSetting(key: string): Promise<string | null> {

@@ -432,7 +432,7 @@ function FeedItem({
         )}
       >
         {feed.imageUrl ? (
-          <img src={feed.imageUrl} alt="" className="size-3.5 rounded-sm shrink-0" />
+          <img src={`/api/icons/${feed.imageUrl}`} alt="" className="size-3.5 rounded-sm shrink-0" />
         ) : (
           <RssIcon className="size-3.5 shrink-0" />
         )}

@@ -3,6 +3,7 @@
  */
 
 import { getUserAgent } from "@/lib/settings";
+import { downloadAndSaveIcon } from "@/lib/icon-storage";
 
 const FAVICON_TIMEOUT = 5000;
 
@@ -42,13 +43,13 @@ async function fetchFaviconFromHtml(siteUrl: string, userAgent: string): Promise
     // Try different favicon patterns in order of preference
     const patterns = [
       // Apple touch icon (usually higher quality)
-      /<link[^>]+rel=["']apple-touch-icon["'][^>]+href=["']([^"']+)["']/i,
-      /<link[^>]+href=["']([^"']+)["'][^>]+rel=["']apple-touch-icon["']/i,
+      /<link[^>]+?rel=["']apple-touch-icon["'][^>]+?href=["']([^"']+)["']/i,
+      /<link[^>]+?href=["']([^"']+)["'][^>]+?rel=["']apple-touch-icon["']/i,
       // Standard favicon with sizes
-      /<link[^>]+rel=["']icon["'][^>]+sizes=["'](\d+)x\d+["'][^>]+href=["']([^"']+)["']/i,
+      /<link[^>]+?rel=["']icon["'][^>]+?sizes=["'](\d+)x\d+["'][^>]+?href=["']([^"']+)["']/i,
       // Standard favicon
-      /<link[^>]+rel=["'](?:shortcut )?icon["'][^>]+href=["']([^"']+)["']/i,
-      /<link[^>]+href=["']([^"']+)["'][^>]+rel=["'](?:shortcut )?icon["']/i,
+      /<link[^>]+?rel=["'](?:shortcut )?icon["'][^>]+?href=["']([^"']+)["']/i,
+      /<link[^>]+?href=["']([^"']+)["'][^>]+?rel=["'](?:shortcut )?icon["']/i,
     ];
 
     for (const pattern of patterns) {
@@ -104,9 +105,9 @@ async function checkFaviconUrl(url: string, userAgent: string): Promise<boolean>
  * Tries multiple methods in order:
  * 1. Parse HTML for favicon link
  * 2. Try common favicon paths
- * 3. Use Google Favicon API as fallback
+ * 3. Use DuckDuckGo Favicon API as fallback
  */
-export async function getFavicon(siteUrl: string): Promise<string | null> {
+async function findFaviconUrl(siteUrl: string): Promise<string | null> {
   if (!siteUrl) return null;
 
   const userAgent = await getUserAgent();
@@ -131,11 +132,23 @@ export async function getFavicon(siteUrl: string): Promise<string | null> {
     }
   }
 
-  // Method 3: Use Google Favicon API as fallback (always works)
+  // Method 3: Use DuckDuckGo Favicon API as fallback
   try {
     const urlObj = new URL(siteUrl);
-    return `https://www.google.com/s2/favicons?domain=${urlObj.hostname}&sz=64`;
+    return `https://external-content.duckduckgo.com/ip3/${urlObj.hostname}.ico`;
   } catch {
     return null;
   }
+}
+
+/**
+ * Get favicon and save it locally
+ * Returns the local filename (e.g., "example.com.png") or null if failed
+ */
+export async function getFavicon(siteUrl: string): Promise<string | null> {
+  const iconUrl = await findFaviconUrl(siteUrl);
+  if (!iconUrl) return null;
+
+  const filename = await downloadAndSaveIcon(iconUrl, siteUrl);
+  return filename;
 }

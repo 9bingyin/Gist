@@ -108,8 +108,8 @@ export function ArticleList({
   return (
     <div className="flex h-full flex-col border-r bg-background">
       <div className="flex h-16 items-center justify-between px-4 shrink-0">
-        <h2 className="font-bold text-xl tracking-tight">{title}</h2>
-        <div className="flex items-center gap-1">
+        <h2 className="font-bold text-xl tracking-tight truncate min-w-0 flex-1 mr-2">{title}</h2>
+        <div className="flex items-center gap-1 shrink-0">
           <Button
             variant="ghost"
             size="icon"
@@ -164,7 +164,7 @@ export function ArticleList({
                       <div className="mt-0.5 shrink-0">
                         {article.feed.imageUrl ? (
                           <img
-                            src={article.feed.imageUrl}
+                            src={`/api/icons/${article.feed.imageUrl}`}
                             alt=""
                             className="h-5 w-5 rounded-sm object-cover"
                           />
@@ -201,7 +201,7 @@ export function ArticleList({
                       {article.imageUrl && (
                         <div className="shrink-0 pl-1">
                           <img
-                            src={article.imageUrl}
+                            src={`/api/proxy/image?url=${encodeURIComponent(article.imageUrl)}`}
                             alt=""
                             className="h-16 w-16 rounded-md object-cover bg-muted border border-border/40"
                           />

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { parseFeed } from "@/lib/rss";
 import { getFavicon } from "@/lib/favicon";
+import { iconFileExists } from "@/lib/icon-storage";
 
 export async function POST(
   _request: NextRequest,
@@ -20,10 +21,14 @@ export async function POST(
     // Update feed info
     const updateData: { imageUrl?: string; title?: string; siteUrl?: string } = {};
 
-    if (!feed.imageUrl && parsed.link) {
-      const favicon = await getFavicon(parsed.link);
-      if (favicon) {
-        updateData.imageUrl = favicon;
+    // Check if icon needs to be fetched (missing or file doesn't exist)
+    if (parsed.link) {
+      const needsFavicon = !feed.imageUrl || !(await iconFileExists(feed.imageUrl));
+      if (needsFavicon) {
+        const favicon = await getFavicon(parsed.link);
+        if (favicon) {
+          updateData.imageUrl = favicon;
+        }
       }
     }
 

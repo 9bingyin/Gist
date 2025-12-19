@@ -75,13 +75,67 @@ function sanitizeHtml(html: string): string {
   });
 }
 
-function processContent(content: string): string {
+/**
+ * Convert relative URL to absolute URL based on the article link
+ */
+function toAbsoluteUrl(url: string, baseUrl: string | undefined): string | null {
+  // Already absolute URL
+  if (url.startsWith("http://") || url.startsWith("https://")) {
+    return url;
+  }
+
+  // Protocol-relative URL
+  if (url.startsWith("//")) {
+    return `https:${url}`;
+  }
+
+  // Data URI or already proxied - skip
+  if (url.startsWith("data:") || url.startsWith("/api/")) {
+    return null;
+  }
+
+  // Relative URL - need base URL
+  if (!baseUrl) return null;
+
+  try {
+    const base = new URL(baseUrl);
+
+    // Absolute path (starts with /)
+    if (url.startsWith("/")) {
+      return `${base.origin}${url}`;
+    }
+
+    // Relative path (e.g., "images/photo.jpg" or "../images/photo.jpg")
+    const basePath = base.pathname.substring(0, base.pathname.lastIndexOf("/") + 1);
+    return `${base.origin}${basePath}${url}`;
+  } catch {
+    return null;
+  }
+}
+
+function processContent(content: string, articleLink?: string): string {
   let processed = sanitizeHtml(content);
 
   // Add target="_blank" to all links
   processed = processed.replace(
     /<a\s+(?![^>]*target=)/gi,
     '<a target="_blank" rel="noopener noreferrer" '
+  );
+
+  // Proxy all image URLs (including converting relative paths to absolute)
+  processed = processed.replace(
+    /<img([^>]*)\ssrc=["']([^"']+)["']/gi,
+    (match, attrs, src) => {
+      const absoluteUrl = toAbsoluteUrl(src, articleLink);
+
+      // Skip if conversion failed or not applicable (data URIs, already proxied)
+      if (!absoluteUrl) {
+        return match;
+      }
+
+      const proxiedSrc = `/api/proxy/image?url=${encodeURIComponent(absoluteUrl)}`;
+      return `<img${attrs} src="${proxiedSrc}"`;
+    }
   );
 
   // Add loading="lazy" to images
@@ -159,7 +213,7 @@ export function ArticleDetail({ article, onArticleUpdate }: ArticleDetailProps) 
       ? article.readabilityContent
       : article.content;
     if (!content) return null;
-    return processContent(content);
+    return processContent(content, article.link);
   }, [article, useReadability]);
 
   const handleToggleReadability = useCallback(async () => {
@@ -369,7 +423,7 @@ export function ArticleDetail({ article, onArticleUpdate }: ArticleDetailProps) 
             <div className="flex items-center gap-1.5 hover:text-foreground transition-colors cursor-pointer">
               {article.feed.imageUrl ? (
                 <img
-                  src={article.feed.imageUrl}
+                  src={`/api/icons/${article.feed.imageUrl}`}
                   alt=""
                   className="h-4 w-4 rounded-sm object-cover"
                 />

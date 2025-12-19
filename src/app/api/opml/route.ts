@@ -117,18 +117,13 @@ export async function POST(request: NextRequest) {
       // Try to parse and add the feed
       try {
         const feedData = await parseFeed(item.xmlUrl);
-        let imageUrl = feedData.image;
-        if (!imageUrl && feedData.link) {
-          imageUrl = (await getFavicon(feedData.link)) ?? undefined;
-        }
 
-        await prisma.feed.create({
+        const newFeed = await prisma.feed.create({
           data: {
             title: feedData.title || item.title || item.xmlUrl,
             url: item.xmlUrl,
             siteUrl: feedData.link || item.htmlUrl,
             description: feedData.description,
-            imageUrl,
             folderId,
             articles: {
               create: feedData.items.slice(0, 30).map((article) => ({
@@ -142,6 +137,18 @@ export async function POST(request: NextRequest) {
             },
           },
         });
+
+        // Get and save favicon after feed is created
+        if (feedData.link) {
+          const iconFilename = await getFavicon(feedData.link);
+          if (iconFilename) {
+            await prisma.feed.update({
+              where: { id: newFeed.id },
+              data: { imageUrl: iconFilename },
+            });
+          }
+        }
+
         imported++;
       } catch {
         // If parsing fails, create a placeholder feed

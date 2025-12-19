@@ -31,19 +31,13 @@ export async function POST(request: NextRequest) {
   try {
     const parsed = await parseFeed(url);
 
-    // Get favicon if RSS feed doesn't have an image
-    let imageUrl = parsed.image;
-    if (!imageUrl && parsed.link) {
-      imageUrl = await getFavicon(parsed.link) ?? undefined;
-    }
-
+    // Create feed first
     const feed = await prisma.feed.create({
       data: {
         title: parsed.title,
         url,
         siteUrl: parsed.link,
         description: parsed.description,
-        imageUrl,
         folderId: folderId || null,
         articles: {
           create: parsed.items.slice(0, 50).map((item) => ({
@@ -62,6 +56,18 @@ export async function POST(request: NextRequest) {
         },
       },
     });
+
+    // Get and save favicon after feed is created
+    if (parsed.link) {
+      const iconFilename = await getFavicon(parsed.link);
+      if (iconFilename) {
+        await prisma.feed.update({
+          where: { id: feed.id },
+          data: { imageUrl: iconFilename },
+        });
+        feed.imageUrl = iconFilename;
+      }
+    }
 
     return NextResponse.json(feed, { status: 201 });
   } catch (error) {

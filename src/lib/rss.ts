@@ -25,6 +25,41 @@ function extractImageFromContent(content?: string): string | undefined {
   return imgMatch?.[1];
 }
 
+/**
+ * Convert relative URL to absolute URL
+ */
+function toAbsoluteUrl(url: string | undefined, baseUrl: string | undefined): string | undefined {
+  if (!url) return undefined;
+
+  // Already absolute URL
+  if (url.startsWith("http://") || url.startsWith("https://")) {
+    return url;
+  }
+
+  // Protocol-relative URL
+  if (url.startsWith("//")) {
+    return `https:${url}`;
+  }
+
+  // Relative URL - need base URL
+  if (!baseUrl) return undefined;
+
+  try {
+    const base = new URL(baseUrl);
+
+    // Absolute path
+    if (url.startsWith("/")) {
+      return `${base.origin}${url}`;
+    }
+
+    // Relative path
+    const basePath = base.pathname.substring(0, base.pathname.lastIndexOf("/") + 1);
+    return `${base.origin}${basePath}${url}`;
+  } catch {
+    return undefined;
+  }
+}
+
 interface MediaContent {
   $?: {
     url?: string;
@@ -68,10 +103,13 @@ export async function parseFeed(url: string): Promise<ParsedFeed> {
 
   const items: ParsedArticle[] = (feed.items || []).map((item) => {
     const rssItem = item as RssItem;
-    const imageUrl =
+    const rawImageUrl =
       rssItem.enclosure?.url ||
       rssItem["media:content"]?.$?.url ||
       extractImageFromContent(rssItem.content || rssItem["content:encoded"]);
+
+    // Convert relative URL to absolute URL using article link as base
+    const imageUrl = toAbsoluteUrl(rawImageUrl, rssItem.link || feed.link);
 
     // For Atom feeds, HTML content might be in summary field instead of content
     // Also decode HTML entities that may be double-encoded in Atom feeds

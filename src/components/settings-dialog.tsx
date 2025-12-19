@@ -407,7 +407,7 @@ function FeedsSettings({
                       <div className="flex items-center gap-3 py-1">
                         {feed.imageUrl ? (
                           <img
-                            src={feed.imageUrl}
+                            src={`/api/icons/${feed.imageUrl}`}
                             alt=""
                             className="size-7 shrink-0 rounded-md object-cover shadow-sm border border-black/5 dark:border-white/5"
                           />
@@ -819,6 +819,7 @@ interface DataSettingsProps {
 function DataSettings({ onDataChange, isImporting, setIsImporting }: DataSettingsProps) {
   const [markingAllRead, setMarkingAllRead] = useState(false);
   const [cleaning, setCleaning] = useState(false);
+  const [clearingIcons, setClearingIcons] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [importTask, setImportTask] = useState<Task | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -997,6 +998,35 @@ function DataSettings({ onDataChange, isImporting, setIsImporting }: DataSetting
     }
   };
 
+  const handleClearIcons = async () => {
+    setClearingIcons(true);
+    setMessage(null);
+
+    try {
+      const res = await fetch("/api/feeds/clear-icons", {
+        method: "POST",
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setMessage({
+          type: "success",
+          text: `Icon cache cleared and refreshed in ${data.duration}: ${data.successCount} succeeded, ${data.failCount} failed out of ${data.total} feeds (${data.uniqueDomains} unique domains).`,
+        });
+        onDataChange?.();
+      } else {
+        throw new Error("Failed to clear icons");
+      }
+    } catch {
+      setMessage({
+        type: "error",
+        text: "Failed to clear icon cache",
+      });
+    } finally {
+      setClearingIcons(false);
+    }
+  };
+
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       <div>
@@ -1154,6 +1184,32 @@ function DataSettings({ onDataChange, isImporting, setIsImporting }: DataSetting
             </Button>
           </div>
         </div>
+
+        {/* Clear Icon Cache */}
+        <div className="rounded-xl border border-muted/40 p-6 bg-card transition-all hover:border-muted-foreground/20">
+          <div className="flex items-center justify-between">
+            <div className="space-y-1">
+              <h4 className="font-semibold text-sm">Clear Icon Cache</h4>
+              <p className="text-[12px] text-muted-foreground">
+                Force re-fetch all feed icons. Useful if icons are broken or outdated.
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleClearIcons}
+              disabled={clearingIcons}
+              className="rounded-md h-9 px-4 text-xs font-semibold whitespace-nowrap"
+            >
+              {clearingIcons ? (
+                <LoaderIcon className="mr-2 size-3.5 animate-spin" />
+              ) : (
+                <Trash2Icon className="mr-2 size-3.5" />
+              )}
+              Clear Cache
+            </Button>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -1172,6 +1228,7 @@ function DebugSettings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [clearingCache, setClearingCache] = useState(false);
+  const [clearingIcons, setClearingIcons] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   useEffect(() => {
@@ -1278,6 +1335,34 @@ function DebugSettings() {
       });
     } finally {
       setClearingCache(false);
+    }
+  };
+
+  const handleClearIcons = async () => {
+    setClearingIcons(true);
+    setMessage(null);
+
+    try {
+      const res = await fetch("/api/feeds/clear-icons", {
+        method: "POST",
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setMessage({
+          type: "success",
+          text: `Icon cache cleared and refreshed in ${data.duration}: ${data.successCount} succeeded, ${data.failCount} failed out of ${data.total} feeds (${data.uniqueDomains} unique domains).`,
+        });
+      } else {
+        throw new Error("Failed to clear icons");
+      }
+    } catch {
+      setMessage({
+        type: "error",
+        text: "Failed to clear icon cache",
+      });
+    } finally {
+      setClearingIcons(false);
     }
   };
 
@@ -1429,7 +1514,7 @@ function DebugSettings() {
               variant="outline"
               size="sm"
               onClick={() => handleClearCache("content")}
-              disabled={clearingCache}
+              disabled={clearingCache || clearingIcons}
               className="rounded-md h-9 text-[11px] font-bold border-destructive/20 hover:bg-destructive/10 hover:text-destructive"
             >
               RSS Content
@@ -1438,7 +1523,7 @@ function DebugSettings() {
               variant="outline"
               size="sm"
               onClick={() => handleClearCache("readability")}
-              disabled={clearingCache}
+              disabled={clearingCache || clearingIcons}
               className="rounded-md h-9 text-[11px] font-bold border-destructive/20 hover:bg-destructive/10 hover:text-destructive"
             >
               Readability
@@ -1446,8 +1531,18 @@ function DebugSettings() {
             <Button
               variant="outline"
               size="sm"
+              onClick={handleClearIcons}
+              disabled={clearingCache || clearingIcons}
+              className="rounded-md h-9 text-[11px] font-bold border-destructive/20 hover:bg-destructive/10 hover:text-destructive"
+            >
+              {clearingIcons && <LoaderIcon className="mr-1.5 size-3 animate-spin" />}
+              Feed Icons
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => handleClearCache("all")}
-              disabled={clearingCache}
+              disabled={clearingCache || clearingIcons}
               className="rounded-md h-9 text-[11px] font-bold bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               Clear All Cache
