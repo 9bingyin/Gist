@@ -42,4 +42,7 @@ export interface Article {
     title: string;
     imageUrl: string | null;
   };
+  // Temporary fields for translation (not persisted)
+  translatedTitle?: string;
+  translatedSummary?: string;
 }

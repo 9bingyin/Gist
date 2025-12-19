@@ -12,6 +12,7 @@ import {
   MoreHorizontalIcon,
   LoaderIcon,
   SparklesIcon,
+  LanguagesIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -168,13 +169,22 @@ export function ArticleDetail({ article, onArticleUpdate }: ArticleDetailProps) 
   const [isLoadingSummary, setIsLoadingSummary] = useState(false);
   const [aiSummary, setAiSummary] = useState<string | null>(null);
   const [summaryError, setSummaryError] = useState<string | null>(null);
+  const [isLoadingTranslation, setIsLoadingTranslation] = useState(false);
+  const [translatedContent, setTranslatedContent] = useState<string | null>(null);
+  const [translatedTitle, setTranslatedTitle] = useState<string | null>(null);
+  const [translatedSummary, setTranslatedSummary] = useState<string | null>(null);
+  const [translationError, setTranslationError] = useState<string | null>(null);
 
-  // Reset readability mode, summary and errors when article changes
+  // Reset readability mode, summary, translation and errors when article changes
   useEffect(() => {
     setUseReadability(false);
     setReadabilityError(null);
     setAiSummary(null);
     setSummaryError(null);
+    setTranslatedContent(null);
+    setTranslatedTitle(null);
+    setTranslatedSummary(null);
+    setTranslationError(null);
   }, [article?.id]);
 
   // Regenerate summary when readability mode changes (if summary was already shown)
@@ -223,15 +233,35 @@ export function ArticleDetail({ article, onArticleUpdate }: ArticleDetailProps) 
 
   const processedContent = useMemo(() => {
     if (!article) return null;
+
+    // Use translated content if available
+    if (translatedContent) {
+      return processContent(translatedContent, article.link);
+    }
+
     const content = useReadability
       ? article.readabilityContent
       : article.content;
     if (!content) return null;
     return processContent(content, article.link);
-  }, [article, useReadability]);
+  }, [article, useReadability, translatedContent]);
 
   const handleToggleReadability = useCallback(async () => {
     if (!article || isLoadingReadability) return;
+
+    // Clear translation when switching readability mode
+    setTranslatedContent(null);
+    setTranslatedTitle(null);
+    setTranslatedSummary(null);
+    setTranslationError(null);
+    // Restore original title/summary in article list
+    if (onArticleUpdate && article) {
+      onArticleUpdate({
+        ...article,
+        translatedTitle: undefined,
+        translatedSummary: undefined,
+      });
+    }
 
     if (useReadability) {
       setUseReadability(false);
@@ -315,6 +345,72 @@ export function ArticleDetail({ article, onArticleUpdate }: ArticleDetailProps) 
     }
   }, [article, isLoadingSummary, aiSummary, useReadability]);
 
+  const handleTranslate = useCallback(async () => {
+    if (!article || isLoadingTranslation) return;
+
+    if (translatedContent) {
+      setTranslatedContent(null);
+      setTranslatedTitle(null);
+      setTranslatedSummary(null);
+      // Restore original title/summary in article list
+      if (onArticleUpdate) {
+        onArticleUpdate({
+          ...article,
+          translatedTitle: undefined,
+          translatedSummary: undefined,
+        });
+      }
+      return;
+    }
+
+    setIsLoadingTranslation(true);
+    setTranslationError(null);
+    try {
+      const content = useReadability
+        ? (article.readabilityContent || article.content || article.summary)
+        : (article.content || article.summary);
+
+      if (!content) {
+        throw new Error("无可用内容进行翻译");
+      }
+
+      const res = await fetch("/api/ai/translate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          content,
+          title: article.title,
+          summary: article.summary,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "翻译失败");
+      }
+
+      setTranslatedContent(data.content);
+      setTranslatedTitle(data.title);
+      setTranslatedSummary(data.summary);
+
+      // Update article with translated title/summary for article list
+      if (onArticleUpdate && (data.title || data.summary)) {
+        onArticleUpdate({
+          ...article,
+          translatedTitle: data.title || undefined,
+          translatedSummary: data.summary || undefined,
+        });
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "翻译失败";
+      setTranslationError(message);
+      console.error("Translation error:", error);
+    } finally {
+      setIsLoadingTranslation(false);
+    }
+  }, [article, isLoadingTranslation, translatedContent, useReadability, onArticleUpdate]);
+
   if (!article) {
     return (
       <div className="flex h-full flex-col items-center justify-center text-muted-foreground bg-background/50">
@@ -379,6 +475,31 @@ export function ArticleDetail({ article, onArticleUpdate }: ArticleDetailProps) 
             </TooltipContent>
           </Tooltip>
 
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className={cn(
+                  "h-8 w-8 text-muted-foreground hover:text-foreground",
+                  translatedContent && "bg-accent text-accent-foreground",
+                  translationError && "text-destructive hover:text-destructive"
+                )}
+                onClick={handleTranslate}
+                disabled={isLoadingTranslation}
+              >
+                {isLoadingTranslation ? (
+                  <LoaderIcon className="h-4 w-4 animate-spin" />
+                ) : (
+                  <LanguagesIcon className="h-4 w-4" />
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>{translationError || (translatedContent ? "显示原文" : "AI 翻译")}</p>
+            </TooltipContent>
+          </Tooltip>
+
           <div className="h-4 w-px bg-border/50 mx-1" />
 
           <Tooltip>
@@ -430,7 +551,7 @@ export function ArticleDetail({ article, onArticleUpdate }: ArticleDetailProps) 
         {/* Article Header */}
         <header className="mb-8">
           <h1 className="text-3xl font-bold leading-tight tracking-tight text-foreground">
-            {article.title}
+            {translatedTitle || article.title}
           </h1>
 
           <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">

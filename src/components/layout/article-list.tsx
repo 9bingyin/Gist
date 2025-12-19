@@ -187,12 +187,12 @@ export function ArticleList({
                           "line-clamp-2 text-[15px] font-bold leading-snug text-foreground",
                           article.isRead && "font-normal text-muted-foreground"
                         )}>
-                          {article.title}
+                          {article.translatedTitle || article.title}
                         </h3>
                         
-                        {article.summary && (
+                        {(article.translatedSummary || article.summary) && (
                           <p className="line-clamp-2 text-xs text-muted-foreground/80 leading-relaxed mt-0.5">
-                            {article.summary.replace(/<[^>]*>/g, '')}
+                            {(article.translatedSummary || article.summary || '').replace(/<[^>]*>/g, '')}
                           </p>
                         )}
                       </div>
