@@ -11,6 +11,7 @@ import { AppSidebar } from "@/components/layout/app-sidebar";
 import { ArticleList } from "@/components/layout/article-list";
 import { ArticleDetail } from "@/components/layout/article-detail";
 import type { Feed, Article, Folder } from "@/lib/types";
+import { useTranslation } from "react-i18next";
 
 const LAYOUT_STORAGE_KEY = "rss-reader-layout";
 
@@ -22,7 +23,9 @@ export default function Home() {
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
   const [loading, setLoading] = useState(false);
-  const [defaultLayout, setDefaultLayout] = useState<Layout | undefined>(undefined);
+  const [defaultLayout, setDefaultLayout] = useState<Layout | undefined>(
+    undefined,
+  );
   const [layoutLoaded, setLayoutLoaded] = useState(false);
   const [autoTranslate, setAutoTranslate] = useState(false);
   const [targetLanguage, setTargetLanguage] = useState("Chinese");
@@ -68,51 +71,63 @@ export default function Home() {
     setFolders(data);
   }, []);
 
-  const fetchArticles = useCallback(async (options: { feedId?: string | null; folderId?: string | null } = {}) => {
-    setLoading(true);
-    let url = "/api/articles";
-    const params = new URLSearchParams();
-    if (options.feedId) params.append("feedId", options.feedId);
-    if (options.folderId) params.append("folderId", options.folderId);
+  const fetchArticles = useCallback(
+    async (
+      options: { feedId?: string | null; folderId?: string | null } = {},
+    ) => {
+      setLoading(true);
+      let url = "/api/articles";
+      const params = new URLSearchParams();
+      if (options.feedId) params.append("feedId", options.feedId);
+      if (options.folderId) params.append("folderId", options.folderId);
 
-    if (params.toString()) {
-      url += `?${params.toString()}`;
-    }
-
-    const res = await fetch(url);
-    const data: Article[] = await res.json();
-
-    // Preserve translation fields from existing articles
-    setArticles((prev) => {
-      const translationMap = new Map<string, { translatedTitle?: string; translatedSummary?: string }>();
-      for (const article of prev) {
-        if (article.translatedTitle || article.translatedSummary) {
-          translationMap.set(article.id, {
-            translatedTitle: article.translatedTitle,
-            translatedSummary: article.translatedSummary,
-          });
-        }
+      if (params.toString()) {
+        url += `?${params.toString()}`;
       }
 
-      return data.map((article) => {
-        const translation = translationMap.get(article.id);
-        if (translation) {
-          return { ...article, ...translation };
+      const res = await fetch(url);
+      const data: Article[] = await res.json();
+
+      // Preserve translation fields from existing articles
+      setArticles((prev) => {
+        const translationMap = new Map<
+          string,
+          { translatedTitle?: string; translatedSummary?: string }
+        >();
+        for (const article of prev) {
+          if (article.translatedTitle || article.translatedSummary) {
+            translationMap.set(article.id, {
+              translatedTitle: article.translatedTitle,
+              translatedSummary: article.translatedSummary,
+            });
+          }
         }
-        return article;
+
+        return data.map((article) => {
+          const translation = translationMap.get(article.id);
+          if (translation) {
+            return { ...article, ...translation };
+          }
+          return article;
+        });
       });
-    });
 
-    setSelectedArticle((prev) => {
-      if (!prev) return prev;
-      const updated = data.find((a) => a.id === prev.id);
-      if (updated && prev.translatedTitle) {
-        return { ...updated, translatedTitle: prev.translatedTitle, translatedSummary: prev.translatedSummary };
-      }
-      return updated || prev;
-    });
-    setLoading(false);
-  }, []);
+      setSelectedArticle((prev) => {
+        if (!prev) return prev;
+        const updated = data.find((a) => a.id === prev.id);
+        if (updated && prev.translatedTitle) {
+          return {
+            ...updated,
+            translatedTitle: prev.translatedTitle,
+            translatedSummary: prev.translatedSummary,
+          };
+        }
+        return updated || prev;
+      });
+      setLoading(false);
+    },
+    [],
+  );
 
   useEffect(() => {
     fetchFeeds();
@@ -168,7 +183,10 @@ export default function Home() {
       handleSelectFeed(null);
     } else {
       await fetchFeeds();
-      await fetchArticles({ feedId: selectedFeedId, folderId: selectedFolderId });
+      await fetchArticles({
+        feedId: selectedFeedId,
+        folderId: selectedFolderId,
+      });
     }
   };
 
@@ -181,7 +199,7 @@ export default function Home() {
         body: JSON.stringify({ isRead: true }),
       });
       setArticles((prev) =>
-        prev.map((a) => (a.id === article.id ? { ...a, isRead: true } : a))
+        prev.map((a) => (a.id === article.id ? { ...a, isRead: true } : a)),
       );
       await fetchFeeds();
     }
@@ -195,7 +213,9 @@ export default function Home() {
         await fetch(`/api/feeds/${selectedFeedId}/refresh`, { method: "POST" });
       } else if (selectedFolderId) {
         // Refresh only feeds in the selected folder
-        const folderFeeds = feeds.filter((f) => f.folderId === selectedFolderId);
+        const folderFeeds = feeds.filter(
+          (f) => f.folderId === selectedFolderId,
+        );
         for (const feed of folderFeeds) {
           await fetch(`/api/feeds/${feed.id}/refresh`, { method: "POST" });
         }
@@ -206,7 +226,10 @@ export default function Home() {
         }
       }
       await fetchFeeds();
-      await fetchArticles({ feedId: selectedFeedId, folderId: selectedFolderId });
+      await fetchArticles({
+        feedId: selectedFeedId,
+        folderId: selectedFolderId,
+      });
     } finally {
       setLoading(false);
     }
@@ -230,7 +253,7 @@ export default function Home() {
   const handleDeleteFolder = async (folderId: string) => {
     await fetch(`/api/folders/${folderId}`, { method: "DELETE" });
     if (selectedFolderId === folderId) {
-       handleSelectFeed(null); // Reset to 'All'
+      handleSelectFeed(null); // Reset to 'All'
     }
     await fetchFolders();
     await fetchFeeds();
@@ -245,7 +268,10 @@ export default function Home() {
     await fetchFolders();
   };
 
-  const handleMoveFeedToFolder = async (feedId: string, folderId: string | null) => {
+  const handleMoveFeedToFolder = async (
+    feedId: string,
+    folderId: string | null,
+  ) => {
     await fetch(`/api/feeds/${feedId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -264,7 +290,7 @@ export default function Home() {
   const handleArticleUpdate = useCallback((updatedArticle: Article) => {
     setSelectedArticle(updatedArticle);
     setArticles((prev) =>
-      prev.map((a) => (a.id === updatedArticle.id ? updatedArticle : a))
+      prev.map((a) => (a.id === updatedArticle.id ? updatedArticle : a)),
     );
   }, []);
 
@@ -288,17 +314,19 @@ export default function Home() {
     await fetchFeeds();
   };
 
+  const { t } = useTranslation();
+
   const listTitle = useMemo(() => {
     if (selectedFeedId) {
       const feed = feeds.find((f) => f.id === selectedFeedId);
-      return feed ? feed.title : "文章";
+      return feed ? feed.title : t("nav.articles");
     }
     if (selectedFolderId) {
       const folder = folders.find((f) => f.id === selectedFolderId);
-      return folder ? folder.name : "文章";
+      return folder ? folder.name : t("nav.articles");
     }
-    return "所有文章";
-  }, [selectedFeedId, selectedFolderId, feeds, folders]);
+    return t("nav.all_articles");
+  }, [selectedFeedId, selectedFolderId, feeds, folders, t]);
 
   if (!layoutLoaded) {
     return <div className="h-screen" />;
@@ -312,7 +340,12 @@ export default function Home() {
       defaultLayout={defaultLayout}
       onLayoutChange={onLayoutChange}
     >
-      <ResizablePanel id="sidebar" defaultSize="17%" minSize="10%" maxSize="30%">
+      <ResizablePanel
+        id="sidebar"
+        defaultSize="17%"
+        minSize="10%"
+        maxSize="30%"
+      >
         <AppSidebar
           feeds={feeds}
           folders={folders}
@@ -333,7 +366,12 @@ export default function Home() {
       </ResizablePanel>
 
       <ResizableHandle />
-      <ResizablePanel id="article-list" defaultSize="23%" minSize="10%" maxSize="40%">
+      <ResizablePanel
+        id="article-list"
+        defaultSize="23%"
+        minSize="10%"
+        maxSize="40%"
+      >
         <ArticleList
           title={listTitle}
           articles={articles}

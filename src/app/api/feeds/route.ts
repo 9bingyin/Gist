@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
     console.error("Failed to parse feed:", error);
     return NextResponse.json(
       { error: "Failed to parse RSS feed" },
-      { status: 400 }
+      { status: 400 },
     );
   }
 }

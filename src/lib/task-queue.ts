@@ -1,4 +1,9 @@
-export type TaskStatus = "pending" | "running" | "completed" | "failed" | "cancelled";
+export type TaskStatus =
+  | "pending"
+  | "running"
+  | "completed"
+  | "failed"
+  | "cancelled";
 
 export interface TaskProgress {
   current: number;
@@ -61,25 +66,26 @@ class TaskQueue {
 
   getAll(): Task[] {
     return Array.from(this.tasks.values()).sort(
-      (a, b) => b.createdAt.getTime() - a.createdAt.getTime()
+      (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
     );
   }
 
   getActive(): Task[] {
     return this.getAll().filter(
-      (t) => t.status === "pending" || t.status === "running"
+      (t) => t.status === "pending" || t.status === "running",
     );
   }
 
   update(
     id: string,
-    updates: Partial<Pick<Task, "status" | "progress" | "result">>
+    updates: Partial<Pick<Task, "status" | "progress" | "result">>,
   ): Task | undefined {
     const task = this.tasks.get(id);
     if (!task) return undefined;
 
     if (updates.status) task.status = updates.status;
-    if (updates.progress) task.progress = { ...task.progress, ...updates.progress };
+    if (updates.progress)
+      task.progress = { ...task.progress, ...updates.progress };
     if (updates.result) task.result = updates.result;
     task.updatedAt = new Date();
 
@@ -114,7 +120,9 @@ class TaskQueue {
 
     for (const [id, task] of this.tasks) {
       if (
-        (task.status === "completed" || task.status === "failed" || task.status === "cancelled") &&
+        (task.status === "completed" ||
+          task.status === "failed" ||
+          task.status === "cancelled") &&
         now - task.updatedAt.getTime() > maxAge
       ) {
         this.tasks.delete(id);

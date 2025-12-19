@@ -1,9 +1,16 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
-import { XIcon, CheckCircleIcon, AlertCircleIcon, LoaderIcon, StopCircleIcon } from "lucide-react";
+import {
+  XIcon,
+  CheckCircleIcon,
+  AlertCircleIcon,
+  LoaderIcon,
+  StopCircleIcon,
+} from "lucide-react";
 import type { Task } from "@/lib/task-queue";
 
 interface TaskProgressProps {
@@ -83,7 +90,7 @@ export function TaskProgress({ onTaskComplete }: TaskProgressProps) {
         // Show completed/failed/cancelled tasks
         task.status === "completed" ||
         task.status === "failed" ||
-        task.status === "cancelled")
+        task.status === "cancelled"),
   );
 
   if (visibleTasks.length === 0) {
@@ -117,19 +124,23 @@ function TaskCard({ task, onDismiss, onCancel }: TaskCardProps) {
       : 0;
 
   const statusIcon = {
-    pending: <LoaderIcon className="size-4 animate-spin text-muted-foreground" />,
+    pending: (
+      <LoaderIcon className="size-4 animate-spin text-muted-foreground" />
+    ),
     running: <LoaderIcon className="size-4 animate-spin text-blue-500" />,
     completed: <CheckCircleIcon className="size-4 text-green-500" />,
     failed: <AlertCircleIcon className="size-4 text-red-500" />,
     cancelled: <StopCircleIcon className="size-4 text-orange-500" />,
   }[task.status];
 
+  const { t } = useTranslation();
+
   const statusLabel = {
-    pending: "Waiting...",
-    running: "Importing...",
-    completed: "Completed",
-    failed: "Failed",
-    cancelled: "Cancelled",
+    pending: t("task.status.pending"),
+    running: t("task.status.running"),
+    completed: t("task.status.completed"),
+    failed: t("task.status.failed"),
+    cancelled: t("task.status.cancelled"),
   }[task.status];
 
   return (
@@ -137,7 +148,7 @@ function TaskCard({ task, onDismiss, onCancel }: TaskCardProps) {
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="flex items-center gap-2">
           {statusIcon}
-          <span className="text-sm font-medium">OPML Import</span>
+          <span className="text-sm font-medium">{t("task.opml_import")}</span>
         </div>
         <Button
           variant="ghost"
@@ -154,7 +165,8 @@ function TaskCard({ task, onDismiss, onCancel }: TaskCardProps) {
           <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
             <span>{statusLabel}</span>
             <span>
-              {task.progress.current} / {task.progress.total} ({Math.round(progress)}%)
+              {task.progress.current} / {task.progress.total} (
+              {Math.round(progress)}%)
             </span>
           </div>
           <Progress value={progress} className="h-2 mb-2" />
@@ -175,7 +187,7 @@ function TaskCard({ task, onDismiss, onCancel }: TaskCardProps) {
             onClick={onCancel}
           >
             <StopCircleIcon className="size-3 mr-1" />
-            Cancel
+            {t("task.cancel")}
           </Button>
         </>
       ) : task.status === "completed" ? (

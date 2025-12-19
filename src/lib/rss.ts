@@ -53,7 +53,10 @@ function extractImageFromContent(content?: string): string | undefined {
 /**
  * Convert relative URL to absolute URL
  */
-function toAbsoluteUrl(url: string | undefined, baseUrl: string | undefined): string | undefined {
+function toAbsoluteUrl(
+  url: string | undefined,
+  baseUrl: string | undefined,
+): string | undefined {
   if (!url) return undefined;
 
   // Already absolute URL
@@ -78,7 +81,10 @@ function toAbsoluteUrl(url: string | undefined, baseUrl: string | undefined): st
     }
 
     // Relative path
-    const basePath = base.pathname.substring(0, base.pathname.lastIndexOf("/") + 1);
+    const basePath = base.pathname.substring(
+      0,
+      base.pathname.lastIndexOf("/") + 1,
+    );
     return `${base.origin}${basePath}${url}`;
   } catch {
     return undefined;
@@ -118,9 +124,7 @@ export async function parseFeed(url: string): Promise<ParsedFeed> {
       "User-Agent": userAgent,
     },
     customFields: {
-      item: [
-        ["content-type", "contentType", { keepArray: false }],
-      ],
+      item: [["content-type", "contentType", { keepArray: false }]],
     },
   });
 
@@ -138,7 +142,8 @@ export async function parseFeed(url: string): Promise<ParsedFeed> {
 
     // For Atom feeds, HTML content might be in summary field instead of content
     // Also decode HTML entities that may be double-encoded in Atom feeds
-    let htmlContent = rssItem["content:encoded"] || rssItem.content || rssItem.summary;
+    let htmlContent =
+      rssItem["content:encoded"] || rssItem.content || rssItem.summary;
     if (htmlContent) {
       // Decode HTML entities (e.g., &lt;p&gt; -> <p>)
       htmlContent = he.decode(htmlContent);

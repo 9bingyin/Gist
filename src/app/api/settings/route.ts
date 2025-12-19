@@ -53,11 +53,13 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: "Key is required" }, { status: 400 });
   }
 
-  await prisma.setting.delete({
-    where: { key },
-  }).catch(() => {
-    // Ignore if not found
-  });
+  await prisma.setting
+    .delete({
+      where: { key },
+    })
+    .catch(() => {
+      // Ignore if not found
+    });
 
   return NextResponse.json({ success: true });
 }

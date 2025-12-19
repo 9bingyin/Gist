@@ -1,6 +1,11 @@
 import { prisma } from "@/lib/db";
 
-export type AiCacheType = "translate" | "translate-readability" | "translate-lite" | "summarize" | "summarize-readability";
+export type AiCacheType =
+  | "translate"
+  | "translate-readability"
+  | "translate-lite"
+  | "summarize"
+  | "summarize-readability";
 
 interface TranslateResult {
   title: string | null;
@@ -27,7 +32,7 @@ type CacheResult = TranslateResult | TranslateLiteResult | SummarizeResult;
 export async function getAiCache<T extends CacheResult>(
   articleId: string,
   type: AiCacheType,
-  language: string
+  language: string,
 ): Promise<T | null> {
   try {
     const cache = await prisma.aiCache.findUnique({
@@ -57,7 +62,7 @@ export async function setAiCache(
   articleId: string,
   type: AiCacheType,
   language: string,
-  result: CacheResult
+  result: CacheResult,
 ): Promise<void> {
   try {
     await prisma.aiCache.upsert({
@@ -89,7 +94,7 @@ export async function setAiCache(
 export async function getAiCacheBatch(
   articleIds: string[],
   type: AiCacheType,
-  language: string
+  language: string,
 ): Promise<Map<string, TranslateLiteResult[string]>> {
   try {
     const caches = await prisma.aiCache.findMany({
@@ -118,28 +123,29 @@ export async function getAiCacheBatch(
 export async function setAiCacheBatch(
   translations: Map<string, TranslateLiteResult[string]>,
   type: AiCacheType,
-  language: string
+  language: string,
 ): Promise<void> {
   try {
-    const operations = Array.from(translations.entries()).map(([articleId, result]) =>
-      prisma.aiCache.upsert({
-        where: {
-          articleId_type_language: {
+    const operations = Array.from(translations.entries()).map(
+      ([articleId, result]) =>
+        prisma.aiCache.upsert({
+          where: {
+            articleId_type_language: {
+              articleId,
+              type,
+              language,
+            },
+          },
+          update: {
+            result: JSON.stringify(result),
+          },
+          create: {
             articleId,
             type,
             language,
+            result: JSON.stringify(result),
           },
-        },
-        update: {
-          result: JSON.stringify(result),
-        },
-        create: {
-          articleId,
-          type,
-          language,
-          result: JSON.stringify(result),
-        },
-      })
+        }),
     );
 
     await prisma.$transaction(operations);

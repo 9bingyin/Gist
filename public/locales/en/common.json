@@ -1,0 +1,274 @@
+{
+  "settings": {
+    "title": "Settings",
+    "subtitle": "Preferences"
+  },
+  "menu": {
+    "general": "General",
+    "subscriptions": "Subscriptions",
+    "folders": "Folders",
+    "ai": "AI",
+    "data": "Data",
+    "debug": "Advanced",
+    "about": "About"
+  },
+  "app": {
+    "name": "Gist",
+    "version": "Version 1.0.0",
+    "description": "A minimalist, high-performance RSS reader designed for focus. Built with modern web technologies for a seamless reading experience."
+  },
+  "general": {
+    "title": "General",
+    "description": "Customize your experience and appearance.",
+    "theme": "Theme",
+    "theme_desc": "Select your preferred interface color scheme.",
+    "theme_system": "System",
+    "theme_light": "Light",
+    "theme_dark": "Dark",
+    "language_title": "Language",
+    "language_desc": "Select UI language or use browser auto-detection.",
+    "language_auto": "Auto (Browser)",
+    "language_en": "English",
+    "language_zh": "中文"
+  },
+  "feeds": {
+    "title": "Subscriptions",
+    "list": "Feed List",
+    "empty": {
+      "title": "No subscriptions yet",
+      "subtitle": "Add a feed to get started"
+    },
+    "total_feeds": "Total Feeds",
+    "unread": "Unread",
+    "subscribed_count": "You are currently subscribed to {{count}} sources.",
+    "delete_selected_confirm": "Are you sure you want to delete {{count}} feeds?",
+    "mark_all_title": "Mark All as Read",
+    "mark_all_desc": "Set all current articles to read status.",
+    "mark_all_button": "Mark All Read",
+    "cleanup_title": "Clean Up",
+    "cleanup_desc": "Remove old read articles to keep your database fast.",
+    "cleanup_7_days": "Older than 7 days",
+    "cleanup_30_days": "Older than 30 days"
+  },
+  "feedlist": {
+    "title": "Feed List",
+    "refresh": "Refresh",
+    "delete": "Delete",
+    "refresh_all": "Refresh All"
+  },
+  "addfeed": {
+    "title": "Add RSS subscription",
+    "placeholder": "Enter RSS feed URL",
+    "adding": "Adding...",
+    "add": "Add feed",
+    "error": "Failed to add feed"
+  },
+  "addfolder": {
+    "title": "New folder",
+    "placeholder": "Folder name",
+    "creating": "Creating...",
+    "create": "Create folder",
+    "error": "Failed to create folder"
+  },
+  "task": {
+    "opml_import": "OPML Import",
+    "cancel": "Cancel",
+    "status": {
+      "pending": "Waiting...",
+      "running": "Importing...",
+      "completed": "Completed",
+      "failed": "Failed",
+      "cancelled": "Cancelled"
+    }
+  },
+  "table": {
+    "source": "Source",
+    "folder": "Folder",
+    "unread": "Unread",
+    "folder_name": "Folder Name",
+    "feeds": "Feeds",
+    "actions": "Actions"
+  },
+  "actions": {
+    "export": "Export",
+    "import": "Import",
+    "cancel_import": "Cancel Import",
+    "refresh": "Refresh",
+    "delete": "Delete",
+    "visit_site": "Visit Site",
+    "refresh_all": "Refresh All",
+    "clear_cache": "Clear Cache",
+    "clear_rss_content": "RSS Content",
+    "clear_readability": "Readability",
+    "clear_feed_icons": "Feed Icons",
+    "clear_all_cache": "Clear All Cache",
+    "save": "Save",
+    "save_changes": "Save Changes",
+    "delete_selected": "Delete Selected",
+    "reset": "Reset",
+    "test_connection": "Test Connection",
+    "save_configuration": "Save Configuration",
+    "refresh_feed": "Refresh",
+    "move_to_folder": "Move to Folder",
+    "remove_from_folder": "Remove from Folder",
+    "delete_feed": "Delete Feed"
+  },
+  "data": {
+    "title": "Data Management",
+    "description": "Import, export, and manage your local reading database.",
+    "opml_title": "OPML Subscriptions",
+    "opml_desc": "Transfer your subscriptions to or from other RSS readers.",
+    "importing": "Importing...",
+    "marked_read": "Marked {{count}} articles as read",
+    "failed_mark_read": "Failed to mark articles as read",
+    "cleaned_up": "Deleted {{count}} read articles",
+    "failed_cleanup": "Failed to clean up articles",
+    "clear_icons_title": "Clear Icon Cache",
+    "clear_icons_desc": "Force re-fetch all feed icons. Useful if icons are broken or outdated.",
+    "icons_cleared_summary": "Icon cache cleared and refreshed in {{duration}}: {{success}} succeeded, {{fail}} failed out of {{total}} feeds ({{uniqueDomains}} unique domains).",
+    "failed_clear_icons": "Failed to clear icon cache"
+  },
+  "folders": {
+    "title": "Folders",
+    "description": "Organize your reading by grouping similar feeds together.",
+    "none": "No Folder",
+    "name": "Folder Name",
+    "feeds": "Feeds",
+    "actions": "Actions",
+    "empty": {
+      "title": "No folders created yet",
+      "subtitle": "Create folders to organize feeds"
+    },
+    "delete": "Delete folder",
+    "delete_confirm": "Are you sure you want to delete this folder? Feeds in this folder will be moved to 'No Folder'.",
+    "delete_selected_confirm": "Are you sure you want to delete {{count}} folders? Feeds in these folders will be moved to 'No Folder'.",
+    "selected": "{{count}} selected",
+    "new_folder_placeholder": "New folder name..."
+  },
+  "advanced": {
+    "title": "Advanced",
+    "description": "Technical settings for power users and debugging.",
+    "auto_refresh_title": "Auto Refresh Interval",
+    "auto_refresh_desc": "Background sync frequency (in minutes).",
+    "minutes": "minutes",
+    "avatar_service": "Avatar Service",
+    "avatar_desc": "Your Gravatar email address for the sidebar.",
+    "user_agent_title": "Network User-Agent",
+    "user_agent_desc": "Custom HTTP header for feed fetching.",
+    "chrome_default": "Chrome Default",
+    "cleared_summary": "Cleared: {{items}}",
+    "no_cache": "No cache to clear",
+    "failed_clear_cache": "Failed to clear cache",
+    "avatar_placeholder": "your@email.com",
+    "default_agent_placeholder": "Default agent",
+    "settings_saved": "Settings saved",
+    "failed_save_settings": "Failed to save settings"
+  },
+  "units": {
+    "minutes": "minutes"
+  },
+  "common": {
+    "off": "Off",
+    "1h": "1h"
+  },
+  "danger": {
+    "title": "Danger Zone",
+    "description": "Clear locally cached data. This will not delete your subscriptions."
+  },
+  "ai": {
+    "title": "AI Configuration",
+    "title_short": "AI",
+    "provider": "AI Provider",
+    "provider_desc": "Select your preferred AI service provider.",
+    "base_url": "Base URL",
+    "base_url_desc": "API endpoint URL. Leave empty to use the default provider endpoint.",
+    "model": "Model Name",
+    "model_desc": "The AI model to use. Leave empty to use the provider's default model.",
+    "model_name": "Model Name",
+    "api_key": "API Key",
+    "api_key_desc": "Your API key for the selected provider. This is stored securely in your local database.",
+    "api_key_placeholder": "sk...",
+    "output_language": "Output Language",
+    "output_language_desc": "The language AI should use in its responses.",
+    "auto_translate": "Auto Translate",
+    "auto_translate_desc": "Automatically translate non-target language articles. Only visible content will be translated to save tokens.",
+    "rate_limit": "Rate Limit (QPS)",
+    "rate_limit_desc": "Maximum AI requests per second. Lower values prevent API rate limit errors.",
+    "requests_per_second": "requests/second",
+    "select_provider": "Select provider",
+    "select_language": "Select language",
+    "test_response": "Test Response",
+    "test_response_desc": "Response from AI (prompt: \"{{prompt}}\")",
+    "settings_saved": "AI settings saved successfully",
+    "failed_save": "Failed to save AI settings",
+    "description": "Configure AI provider for intelligent features.",
+    "lang_en": "English",
+    "lang_zh": "Chinese",
+    "lang_ja": "Japanese",
+    "lang_ko": "Korean",
+    "lang_fr": "French",
+    "lang_de": "German",
+    "lang_es": "Spanish",
+    "provider_openai": "OpenAI",
+    "provider_anthropic": "Anthropic",
+    "provider_openai_compatible": "OpenAI Compatible",
+    "use_default": "Use Default",
+    "clear": "Clear",
+    "test_connection": "Test Connection",
+    "save_configuration": "Save Configuration"
+  },
+  "ui": {
+    "close": "Close",
+    "sidebar_title": "Sidebar",
+    "sidebar_description": "Displays the mobile sidebar.",
+    "toggle_sidebar": "Toggle Sidebar"
+  },
+  "sidebar": {
+    "feeds": "Feeds",
+    "sort_name": "Sort by name",
+    "sort_date": "Sort by date",
+    "uncategorized": "Uncategorized"
+  },
+  "nav": {
+    "articles": "Articles",
+    "all_articles": "All Articles"
+  },
+  "article": {
+    "readability": {
+      "show_original": "Show original",
+      "read_mode": "Readability"
+    },
+    "summary": {
+      "generate": "AI Summary",
+      "hide": "Hide Summary"
+    },
+    "translate": {
+      "show_original": "Show original",
+      "ai_translate": "AI Translate"
+    },
+    "actions": {
+      "share": "Share",
+      "bookmark": "Bookmark",
+      "open_original": "Open original",
+      "more": "More"
+    }
+  },
+  "time": {
+    "just_now": "Just now",
+    "minutes_ago": "{{count}} minute(s) ago",
+    "hours_ago": "{{count}} hour(s) ago",
+    "days_ago": "{{count}} day(s) ago",
+    "yesterday": "Yesterday",
+    "today": "Today",
+    "tomorrow": "Tomorrow",
+    "in_minutes": "in {{count}} minute(s)",
+    "in_hours": "in {{count}} hour(s)",
+    "in_days": "in {{count}} day(s)"
+  },
+  "articles": {
+    "empty": {
+      "title": "No articles yet",
+      "subtitle": "Add a feed to start reading"
+    }
+  }
+}

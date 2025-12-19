@@ -23,7 +23,7 @@ export async function GET() {
     ...folder,
     unreadCount: folder.feeds.reduce(
       (sum, feed) => sum + feed._count.articles,
-      0
+      0,
     ),
   }));
 

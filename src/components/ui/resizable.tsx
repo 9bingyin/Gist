@@ -1,15 +1,18 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import { GripVerticalIcon } from "lucide-react"
-import { Group, Panel, Separator } from "react-resizable-panels"
+import * as React from "react";
+import { GripVerticalIcon } from "lucide-react";
+import { Group, Panel, Separator } from "react-resizable-panels";
 
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/utils";
 
-type Orientation = "horizontal" | "vertical"
+type Orientation = "horizontal" | "vertical";
 
-interface ResizablePanelGroupProps extends Omit<React.ComponentProps<typeof Group>, "orientation"> {
-  orientation?: Orientation
+interface ResizablePanelGroupProps extends Omit<
+  React.ComponentProps<typeof Group>,
+  "orientation"
+> {
+  orientation?: Orientation;
 }
 
 function ResizablePanelGroup({
@@ -25,11 +28,11 @@ function ResizablePanelGroup({
       className={cn(
         "flex h-full w-full",
         orientation === "vertical" && "flex-col",
-        className
+        className,
       )}
       {...props}
     />
-  )
+  );
 }
 
 function ResizablePanel({
@@ -42,11 +45,11 @@ function ResizablePanel({
       className={cn("overflow-hidden", className)}
       {...props}
     />
-  )
+  );
 }
 
 interface ResizableHandleProps extends React.ComponentProps<typeof Separator> {
-  withHandle?: boolean
+  withHandle?: boolean;
 }
 
 function ResizableHandle({
@@ -59,7 +62,7 @@ function ResizableHandle({
       data-slot="resizable-handle"
       className={cn(
         "relative flex w-px shrink-0 items-center justify-center after:absolute after:inset-y-0 after:left-1/2 after:w-2 after:-translate-x-1/2 cursor-col-resize outline-none",
-        className
+        className,
       )}
       {...props}
     >
@@ -69,7 +72,7 @@ function ResizableHandle({
         </div>
       )}
     </Separator>
-  )
+  );
 }
 
-export { ResizablePanelGroup, ResizablePanel, ResizableHandle }
+export { ResizablePanelGroup, ResizablePanel, ResizableHandle };

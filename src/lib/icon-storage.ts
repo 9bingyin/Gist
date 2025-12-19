@@ -20,17 +20,28 @@ async function ensureIconsDir() {
 /**
  * Get file extension from content type or URL
  */
-function getExtensionFromContentType(contentType: string | null, url: string): string {
+function getExtensionFromContentType(
+  contentType: string | null,
+  url: string,
+): string {
   if (contentType?.includes("svg")) return "svg";
   if (contentType?.includes("png")) return "png";
-  if (contentType?.includes("jpeg") || contentType?.includes("jpg")) return "jpg";
+  if (contentType?.includes("jpeg") || contentType?.includes("jpg"))
+    return "jpg";
   if (contentType?.includes("gif")) return "gif";
   if (contentType?.includes("webp")) return "webp";
-  if (contentType?.includes("x-icon") || contentType?.includes("vnd.microsoft.icon")) return "ico";
+  if (
+    contentType?.includes("x-icon") ||
+    contentType?.includes("vnd.microsoft.icon")
+  )
+    return "ico";
 
   // Fallback to URL extension
   const urlExt = url.split(".").pop()?.split("?")[0]?.toLowerCase();
-  if (urlExt && ["svg", "png", "jpg", "jpeg", "gif", "webp", "ico"].includes(urlExt)) {
+  if (
+    urlExt &&
+    ["svg", "png", "jpg", "jpeg", "gif", "webp", "ico"].includes(urlExt)
+  ) {
     return urlExt === "jpeg" ? "jpg" : urlExt;
   }
 
@@ -64,14 +75,20 @@ function isValidImageContentType(contentType: string | null): boolean {
 /**
  * Validate if response is actually an image
  */
-function isValidImageBuffer(buffer: ArrayBuffer, contentType: string | null): boolean {
+function isValidImageBuffer(
+  buffer: ArrayBuffer,
+  contentType: string | null,
+): boolean {
   const bytes = new Uint8Array(buffer);
 
   // Too small to be a valid image
   if (bytes.length < 10) return false;
 
   // SVG validation (must check before the '<' character check)
-  if (contentType?.includes("svg") || (bytes[0] === 0x3C && contentType === null)) {
+  if (
+    contentType?.includes("svg") ||
+    (bytes[0] === 0x3c && contentType === null)
+  ) {
     const text = new TextDecoder().decode(bytes);
     const lowerText = text.toLowerCase();
 
@@ -107,18 +124,23 @@ function isValidImageBuffer(buffer: ArrayBuffer, contentType: string | null): bo
   }
 
   // For non-SVG files, reject if starts with '<' (likely HTML)
-  if (bytes[0] === 0x3C) {
+  if (bytes[0] === 0x3c) {
     return false;
   }
 
   // Check for common image file signatures
   // PNG: 89 50 4E 47
-  if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47) {
+  if (
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47
+  ) {
     return true;
   }
 
   // JPEG/JPG: FF D8 FF
-  if (bytes[0] === 0xFF && bytes[1] === 0xD8 && bytes[2] === 0xFF) {
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
     return true;
   }
 
@@ -128,12 +150,22 @@ function isValidImageBuffer(buffer: ArrayBuffer, contentType: string | null): bo
   }
 
   // WebP: 52 49 46 46 ... 57 45 42 50
-  if (bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46) {
+  if (
+    bytes[0] === 0x52 &&
+    bytes[1] === 0x49 &&
+    bytes[2] === 0x46 &&
+    bytes[3] === 0x46
+  ) {
     return true;
   }
 
   // ICO: 00 00 01 00 or 00 00 02 00
-  if (bytes[0] === 0x00 && bytes[1] === 0x00 && (bytes[2] === 0x01 || bytes[2] === 0x02) && bytes[3] === 0x00) {
+  if (
+    bytes[0] === 0x00 &&
+    bytes[1] === 0x00 &&
+    (bytes[2] === 0x01 || bytes[2] === 0x02) &&
+    bytes[3] === 0x00
+  ) {
     return true;
   }
 
@@ -145,7 +177,7 @@ function isValidImageBuffer(buffer: ArrayBuffer, contentType: string | null): bo
  */
 export async function downloadAndSaveIcon(
   iconUrl: string,
-  siteUrl: string
+  siteUrl: string,
 ): Promise<string | null> {
   try {
     await ensureIconsDir();
@@ -184,7 +216,9 @@ export async function downloadAndSaveIcon(
     }
 
     if (buffer.byteLength > MAX_ICON_SIZE) {
-      console.warn(`File too large from ${iconUrl}: ${buffer.byteLength} bytes`);
+      console.warn(
+        `File too large from ${iconUrl}: ${buffer.byteLength} bytes`,
+      );
       return null;
     }
 

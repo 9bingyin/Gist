@@ -4,7 +4,7 @@ import { taskQueue } from "@/lib/task-queue";
 // Get a specific task
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
   const task = taskQueue.get(id);
@@ -19,7 +19,7 @@ export async function GET(
 // Cancel a task
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
   const body = await request.json();
@@ -40,7 +40,7 @@ export async function PATCH(
 // Delete a task
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
   const deleted = taskQueue.delete(id);

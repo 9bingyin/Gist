@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { FolderPlusIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useTranslation } from "react-i18next";
 import {
   Dialog,
   DialogContent,
@@ -23,6 +24,8 @@ export function AddFolderDialog({ onAdd, children }: AddFolderDialogProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  const { t } = useTranslation();
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
@@ -35,7 +38,7 @@ export function AddFolderDialog({ onAdd, children }: AddFolderDialogProps) {
       setName("");
       setOpen(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "创建文件夹失败");
+      setError(err instanceof Error ? err.message : t("addfolder.error"));
     } finally {
       setLoading(false);
     }
@@ -52,23 +55,26 @@ export function AddFolderDialog({ onAdd, children }: AddFolderDialogProps) {
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>新建文件夹</DialogTitle>
+          <DialogTitle>{t("addfolder.title")}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <Input
-            placeholder="文件夹名称"
+            placeholder={t("addfolder.placeholder")}
             value={name}
             onChange={(e) => setName(e.target.value)}
             disabled={loading}
             autoFocus
           />
           {error && <p className="text-sm text-red-500">{error}</p>}
-          <Button type="submit" disabled={loading || !name.trim()} className="w-full">
-            {loading ? "创建中..." : "创建文件夹"}
+          <Button
+            type="submit"
+            disabled={loading || !name.trim()}
+            className="w-full"
+          >
+            {loading ? t("addfolder.creating") : t("addfolder.create")}
           </Button>
         </form>
       </DialogContent>
     </Dialog>
   );
 }
-

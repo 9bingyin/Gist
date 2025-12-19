@@ -22,7 +22,10 @@ function getDomain(url: string): string {
 /**
  * Try to fetch favicon from website HTML
  */
-async function fetchFaviconFromHtml(siteUrl: string, userAgent: string): Promise<string | null> {
+async function fetchFaviconFromHtml(
+  siteUrl: string,
+  userAgent: string,
+): Promise<string | null> {
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), FAVICON_TIMEOUT);
@@ -80,7 +83,10 @@ async function fetchFaviconFromHtml(siteUrl: string, userAgent: string): Promise
 /**
  * Check if a favicon URL is accessible
  */
-async function checkFaviconUrl(url: string, userAgent: string): Promise<boolean> {
+async function checkFaviconUrl(
+  url: string,
+  userAgent: string,
+): Promise<boolean> {
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), FAVICON_TIMEOUT);

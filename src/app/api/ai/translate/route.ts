@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
     if (!content) {
       return NextResponse.json(
         { error: "Content is required" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -46,11 +46,11 @@ export async function POST(request: NextRequest) {
 
     // Check cache first
     if (articleId) {
-      const cached = await getAiCache<{ title: string | null; summary: string | null; content: string }>(
-        articleId,
-        cacheType,
-        language
-      );
+      const cached = await getAiCache<{
+        title: string | null;
+        summary: string | null;
+        content: string;
+      }>(articleId, cacheType, language);
       if (cached) {
         return NextResponse.json(cached);
       }
@@ -58,8 +58,11 @@ export async function POST(request: NextRequest) {
 
     if (!apiKey) {
       return NextResponse.json(
-        { error: "AI API key is not configured. Please configure it in Settings." },
-        { status: 400 }
+        {
+          error:
+            "AI API key is not configured. Please configure it in Settings.",
+        },
+        { status: 400 },
       );
     }
 
@@ -76,7 +79,7 @@ Translate the following article into ${language}. Preserve the original HTML str
 </requirements>
 
 <article>
-${title ? `<title>${title}</title>\n\n` : ''}${summary ? `<summary>${summary}</summary>\n\n` : ''}<content>
+${title ? `<title>${title}</title>\n\n` : ""}${summary ? `<summary>${summary}</summary>\n\n` : ""}<content>
 ${content}
 </content>
 </article>
@@ -106,7 +109,7 @@ Example:
           generateText({
             model: openai(modelName),
             prompt,
-          })
+          }),
         );
 
         response = result.text;
@@ -115,7 +118,7 @@ Example:
         throw new Error(
           err instanceof Error
             ? `OpenAI error: ${err.message}`
-            : "Failed to translate with OpenAI"
+            : "Failed to translate with OpenAI",
         );
       }
     } else if (provider === "openai-compatible") {
@@ -132,7 +135,7 @@ Example:
           generateText({
             model: compatible(modelName),
             prompt,
-          })
+          }),
         );
 
         response = result.text;
@@ -141,7 +144,7 @@ Example:
         throw new Error(
           err instanceof Error
             ? `OpenAI Compatible error: ${err.message}`
-            : "Failed to translate with OpenAI Compatible API"
+            : "Failed to translate with OpenAI Compatible API",
         );
       }
     } else if (provider === "anthropic") {
@@ -157,7 +160,7 @@ Example:
           generateText({
             model: anthropic(modelName),
             prompt,
-          })
+          }),
         );
 
         response = result.text;
@@ -166,18 +169,22 @@ Example:
         throw new Error(
           err instanceof Error
             ? `Anthropic error: ${err.message}`
-            : "Failed to translate with Anthropic"
+            : "Failed to translate with Anthropic",
         );
       }
     } else {
       return NextResponse.json(
         { error: "Unsupported AI provider" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     // Parse JSON response from AI
-    let result = { title: null as string | null, summary: null as string | null, content: response };
+    let result = {
+      title: null as string | null,
+      summary: null as string | null,
+      content: response,
+    };
     try {
       // Try to extract JSON from the response (AI might include extra text)
       const jsonMatch = response.match(/\{[\s\S]*\}/);
@@ -207,20 +214,24 @@ Example:
     if (error instanceof Error) {
       errorMessage = error.message;
 
-      if (errorMessage.includes("401") || errorMessage.includes("Unauthorized")) {
+      if (
+        errorMessage.includes("401") ||
+        errorMessage.includes("Unauthorized")
+      ) {
         errorMessage = "Invalid API key";
-      } else if (errorMessage.includes("404") || errorMessage.includes("model")) {
+      } else if (
+        errorMessage.includes("404") ||
+        errorMessage.includes("model")
+      ) {
         errorMessage = "Invalid model name or model not found";
       } else if (errorMessage.includes("429")) {
         errorMessage = "Rate limit exceeded";
       } else if (errorMessage.includes("Invalid time value")) {
-        errorMessage = "API response format error. Please check your API key and base URL.";
+        errorMessage =
+          "API response format error. Please check your API key and base URL.";
       }
     }
 
-    return NextResponse.json(
-      { error: errorMessage },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }

@@ -34,7 +34,10 @@ export async function GET(request: NextRequest) {
     hostname.startsWith("172.16.") ||
     hostname.endsWith(".local")
   ) {
-    return NextResponse.json({ error: "Private addresses not allowed" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Private addresses not allowed" },
+      { status: 400 },
+    );
   }
 
   try {
@@ -46,7 +49,7 @@ export async function GET(request: NextRequest) {
       signal: controller.signal,
       headers: {
         "User-Agent": userAgent,
-        "Accept": "image/*",
+        Accept: "image/*",
       },
     });
     clearTimeout(timeoutId);
@@ -54,11 +57,12 @@ export async function GET(request: NextRequest) {
     if (!response.ok) {
       return NextResponse.json(
         { error: `Failed to fetch: ${response.status}` },
-        { status: response.status }
+        { status: response.status },
       );
     }
 
-    const contentType = response.headers.get("content-type") || "application/octet-stream";
+    const contentType =
+      response.headers.get("content-type") || "application/octet-stream";
     const contentLength = response.headers.get("content-length");
 
     // Check size limit
@@ -84,6 +88,9 @@ export async function GET(request: NextRequest) {
     if (error instanceof Error && error.name === "AbortError") {
       return NextResponse.json({ error: "Request timeout" }, { status: 504 });
     }
-    return NextResponse.json({ error: "Failed to fetch image" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to fetch image" },
+      { status: 500 },
+    );
   }
 }

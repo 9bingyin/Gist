@@ -11,7 +11,8 @@ function isValidImageFile(buffer: Buffer, filename: string): boolean {
   if (bytes.length === 0) return false;
 
   // Reject if starts with HTML tag
-  if (bytes[0] === 0x3C) { // '<' character
+  if (bytes[0] === 0x3c) {
+    // '<' character
     return false;
   }
 
@@ -41,7 +42,7 @@ function isValidImageFile(buffer: Buffer, filename: string): boolean {
 
 export async function GET(
   _request: NextRequest,
-  { params }: { params: Promise<{ filename: string }> }
+  { params }: { params: Promise<{ filename: string }> },
 ) {
   const { filename } = await params;
 
@@ -58,7 +59,15 @@ export async function GET(
   }
 
   // Only allow specific image extensions
-  const allowedExtensions = [".png", ".jpg", ".jpeg", ".gif", ".ico", ".svg", ".webp"];
+  const allowedExtensions = [
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".ico",
+    ".svg",
+    ".webp",
+  ];
   if (!allowedExtensions.some((ext) => filename.toLowerCase().endsWith(ext))) {
     return NextResponse.json({ error: "Invalid file type" }, { status: 400 });
   }
@@ -72,7 +81,10 @@ export async function GET(
   // Security: Validate file content
   if (!isValidImageFile(buffer, filename)) {
     console.error(`Security: Invalid or malicious file detected: ${filename}`);
-    return NextResponse.json({ error: "Invalid file content" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Invalid file content" },
+      { status: 400 },
+    );
   }
 
   const contentType = getContentTypeFromExtension(filename);
@@ -83,7 +95,8 @@ export async function GET(
       "Cache-Control": "public, max-age=31536000, immutable",
       // Security headers
       "X-Content-Type-Options": "nosniff",
-      "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline';",
+      "Content-Security-Policy":
+        "default-src 'none'; style-src 'unsafe-inline';",
     },
   });
 }

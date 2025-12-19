@@ -12,14 +12,14 @@ const CONCURRENT_DOWNLOADS = 10;
 async function processBatch<T, R>(
   items: T[],
   processor: (item: T) => Promise<R>,
-  concurrency: number
+  concurrency: number,
 ): Promise<R[]> {
   const results: R[] = [];
 
   for (let i = 0; i < items.length; i += concurrency) {
     const batch = items.slice(i, i + concurrency);
     const batchResults = await Promise.allSettled(
-      batch.map((item) => processor(item))
+      batch.map((item) => processor(item)),
     );
 
     for (const result of batchResults) {
@@ -73,7 +73,9 @@ export async function POST() {
       }
     }
 
-    console.log(`Starting to fetch icons for ${feedsByHostname.size} unique domains with ${CONCURRENT_DOWNLOADS} concurrent downloads...`);
+    console.log(
+      `Starting to fetch icons for ${feedsByHostname.size} unique domains with ${CONCURRENT_DOWNLOADS} concurrent downloads...`,
+    );
 
     // Convert to array for batch processing
     const hostnameEntries = Array.from(feedsByHostname.entries());
@@ -96,7 +98,7 @@ export async function POST() {
           return { hostname, feedIds, iconFilename: null, success: false };
         }
       },
-      CONCURRENT_DOWNLOADS
+      CONCURRENT_DOWNLOADS,
     );
 
     // Batch update database
@@ -134,7 +136,9 @@ export async function POST() {
     }
 
     const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-    console.log(`Icon refresh complete in ${duration}s: ${successCount} succeeded, ${failCount} failed`);
+    console.log(
+      `Icon refresh complete in ${duration}s: ${successCount} succeeded, ${failCount} failed`,
+    );
 
     return NextResponse.json({
       success: true,
@@ -149,7 +153,7 @@ export async function POST() {
     console.error("Clear icons error:", error);
     return NextResponse.json(
       { error: "Failed to clear icons" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

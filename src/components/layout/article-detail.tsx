@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { needsTranslation } from "@/lib/language-detect";
+import { useTranslation } from "react-i18next";
 import type { Article } from "@/lib/types";
 
 interface ArticleDetailProps {
@@ -32,37 +33,7 @@ interface ArticleDetailProps {
   targetLanguage?: string;
 }
 
-function formatRelativeTime(dateStr: string | null): string {
-  if (!dateStr) return "";
-  const date = new Date(dateStr);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-
-  // Handle future dates
-  if (diffMs < 0) {
-    const absDiffMs = Math.abs(diffMs);
-    const diffMinutes = Math.floor(absDiffMs / 60000);
-    const diffHours = Math.floor(diffMinutes / 60);
-    const diffDays = Math.floor(diffHours / 24);
-
-    if (diffMinutes < 60) return `${diffMinutes || 1} 分钟后`;
-    if (diffHours < 24) return `${diffHours} 小时后`;
-    if (diffDays < 7) return `${diffDays} 天后`;
-    return date.toLocaleDateString("zh-CN", { year: "numeric", month: "long", day: "numeric" });
-  }
-
-  const diffSeconds = Math.floor(diffMs / 1000);
-  const diffMinutes = Math.floor(diffSeconds / 60);
-  const diffHours = Math.floor(diffMinutes / 60);
-  const diffDays = Math.floor(diffHours / 24);
-
-  if (diffSeconds < 60) return "刚刚";
-  if (diffMinutes < 60) return `${diffMinutes} 分钟前`;
-  if (diffHours < 24) return `${diffHours} 小时前`;
-  if (diffDays < 7) return `${diffDays} 天前`;
-
-  return date.toLocaleDateString("zh-CN", { year: "numeric", month: "long", day: "numeric" });
-}
+// formatRelativeTime is implemented inside the component to access translations
 
 function sanitizeHtml(html: string): string {
   if (typeof window === "undefined") {
@@ -71,21 +42,76 @@ function sanitizeHtml(html: string): string {
 
   return DOMPurify.sanitize(html, {
     ALLOWED_TAGS: [
-      "p", "br", "strong", "b", "em", "i", "u", "s", "strike",
-      "h1", "h2", "h3", "h4", "h5", "h6",
-      "ul", "ol", "li",
-      "blockquote", "pre", "code",
-      "a", "img", "figure", "figcaption",
-      "table", "thead", "tbody", "tr", "th", "td",
-      "hr", "div", "span", "sup", "sub", "small", "mark", "abbr",
-      "video", "source", "audio",
-      "dl", "dt", "dd", "details", "summary",
+      "p",
+      "br",
+      "strong",
+      "b",
+      "em",
+      "i",
+      "u",
+      "s",
+      "strike",
+      "h1",
+      "h2",
+      "h3",
+      "h4",
+      "h5",
+      "h6",
+      "ul",
+      "ol",
+      "li",
+      "blockquote",
+      "pre",
+      "code",
+      "a",
+      "img",
+      "figure",
+      "figcaption",
+      "table",
+      "thead",
+      "tbody",
+      "tr",
+      "th",
+      "td",
+      "hr",
+      "div",
+      "span",
+      "sup",
+      "sub",
+      "small",
+      "mark",
+      "abbr",
+      "video",
+      "source",
+      "audio",
+      "dl",
+      "dt",
+      "dd",
+      "details",
+      "summary",
     ],
     ALLOWED_ATTR: [
-      "href", "src", "alt", "title", "class", "id", "style",
-      "target", "rel", "width", "height",
-      "controls", "autoplay", "loop", "muted", "poster",
-      "type", "colspan", "rowspan", "datetime", "open",
+      "href",
+      "src",
+      "alt",
+      "title",
+      "class",
+      "id",
+      "style",
+      "target",
+      "rel",
+      "width",
+      "height",
+      "controls",
+      "autoplay",
+      "loop",
+      "muted",
+      "poster",
+      "type",
+      "colspan",
+      "rowspan",
+      "datetime",
+      "open",
     ],
     ADD_ATTR: ["target"],
     FORBID_TAGS: ["script", "iframe", "form", "input", "button"],
@@ -96,7 +122,10 @@ function sanitizeHtml(html: string): string {
 /**
  * Convert relative URL to absolute URL based on the article link
  */
-function toAbsoluteUrl(url: string, baseUrl: string | undefined): string | null {
+function toAbsoluteUrl(
+  url: string,
+  baseUrl: string | undefined,
+): string | null {
   // Already absolute URL
   if (url.startsWith("http://") || url.startsWith("https://")) {
     return url;
@@ -124,7 +153,10 @@ function toAbsoluteUrl(url: string, baseUrl: string | undefined): string | null 
     }
 
     // Relative path (e.g., "images/photo.jpg" or "../images/photo.jpg")
-    const basePath = base.pathname.substring(0, base.pathname.lastIndexOf("/") + 1);
+    const basePath = base.pathname.substring(
+      0,
+      base.pathname.lastIndexOf("/") + 1,
+    );
     return `${base.origin}${basePath}${url}`;
   } catch {
     return null;
@@ -137,7 +169,7 @@ function processContent(content: string, articleLink?: string): string {
   // Add target="_blank" to all links
   processed = processed.replace(
     /<a\s+(?![^>]*target=)/gi,
-    '<a target="_blank" rel="noopener noreferrer" '
+    '<a target="_blank" rel="noopener noreferrer" ',
   );
 
   // Proxy all image URLs (including converting relative paths to absolute)
@@ -153,19 +185,66 @@ function processContent(content: string, articleLink?: string): string {
 
       const proxiedSrc = `/api/proxy/image?url=${encodeURIComponent(absoluteUrl)}`;
       return `<img${attrs} src="${proxiedSrc}"`;
-    }
+    },
   );
 
   // Add loading="lazy" to images
   processed = processed.replace(
     /<img\s+(?![^>]*loading=)/gi,
-    '<img loading="lazy" '
+    '<img loading="lazy" ',
   );
 
   return processed;
 }
 
-export function ArticleDetail({ article, onArticleUpdate, autoTranslate, targetLanguage }: ArticleDetailProps) {
+export function ArticleDetail({
+  article,
+  onArticleUpdate,
+  autoTranslate,
+  targetLanguage,
+}: ArticleDetailProps) {
+  const { t, i18n } = useTranslation();
+
+  function formatRelativeTime(dateStr: string | null): string {
+    if (!dateStr) return "";
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+
+    // Handle future dates
+    if (diffMs < 0) {
+      const absDiffMs = Math.abs(diffMs);
+      const diffMinutes = Math.floor(absDiffMs / 60000);
+      const diffHours = Math.floor(diffMinutes / 60);
+      const diffDays = Math.floor(diffHours / 24);
+
+      if (diffMinutes < 60)
+        return t("time.in_minutes", { count: diffMinutes || 1 });
+      if (diffHours < 24) return t("time.in_hours", { count: diffHours });
+      if (diffDays < 7) return t("time.in_days", { count: diffDays });
+      return date.toLocaleDateString(
+        i18n.language === "zh" ? "zh-CN" : "en-US",
+        { year: "numeric", month: "long", day: "numeric" },
+      );
+    }
+
+    const diffSeconds = Math.floor(diffMs / 1000);
+    const diffMinutes = Math.floor(diffSeconds / 60);
+    const diffHours = Math.floor(diffMinutes / 60);
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffSeconds < 60) return t("time.just_now");
+    if (diffMinutes < 60) return t("time.minutes_ago", { count: diffMinutes });
+    if (diffHours < 24) return t("time.hours_ago", { count: diffHours });
+    if (diffDays < 7) return t("time.days_ago", { count: diffDays });
+
+    return date.toLocaleDateString(i18n.language === "zh" ? "zh-CN" : "en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+  }
+
   const [isLoadingReadability, setIsLoadingReadability] = useState(false);
   const [useReadability, setUseReadability] = useState(false);
   const [readabilityError, setReadabilityError] = useState<string | null>(null);
@@ -173,9 +252,13 @@ export function ArticleDetail({ article, onArticleUpdate, autoTranslate, targetL
   const [aiSummary, setAiSummary] = useState<string | null>(null);
   const [summaryError, setSummaryError] = useState<string | null>(null);
   const [isLoadingTranslation, setIsLoadingTranslation] = useState(false);
-  const [translatedContent, setTranslatedContent] = useState<string | null>(null);
+  const [translatedContent, setTranslatedContent] = useState<string | null>(
+    null,
+  );
   const [translatedTitle, setTranslatedTitle] = useState<string | null>(null);
-  const [translatedSummary, setTranslatedSummary] = useState<string | null>(null);
+  const [translatedSummary, setTranslatedSummary] = useState<string | null>(
+    null,
+  );
   const [translationError, setTranslationError] = useState<string | null>(null);
   const [translateEnabled, setTranslateEnabled] = useState(false); // Track if user wants translation
 
@@ -198,7 +281,8 @@ export function ArticleDetail({ article, onArticleUpdate, autoTranslate, targetL
     if (!autoTranslate || !article || !targetLanguage) return;
 
     // Skip if article is already in target language
-    if (!needsTranslation(article.title, article.summary, targetLanguage)) return;
+    if (!needsTranslation(article.title, article.summary, targetLanguage))
+      return;
 
     // Enable translation mode for this article
     setTranslateEnabled(true);
@@ -211,7 +295,7 @@ export function ArticleDetail({ article, onArticleUpdate, autoTranslate, targetL
     const isReadability = useReadability && !!article.readabilityContent;
     const content = isReadability
       ? article.readabilityContent
-      : (article.content || article.summary);
+      : article.content || article.summary;
     if (!content) return;
 
     const abortController = new AbortController();
@@ -259,7 +343,8 @@ export function ArticleDetail({ article, onArticleUpdate, autoTranslate, targetL
         if (error instanceof Error && error.name === "AbortError") {
           return;
         }
-        const message = error instanceof Error ? error.message : "Translation failed";
+        const message =
+          error instanceof Error ? error.message : "Translation failed";
         if (!abortController.signal.aborted) {
           setTranslationError(message);
         }
@@ -277,7 +362,12 @@ export function ArticleDetail({ article, onArticleUpdate, autoTranslate, targetL
     return () => {
       abortController.abort();
     };
-  }, [translateEnabled, useReadability, article?.id, article?.readabilityContent]);
+  }, [
+    translateEnabled,
+    useReadability,
+    article?.id,
+    article?.readabilityContent,
+  ]);
 
   // Regenerate summary when readability mode changes (if summary was already shown)
   useEffect(() => {
@@ -290,7 +380,7 @@ export function ArticleDetail({ article, onArticleUpdate, autoTranslate, targetL
         const isReadability = useReadability && !!article.readabilityContent;
         const content = isReadability
           ? article.readabilityContent
-          : (article.content || article.summary);
+          : article.content || article.summary;
 
         if (!content) {
           throw new Error("无可用内容进行概括");
@@ -400,7 +490,7 @@ export function ArticleDetail({ article, onArticleUpdate, autoTranslate, targetL
       const isReadability = useReadability && !!article.readabilityContent;
       const content = isReadability
         ? article.readabilityContent
-        : (article.content || article.summary);
+        : article.content || article.summary;
 
       if (!content) {
         throw new Error("无可用内容进行概括");
@@ -479,7 +569,7 @@ export function ArticleDetail({ article, onArticleUpdate, autoTranslate, targetL
                 className={cn(
                   "h-8 w-8 text-muted-foreground hover:text-foreground",
                   useReadability && "bg-accent text-accent-foreground",
-                  readabilityError && "text-destructive hover:text-destructive"
+                  readabilityError && "text-destructive hover:text-destructive",
                 )}
                 onClick={handleToggleReadability}
                 disabled={isLoadingReadability}
@@ -492,7 +582,12 @@ export function ArticleDetail({ article, onArticleUpdate, autoTranslate, targetL
               </Button>
             </TooltipTrigger>
             <TooltipContent>
-              <p>{readabilityError || (useReadability ? "显示原文" : "阅读模式")}</p>
+              <p>
+                {readabilityError ||
+                  (useReadability
+                    ? t("article.readability.show_original")
+                    : t("article.readability.read_mode"))}
+              </p>
             </TooltipContent>
           </Tooltip>
 
@@ -504,7 +599,7 @@ export function ArticleDetail({ article, onArticleUpdate, autoTranslate, targetL
                 className={cn(
                   "h-8 w-8 text-muted-foreground hover:text-foreground",
                   aiSummary && "bg-accent text-accent-foreground",
-                  summaryError && "text-destructive hover:text-destructive"
+                  summaryError && "text-destructive hover:text-destructive",
                 )}
                 onClick={handleGenerateSummary}
                 disabled={isLoadingSummary}
@@ -517,7 +612,12 @@ export function ArticleDetail({ article, onArticleUpdate, autoTranslate, targetL
               </Button>
             </TooltipTrigger>
             <TooltipContent>
-              <p>{summaryError || (aiSummary ? "隐藏摘要" : "AI 概括")}</p>
+              <p>
+                {summaryError ||
+                  (aiSummary
+                    ? t("article.summary.hide")
+                    : t("article.summary.generate"))}
+              </p>
             </TooltipContent>
           </Tooltip>
 
@@ -529,7 +629,7 @@ export function ArticleDetail({ article, onArticleUpdate, autoTranslate, targetL
                 className={cn(
                   "h-8 w-8 text-muted-foreground hover:text-foreground",
                   translateEnabled && "bg-accent text-accent-foreground",
-                  translationError && "text-destructive hover:text-destructive"
+                  translationError && "text-destructive hover:text-destructive",
                 )}
                 onClick={handleTranslate}
                 disabled={isLoadingTranslation}
@@ -542,7 +642,12 @@ export function ArticleDetail({ article, onArticleUpdate, autoTranslate, targetL
               </Button>
             </TooltipTrigger>
             <TooltipContent>
-              <p>{translationError || (translateEnabled ? "显示原文" : "AI 翻译")}</p>
+              <p>
+                {translationError ||
+                  (translateEnabled
+                    ? t("article.translate.show_original")
+                    : t("article.translate.ai_translate"))}
+              </p>
             </TooltipContent>
           </Tooltip>
 
@@ -550,44 +655,65 @@ export function ArticleDetail({ article, onArticleUpdate, autoTranslate, targetL
 
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-muted-foreground hover:text-foreground"
+              >
                 <Share2Icon className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
             <TooltipContent>
-              <p>分享</p>
+              <p>{t("article.actions.share")}</p>
             </TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-muted-foreground hover:text-foreground"
+              >
                 <BookmarkIcon className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
             <TooltipContent>
-              <p>收藏</p>
+              <p>{t("article.actions.bookmark")}</p>
             </TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" asChild>
-                <a href={article.link} target="_blank" rel="noopener noreferrer">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                asChild
+              >
+                <a
+                  href={article.link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
                   <ExternalLinkIcon className="h-4 w-4" />
                 </a>
               </Button>
             </TooltipTrigger>
             <TooltipContent>
-              <p>打开原文</p>
+              <p>{t("article.actions.open_original")}</p>
             </TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-muted-foreground hover:text-foreground"
+              >
                 <MoreHorizontalIcon className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
             <TooltipContent>
-              <p>更多</p>
+              <p>{t("article.actions.more")}</p>
             </TooltipContent>
           </Tooltip>
         </div>
@@ -628,12 +754,15 @@ export function ArticleDetail({ article, onArticleUpdate, autoTranslate, targetL
                 <h3 className="text-sm font-semibold text-primary">AI 概括</h3>
               </div>
               <div className="text-sm leading-relaxed text-foreground space-y-2">
-                {aiSummary.split('\n').filter(line => line.trim()).map((point, index) => (
-                  <div key={index} className="flex gap-2">
-                    <span className="text-primary mt-1.5 shrink-0">•</span>
-                    <span className="flex-1">{point.trim()}</span>
-                  </div>
-                ))}
+                {aiSummary
+                  .split("\n")
+                  .filter((line) => line.trim())
+                  .map((point, index) => (
+                    <div key={index} className="flex gap-2">
+                      <span className="text-primary mt-1.5 shrink-0">•</span>
+                      <span className="flex-1">{point.trim()}</span>
+                    </div>
+                  ))}
               </div>
             </div>
           )}
@@ -654,7 +783,11 @@ export function ArticleDetail({ article, onArticleUpdate, autoTranslate, targetL
                 无法获取该文章的正文内容
               </p>
               <Button variant="outline" size="sm" asChild>
-                <a href={article.link} target="_blank" rel="noopener noreferrer">
+                <a
+                  href={article.link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
                   <ExternalLinkIcon className="mr-2 h-4 w-4" />
                   打开原文
                 </a>
@@ -666,4 +799,3 @@ export function ArticleDetail({ article, onArticleUpdate, autoTranslate, targetL
     </div>
   );
 }
-

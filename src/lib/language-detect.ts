@@ -56,7 +56,10 @@ export function detectLanguage(text: string): string | null {
 /**
  * Check if text is already in the target language
  */
-export function isTargetLanguage(text: string, targetLanguage: string): boolean {
+export function isTargetLanguage(
+  text: string,
+  targetLanguage: string,
+): boolean {
   const detected = detectLanguage(text);
 
   if (!detected) return false;
@@ -70,7 +73,7 @@ export function isTargetLanguage(text: string, targetLanguage: string): boolean 
 export function needsTranslation(
   title: string,
   summary: string | null,
-  targetLanguage: string
+  targetLanguage: string,
 ): boolean {
   // Combine title and summary for better detection
   const textToCheck = summary ? `${title} ${summary}` : title;

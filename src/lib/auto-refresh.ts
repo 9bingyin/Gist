@@ -18,7 +18,11 @@ async function refreshAllFeeds() {
       const parsed = await parseFeed(feed.url);
 
       // Update feed info if needed
-      const updateData: { imageUrl?: string; title?: string; siteUrl?: string } = {};
+      const updateData: {
+        imageUrl?: string;
+        title?: string;
+        siteUrl?: string;
+      } = {};
 
       if (!feed.imageUrl && parsed.link) {
         const favicon = await getFavicon(parsed.link);
@@ -27,7 +31,10 @@ async function refreshAllFeeds() {
         }
       }
 
-      if (feed.title === feed.url || feed.title.includes("not yet whitelisted")) {
+      if (
+        feed.title === feed.url ||
+        feed.title.includes("not yet whitelisted")
+      ) {
         updateData.title = parsed.title;
       }
 
@@ -53,13 +60,14 @@ async function refreshAllFeeds() {
         });
 
         if (existing) {
-          const contentChanged = item.content && (
-            !existing.content || item.content !== existing.content
-          );
-          const pubDateChanged = item.pubDate && (
-            !existing.pubDate ||
-            new Date(item.pubDate).getTime() !== new Date(existing.pubDate).getTime()
-          );
+          const contentChanged =
+            item.content &&
+            (!existing.content || item.content !== existing.content);
+          const pubDateChanged =
+            item.pubDate &&
+            (!existing.pubDate ||
+              new Date(item.pubDate).getTime() !==
+                new Date(existing.pubDate).getTime());
 
           if (contentChanged || pubDateChanged) {
             await prisma.article.update({
@@ -123,7 +131,9 @@ export async function startAutoRefresh() {
     // Re-check interval setting in case it changed
     const currentInterval = await getRefreshInterval();
     if (currentInterval !== globalForAutoRefresh.lastRefreshInterval) {
-      console.log(`[Auto Refresh] Interval changed to ${currentInterval} minutes, restarting...`);
+      console.log(
+        `[Auto Refresh] Interval changed to ${currentInterval} minutes, restarting...`,
+      );
       startAutoRefresh();
       return;
     }

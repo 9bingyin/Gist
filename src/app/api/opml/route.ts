@@ -169,7 +169,7 @@ export async function POST(request: NextRequest) {
     console.error("Failed to import OPML:", error);
     return NextResponse.json(
       { error: "Failed to parse OPML file" },
-      { status: 400 }
+      { status: 400 },
     );
   }
 }
@@ -256,7 +256,10 @@ function parseOpml(content: string): OpmlItem[] {
           title: attrs.title || attrs.text || attrs.xmlurl,
           xmlUrl: attrs.xmlurl,
           htmlUrl: attrs.htmlurl,
-          folder: folderStack.length > 0 ? folderStack[folderStack.length - 1] : undefined,
+          folder:
+            folderStack.length > 0
+              ? folderStack[folderStack.length - 1]
+              : undefined,
         });
       } else if ((attrs.text || attrs.title) && !tag.isSelfClosing) {
         // This is a folder (has text/title but no xmlUrl and is not self-closing)

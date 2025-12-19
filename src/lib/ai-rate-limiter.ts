@@ -72,9 +72,7 @@ class AIRateLimiter {
     return new Promise<void>((resolve, reject) => {
       // Set timeout for this request
       const timeoutId = setTimeout(() => {
-        const index = this.queue.findIndex(
-          (item) => item.resolve === resolve
-        );
+        const index = this.queue.findIndex((item) => item.resolve === resolve);
         if (index !== -1) {
           this.queue.splice(index, 1);
         }

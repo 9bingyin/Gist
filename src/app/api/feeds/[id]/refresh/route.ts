@@ -6,7 +6,7 @@ import { iconFileExists } from "@/lib/icon-storage";
 
 export async function POST(
   _request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
 
@@ -19,11 +19,13 @@ export async function POST(
     const parsed = await parseFeed(feed.url);
 
     // Update feed info
-    const updateData: { imageUrl?: string; title?: string; siteUrl?: string } = {};
+    const updateData: { imageUrl?: string; title?: string; siteUrl?: string } =
+      {};
 
     // Check if icon needs to be fetched (missing or file doesn't exist)
     if (parsed.link) {
-      const needsFavicon = !feed.imageUrl || !(await iconFileExists(feed.imageUrl));
+      const needsFavicon =
+        !feed.imageUrl || !(await iconFileExists(feed.imageUrl));
       if (needsFavicon) {
         const favicon = await getFavicon(parsed.link);
         if (favicon) {
@@ -61,13 +63,14 @@ export async function POST(
 
       if (existing) {
         // Update existing article if content, pubDate, or imageUrl changed
-        const contentChanged = item.content && (
-          !existing.content || item.content !== existing.content
-        );
-        const pubDateChanged = item.pubDate && (
-          !existing.pubDate ||
-          new Date(item.pubDate).getTime() !== new Date(existing.pubDate).getTime()
-        );
+        const contentChanged =
+          item.content &&
+          (!existing.content || item.content !== existing.content);
+        const pubDateChanged =
+          item.pubDate &&
+          (!existing.pubDate ||
+            new Date(item.pubDate).getTime() !==
+              new Date(existing.pubDate).getTime());
         const imageUrlChanged = (item.imageUrl ?? null) !== existing.imageUrl;
 
         if (contentChanged || pubDateChanged || imageUrlChanged) {
@@ -100,7 +103,9 @@ export async function POST(
       }
     }
 
-    console.log(`Refreshed feed ${feed.title}: ${newCount} new, ${updatedCount} updated`);
+    console.log(
+      `Refreshed feed ${feed.title}: ${newCount} new, ${updatedCount} updated`,
+    );
 
     return NextResponse.json({
       success: true,
@@ -111,8 +116,11 @@ export async function POST(
   } catch (error) {
     console.error(`Failed to refresh feed ${feed.title}:`, error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to refresh feed" },
-      { status: 500 }
+      {
+        error:
+          error instanceof Error ? error.message : "Failed to refresh feed",
+      },
+      { status: 500 },
     );
   }
 }

@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
     if (!content) {
       return NextResponse.json(
         { error: "Content is required" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
       const cached = await getAiCache<{ summary: string }>(
         articleId,
         cacheType,
-        language
+        language,
       );
       if (cached) {
         return NextResponse.json(cached);
@@ -58,13 +58,18 @@ export async function POST(request: NextRequest) {
 
     if (!apiKey) {
       return NextResponse.json(
-        { error: "AI API key is not configured. Please configure it in Settings." },
-        { status: 400 }
+        {
+          error:
+            "AI API key is not configured. Please configure it in Settings.",
+        },
+        { status: 400 },
       );
     }
 
     // Create prompt for summarization
-    const languageInstruction = language ? `You must answer in ${language}.` : "";
+    const languageInstruction = language
+      ? `You must answer in ${language}.`
+      : "";
     const prompt = `${languageInstruction}
 
 <task>
@@ -84,7 +89,7 @@ Use simple, clear language that is easy to understand for general readers.
 </requirements>
 
 <article>
-${title ? `<title>${title}</title>\n\n` : ''}<content>
+${title ? `<title>${title}</title>\n\n` : ""}<content>
 ${content}
 </content>
 </article>
@@ -108,7 +113,7 @@ Return only the key points, one per line, without any prefixes or formatting sym
           generateText({
             model: openai(modelName),
             prompt,
-          })
+          }),
         );
 
         response = result.text;
@@ -117,7 +122,7 @@ Return only the key points, one per line, without any prefixes or formatting sym
         throw new Error(
           err instanceof Error
             ? `OpenAI error: ${err.message}`
-            : "Failed to generate summary with OpenAI"
+            : "Failed to generate summary with OpenAI",
         );
       }
     } else if (provider === "openai-compatible") {
@@ -134,7 +139,7 @@ Return only the key points, one per line, without any prefixes or formatting sym
           generateText({
             model: compatible(modelName),
             prompt,
-          })
+          }),
         );
 
         response = result.text;
@@ -143,7 +148,7 @@ Return only the key points, one per line, without any prefixes or formatting sym
         throw new Error(
           err instanceof Error
             ? `OpenAI Compatible error: ${err.message}`
-            : "Failed to generate summary with OpenAI Compatible API"
+            : "Failed to generate summary with OpenAI Compatible API",
         );
       }
     } else if (provider === "anthropic") {
@@ -159,7 +164,7 @@ Return only the key points, one per line, without any prefixes or formatting sym
           generateText({
             model: anthropic(modelName),
             prompt,
-          })
+          }),
         );
 
         response = result.text;
@@ -168,13 +173,13 @@ Return only the key points, one per line, without any prefixes or formatting sym
         throw new Error(
           err instanceof Error
             ? `Anthropic error: ${err.message}`
-            : "Failed to generate summary with Anthropic"
+            : "Failed to generate summary with Anthropic",
         );
       }
     } else {
       return NextResponse.json(
         { error: "Unsupported AI provider" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -195,20 +200,24 @@ Return only the key points, one per line, without any prefixes or formatting sym
       errorMessage = error.message;
 
       // Handle common error patterns
-      if (errorMessage.includes("401") || errorMessage.includes("Unauthorized")) {
+      if (
+        errorMessage.includes("401") ||
+        errorMessage.includes("Unauthorized")
+      ) {
         errorMessage = "Invalid API key";
-      } else if (errorMessage.includes("404") || errorMessage.includes("model")) {
+      } else if (
+        errorMessage.includes("404") ||
+        errorMessage.includes("model")
+      ) {
         errorMessage = "Invalid model name or model not found";
       } else if (errorMessage.includes("429")) {
         errorMessage = "Rate limit exceeded";
       } else if (errorMessage.includes("Invalid time value")) {
-        errorMessage = "API response format error. Please check your API key and base URL.";
+        errorMessage =
+          "API response format error. Please check your API key and base URL.";
       }
     }
 
-    return NextResponse.json(
-      { error: errorMessage },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }

@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
     if (!articles || !Array.isArray(articles) || articles.length === 0) {
       return NextResponse.json(
         { error: "Articles array is required" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -52,14 +52,21 @@ export async function POST(request: NextRequest) {
 
     // Check cache first
     const articleIds = batchArticles.map((a) => a.id);
-    const cachedTranslations = await getAiCacheBatch(articleIds, "translate-lite", language);
+    const cachedTranslations = await getAiCacheBatch(
+      articleIds,
+      "translate-lite",
+      language,
+    );
 
     // Filter out already cached articles
-    const uncachedArticles = batchArticles.filter((a) => !cachedTranslations.has(a.id));
+    const uncachedArticles = batchArticles.filter(
+      (a) => !cachedTranslations.has(a.id),
+    );
 
     // If all articles are cached, return cached results
     if (uncachedArticles.length === 0) {
-      const results: Record<string, { title: string; summary: string | null }> = {};
+      const results: Record<string, { title: string; summary: string | null }> =
+        {};
       cachedTranslations.forEach((value, key) => {
         results[key] = value;
       });
@@ -68,15 +75,20 @@ export async function POST(request: NextRequest) {
 
     if (!apiKey) {
       return NextResponse.json(
-        { error: "AI API key is not configured. Please configure it in Settings." },
-        { status: 400 }
+        {
+          error:
+            "AI API key is not configured. Please configure it in Settings.",
+        },
+        { status: 400 },
       );
     }
 
     // Build articles content for translation (only uncached)
     const articlesContent = uncachedArticles
       .map((article, index) => {
-        const summaryPart = article.summary ? `\n<summary>${article.summary.replace(/<[^>]*>/g, '').slice(0, 200)}</summary>` : '';
+        const summaryPart = article.summary
+          ? `\n<summary>${article.summary.replace(/<[^>]*>/g, "").slice(0, 200)}</summary>`
+          : "";
         return `<article id="${index}">
 <title>${article.title}</title>${summaryPart}
 </article>`;
@@ -119,7 +131,7 @@ Return a JSON array:
           generateText({
             model: openai(modelName),
             prompt,
-          })
+          }),
         );
 
         response = result.text;
@@ -128,7 +140,7 @@ Return a JSON array:
         throw new Error(
           err instanceof Error
             ? `OpenAI error: ${err.message}`
-            : "Failed to translate with OpenAI"
+            : "Failed to translate with OpenAI",
         );
       }
     } else if (provider === "openai-compatible") {
@@ -145,7 +157,7 @@ Return a JSON array:
           generateText({
             model: compatible(modelName),
             prompt,
-          })
+          }),
         );
 
         response = result.text;
@@ -154,7 +166,7 @@ Return a JSON array:
         throw new Error(
           err instanceof Error
             ? `OpenAI Compatible error: ${err.message}`
-            : "Failed to translate with OpenAI Compatible API"
+            : "Failed to translate with OpenAI Compatible API",
         );
       }
     } else if (provider === "anthropic") {
@@ -170,7 +182,7 @@ Return a JSON array:
           generateText({
             model: anthropic(modelName),
             prompt,
-          })
+          }),
         );
 
         response = result.text;
@@ -179,18 +191,21 @@ Return a JSON array:
         throw new Error(
           err instanceof Error
             ? `Anthropic error: ${err.message}`
-            : "Failed to translate with Anthropic"
+            : "Failed to translate with Anthropic",
         );
       }
     } else {
       return NextResponse.json(
         { error: "Unsupported AI provider" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     // Parse JSON response from AI
-    const newTranslations = new Map<string, { title: string; summary: string | null }>();
+    const newTranslations = new Map<
+      string,
+      { title: string; summary: string | null }
+    >();
     try {
       // Try to extract JSON array from the response
       const jsonMatch = response.match(/\[[\s\S]*\]/);
@@ -222,7 +237,8 @@ Return a JSON array:
     }
 
     // Merge cached and new translations
-    const results: Record<string, { title: string; summary: string | null }> = {};
+    const results: Record<string, { title: string; summary: string | null }> =
+      {};
     cachedTranslations.forEach((value, key) => {
       results[key] = value;
     });
@@ -239,18 +255,21 @@ Return a JSON array:
     if (error instanceof Error) {
       errorMessage = error.message;
 
-      if (errorMessage.includes("401") || errorMessage.includes("Unauthorized")) {
+      if (
+        errorMessage.includes("401") ||
+        errorMessage.includes("Unauthorized")
+      ) {
         errorMessage = "Invalid API key";
-      } else if (errorMessage.includes("404") || errorMessage.includes("model")) {
+      } else if (
+        errorMessage.includes("404") ||
+        errorMessage.includes("model")
+      ) {
         errorMessage = "Invalid model name or model not found";
       } else if (errorMessage.includes("429")) {
         errorMessage = "Rate limit exceeded";
       }
     }
 
-    return NextResponse.json(
-      { error: errorMessage },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }

@@ -35,6 +35,7 @@ import { AddFeedDialog } from "@/components/add-feed-dialog";
 import { AddFolderDialog } from "@/components/add-folder-dialog";
 import { SettingsDialog } from "@/components/settings-dialog";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "react-i18next";
 import type { Feed, Folder } from "@/lib/types";
 
 interface AppSidebarProps {
@@ -51,7 +52,10 @@ interface AppSidebarProps {
   onAddFolder: (name: string) => Promise<void>;
   onDeleteFolder: (folderId: string) => Promise<void>;
   onRenameFolder: (folderId: string, name: string) => Promise<void>;
-  onMoveFeedToFolder: (feedId: string, folderId: string | null) => Promise<void>;
+  onMoveFeedToFolder: (
+    feedId: string,
+    folderId: string | null,
+  ) => Promise<void>;
   onDataChange?: () => Promise<void>;
 }
 
@@ -72,7 +76,9 @@ export function AppSidebar({
   onMoveFeedToFolder,
   onDataChange,
 }: AppSidebarProps) {
-  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(
+    new Set(),
+  );
   const [email, setEmail] = useState("");
   const [sortBy, setSortBy] = useState<"name" | "date">("name");
 
@@ -83,7 +89,10 @@ export function AppSidebar({
       .catch(() => {});
   }, []);
 
-  const totalUnread = feeds.reduce((sum, feed) => sum + feed._count.articles, 0);
+  const totalUnread = feeds.reduce(
+    (sum, feed) => sum + feed._count.articles,
+    0,
+  );
   const uncategorizedFeeds = feeds.filter((feed) => !feed.folderId);
 
   // Custom sort function: ASCII (English/Numbers) first, then others (Chinese, etc.)
@@ -101,7 +110,10 @@ export function AppSidebar({
   const sortedFolders = useMemo(() => {
     if (sortBy === "date") {
       // Sort by createdAt asc (Oldest first)
-      return [...folders].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+      return [...folders].sort(
+        (a, b) =>
+          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+      );
     }
     // Default: Sort by name
     return [...folders].sort((a, b) => compareNames(a.name, b.name));
@@ -110,17 +122,27 @@ export function AppSidebar({
   const sortedUncategorizedFeeds = useMemo(() => {
     if (sortBy === "date") {
       // Sort by createdAt asc (Oldest first)
-      return [...uncategorizedFeeds].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+      return [...uncategorizedFeeds].sort(
+        (a, b) =>
+          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+      );
     }
     // Default: Sort by name
-    return [...uncategorizedFeeds].sort((a, b) => compareNames(a.title, b.title));
+    return [...uncategorizedFeeds].sort((a, b) =>
+      compareNames(a.title, b.title),
+    );
   }, [uncategorizedFeeds, sortBy]);
+
+  const { t } = useTranslation();
 
   const getSortedFolderFeeds = (folderId: string) => {
     const folderFeeds = feeds.filter((feed) => feed.folderId === folderId);
     if (sortBy === "date") {
       // Sort by createdAt asc (Oldest first)
-      return [...folderFeeds].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+      return [...folderFeeds].sort(
+        (a, b) =>
+          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+      );
     }
     // Default: Sort by name
     return [...folderFeeds].sort((a, b) => compareNames(a.title, b.title));
@@ -150,16 +172,24 @@ export function AppSidebar({
       <div className="flex h-12 items-center justify-between px-4 shrink-0">
         <div className="flex items-center gap-2 font-semibold text-lg tracking-tight">
           <LayoutGridIcon className="h-5 w-5 text-orange-500" />
-          <span>Gist</span>
+          <span>{t("app.name")}</span>
         </div>
         <div className="flex items-center gap-1">
           <AddFolderDialog onAdd={onAddFolder}>
-            <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-muted-foreground hover:text-foreground"
+            >
               <FolderPlusIcon className="h-4 w-4" />
             </Button>
           </AddFolderDialog>
           <AddFeedDialog onAdd={onAddFeed}>
-            <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-muted-foreground hover:text-foreground"
+            >
               <PlusIcon className="h-4 w-4" />
             </Button>
           </AddFeedDialog>
@@ -194,13 +224,15 @@ export function AppSidebar({
               >
                 <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
                   <SettingsIcon className="mr-2 size-4" />
-                  设置
+                  {t("settings.title")}
                 </DropdownMenuItem>
               </SettingsDialog>
               <DropdownMenuSeparator />
               <DropdownMenuItem disabled>
                 <InfoIcon className="mr-2 size-4" />
-                <span className="text-muted-foreground">Gist v1.0.0</span>
+                <span className="text-muted-foreground">
+                  {t("app.version")}
+                </span>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -217,11 +249,11 @@ export function AppSidebar({
               "flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
               selectedFeedId === null && selectedFolderId === null
                 ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                : "text-muted-foreground hover:bg-sidebar-accent/50 hover:text-foreground"
+                : "text-muted-foreground hover:bg-sidebar-accent/50 hover:text-foreground",
             )}
           >
             <FileTextIcon className="size-4" />
-            <span>文章</span>
+            <span>{t("nav.articles")}</span>
             {totalUnread > 0 && (
               <span className="ml-auto text-xs font-normal opacity-70">
                 {totalUnread}
@@ -236,11 +268,15 @@ export function AppSidebar({
             {/* Sort Header */}
             <div className="flex items-center justify-between px-2 mb-1">
               <span className="text-xs font-medium text-muted-foreground/70 uppercase tracking-wider">
-                订阅源
+                {t("sidebar.feeds")}
               </span>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-foreground">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                  >
                     {sortBy === "name" ? (
                       <ArrowDownAZIcon className="h-3.5 w-3.5" />
                     ) : (
@@ -249,13 +285,19 @@ export function AppSidebar({
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem onSelect={() => setSortBy("name")} className={cn(sortBy === "name" && "bg-accent")}>
+                  <DropdownMenuItem
+                    onSelect={() => setSortBy("name")}
+                    className={cn(sortBy === "name" && "bg-accent")}
+                  >
                     <ArrowDownAZIcon className="mr-2 h-4 w-4" />
-                    按名称排序
+                    {t("sidebar.sort_name")}
                   </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => setSortBy("date")} className={cn(sortBy === "date" && "bg-accent")}>
+                  <DropdownMenuItem
+                    onSelect={() => setSortBy("date")}
+                    className={cn(sortBy === "date" && "bg-accent")}
+                  >
                     <CalendarIcon className="mr-2 h-4 w-4" />
-                    按添加时间排序
+                    {t("sidebar.sort_date")}
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -273,7 +315,7 @@ export function AppSidebar({
                       "group relative flex items-center gap-0.5 rounded-md pr-8 transition-colors",
                       selectedFolderId === folder.id
                         ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                        : "hover:bg-sidebar-accent/50"
+                        : "hover:bg-sidebar-accent/50",
                     )}
                   >
                     {/* Expand/Collapse Button */}
@@ -286,13 +328,13 @@ export function AppSidebar({
                         "p-1.5 rounded-md transition-colors",
                         selectedFolderId === folder.id
                           ? "text-sidebar-accent-foreground"
-                          : "text-muted-foreground hover:text-foreground"
+                          : "text-muted-foreground hover:text-foreground",
                       )}
                     >
                       <ChevronRightIcon
                         className={cn(
                           "size-3.5 shrink-0 transition-transform duration-200",
-                          isExpanded && "rotate-90"
+                          isExpanded && "rotate-90",
                         )}
                       />
                     </button>
@@ -304,7 +346,7 @@ export function AppSidebar({
                         "flex-1 flex items-center gap-2 py-1.5 text-sm font-medium transition-colors rounded-md px-1.5",
                         selectedFolderId === folder.id
                           ? "text-sidebar-accent-foreground"
-                          : "text-muted-foreground hover:text-foreground"
+                          : "text-muted-foreground hover:text-foreground",
                       )}
                     >
                       {isExpanded ? (
@@ -338,7 +380,7 @@ export function AppSidebar({
                           className="text-destructive focus:text-destructive"
                         >
                           <Trash2Icon className="mr-2 size-4" />
-                          删除文件夹
+                          {t("folders.delete")}
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
@@ -348,7 +390,7 @@ export function AppSidebar({
                     <div className="ml-3 border-l border-border/50 pl-2 space-y-0.5">
                       {folderFeeds.length === 0 ? (
                         <div className="px-2 py-1.5 text-xs text-muted-foreground italic">
-                          空文件夹
+                          {t("folders.empty")}
                         </div>
                       ) : (
                         folderFeeds.map((feed) => (
@@ -375,7 +417,7 @@ export function AppSidebar({
               <div className="pt-2">
                 {sortedFolders.length > 0 && (
                   <div className="mb-2 px-2 text-xs font-medium text-muted-foreground/70 uppercase tracking-wider">
-                    未分类
+                    {t("sidebar.uncategorized")}
                   </div>
                 )}
                 <div className="space-y-0.5">
@@ -420,19 +462,25 @@ function FeedItem({
   onDelete,
   onMoveToFolder,
 }: FeedItemProps) {
+  const { t } = useTranslation();
+
   return (
     <div className="group relative">
       <button
         onClick={onSelect}
         className={cn(
           "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
-          isSelected 
-            ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium" 
-            : "text-muted-foreground hover:bg-sidebar-accent/50 hover:text-foreground"
+          isSelected
+            ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+            : "text-muted-foreground hover:bg-sidebar-accent/50 hover:text-foreground",
         )}
       >
         {feed.imageUrl ? (
-          <img src={`/api/icons/${feed.imageUrl}`} alt="" className="size-3.5 rounded-sm shrink-0" />
+          <img
+            src={`/api/icons/${feed.imageUrl}`}
+            alt=""
+            className="size-3.5 rounded-sm shrink-0"
+          />
         ) : (
           <RssIcon className="size-3.5 shrink-0" />
         )}
@@ -456,7 +504,7 @@ function FeedItem({
         <DropdownMenuContent side="right" align="start">
           <DropdownMenuItem onClick={onRefresh}>
             <RefreshCwIcon className="mr-2 size-4" />
-            刷新
+            {t("actions.refresh_feed")}
           </DropdownMenuItem>
           {folders.length > 0 && (
             <>
@@ -464,14 +512,14 @@ function FeedItem({
               <DropdownMenuSub>
                 <DropdownMenuSubTrigger>
                   <FolderIcon className="mr-2 size-4" />
-                  移动到文件夹
+                  {t("actions.move_to_folder")}
                 </DropdownMenuSubTrigger>
                 <DropdownMenuSubContent>
                   {feed.folderId && (
                     <DropdownMenuItem
                       onClick={() => onMoveToFolder(feed.id, null)}
                     >
-                      移出文件夹
+                      {t("actions.remove_from_folder")}
                     </DropdownMenuItem>
                   )}
                   {folders
@@ -489,9 +537,12 @@ function FeedItem({
             </>
           )}
           <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={onDelete} className="text-destructive focus:text-destructive">
+          <DropdownMenuItem
+            onClick={onDelete}
+            className="text-destructive focus:text-destructive"
+          >
             <Trash2Icon className="mr-2 size-4" />
-            删除订阅
+            {t("actions.delete_feed")}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

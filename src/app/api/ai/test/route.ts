@@ -14,19 +14,21 @@ export async function POST(request: NextRequest) {
     if (!apiKey) {
       return NextResponse.json(
         { error: "API key is required" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     if (!prompt) {
       return NextResponse.json(
         { error: "Prompt is required" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     // Add language instruction to prompt
-    const languageInstruction = language ? `You must answer me in ${language}. ` : "";
+    const languageInstruction = language
+      ? `You must answer me in ${language}. `
+      : "";
     const fullPrompt = languageInstruction + prompt;
 
     let response: string;
@@ -51,7 +53,7 @@ export async function POST(request: NextRequest) {
         throw new Error(
           err instanceof Error
             ? `OpenAI error: ${err.message}`
-            : "Failed to generate text with OpenAI"
+            : "Failed to generate text with OpenAI",
         );
       }
     } else if (provider === "openai-compatible") {
@@ -75,7 +77,7 @@ export async function POST(request: NextRequest) {
         throw new Error(
           err instanceof Error
             ? `OpenAI Compatible error: ${err.message}`
-            : "Failed to generate text with OpenAI Compatible API"
+            : "Failed to generate text with OpenAI Compatible API",
         );
       }
     } else if (provider === "anthropic") {
@@ -98,13 +100,13 @@ export async function POST(request: NextRequest) {
         throw new Error(
           err instanceof Error
             ? `Anthropic error: ${err.message}`
-            : "Failed to generate text with Anthropic"
+            : "Failed to generate text with Anthropic",
         );
       }
     } else {
       return NextResponse.json(
         { error: "Unsupported provider" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -118,20 +120,24 @@ export async function POST(request: NextRequest) {
       errorMessage = error.message;
 
       // Handle common error patterns
-      if (errorMessage.includes("401") || errorMessage.includes("Unauthorized")) {
+      if (
+        errorMessage.includes("401") ||
+        errorMessage.includes("Unauthorized")
+      ) {
         errorMessage = "Invalid API key";
-      } else if (errorMessage.includes("404") || errorMessage.includes("model")) {
+      } else if (
+        errorMessage.includes("404") ||
+        errorMessage.includes("model")
+      ) {
         errorMessage = "Invalid model name or model not found";
       } else if (errorMessage.includes("429")) {
         errorMessage = "Rate limit exceeded";
       } else if (errorMessage.includes("Invalid time value")) {
-        errorMessage = "API response format error. Please check your API key and base URL.";
+        errorMessage =
+          "API response format error. Please check your API key and base URL.";
       }
     }
 
-    return NextResponse.json(
-      { error: errorMessage },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }

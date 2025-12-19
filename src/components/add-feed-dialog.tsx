@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { PlusIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useTranslation } from "react-i18next";
 import {
   Dialog,
   DialogContent,
@@ -18,6 +19,7 @@ interface AddFeedDialogProps {
 }
 
 export function AddFeedDialog({ onAdd, children }: AddFeedDialogProps) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
@@ -35,7 +37,7 @@ export function AddFeedDialog({ onAdd, children }: AddFeedDialogProps) {
       setUrl("");
       setOpen(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "添加订阅失败");
+      setError(err instanceof Error ? err.message : t("addfeed.error"));
     } finally {
       setLoading(false);
     }
@@ -54,22 +56,25 @@ export function AddFeedDialog({ onAdd, children }: AddFeedDialogProps) {
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>添加 RSS 订阅</DialogTitle>
+          <DialogTitle>{t("addfeed.title")}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <Input
-            placeholder="输入 RSS 订阅地址"
+            placeholder={t("addfeed.placeholder")}
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             disabled={loading}
           />
           {error && <p className="text-sm text-red-500">{error}</p>}
-          <Button type="submit" disabled={loading || !url.trim()} className="w-full">
-            {loading ? "添加中..." : "添加订阅"}
+          <Button
+            type="submit"
+            disabled={loading || !url.trim()}
+            className="w-full"
+          >
+            {loading ? t("addfeed.adding") : t("addfeed.add")}
           </Button>
         </form>
       </DialogContent>
     </Dialog>
   );
 }
-

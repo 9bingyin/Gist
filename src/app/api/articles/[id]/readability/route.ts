@@ -6,7 +6,7 @@ import { getUserAgent } from "@/lib/settings";
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
 
@@ -40,7 +40,7 @@ export async function POST(
     if (!response.ok) {
       return NextResponse.json(
         { error: `Failed to fetch article: ${response.status}` },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -52,7 +52,7 @@ export async function POST(
     if (!parsed) {
       return NextResponse.json(
         { error: "Failed to parse article content" },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -72,7 +72,7 @@ export async function POST(
     console.error("Readability error:", error);
     return NextResponse.json(
       { error: "Failed to process article" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

@@ -34,6 +34,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
@@ -66,7 +67,14 @@ import { MoreHorizontalIcon } from "lucide-react";
 import type { Feed, Folder } from "@/lib/types";
 import type { Task } from "@/lib/task-queue";
 
-type SettingsTab = "feeds" | "folders" | "ai" | "general" | "data" | "debug" | "about";
+type SettingsTab =
+  | "feeds"
+  | "folders"
+  | "ai"
+  | "general"
+  | "data"
+  | "debug"
+  | "about";
 
 interface SettingsDialogProps {
   feeds: Feed[];
@@ -77,20 +85,15 @@ interface SettingsDialogProps {
   onAddFolder: (name: string) => Promise<void>;
   onDeleteFolder: (folderId: string) => Promise<void>;
   onRenameFolder: (folderId: string, name: string) => Promise<void>;
-  onMoveFeedToFolder: (feedId: string, folderId: string | null) => Promise<void>;
+  onMoveFeedToFolder: (
+    feedId: string,
+    folderId: string | null,
+  ) => Promise<void>;
   onDataChange?: () => Promise<void>;
   children?: React.ReactNode;
 }
 
-const menuItems: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
-  { id: "general", label: "General", icon: <SettingsIcon className="size-4" /> },
-  { id: "feeds", label: "Subscriptions", icon: <RssIcon className="size-4" /> },
-  { id: "folders", label: "Folders", icon: <FolderIcon className="size-4" /> },
-  { id: "ai", label: "AI", icon: <SparklesIcon className="size-4" /> },
-  { id: "data", label: "Data", icon: <DatabaseIcon className="size-4" /> },
-  { id: "debug", label: "Advanced", icon: <BugIcon className="size-4" /> },
-  { id: "about", label: "About", icon: <GlobeIcon className="size-4" /> },
-];
+// menu labels are defined per-locale inside the component so `t` is available
 
 export function SettingsDialog({
   feeds,
@@ -110,6 +113,46 @@ export function SettingsDialog({
   const [refreshingAll, setRefreshingAll] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [open, setOpen] = useState(false);
+  const { t } = useTranslation();
+
+  const menuItems: { id: SettingsTab; label: string; icon: React.ReactNode }[] =
+    [
+      {
+        id: "general",
+        label: t("menu.general"),
+        icon: <SettingsIcon className="size-4" />,
+      },
+      {
+        id: "feeds",
+        label: t("menu.subscriptions"),
+        icon: <RssIcon className="size-4" />,
+      },
+      {
+        id: "folders",
+        label: t("menu.folders"),
+        icon: <FolderIcon className="size-4" />,
+      },
+      {
+        id: "ai",
+        label: t("menu.ai"),
+        icon: <SparklesIcon className="size-4" />,
+      },
+      {
+        id: "data",
+        label: t("menu.data"),
+        icon: <DatabaseIcon className="size-4" />,
+      },
+      {
+        id: "debug",
+        label: t("menu.debug"),
+        icon: <BugIcon className="size-4" />,
+      },
+      {
+        id: "about",
+        label: t("menu.about"),
+        icon: <GlobeIcon className="size-4" />,
+      },
+    ];
 
   const handleRefreshFeed = async (feedId: string) => {
     setRefreshingFeedId(feedId);
@@ -129,7 +172,10 @@ export function SettingsDialog({
     }
   };
 
-  const totalArticles = feeds.reduce((sum, feed) => sum + feed._count.articles, 0);
+  const totalArticles = feeds.reduce(
+    (sum, feed) => sum + feed._count.articles,
+    0,
+  );
 
   const handleOpenChange = (newOpen: boolean) => {
     // Prevent closing while importing
@@ -153,13 +199,17 @@ export function SettingsDialog({
         onPointerDownOutside={(e) => isImporting && e.preventDefault()}
         onEscapeKeyDown={(e) => isImporting && e.preventDefault()}
       >
-        <DialogTitle className="sr-only">Settings</DialogTitle>
+        <DialogTitle className="sr-only">{t("settings.title")}</DialogTitle>
         <div className="flex h-full overflow-hidden bg-background">
           {/* Left menu */}
           <div className="w-[200px] border-r bg-muted/20 p-5 flex flex-col">
             <div className="mb-6 px-2">
-              <h2 className="text-lg font-semibold tracking-tight">Settings</h2>
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium mt-0.5">Preferences</p>
+              <h2 className="text-lg font-semibold tracking-tight">
+                {t("settings.title")}
+              </h2>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium mt-0.5">
+                {t("settings.subtitle")}
+              </p>
             </div>
             <nav className="space-y-1 flex-1">
               {menuItems.map((item) => (
@@ -172,17 +222,23 @@ export function SettingsDialog({
                       : "text-muted-foreground hover:bg-muted hover:text-foreground"
                   }`}
                 >
-                  <div className={activeTab === item.id ? "text-primary-foreground" : "text-muted-foreground/70"}>
+                  <div
+                    className={
+                      activeTab === item.id
+                        ? "text-primary-foreground"
+                        : "text-muted-foreground/70"
+                    }
+                  >
                     {item.icon}
                   </div>
                   {item.label}
                 </button>
               ))}
             </nav>
-            
+
             <div className="mt-auto pt-3 px-2">
               <div className="flex items-center gap-2 text-[10px] text-muted-foreground font-mono opacity-50">
-                <span>GIST RSS v1.0.0</span>
+                <span>{t("app.version")}</span>
               </div>
             </div>
           </div>
@@ -240,7 +296,10 @@ interface FeedsSettingsProps {
   onRefreshFeed: (feedId: string) => Promise<void>;
   onDeleteFeed: (feedId: string) => Promise<void>;
   onRefreshAll: () => Promise<void>;
-  onMoveFeedToFolder: (feedId: string, folderId: string | null) => Promise<void>;
+  onMoveFeedToFolder: (
+    feedId: string,
+    folderId: string | null,
+  ) => Promise<void>;
 }
 
 function FeedsSettings({
@@ -254,6 +313,7 @@ function FeedsSettings({
   onRefreshAll,
   onMoveFeedToFolder,
 }: FeedsSettingsProps) {
+  const { t } = useTranslation();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isBulkRefreshing, setIsBulkRefreshing] = useState(false);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
@@ -288,8 +348,11 @@ function FeedsSettings({
 
   const handleBulkDelete = async () => {
     if (selectedIds.size === 0) return;
-    if (!confirm(`Are you sure you want to delete ${selectedIds.size} feeds?`)) return;
-    
+    if (
+      !confirm(t("feeds.delete_selected_confirm", { count: selectedIds.size }))
+    )
+      return;
+
     setIsBulkDeleting(true);
     try {
       await Promise.all(Array.from(selectedIds).map((id) => onDeleteFeed(id)));
@@ -302,21 +365,29 @@ function FeedsSettings({
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div>
-        <h3 className="text-xl font-bold tracking-tight">Subscriptions</h3>
+        <h3 className="text-xl font-bold tracking-tight">{t("feeds.title")}</h3>
         <p className="text-xs text-muted-foreground mt-0.5">
-          You are currently subscribed to {feeds.length} sources.
+          {t("feeds.subscribed_count", { count: feeds.length })}
         </p>
       </div>
 
       {/* Stats */}
       <div className="grid grid-cols-2 gap-3">
         <div className="rounded-xl border border-muted/40 bg-card p-4 transition-all hover:border-muted-foreground/20 hover:shadow-sm">
-          <div className="text-xs font-medium text-muted-foreground mb-1">Total Feeds</div>
-          <div className="text-2xl font-bold tracking-tight">{feeds.length}</div>
+          <div className="text-xs font-medium text-muted-foreground mb-1">
+            {t("feeds.total_feeds")}
+          </div>
+          <div className="text-2xl font-bold tracking-tight">
+            {feeds.length}
+          </div>
         </div>
         <div className="rounded-xl border border-muted/40 bg-card p-4 transition-all hover:border-muted-foreground/20 hover:shadow-sm">
-          <div className="text-xs font-medium text-muted-foreground mb-1">Unread</div>
-          <div className="text-2xl font-bold tracking-tight">{totalArticles}</div>
+          <div className="text-xs font-medium text-muted-foreground mb-1">
+            {t("feeds.unread")}
+          </div>
+          <div className="text-2xl font-bold tracking-tight">
+            {totalArticles}
+          </div>
         </div>
       </div>
 
@@ -324,7 +395,9 @@ function FeedsSettings({
         {/* Actions */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <h4 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground/70">Feed List</h4>
+            <h4 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground/70">
+              {t("feeds.list")}
+            </h4>
             {selectedIds.size > 0 && (
               <div className="flex items-center gap-2 animate-in slide-in-from-left-2 duration-300">
                 <Separator orientation="vertical" className="h-4 mx-1" />
@@ -335,8 +408,10 @@ function FeedsSettings({
                   onClick={handleBulkRefresh}
                   disabled={isBulkRefreshing || isBulkDeleting}
                 >
-                  <RefreshCwIcon className={`mr-1.5 size-3 ${isBulkRefreshing ? "animate-spin" : ""}`} />
-                  Refresh
+                  <RefreshCwIcon
+                    className={`mr-1.5 size-3 ${isBulkRefreshing ? "animate-spin" : ""}`}
+                  />
+                  {t("actions.refresh")}
                 </Button>
                 <Button
                   variant="ghost"
@@ -346,7 +421,7 @@ function FeedsSettings({
                   disabled={isBulkRefreshing || isBulkDeleting}
                 >
                   <Trash2Icon className="mr-1.5 size-3" />
-                  Delete
+                  {t("actions.delete")}
                 </Button>
               </div>
             )}
@@ -356,10 +431,17 @@ function FeedsSettings({
             size="sm"
             className="rounded-md px-4 h-8 text-xs font-medium border-muted-foreground/20 hover:bg-muted"
             onClick={onRefreshAll}
-            disabled={refreshingAll || feeds.length === 0 || isBulkRefreshing || isBulkDeleting}
+            disabled={
+              refreshingAll ||
+              feeds.length === 0 ||
+              isBulkRefreshing ||
+              isBulkDeleting
+            }
           >
-            <RefreshCwIcon className={`mr-2 size-3 ${refreshingAll ? "animate-spin" : ""}`} />
-            Refresh All
+            <RefreshCwIcon
+              className={`mr-2 size-3 ${refreshingAll ? "animate-spin" : ""}`}
+            />
+            {t("actions.refresh_all")}
           </Button>
         </div>
 
@@ -369,8 +451,12 @@ function FeedsSettings({
             <div className="rounded-full bg-muted p-4 mb-4">
               <RssIcon className="size-6 text-muted-foreground/60" />
             </div>
-            <p className="font-medium text-muted-foreground">No subscriptions yet</p>
-            <p className="text-xs text-muted-foreground/60 mt-1">Add a feed to get started</p>
+            <p className="font-medium text-muted-foreground">
+              {t("feeds.empty.title")}
+            </p>
+            <p className="text-xs text-muted-foreground/60 mt-1">
+              {t("feeds.empty.subtitle")}
+            </p>
           </div>
         ) : (
           <div className="rounded-xl border border-muted/40 overflow-hidden bg-card shadow-sm">
@@ -379,21 +465,29 @@ function FeedsSettings({
                 <TableRow className="hover:bg-transparent border-none">
                   <TableHead className="w-[48px] pl-4">
                     <Checkbox
-                      checked={selectedIds.size === feeds.length && feeds.length > 0}
+                      checked={
+                        selectedIds.size === feeds.length && feeds.length > 0
+                      }
                       onCheckedChange={toggleSelectAll}
                       className="rounded-[4px]"
                     />
                   </TableHead>
-                  <TableHead className="text-xs font-bold uppercase tracking-wider text-muted-foreground/60">Source</TableHead>
-                  <TableHead className="text-xs font-bold uppercase tracking-wider text-muted-foreground/60">Folder</TableHead>
-                  <TableHead className="w-[100px] text-center text-xs font-bold uppercase tracking-wider text-muted-foreground/60">Unread</TableHead>
+                  <TableHead className="text-xs font-bold uppercase tracking-wider text-muted-foreground/60">
+                    {t("table.source")}
+                  </TableHead>
+                  <TableHead className="text-xs font-bold uppercase tracking-wider text-muted-foreground/60">
+                    {t("table.folder")}
+                  </TableHead>
+                  <TableHead className="w-[100px] text-center text-xs font-bold uppercase tracking-wider text-muted-foreground/60">
+                    {t("table.unread")}
+                  </TableHead>
                   <TableHead className="w-[48px] pr-4"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {feeds.map((feed) => (
-                  <TableRow 
-                    key={feed.id} 
+                  <TableRow
+                    key={feed.id}
                     className={`border-muted/40 hover:bg-muted/20 transition-colors ${selectedIds.has(feed.id) ? "bg-muted/40" : ""}`}
                   >
                     <TableCell className="pl-4">
@@ -417,7 +511,9 @@ function FeedsSettings({
                           </div>
                         )}
                         <div className="min-w-0">
-                          <div className="font-semibold text-[13px] truncate max-w-[220px]">{feed.title}</div>
+                          <div className="font-semibold text-[13px] truncate max-w-[220px]">
+                            {feed.title}
+                          </div>
                           <div className="text-[11px] text-muted-foreground truncate max-w-[220px] opacity-70">
                             {new URL(feed.url).hostname}
                           </div>
@@ -427,15 +523,26 @@ function FeedsSettings({
                     <TableCell>
                       <Select
                         value={feed.folderId || "none"}
-                        onValueChange={(val) => onMoveFeedToFolder(feed.id, val === "none" ? null : val)}
+                        onValueChange={(val) =>
+                          onMoveFeedToFolder(
+                            feed.id,
+                            val === "none" ? null : val,
+                          )
+                        }
                       >
                         <SelectTrigger className="h-7 w-[120px] text-[11px] bg-transparent border-none hover:bg-muted/50 px-2 focus:ring-0">
-                          <SelectValue placeholder="No Folder" />
+                          <SelectValue placeholder={t("folders.none")} />
                         </SelectTrigger>
                         <SelectContent className="rounded-lg shadow-xl border-muted/40">
-                          <SelectItem value="none" className="text-[11px]">No Folder</SelectItem>
+                          <SelectItem value="none" className="text-[11px]">
+                            {t("folders.none")}
+                          </SelectItem>
                           {folders.map((folder) => (
-                            <SelectItem key={folder.id} value={folder.id} className="text-[11px]">
+                            <SelectItem
+                              key={folder.id}
+                              value={folder.id}
+                              className="text-[11px]"
+                            >
                               {folder.name}
                             </SelectItem>
                           ))}
@@ -448,34 +555,48 @@ function FeedsSettings({
                           {feed._count.articles}
                         </span>
                       ) : (
-                        <span className="text-[11px] text-muted-foreground opacity-40">0</span>
+                        <span className="text-[11px] text-muted-foreground opacity-40">
+                          0
+                        </span>
                       )}
                     </TableCell>
                     <TableCell className="pr-4">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="size-8 rounded-md hover:bg-muted/50">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-8 rounded-md hover:bg-muted/50"
+                          >
                             <MoreHorizontalIcon className="size-4 text-muted-foreground" />
                           </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-40 rounded-lg shadow-xl border-muted/40 p-1">
+                        <DropdownMenuContent
+                          align="end"
+                          className="w-40 rounded-lg shadow-xl border-muted/40 p-1"
+                        >
                           <DropdownMenuItem
                             onClick={() => onRefreshFeed(feed.id)}
                             disabled={refreshingFeedId === feed.id}
                             className="rounded-md text-xs"
                           >
-                            <RefreshCwIcon className={`mr-2 size-3.5 ${refreshingFeedId === feed.id ? "animate-spin" : ""}`} />
-                            Refresh
+                            <RefreshCwIcon
+                              className={`mr-2 size-3.5 ${refreshingFeedId === feed.id ? "animate-spin" : ""}`}
+                            />
+                            {t("actions.refresh")}
                           </DropdownMenuItem>
                           {feed.siteUrl && (
-                            <DropdownMenuItem asChild className="rounded-md text-xs">
+                            <DropdownMenuItem
+                              asChild
+                              className="rounded-md text-xs"
+                            >
                               <a
                                 href={feed.siteUrl}
                                 target="_blank"
                                 rel="noopener noreferrer"
                               >
                                 <ExternalLinkIcon className="mr-2 size-3.5" />
-                                Visit Site
+                                {t("actions.visit_site")}
                               </a>
                             </DropdownMenuItem>
                           )}
@@ -485,7 +606,7 @@ function FeedsSettings({
                             className="text-destructive focus:text-destructive focus:bg-destructive/10 rounded-md text-xs"
                           >
                             <Trash2Icon className="mr-2 size-3.5" />
-                            Delete
+                            {t("actions.delete")}
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -516,6 +637,7 @@ function FoldersSettings({
   onDeleteFolder,
   onRenameFolder,
 }: FoldersSettingsProps) {
+  const { t } = useTranslation();
   const [newFolderName, setNewFolderName] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
@@ -554,7 +676,7 @@ function FoldersSettings({
   };
 
   const handleDeleteFolder = async (folderId: string) => {
-    if (!confirm("Are you sure you want to delete this folder? Feeds in this folder will be moved to 'No Folder'.")) return;
+    if (!confirm(t("folders.delete_confirm"))) return;
     await onDeleteFolder(folderId);
   };
 
@@ -578,11 +700,18 @@ function FoldersSettings({
 
   const handleBulkDelete = async () => {
     if (selectedIds.size === 0) return;
-    if (!confirm(`Are you sure you want to delete ${selectedIds.size} folders? Feeds in these folders will be moved to 'No Folder'.`)) return;
+    if (
+      !confirm(
+        t("folders.delete_selected_confirm", { count: selectedIds.size }),
+      )
+    )
+      return;
 
     setIsBulkDeleting(true);
     try {
-      await Promise.all(Array.from(selectedIds).map((id) => onDeleteFolder(id)));
+      await Promise.all(
+        Array.from(selectedIds).map((id) => onDeleteFolder(id)),
+      );
       setSelectedIds(new Set());
     } finally {
       setIsBulkDeleting(false);
@@ -592,9 +721,11 @@ function FoldersSettings({
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div>
-        <h3 className="text-xl font-bold tracking-tight">Folders</h3>
+        <h3 className="text-xl font-bold tracking-tight">
+          {t("folders.title")}
+        </h3>
         <p className="text-xs text-muted-foreground mt-0.5">
-          Organize your reading by grouping similar feeds together.
+          {t("folders.description")}
         </p>
       </div>
 
@@ -604,17 +735,19 @@ function FoldersSettings({
           <form onSubmit={handleAddFolder} className="flex flex-1 gap-2">
             <div className="relative flex-1 max-w-[320px]">
               <Input
-                placeholder="New folder name..."
+                placeholder={t("folders.new_folder_placeholder")}
                 value={newFolderName}
                 onChange={(e) => setNewFolderName(e.target.value)}
                 className="rounded-lg pl-4 pr-10 h-9 border-muted-foreground/20 bg-muted/20 focus-visible:ring-primary/20"
               />
-              <Button 
-                type="submit" 
-                size="icon" 
-                variant="ghost" 
+              <Button
+                type="submit"
+                size="icon"
+                variant="ghost"
                 className="absolute right-1 top-1 size-7 rounded-md text-primary hover:bg-primary/10"
-                disabled={isSubmitting || !newFolderName.trim() || isBulkDeleting}
+                disabled={
+                  isSubmitting || !newFolderName.trim() || isBulkDeleting
+                }
               >
                 <PlusIcon className="size-4" />
               </Button>
@@ -624,7 +757,7 @@ function FoldersSettings({
           {selectedIds.size > 0 && (
             <div className="flex items-center gap-2 animate-in slide-in-from-right-2 duration-300">
               <span className="text-[11px] font-medium text-muted-foreground mr-2 uppercase tracking-wider">
-                {selectedIds.size} selected
+                {t("folders.selected", { count: selectedIds.size })}
               </span>
               <Button
                 variant="ghost"
@@ -634,7 +767,7 @@ function FoldersSettings({
                 disabled={isBulkDeleting || isSubmitting}
               >
                 <Trash2Icon className="mr-1.5 size-3" />
-                Delete Selected
+                {t("actions.delete_selected")}
               </Button>
             </div>
           )}
@@ -647,14 +780,22 @@ function FoldersSettings({
               <TableRow className="hover:bg-transparent border-none">
                 <TableHead className="w-[48px] pl-4">
                   <Checkbox
-                    checked={selectedIds.size === folders.length && folders.length > 0}
+                    checked={
+                      selectedIds.size === folders.length && folders.length > 0
+                    }
                     onCheckedChange={toggleSelectAll}
                     className="rounded-[4px]"
                   />
                 </TableHead>
-                <TableHead className="text-xs font-bold uppercase tracking-wider text-muted-foreground/60">Folder Name</TableHead>
-                <TableHead className="w-[100px] text-center text-xs font-bold uppercase tracking-wider text-muted-foreground/60">Feeds</TableHead>
-                <TableHead className="w-[100px] pr-4 text-right text-xs font-bold uppercase tracking-wider text-muted-foreground/60">Actions</TableHead>
+                <TableHead className="text-xs font-bold uppercase tracking-wider text-muted-foreground/60">
+                  {t("table.folder_name")}
+                </TableHead>
+                <TableHead className="w-[100px] text-center text-xs font-bold uppercase tracking-wider text-muted-foreground/60">
+                  {t("table.feeds")}
+                </TableHead>
+                <TableHead className="w-[100px] pr-4 text-right text-xs font-bold uppercase tracking-wider text-muted-foreground/60">
+                  {t("table.actions")}
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -663,14 +804,16 @@ function FoldersSettings({
                   <TableCell colSpan={4} className="h-32 text-center">
                     <div className="flex flex-col items-center justify-center py-8">
                       <FolderIcon className="size-8 text-muted-foreground/20 mb-2" />
-                      <p className="text-sm text-muted-foreground">No folders created yet</p>
+                      <p className="text-sm text-muted-foreground">
+                        {t("folders.empty.title")}
+                      </p>
                     </div>
                   </TableCell>
                 </TableRow>
               ) : (
                 folders.map((folder) => (
-                  <TableRow 
-                    key={folder.id} 
+                  <TableRow
+                    key={folder.id}
                     className={`border-muted/40 hover:bg-muted/20 transition-colors ${selectedIds.has(folder.id) ? "bg-muted/40" : ""}`}
                   >
                     <TableCell className="pl-4">
@@ -693,10 +836,20 @@ function FoldersSettings({
                               if (e.key === "Escape") setEditingId(null);
                             }}
                           />
-                          <Button size="sm" className="h-8 rounded-md px-3" onClick={handleSaveEdit} disabled={isSubmitting}>
-                            Save
+                          <Button
+                            size="sm"
+                            className="h-8 rounded-md px-3"
+                            onClick={handleSaveEdit}
+                            disabled={isSubmitting}
+                          >
+                            {t("actions.save")}
                           </Button>
-                          <Button size="sm" variant="ghost" className="h-8 rounded-md" onClick={() => setEditingId(null)}>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-8 rounded-md"
+                            onClick={() => setEditingId(null)}
+                          >
                             <Trash2Icon className="size-3.5" />
                           </Button>
                         </div>
@@ -705,13 +858,15 @@ function FoldersSettings({
                           <div className="size-7 rounded-md bg-muted flex items-center justify-center text-muted-foreground/60">
                             <FolderIcon className="size-3.5" />
                           </div>
-                          <span className="font-semibold text-[13px]">{folder.name}</span>
+                          <span className="font-semibold text-[13px]">
+                            {folder.name}
+                          </span>
                         </div>
                       )}
                     </TableCell>
                     <TableCell className="text-center">
                       <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-full bg-muted text-muted-foreground text-[10px] font-bold">
-                        {feeds.filter(f => f.folderId === folder.id).length}
+                        {feeds.filter((f) => f.folderId === folder.id).length}
                       </span>
                     </TableCell>
                     <TableCell className="pr-4 text-right">
@@ -749,13 +904,36 @@ function FoldersSettings({
 
 function GeneralSettings() {
   const { theme, setTheme } = useTheme();
+  const { t } = useTranslation();
+  const [lang, setLang] = useState<string>(() => {
+    if (typeof window === "undefined") return "auto";
+    const saved = localStorage.getItem("lang");
+    return saved || "auto";
+  });
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    if (!lang || lang === "auto") {
+      localStorage.removeItem("lang");
+      const browser = navigator.language || "en";
+      const base = browser.split("-")[0];
+      const detected = base === "zh" ? "zh" : "en";
+      import("@/i18n").then((i) => i.default.changeLanguage(detected));
+    } else {
+      localStorage.setItem("lang", lang);
+      import("@/i18n").then((i) => i.default.changeLanguage(lang));
+    }
+  }, [lang]);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div>
-        <h3 className="text-xl font-bold tracking-tight">General</h3>
+        <h3 className="text-xl font-bold tracking-tight">
+          {t("general.title")}
+        </h3>
         <p className="text-xs text-muted-foreground mt-0.5">
-          Customize your experience and appearance.
+          {t("general.description")}
         </p>
       </div>
 
@@ -763,17 +941,31 @@ function GeneralSettings() {
         <div className="rounded-xl border border-muted/40 p-4 bg-card transition-all hover:border-muted-foreground/20">
           <div className="flex items-center justify-between">
             <div>
-              <h4 className="font-semibold text-sm mb-1">Theme</h4>
+              <h4 className="font-semibold text-sm mb-1">
+                {t("general.theme")}
+              </h4>
               <p className="text-[11px] text-muted-foreground">
-                Select your preferred interface color scheme.
+                {t("general.theme_desc")}
               </p>
             </div>
 
             <div className="flex items-center gap-2 bg-muted/30 rounded-lg p-1">
               {[
-                { id: "system", label: "System", icon: <MonitorIcon className="size-4" /> },
-                { id: "light", label: "Light", icon: <SunIcon className="size-4" /> },
-                { id: "dark", label: "Dark", icon: <MoonIcon className="size-4" /> },
+                {
+                  id: "system",
+                  label: t("general.theme_system"),
+                  icon: <MonitorIcon className="size-4" />,
+                },
+                {
+                  id: "light",
+                  label: t("general.theme_light"),
+                  icon: <SunIcon className="size-4" />,
+                },
+                {
+                  id: "dark",
+                  label: t("general.theme_dark"),
+                  icon: <MoonIcon className="size-4" />,
+                },
               ].map((t) => (
                 <button
                   key={t.id}
@@ -791,6 +983,34 @@ function GeneralSettings() {
             </div>
           </div>
         </div>
+
+        <div className="rounded-xl border border-muted/40 p-4 bg-card transition-all hover:border-muted-foreground/20">
+          <div className="flex items-center justify-between">
+            <div>
+              <h4 className="font-semibold text-sm mb-1">
+                {t("general.language_title")}
+              </h4>
+              <p className="text-[11px] text-muted-foreground">
+                {t("general.language_desc")}
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Select onValueChange={(v) => setLang(v)} value={lang}>
+                <SelectTrigger className="w-44">
+                  <SelectValue placeholder={t("general.language_auto")} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="auto">
+                    {t("general.language_auto")}
+                  </SelectItem>
+                  <SelectItem value="zh">{t("general.language_zh")}</SelectItem>
+                  <SelectItem value="en">{t("general.language_en")}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -802,48 +1022,63 @@ interface DataSettingsProps {
   setIsImporting: (value: boolean) => void;
 }
 
-function DataSettings({ onDataChange, isImporting, setIsImporting }: DataSettingsProps) {
+function DataSettings({
+  onDataChange,
+  isImporting,
+  setIsImporting,
+}: DataSettingsProps) {
+  const { t } = useTranslation();
   const [markingAllRead, setMarkingAllRead] = useState(false);
   const [cleaning, setCleaning] = useState(false);
   const [clearingIcons, setClearingIcons] = useState(false);
-  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [message, setMessage] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
   const [importTask, setImportTask] = useState<Task | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const startPolling = useCallback((taskId: string) => {
-    // Clear any existing polling
-    if (pollIntervalRef.current) {
-      clearInterval(pollIntervalRef.current);
-    }
+  const startPolling = useCallback(
+    (taskId: string) => {
+      // Clear any existing polling
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+      }
 
-    const poll = async () => {
-      try {
-        const res = await fetch(`/api/tasks/${taskId}`);
-        if (res.ok) {
-          const task: Task = await res.json();
-          setImportTask(task);
+      const poll = async () => {
+        try {
+          const res = await fetch(`/api/tasks/${taskId}`);
+          if (res.ok) {
+            const task: Task = await res.json();
+            setImportTask(task);
 
-          if (task.status === "completed" || task.status === "failed" || task.status === "cancelled") {
-            if (pollIntervalRef.current) {
-              clearInterval(pollIntervalRef.current);
-              pollIntervalRef.current = null;
-            }
-            setIsImporting(false);
+            if (
+              task.status === "completed" ||
+              task.status === "failed" ||
+              task.status === "cancelled"
+            ) {
+              if (pollIntervalRef.current) {
+                clearInterval(pollIntervalRef.current);
+                pollIntervalRef.current = null;
+              }
+              setIsImporting(false);
 
-            if (task.status === "completed") {
-              onDataChange?.();
+              if (task.status === "completed") {
+                onDataChange?.();
+              }
             }
           }
+        } catch (err) {
+          console.error("Failed to poll task:", err);
         }
-      } catch (err) {
-        console.error("Failed to poll task:", err);
-      }
-    };
+      };
 
-    poll();
-    pollIntervalRef.current = setInterval(poll, 500);
-  }, [setIsImporting, onDataChange]);
+      poll();
+      pollIntervalRef.current = setInterval(poll, 500);
+    },
+    [setIsImporting, onDataChange],
+  );
 
   // Check for existing running tasks on mount
   useEffect(() => {
@@ -853,7 +1088,9 @@ function DataSettings({ onDataChange, isImporting, setIsImporting }: DataSetting
         if (res.ok) {
           const tasks: Task[] = await res.json();
           const runningTask = tasks.find(
-            (t) => t.type === "opml-import" && (t.status === "running" || t.status === "pending")
+            (t) =>
+              t.type === "opml-import" &&
+              (t.status === "running" || t.status === "pending"),
           );
           if (runningTask) {
             setImportTask(runningTask);
@@ -878,43 +1115,46 @@ function DataSettings({ onDataChange, isImporting, setIsImporting }: DataSetting
     window.open("/api/opml", "_blank");
   };
 
-  const handleImportOpml = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const handleImportOpml = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
 
-    setIsImporting(true);
-    setMessage(null);
-    setImportTask(null);
+      setIsImporting(true);
+      setMessage(null);
+      setImportTask(null);
 
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
 
-      const res = await fetch("/api/opml/import", {
-        method: "POST",
-        body: formData,
-      });
+        const res = await fetch("/api/opml/import", {
+          method: "POST",
+          body: formData,
+        });
 
-      const data = await res.json();
+        const data = await res.json();
 
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to import");
+        if (!res.ok) {
+          throw new Error(data.error || "Failed to import");
+        }
+
+        // Start polling for progress
+        startPolling(data.taskId);
+      } catch (err) {
+        setMessage({
+          type: "error",
+          text: err instanceof Error ? err.message : "Failed to import OPML",
+        });
+        setIsImporting(false);
+      } finally {
+        if (fileInputRef.current) {
+          fileInputRef.current.value = "";
+        }
       }
-
-      // Start polling for progress
-      startPolling(data.taskId);
-    } catch (err) {
-      setMessage({
-        type: "error",
-        text: err instanceof Error ? err.message : "Failed to import OPML",
-      });
-      setIsImporting(false);
-    } finally {
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
-    }
-  }, [setIsImporting, startPolling]);
+    },
+    [setIsImporting, startPolling],
+  );
 
   const handleCancelImport = async () => {
     if (!importTask) return;
@@ -944,13 +1184,13 @@ function DataSettings({ onDataChange, isImporting, setIsImporting }: DataSetting
       const data = await res.json();
       setMessage({
         type: "success",
-        text: `Marked ${data.count} articles as read`,
+        text: t("data.marked_read", { count: data.count }),
       });
       onDataChange?.();
     } catch {
       setMessage({
         type: "error",
-        text: "Failed to mark articles as read",
+        text: t("data.failed_mark_read"),
       });
     } finally {
       setMarkingAllRead(false);
@@ -971,13 +1211,13 @@ function DataSettings({ onDataChange, isImporting, setIsImporting }: DataSetting
       const data = await res.json();
       setMessage({
         type: "success",
-        text: `Deleted ${data.count} read articles`,
+        text: t("data.cleaned_up", { count: data.count }),
       });
       onDataChange?.();
     } catch {
       setMessage({
         type: "error",
-        text: "Failed to clean up articles",
+        text: t("data.failed_cleanup"),
       });
     } finally {
       setCleaning(false);
@@ -997,7 +1237,13 @@ function DataSettings({ onDataChange, isImporting, setIsImporting }: DataSetting
         const data = await res.json();
         setMessage({
           type: "success",
-          text: `Icon cache cleared and refreshed in ${data.duration}: ${data.successCount} succeeded, ${data.failCount} failed out of ${data.total} feeds (${data.uniqueDomains} unique domains).`,
+          text: t("data.icons_cleared_summary", {
+            duration: data.duration,
+            success: data.successCount,
+            fail: data.failCount,
+            total: data.total,
+            uniqueDomains: data.uniqueDomains,
+          }),
         });
         onDataChange?.();
       } else {
@@ -1006,7 +1252,7 @@ function DataSettings({ onDataChange, isImporting, setIsImporting }: DataSetting
     } catch {
       setMessage({
         type: "error",
-        text: "Failed to clear icon cache",
+        text: t("data.failed_clear_icons"),
       });
     } finally {
       setClearingIcons(false);
@@ -1016,9 +1262,9 @@ function DataSettings({ onDataChange, isImporting, setIsImporting }: DataSetting
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div>
-        <h3 className="text-xl font-bold tracking-tight">Data Management</h3>
+        <h3 className="text-xl font-bold tracking-tight">{t("data.title")}</h3>
         <p className="text-xs text-muted-foreground mt-0.5">
-          Import, export, and manage your local reading database.
+          {t("data.description")}
         </p>
       </div>
 
@@ -1031,7 +1277,11 @@ function DataSettings({ onDataChange, isImporting, setIsImporting }: DataSetting
           }`}
         >
           <div className="flex items-center gap-2">
-            {message.type === "success" ? <CheckCircleIcon className="size-4" /> : <AlertCircleIcon className="size-4" />}
+            {message.type === "success" ? (
+              <CheckCircleIcon className="size-4" />
+            ) : (
+              <AlertCircleIcon className="size-4" />
+            )}
             {message.text}
           </div>
         </div>
@@ -1042,56 +1292,65 @@ function DataSettings({ onDataChange, isImporting, setIsImporting }: DataSetting
         <div className="rounded-xl border border-muted/40 p-4 bg-card transition-all hover:border-muted-foreground/20">
           <div className="flex items-start justify-between">
             <div className="space-y-1">
-              <h4 className="font-semibold text-sm">OPML Subscriptions</h4>
+              <h4 className="font-semibold text-sm">{t("data.opml_title")}</h4>
               <p className="text-[11px] text-muted-foreground">
-                Transfer your subscriptions to or from other RSS readers.
+                {t("data.opml_desc")}
               </p>
             </div>
           </div>
 
           {/* Import Progress */}
-          {importTask && (importTask.status === "running" || importTask.status === "pending") && (
-            <div className="mt-4 space-y-3 p-3 rounded-lg bg-muted/30 border border-muted/50">
-              <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider">
-                <div className="flex items-center gap-2 text-primary">
-                  <LoaderIcon className="size-3 animate-spin" />
-                  <span>Importing...</span>
+          {importTask &&
+            (importTask.status === "running" ||
+              importTask.status === "pending") && (
+              <div className="mt-4 space-y-3 p-3 rounded-lg bg-muted/30 border border-muted/50">
+                <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider">
+                  <div className="flex items-center gap-2 text-primary">
+                    <LoaderIcon className="size-3 animate-spin" />
+                    <span>{t("data.importing")}</span>
+                  </div>
+                  <span className="text-muted-foreground">
+                    {importTask.progress.current} / {importTask.progress.total}
+                  </span>
                 </div>
-                <span className="text-muted-foreground">
-                  {importTask.progress.current} / {importTask.progress.total}
-                </span>
+                <Progress
+                  value={
+                    importTask.progress.total > 0
+                      ? (importTask.progress.current /
+                          importTask.progress.total) *
+                        100
+                      : 0
+                  }
+                  className="h-1.5 bg-muted"
+                />
+                {importTask.progress.message && (
+                  <div className="text-[11px] text-muted-foreground truncate italic opacity-70">
+                    {importTask.progress.message}
+                  </div>
+                )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full h-8 text-xs text-destructive hover:bg-destructive/10 rounded-md mt-1"
+                  onClick={handleCancelImport}
+                >
+                  <StopCircleIcon className="mr-2 size-3.5" />
+                  {t("actions.cancel_import")}
+                </Button>
               </div>
-              <Progress
-                value={
-                  importTask.progress.total > 0
-                    ? (importTask.progress.current / importTask.progress.total) * 100
-                    : 0
-                }
-                className="h-1.5 bg-muted"
-              />
-              {importTask.progress.message && (
-                <div className="text-[11px] text-muted-foreground truncate italic opacity-70">
-                  {importTask.progress.message}
-                </div>
-              )}
-              <Button
-                variant="ghost"
-                size="sm"
-                className="w-full h-8 text-xs text-destructive hover:bg-destructive/10 rounded-md mt-1"
-                onClick={handleCancelImport}
-              >
-                <StopCircleIcon className="mr-2 size-3.5" />
-                Cancel Import
-              </Button>
-            </div>
-          )}
+            )}
 
           {/* Buttons */}
           {!isImporting && (
             <div className="mt-4 flex gap-3">
-              <Button variant="outline" size="sm" onClick={handleExportOpml} className="rounded-md h-8 px-3 text-xs font-semibold">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExportOpml}
+                className="rounded-md h-8 px-3 text-xs font-semibold"
+              >
                 <DownloadIcon className="mr-2 size-3.5" />
-                Export
+                {t("actions.export")}
               </Button>
               <Button
                 variant="outline"
@@ -1100,7 +1359,7 @@ function DataSettings({ onDataChange, isImporting, setIsImporting }: DataSetting
                 className="rounded-md h-8 px-3 text-xs font-semibold"
               >
                 <UploadIcon className="mr-2 size-3.5" />
-                Import
+                {t("actions.import")}
               </Button>
               <input
                 ref={fileInputRef}
@@ -1117,9 +1376,11 @@ function DataSettings({ onDataChange, isImporting, setIsImporting }: DataSetting
         <div className="rounded-xl border border-muted/40 p-4 bg-card transition-all hover:border-muted-foreground/20">
           <div className="flex items-center justify-between">
             <div className="space-y-1">
-              <h4 className="font-semibold text-sm">Mark All as Read</h4>
+              <h4 className="font-semibold text-sm">
+                {t("feeds.mark_all_title")}
+              </h4>
               <p className="text-[11px] text-muted-foreground">
-                Set all current articles to read status.
+                {t("feeds.mark_all_desc")}
               </p>
             </div>
             <Button
@@ -1134,7 +1395,7 @@ function DataSettings({ onDataChange, isImporting, setIsImporting }: DataSetting
               ) : (
                 <CheckCircleIcon className="mr-2 size-3.5" />
               )}
-              Mark All Read
+              {t("feeds.mark_all_button")}
             </Button>
           </div>
         </div>
@@ -1142,9 +1403,11 @@ function DataSettings({ onDataChange, isImporting, setIsImporting }: DataSetting
         {/* Cleanup */}
         <div className="rounded-xl border border-muted/40 p-4 bg-card transition-all hover:border-muted-foreground/20">
           <div className="space-y-1 mb-4">
-            <h4 className="font-semibold text-sm">Clean Up</h4>
+            <h4 className="font-semibold text-sm">
+              {t("feeds.cleanup_title")}
+            </h4>
             <p className="text-[11px] text-muted-foreground">
-              Remove old read articles to keep your database fast.
+              {t("feeds.cleanup_desc")}
             </p>
           </div>
           <div className="flex gap-3">
@@ -1156,7 +1419,7 @@ function DataSettings({ onDataChange, isImporting, setIsImporting }: DataSetting
               className="rounded-md h-8 px-3 text-xs font-semibold hover:bg-muted"
             >
               <Trash2Icon className="mr-2 size-3.5" />
-              Older than 7 days
+              {t("feeds.cleanup_7_days")}
             </Button>
             <Button
               variant="ghost"
@@ -1166,7 +1429,7 @@ function DataSettings({ onDataChange, isImporting, setIsImporting }: DataSetting
               className="rounded-md h-8 px-3 text-xs font-semibold hover:bg-muted"
             >
               <Trash2Icon className="mr-2 size-3.5" />
-              Older than 30 days
+              {t("feeds.cleanup_30_days")}
             </Button>
           </div>
         </div>
@@ -1175,9 +1438,11 @@ function DataSettings({ onDataChange, isImporting, setIsImporting }: DataSetting
         <div className="rounded-xl border border-muted/40 p-4 bg-card transition-all hover:border-muted-foreground/20">
           <div className="flex items-center justify-between">
             <div className="space-y-1">
-              <h4 className="font-semibold text-sm">Clear Icon Cache</h4>
+              <h4 className="font-semibold text-sm">
+                {t("data.clear_icons_title")}
+              </h4>
               <p className="text-[11px] text-muted-foreground">
-                Force re-fetch all feed icons. Useful if icons are broken or outdated.
+                {t("data.clear_icons_desc")}
               </p>
             </div>
             <Button
@@ -1192,7 +1457,7 @@ function DataSettings({ onDataChange, isImporting, setIsImporting }: DataSetting
               ) : (
                 <Trash2Icon className="mr-2 size-3.5" />
               )}
-              Clear Cache
+              {t("actions.clear_cache")}
             </Button>
           </div>
         </div>
@@ -1201,21 +1466,30 @@ function DataSettings({ onDataChange, isImporting, setIsImporting }: DataSetting
   );
 }
 
-const DEFAULT_USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+const DEFAULT_USER_AGENT =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 const DEFAULT_REFRESH_INTERVAL = 15;
 
 function DebugSettings() {
+  const { t } = useTranslation();
   const [userAgent, setUserAgent] = useState("");
   const [savedUserAgent, setSavedUserAgent] = useState("");
-  const [refreshInterval, setRefreshInterval] = useState(DEFAULT_REFRESH_INTERVAL.toString());
-  const [savedRefreshInterval, setSavedRefreshInterval] = useState(DEFAULT_REFRESH_INTERVAL.toString());
+  const [refreshInterval, setRefreshInterval] = useState(
+    DEFAULT_REFRESH_INTERVAL.toString(),
+  );
+  const [savedRefreshInterval, setSavedRefreshInterval] = useState(
+    DEFAULT_REFRESH_INTERVAL.toString(),
+  );
   const [email, setEmail] = useState("");
   const [savedEmail, setSavedEmail] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [clearingCache, setClearingCache] = useState(false);
   const [clearingIcons, setClearingIcons] = useState(false);
-  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [message, setMessage] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
 
   useEffect(() => {
     const fetchSettings = async () => {
@@ -1223,7 +1497,8 @@ function DebugSettings() {
         const res = await fetch("/api/settings");
         const settings = await res.json();
         const ua = settings.userAgent || "";
-        const interval = settings.refreshInterval || DEFAULT_REFRESH_INTERVAL.toString();
+        const interval =
+          settings.refreshInterval || DEFAULT_REFRESH_INTERVAL.toString();
         const em = settings.email || "";
         setUserAgent(ua);
         setSavedUserAgent(ua);
@@ -1250,7 +1525,8 @@ function DebugSettings() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userAgent: userAgent || "",
-          refreshInterval: refreshInterval || DEFAULT_REFRESH_INTERVAL.toString(),
+          refreshInterval:
+            refreshInterval || DEFAULT_REFRESH_INTERVAL.toString(),
           email: email || "",
         }),
       });
@@ -1266,9 +1542,9 @@ function DebugSettings() {
       // Restart server-side auto refresh with new interval
       await fetch("/api/auto-refresh", { method: "POST" });
 
-      setMessage({ type: "success", text: "Settings saved" });
+      setMessage({ type: "success", text: t("advanced.settings_saved") });
     } catch {
-      setMessage({ type: "error", text: "Failed to save settings" });
+      setMessage({ type: "error", text: t("advanced.failed_save_settings") });
     } finally {
       setSaving(false);
     }
@@ -1312,12 +1588,16 @@ function DebugSettings() {
 
       setMessage({
         type: "success",
-        text: messages.length > 0 ? `Cleared: ${messages.join(", ")}` : "No cache to clear",
+        text:
+          messages.length > 0
+            ? t("advanced.cleared_summary", { items: messages.join(", ") })
+            : t("advanced.no_cache"),
       });
     } catch (err) {
       setMessage({
         type: "error",
-        text: err instanceof Error ? err.message : "Failed to clear cache",
+        text:
+          err instanceof Error ? err.message : t("advanced.failed_clear_cache"),
       });
     } finally {
       setClearingCache(false);
@@ -1337,7 +1617,13 @@ function DebugSettings() {
         const data = await res.json();
         setMessage({
           type: "success",
-          text: `Icon cache cleared and refreshed in ${data.duration}: ${data.successCount} succeeded, ${data.failCount} failed out of ${data.total} feeds (${data.uniqueDomains} unique domains).`,
+          text: t("data.icons_cleared_summary", {
+            duration: data.duration,
+            success: data.successCount,
+            fail: data.failCount,
+            total: data.total,
+            uniqueDomains: data.uniqueDomains,
+          }),
         });
       } else {
         throw new Error("Failed to clear icons");
@@ -1345,21 +1631,26 @@ function DebugSettings() {
     } catch {
       setMessage({
         type: "error",
-        text: "Failed to clear icon cache",
+        text: t("data.failed_clear_icons"),
       });
     } finally {
       setClearingIcons(false);
     }
   };
 
-  const hasChanges = userAgent !== savedUserAgent || refreshInterval !== savedRefreshInterval || email !== savedEmail;
+  const hasChanges =
+    userAgent !== savedUserAgent ||
+    refreshInterval !== savedRefreshInterval ||
+    email !== savedEmail;
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div>
-        <h3 className="text-xl font-bold tracking-tight">Advanced</h3>
+        <h3 className="text-xl font-bold tracking-tight">
+          {t("advanced.title")}
+        </h3>
         <p className="text-xs text-muted-foreground mt-0.5">
-          Technical settings for power users and debugging.
+          {t("advanced.description")}
         </p>
       </div>
 
@@ -1378,9 +1669,11 @@ function DebugSettings() {
       <div className="space-y-6">
         {/* Refresh Interval */}
         <div className="rounded-xl border border-muted/40 p-4 bg-card transition-all hover:border-muted-foreground/20">
-          <h4 className="font-semibold text-sm mb-1">Auto Refresh Interval</h4>
+          <h4 className="font-semibold text-sm mb-1">
+            {t("advanced.auto_refresh_title")}
+          </h4>
           <p className="text-[11px] text-muted-foreground mb-4">
-            Background sync frequency (in minutes).
+            {t("advanced.auto_refresh_desc")}
           </p>
 
           {loading ? (
@@ -1398,7 +1691,9 @@ function DebugSettings() {
                   onChange={(e) => setRefreshInterval(e.target.value)}
                   className="w-24 rounded-md border-muted-foreground/20"
                 />
-                <span className="text-sm font-medium text-muted-foreground">minutes</span>
+                <span className="text-sm font-medium text-muted-foreground">
+                  {t("units.minutes")}
+                </span>
               </div>
 
               <div className="flex flex-wrap gap-2">
@@ -1410,7 +1705,11 @@ function DebugSettings() {
                     onClick={() => setRefreshInterval(v)}
                     className="rounded-md h-8 px-4 text-[11px] font-bold"
                   >
-                    {v === "0" ? "Off" : v === "60" ? "1h" : `${v}m`}
+                    {v === "0"
+                      ? t("common.off")
+                      : v === "60"
+                        ? t("common.1h")
+                        : `${v}m`}
                   </Button>
                 ))}
               </div>
@@ -1420,9 +1719,11 @@ function DebugSettings() {
 
         {/* Gravatar Email */}
         <div className="rounded-xl border border-muted/40 p-4 bg-card transition-all hover:border-muted-foreground/20">
-          <h4 className="font-semibold text-sm mb-1">Avatar Service</h4>
+          <h4 className="font-semibold text-sm mb-1">
+            {t("advanced.avatar_service")}
+          </h4>
           <p className="text-[11px] text-muted-foreground mb-4">
-            Your Gravatar email address for the sidebar.
+            {t("advanced.avatar_desc")}
           </p>
 
           {!loading && (
@@ -1430,7 +1731,7 @@ function DebugSettings() {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="your@email.com"
+              placeholder={t("advanced.avatar_placeholder")}
               className="max-w-[320px] rounded-md border-muted-foreground/20"
             />
           )}
@@ -1438,9 +1739,11 @@ function DebugSettings() {
 
         {/* User-Agent */}
         <div className="rounded-xl border border-muted/40 p-4 bg-card transition-all hover:border-muted-foreground/20">
-          <h4 className="font-semibold text-sm mb-1">Network User-Agent</h4>
+          <h4 className="font-semibold text-sm mb-1">
+            {t("advanced.user_agent_title")}
+          </h4>
           <p className="text-[11px] text-muted-foreground mb-4">
-            Custom HTTP header for feed fetching.
+            {t("advanced.user_agent_desc")}
           </p>
 
           {!loading && (
@@ -1448,7 +1751,7 @@ function DebugSettings() {
               <Input
                 value={userAgent}
                 onChange={(e) => setUserAgent(e.target.value)}
-                placeholder="Default agent"
+                placeholder={t("advanced.default_agent_placeholder")}
                 className="font-mono text-[11px] rounded-md border-muted-foreground/20 bg-muted/20"
               />
 
@@ -1459,7 +1762,7 @@ function DebugSettings() {
                   onClick={handleUseDefaultUA}
                   className="rounded-md h-8 text-[11px] font-bold hover:bg-muted"
                 >
-                  Chrome Default
+                  {t("advanced.chrome_default")}
                 </Button>
                 <Button
                   variant="ghost"
@@ -1467,7 +1770,7 @@ function DebugSettings() {
                   onClick={handleResetUA}
                   className="rounded-md h-8 text-[11px] font-bold hover:bg-muted"
                 >
-                  Reset
+                  {t("actions.reset")}
                 </Button>
               </div>
             </div>
@@ -1481,8 +1784,10 @@ function DebugSettings() {
             disabled={saving || !hasChanges}
             className="rounded-md px-6 h-9 font-bold shadow-lg shadow-primary/20"
           >
-            {saving ? <LoaderIcon className="size-4 animate-spin mr-2" /> : null}
-            Save Changes
+            {saving ? (
+              <LoaderIcon className="size-4 animate-spin mr-2" />
+            ) : null}
+            {t("actions.save_changes")}
           </Button>
         </div>
 
@@ -1490,9 +1795,11 @@ function DebugSettings() {
 
         {/* Clear Cache */}
         <div className="rounded-xl border border-destructive/20 p-4 bg-destructive/[0.02]">
-          <h4 className="font-semibold text-sm text-destructive mb-1">Danger Zone</h4>
+          <h4 className="font-semibold text-sm text-destructive mb-1">
+            {t("danger.title")}
+          </h4>
           <p className="text-[11px] text-muted-foreground mb-4">
-            Clear locally cached data. This will not delete your subscriptions.
+            {t("danger.description")}
           </p>
 
           <div className="flex flex-wrap gap-2">
@@ -1503,7 +1810,7 @@ function DebugSettings() {
               disabled={clearingCache || clearingIcons}
               className="rounded-md h-8 text-[11px] font-bold border-destructive/20 hover:bg-destructive/10 hover:text-destructive"
             >
-              RSS Content
+              {t("actions.clear_rss_content")}
             </Button>
             <Button
               variant="outline"
@@ -1512,7 +1819,7 @@ function DebugSettings() {
               disabled={clearingCache || clearingIcons}
               className="rounded-md h-8 text-[11px] font-bold border-destructive/20 hover:bg-destructive/10 hover:text-destructive"
             >
-              Readability
+              {t("actions.clear_readability")}
             </Button>
             <Button
               variant="outline"
@@ -1521,8 +1828,10 @@ function DebugSettings() {
               disabled={clearingCache || clearingIcons}
               className="rounded-md h-8 text-[11px] font-bold border-destructive/20 hover:bg-destructive/10 hover:text-destructive"
             >
-              {clearingIcons && <LoaderIcon className="mr-1.5 size-3 animate-spin" />}
-              Feed Icons
+              {clearingIcons && (
+                <LoaderIcon className="mr-1.5 size-3 animate-spin" />
+              )}
+              {t("actions.clear_feed_icons")}
             </Button>
             <Button
               variant="outline"
@@ -1531,7 +1840,7 @@ function DebugSettings() {
               disabled={clearingCache || clearingIcons}
               className="rounded-md h-8 text-[11px] font-bold bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              Clear All Cache
+              {t("actions.clear_all_cache")}
             </Button>
           </div>
         </div>
@@ -1541,8 +1850,13 @@ function DebugSettings() {
 }
 
 function AISettings() {
-  const [aiProvider, setAiProvider] = useState<"openai" | "anthropic" | "openai-compatible">("openai");
-  const [savedAiProvider, setSavedAiProvider] = useState<"openai" | "anthropic" | "openai-compatible">("openai");
+  const { t } = useTranslation();
+  const [aiProvider, setAiProvider] = useState<
+    "openai" | "anthropic" | "openai-compatible"
+  >("openai");
+  const [savedAiProvider, setSavedAiProvider] = useState<
+    "openai" | "anthropic" | "openai-compatible"
+  >("openai");
   const [aiBaseUrl, setAiBaseUrl] = useState("");
   const [savedAiBaseUrl, setSavedAiBaseUrl] = useState("");
   const [aiApiKey, setAiApiKey] = useState("");
@@ -1559,14 +1873,20 @@ function AISettings() {
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<string | null>(null);
-  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [message, setMessage] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
 
   useEffect(() => {
     const fetchSettings = async () => {
       try {
         const res = await fetch("/api/settings");
         const settings = await res.json();
-        const provider = (settings.aiProvider || "openai") as "openai" | "anthropic" | "openai-compatible";
+        const provider = (settings.aiProvider || "openai") as
+          | "openai"
+          | "anthropic"
+          | "openai-compatible";
         const baseUrl = settings.aiBaseUrl || "";
         const apiKey = settings.aiApiKey || "";
         const model = settings.aiModel || "";
@@ -1629,9 +1949,9 @@ function AISettings() {
       setSavedAiAutoTranslate(aiAutoTranslate);
       setSavedAiQps(aiQps);
 
-      setMessage({ type: "success", text: "AI settings saved successfully" });
+      setMessage({ type: "success", text: t("ai.settings_saved") });
     } catch {
-      setMessage({ type: "error", text: "Failed to save AI settings" });
+      setMessage({ type: "error", text: t("ai.failed_save") });
     } finally {
       setSaving(false);
     }
@@ -1701,9 +2021,9 @@ function AISettings() {
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div>
-        <h3 className="text-xl font-bold tracking-tight">AI Configuration</h3>
+        <h3 className="text-xl font-bold tracking-tight">{t("ai.title")}</h3>
         <p className="text-xs text-muted-foreground mt-0.5">
-          Configure AI provider for intelligent features.
+          {t("ai.description")}
         </p>
       </div>
 
@@ -1716,7 +2036,11 @@ function AISettings() {
           }`}
         >
           <div className="flex items-center gap-2">
-            {message.type === "success" ? <CheckCircleIcon className="size-4" /> : <AlertCircleIcon className="size-4" />}
+            {message.type === "success" ? (
+              <CheckCircleIcon className="size-4" />
+            ) : (
+              <AlertCircleIcon className="size-4" />
+            )}
             {message.text}
           </div>
         </div>
@@ -1725,9 +2049,9 @@ function AISettings() {
       <div className="space-y-4">
         {/* AI Provider */}
         <div className="rounded-xl border border-muted/40 p-4 bg-card transition-all hover:border-muted-foreground/20">
-          <h4 className="font-semibold text-sm mb-1">AI Provider</h4>
+          <h4 className="font-semibold text-sm mb-1">{t("ai.title")}</h4>
           <p className="text-[11px] text-muted-foreground mb-3">
-            Select your preferred AI service provider.
+            {t("ai.provider_desc")}
           </p>
 
           {loading ? (
@@ -1735,14 +2059,27 @@ function AISettings() {
               <LoaderIcon className="size-4 animate-spin text-muted-foreground/30" />
             </div>
           ) : (
-            <Select value={aiProvider} onValueChange={(value) => setAiProvider(value as "openai" | "anthropic" | "openai-compatible")}>
+            <Select
+              value={aiProvider}
+              onValueChange={(value) =>
+                setAiProvider(
+                  value as "openai" | "anthropic" | "openai-compatible",
+                )
+              }
+            >
               <SelectTrigger className="w-full rounded-md border-muted-foreground/20 bg-muted/20">
-                <SelectValue placeholder="Select provider" />
+                <SelectValue placeholder={t("ai.select_provider")} />
               </SelectTrigger>
               <SelectContent className="rounded-lg shadow-xl border-muted/40">
-                <SelectItem value="openai">OpenAI</SelectItem>
-                <SelectItem value="anthropic">Anthropic</SelectItem>
-                <SelectItem value="openai-compatible">OpenAI Compatible</SelectItem>
+                <SelectItem value="openai">
+                  {t("ai.provider_openai")}
+                </SelectItem>
+                <SelectItem value="anthropic">
+                  {t("ai.provider_anthropic")}
+                </SelectItem>
+                <SelectItem value="openai-compatible">
+                  {t("ai.provider_openai_compatible")}
+                </SelectItem>
               </SelectContent>
             </Select>
           )}
@@ -1750,9 +2087,9 @@ function AISettings() {
 
         {/* Base URL */}
         <div className="rounded-xl border border-muted/40 p-4 bg-card transition-all hover:border-muted-foreground/20">
-          <h4 className="font-semibold text-sm mb-1">Base URL</h4>
+          <h4 className="font-semibold text-sm mb-1">{t("ai.base_url")}</h4>
           <p className="text-[11px] text-muted-foreground mb-3">
-            API endpoint URL. Leave empty to use the default provider endpoint.
+            {t("ai.base_url_desc")}
           </p>
 
           {!loading && (
@@ -1764,8 +2101,8 @@ function AISettings() {
                   aiProvider === "openai"
                     ? "https://api.openai.com/v1"
                     : aiProvider === "anthropic"
-                    ? "https://api.anthropic.com/v1"
-                    : "http://localhost:11434/v1"
+                      ? "https://api.anthropic.com/v1"
+                      : "http://localhost:11434/v1"
                 }
                 className="font-mono text-[11px] rounded-md border-muted-foreground/20 bg-muted/20"
               />
@@ -1777,7 +2114,7 @@ function AISettings() {
                   onClick={handleResetBaseUrl}
                   className="rounded-md h-8 text-[11px] font-bold hover:bg-muted"
                 >
-                  Use Default
+                  {t("ai.use_default")}
                 </Button>
                 <Button
                   variant="ghost"
@@ -1785,7 +2122,7 @@ function AISettings() {
                   onClick={() => setAiBaseUrl("")}
                   className="rounded-md h-8 text-[11px] font-bold hover:bg-muted"
                 >
-                  Clear
+                  {t("ai.clear")}
                 </Button>
               </div>
             </div>
@@ -1794,9 +2131,9 @@ function AISettings() {
 
         {/* Model */}
         <div className="rounded-xl border border-muted/40 p-4 bg-card transition-all hover:border-muted-foreground/20">
-          <h4 className="font-semibold text-sm mb-1">Model Name</h4>
+          <h4 className="font-semibold text-sm mb-1">{t("ai.model_name")}</h4>
           <p className="text-[11px] text-muted-foreground mb-3">
-            The AI model to use. Leave empty to use the provider's default model.
+            {t("ai.model_desc")}
           </p>
 
           {!loading && (
@@ -1807,8 +2144,8 @@ function AISettings() {
                 aiProvider === "openai"
                   ? "gpt-4o-mini"
                   : aiProvider === "anthropic"
-                  ? "claude-3-5-haiku-20241022"
-                  : "llama3.2"
+                    ? "claude-3-5-haiku-20241022"
+                    : "llama3.2"
               }
               className="font-mono text-[11px] rounded-md border-muted-foreground/20 bg-muted/20"
             />
@@ -1817,9 +2154,9 @@ function AISettings() {
 
         {/* API Key */}
         <div className="rounded-xl border border-muted/40 p-4 bg-card transition-all hover:border-muted-foreground/20">
-          <h4 className="font-semibold text-sm mb-1">API Key</h4>
+          <h4 className="font-semibold text-sm mb-1">{t("ai.api_key")}</h4>
           <p className="text-[11px] text-muted-foreground mb-3">
-            Your API key for the selected provider. This is stored securely in your local database.
+            {t("ai.api_key_desc")}
           </p>
 
           {!loading && (
@@ -1835,9 +2172,11 @@ function AISettings() {
 
         {/* Output Language */}
         <div className="rounded-xl border border-muted/40 p-4 bg-card transition-all hover:border-muted-foreground/20">
-          <h4 className="font-semibold text-sm mb-1">Output Language</h4>
+          <h4 className="font-semibold text-sm mb-1">
+            {t("ai.output_language")}
+          </h4>
           <p className="text-[11px] text-muted-foreground mb-3">
-            The language AI should use in its responses.
+            {t("ai.output_language_desc")}
           </p>
 
           {loading ? (
@@ -1847,16 +2186,16 @@ function AISettings() {
           ) : (
             <Select value={aiLanguage} onValueChange={setAiLanguage}>
               <SelectTrigger className="w-full rounded-md border-muted-foreground/20 bg-muted/20">
-                <SelectValue placeholder="Select language" />
+                <SelectValue placeholder={t("ai.select_language")} />
               </SelectTrigger>
               <SelectContent className="rounded-lg shadow-xl border-muted/40">
-                <SelectItem value="English">English</SelectItem>
-                <SelectItem value="Chinese">Chinese</SelectItem>
-                <SelectItem value="Japanese">Japanese</SelectItem>
-                <SelectItem value="Korean">Korean</SelectItem>
-                <SelectItem value="French">French</SelectItem>
-                <SelectItem value="German">German</SelectItem>
-                <SelectItem value="Spanish">Spanish</SelectItem>
+                <SelectItem value="English">{t("ai.lang_en")}</SelectItem>
+                <SelectItem value="Chinese">{t("ai.lang_zh")}</SelectItem>
+                <SelectItem value="Japanese">{t("ai.lang_ja")}</SelectItem>
+                <SelectItem value="Korean">{t("ai.lang_ko")}</SelectItem>
+                <SelectItem value="French">{t("ai.lang_fr")}</SelectItem>
+                <SelectItem value="German">{t("ai.lang_de")}</SelectItem>
+                <SelectItem value="Spanish">{t("ai.lang_es")}</SelectItem>
               </SelectContent>
             </Select>
           )}
@@ -1866,9 +2205,11 @@ function AISettings() {
         <div className="rounded-xl border border-muted/40 p-4 bg-card transition-all hover:border-muted-foreground/20">
           <div className="flex items-center justify-between">
             <div className="space-y-1">
-              <h4 className="font-semibold text-sm">Auto Translate</h4>
+              <h4 className="font-semibold text-sm">
+                {t("ai.auto_translate")}
+              </h4>
               <p className="text-[11px] text-muted-foreground">
-                Automatically translate non-target language articles. Only visible content will be translated to save tokens.
+                {t("ai.auto_translate_desc")}
               </p>
             </div>
 
@@ -1894,9 +2235,9 @@ function AISettings() {
 
         {/* Rate Limit (QPS) */}
         <div className="rounded-xl border border-muted/40 p-4 bg-card transition-all hover:border-muted-foreground/20">
-          <h4 className="font-semibold text-sm mb-1">Rate Limit (QPS)</h4>
+          <h4 className="font-semibold text-sm mb-1">{t("ai.rate_limit")}</h4>
           <p className="text-[11px] text-muted-foreground mb-3">
-            Maximum AI requests per second. Lower values prevent API rate limit errors.
+            {t("ai.rate_limit_desc")}
           </p>
 
           {!loading && (
@@ -1911,7 +2252,9 @@ function AISettings() {
                   onChange={(e) => setAiQps(e.target.value)}
                   className="w-24 rounded-md border-muted-foreground/20"
                 />
-                <span className="text-sm font-medium text-muted-foreground">requests/second</span>
+                <span className="text-sm font-medium text-muted-foreground">
+                  {t("ai.requests_per_second")}
+                </span>
               </div>
 
               <div className="flex flex-wrap gap-2">
@@ -1934,9 +2277,11 @@ function AISettings() {
         {/* Test Result */}
         {testResult && (
           <div className="rounded-xl border border-muted/40 p-4 bg-card">
-            <h4 className="font-semibold text-sm mb-1">Test Response</h4>
+            <h4 className="font-semibold text-sm mb-1">
+              {t("ai.test_response")}
+            </h4>
             <p className="text-[11px] text-muted-foreground mb-2">
-              Response from AI (prompt: "RSS is the best!")
+              {t("ai.test_response_desc", { prompt: "RSS is the best!" })}
             </p>
             <div className="p-3 rounded-lg bg-muted/30 text-sm leading-relaxed">
               {testResult}
@@ -1952,16 +2297,20 @@ function AISettings() {
             disabled={testing || !aiApiKey}
             className="rounded-md px-5 h-9 font-bold"
           >
-            {testing ? <LoaderIcon className="size-4 animate-spin mr-2" /> : null}
-            Test Connection
+            {testing ? (
+              <LoaderIcon className="size-4 animate-spin mr-2" />
+            ) : null}
+            {t("actions.test_connection")}
           </Button>
           <Button
             onClick={handleSave}
             disabled={saving || !hasChanges}
             className="rounded-md px-6 h-9 font-bold shadow-lg shadow-primary/20"
           >
-            {saving ? <LoaderIcon className="size-4 animate-spin mr-2" /> : null}
-            Save Configuration
+            {saving ? (
+              <LoaderIcon className="size-4 animate-spin mr-2" />
+            ) : null}
+            {t("actions.save_configuration")}
           </Button>
         </div>
       </div>
@@ -1970,23 +2319,26 @@ function AISettings() {
 }
 
 function AboutSettings() {
+  const { t } = useTranslation();
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="flex flex-col items-center py-8 text-center">
         <div className="flex size-20 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-2xl shadow-primary/40 mb-6 rotate-3 transition-transform hover:rotate-0">
           <RssIcon className="size-10" />
         </div>
-        <h4 className="text-3xl font-black tracking-tighter">GIST RSS</h4>
-        <p className="text-xs font-bold text-primary/60 tracking-widest uppercase mt-1.5">Version 1.0.0</p>
-        
+        <h4 className="text-3xl font-black tracking-tighter">
+          {t("app.name")}
+        </h4>
+        <p className="text-xs font-bold text-primary/60 tracking-widest uppercase mt-1.5">
+          {t("app.version")}
+        </p>
+
         <div className="max-w-[420px] mt-6">
           <p className="text-sm text-muted-foreground leading-relaxed">
-            A minimalist, high-performance RSS reader designed for focus. 
-            Built with modern web technologies for a seamless reading experience.
+            {t("app.description")}
           </p>
         </div>
       </div>
-
     </div>
   );
 }

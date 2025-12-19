@@ -233,10 +233,7 @@ export async function POST(request: NextRequest) {
     const file = formData.get("file") as File;
 
     if (!file) {
-      return NextResponse.json(
-        { error: "No file provided" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "No file provided" }, { status: 400 });
     }
 
     const content = await file.text();
@@ -245,7 +242,7 @@ export async function POST(request: NextRequest) {
     if (parsed.length === 0) {
       return NextResponse.json(
         { error: "No feeds found in OPML file" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -267,7 +264,7 @@ export async function POST(request: NextRequest) {
     console.error("Failed to start import:", error);
     return NextResponse.json(
       { error: "Failed to parse OPML file" },
-      { status: 400 }
+      { status: 400 },
     );
   }
 }

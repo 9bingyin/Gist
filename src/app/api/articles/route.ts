@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
   }
   if (folderId) {
     where.feed = {
-      folderId: folderId
+      folderId: folderId,
     };
   }
   if (unreadOnly) {
