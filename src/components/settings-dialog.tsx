@@ -114,9 +114,82 @@ export function SettingsDialog({
   const [refreshingFeedId, setRefreshingFeedId] = useState<string | null>(null);
   const [refreshingAll, setRefreshingAll] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [importTask, setImportTask] = useState<Task | null>(null);
   const [open, setOpen] = useState(false);
   const { t } = useTranslation();
   const isMobile = useIsMobile();
+  const eventSourceRef = useRef<EventSource | null>(null);
+
+  const subscribeToTask = useCallback(
+    (taskId: string) => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+      }
+
+      const eventSource = new EventSource(`/api/tasks/${taskId}/stream`);
+      eventSourceRef.current = eventSource;
+
+      eventSource.onmessage = (event) => {
+        try {
+          const task: Task = JSON.parse(event.data);
+          setImportTask(task);
+
+          if (
+            task.status === "completed" ||
+            task.status === "failed" ||
+            task.status === "cancelled"
+          ) {
+            eventSource.close();
+            eventSourceRef.current = null;
+            setIsImporting(false);
+
+            if (task.status === "completed") {
+              onDataChange?.();
+            }
+          }
+        } catch {
+          // Ignore parse errors
+        }
+      };
+
+      eventSource.onerror = () => {
+        eventSource.close();
+        eventSourceRef.current = null;
+        setIsImporting(false);
+      };
+    },
+    [onDataChange],
+  );
+
+  useEffect(() => {
+    const checkExistingTask = async () => {
+      try {
+        const res = await fetch("/api/tasks");
+        if (res.ok) {
+          const tasks: Task[] = await res.json();
+          const runningTask = tasks.find(
+            (t) =>
+              t.type === "opml-import" &&
+              (t.status === "running" || t.status === "pending"),
+          );
+          if (runningTask) {
+            setImportTask(runningTask);
+            setIsImporting(true);
+            subscribeToTask(runningTask.id);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to check existing tasks:", err);
+      }
+    };
+    checkExistingTask();
+
+    return () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+      }
+    };
+  }, [subscribeToTask]);
 
   const menuItems: { id: SettingsTab; label: string; icon: React.ReactNode }[] =
     [
@@ -181,10 +254,6 @@ export function SettingsDialog({
   );
 
   const handleOpenChange = (newOpen: boolean) => {
-    // Prevent closing while importing
-    if (!newOpen && isImporting) {
-      return;
-    }
     setOpen(newOpen);
   };
 
@@ -203,8 +272,6 @@ export function SettingsDialog({
             ? "w-full h-full max-w-full max-h-full p-0 gap-0 overflow-hidden border-none rounded-none"
             : "sm:max-w-4xl h-[650px] max-h-[90vh] p-0 gap-0 overflow-hidden border-none shadow-2xl"
         }
-        onPointerDownOutside={(e) => isImporting && e.preventDefault()}
-        onEscapeKeyDown={(e) => isImporting && e.preventDefault()}
       >
         <DialogTitle className="sr-only">{t("settings.title")}</DialogTitle>
         <div className="flex flex-col md:flex-row h-full overflow-hidden bg-background">
@@ -319,6 +386,9 @@ export function SettingsDialog({
                   onDataChange={onDataChange}
                   isImporting={isImporting}
                   setIsImporting={setIsImporting}
+                  importTask={importTask}
+                  setImportTask={setImportTask}
+                  subscribeToTask={subscribeToTask}
                 />
               )}
               {activeTab === "debug" && <DebugSettings />}
@@ -1064,12 +1134,18 @@ interface DataSettingsProps {
   onDataChange?: () => Promise<void>;
   isImporting: boolean;
   setIsImporting: (value: boolean) => void;
+  importTask: Task | null;
+  setImportTask: (task: Task | null) => void;
+  subscribeToTask: (taskId: string) => void;
 }
 
 function DataSettings({
   onDataChange,
   isImporting,
   setIsImporting,
+  importTask,
+  setImportTask,
+  subscribeToTask,
 }: DataSettingsProps) {
   const { t } = useTranslation();
   const [markingAllRead, setMarkingAllRead] = useState(false);
@@ -1079,81 +1155,7 @@ function DataSettings({
     type: "success" | "error";
     text: string;
   } | null>(null);
-  const [importTask, setImportTask] = useState<Task | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const startPolling = useCallback(
-    (taskId: string) => {
-      // Clear any existing polling
-      if (pollIntervalRef.current) {
-        clearInterval(pollIntervalRef.current);
-      }
-
-      const poll = async () => {
-        try {
-          const res = await fetch(`/api/tasks/${taskId}`);
-          if (res.ok) {
-            const task: Task = await res.json();
-            setImportTask(task);
-
-            if (
-              task.status === "completed" ||
-              task.status === "failed" ||
-              task.status === "cancelled"
-            ) {
-              if (pollIntervalRef.current) {
-                clearInterval(pollIntervalRef.current);
-                pollIntervalRef.current = null;
-              }
-              setIsImporting(false);
-
-              if (task.status === "completed") {
-                onDataChange?.();
-              }
-            }
-          }
-        } catch (err) {
-          console.error("Failed to poll task:", err);
-        }
-      };
-
-      poll();
-      pollIntervalRef.current = setInterval(poll, 500);
-    },
-    [setIsImporting, onDataChange],
-  );
-
-  // Check for existing running tasks on mount
-  useEffect(() => {
-    const checkExistingTask = async () => {
-      try {
-        const res = await fetch("/api/tasks");
-        if (res.ok) {
-          const tasks: Task[] = await res.json();
-          const runningTask = tasks.find(
-            (t) =>
-              t.type === "opml-import" &&
-              (t.status === "running" || t.status === "pending"),
-          );
-          if (runningTask) {
-            setImportTask(runningTask);
-            setIsImporting(true);
-            startPolling(runningTask.id);
-          }
-        }
-      } catch (err) {
-        console.error("Failed to check existing tasks:", err);
-      }
-    };
-    checkExistingTask();
-
-    return () => {
-      if (pollIntervalRef.current) {
-        clearInterval(pollIntervalRef.current);
-      }
-    };
-  }, [setIsImporting, startPolling]);
 
   const handleExportOpml = () => {
     window.open("/api/opml", "_blank");
@@ -1183,8 +1185,8 @@ function DataSettings({
           throw new Error(data.error || "Failed to import");
         }
 
-        // Start polling for progress
-        startPolling(data.taskId);
+        // Subscribe to task updates via SSE
+        subscribeToTask(data.taskId);
       } catch (err) {
         setMessage({
           type: "error",
@@ -1197,7 +1199,7 @@ function DataSettings({
         }
       }
     },
-    [setIsImporting, startPolling],
+    [setIsImporting, setImportTask, subscribeToTask],
   );
 
   const handleCancelImport = async () => {

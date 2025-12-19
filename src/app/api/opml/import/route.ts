@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { parseFeed } from "@/lib/rss";
 import { getFavicon } from "@/lib/favicon";
 import { taskQueue } from "@/lib/task-queue";
+import { parseOpml as parseOpmlLib } from "feedsmith";
 
 interface OpmlItem {
   title: string;
@@ -11,75 +12,40 @@ interface OpmlItem {
   folder?: string;
 }
 
-function parseOpml(content: string): OpmlItem[] {
+interface OpmlOutline {
+  text?: string;
+  title?: string;
+  xmlUrl?: string;
+  htmlUrl?: string;
+  outlines?: OpmlOutline[];
+}
+
+function extractFeeds(outlines: OpmlOutline[], folderName?: string): OpmlItem[] {
   const items: OpmlItem[] = [];
 
-  const outlineTagRegex = /<outline\s+([^>]*?)\s*\/?>/gi;
-  const closingTagRegex = /<\/outline>/gi;
-
-  const folderStack: string[] = [];
-
-  interface TagInfo {
-    type: "open" | "close";
-    index: number;
-    attrs?: Record<string, string>;
-    isSelfClosing?: boolean;
-  }
-
-  const tags: TagInfo[] = [];
-
-  let match;
-  while ((match = outlineTagRegex.exec(content)) !== null) {
-    const attrs: Record<string, string> = {};
-    let attrMatch;
-    const attrRegexLocal = /(\w+)="([^"]*)"/g;
-
-    while ((attrMatch = attrRegexLocal.exec(match[1])) !== null) {
-      attrs[attrMatch[1].toLowerCase()] = attrMatch[2];
-    }
-
-    const isSelfClosing = match[0].endsWith("/>");
-
-    tags.push({
-      type: "open",
-      index: match.index,
-      attrs,
-      isSelfClosing,
-    });
-  }
-
-  while ((match = closingTagRegex.exec(content)) !== null) {
-    tags.push({
-      type: "close",
-      index: match.index,
-    });
-  }
-
-  tags.sort((a, b) => a.index - b.index);
-
-  for (const tag of tags) {
-    if (tag.type === "close") {
-      folderStack.pop();
-    } else if (tag.attrs) {
-      const attrs = tag.attrs;
-
-      if (attrs.xmlurl) {
-        items.push({
-          title: attrs.title || attrs.text || attrs.xmlurl,
-          xmlUrl: attrs.xmlurl,
-          htmlUrl: attrs.htmlurl,
-          folder:
-            folderStack.length > 0
-              ? folderStack[folderStack.length - 1]
-              : undefined,
-        });
-      } else if ((attrs.text || attrs.title) && !tag.isSelfClosing) {
-        folderStack.push(attrs.text || attrs.title);
-      }
+  for (const outline of outlines) {
+    if (outline.xmlUrl) {
+      items.push({
+        title: outline.title || outline.text || outline.xmlUrl,
+        xmlUrl: outline.xmlUrl,
+        htmlUrl: outline.htmlUrl,
+        folder: folderName,
+      });
+    } else if (outline.outlines && outline.outlines.length > 0) {
+      const folder = outline.text || outline.title;
+      items.push(...extractFeeds(outline.outlines, folder));
     }
   }
 
   return items;
+}
+
+function parseOpml(content: string): OpmlItem[] {
+  const opml = parseOpmlLib(content);
+  if (!opml.body?.outlines) {
+    return [];
+  }
+  return extractFeeds(opml.body.outlines as OpmlOutline[]);
 }
 
 async function processImport(taskId: string, items: OpmlItem[]) {

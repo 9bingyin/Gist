@@ -23,41 +23,39 @@ export function TaskProgress({ onTaskComplete }: TaskProgressProps) {
   const notifiedIdsRef = useRef<Set<string>>(new Set());
   const onTaskCompleteRef = useRef(onTaskComplete);
 
-  // Keep the ref updated
   useEffect(() => {
     onTaskCompleteRef.current = onTaskComplete;
   }, [onTaskComplete]);
 
   useEffect(() => {
-    const fetchTasks = async () => {
-      try {
-        const res = await fetch("/api/tasks");
-        if (res.ok) {
-          const data = await res.json();
-          setTasks(data);
+    const eventSource = new EventSource("/api/tasks/stream");
 
-          // Check for newly completed tasks (only notify once per task)
-          for (const task of data) {
-            if (
-              task.status === "completed" &&
-              !notifiedIdsRef.current.has(task.id)
-            ) {
-              notifiedIdsRef.current.add(task.id);
-              onTaskCompleteRef.current?.();
-            }
+    eventSource.onmessage = (event) => {
+      try {
+        const data: Task[] = JSON.parse(event.data);
+        setTasks(data);
+
+        for (const task of data) {
+          if (
+            task.status === "completed" &&
+            !notifiedIdsRef.current.has(task.id)
+          ) {
+            notifiedIdsRef.current.add(task.id);
+            onTaskCompleteRef.current?.();
           }
         }
       } catch (err) {
-        console.error("Failed to fetch tasks:", err);
+        console.error("Failed to parse tasks event:", err);
       }
     };
 
-    fetchTasks();
+    eventSource.onerror = () => {
+      eventSource.close();
+    };
 
-    // Poll for updates
-    const interval = setInterval(fetchTasks, 1000);
-
-    return () => clearInterval(interval);
+    return () => {
+      eventSource.close();
+    };
   }, []);
 
   const dismissTask = async (taskId: string) => {
@@ -81,13 +79,11 @@ export function TaskProgress({ onTaskComplete }: TaskProgressProps) {
     }
   };
 
-  // Filter out dismissed tasks and only show recent ones
   const visibleTasks = tasks.filter(
     (task) =>
       !dismissedIds.has(task.id) &&
       (task.status === "running" ||
         task.status === "pending" ||
-        // Show completed/failed/cancelled tasks
         task.status === "completed" ||
         task.status === "failed" ||
         task.status === "cancelled"),

@@ -1,3 +1,5 @@
+import { EventEmitter } from "events";
+
 export type TaskStatus =
   | "pending"
   | "running"
@@ -27,12 +29,13 @@ export interface Task {
   updatedAt: Date;
 }
 
-class TaskQueue {
+class TaskQueue extends EventEmitter {
   private tasks: Map<string, Task> = new Map();
   private cleanupInterval: ReturnType<typeof setInterval> | null = null;
 
   constructor() {
-    // Clean up old completed tasks every 5 minutes
+    super();
+    this.setMaxListeners(100);
     if (typeof setInterval !== "undefined") {
       this.cleanupInterval = setInterval(() => this.cleanup(), 5 * 60 * 1000);
     }
@@ -57,6 +60,7 @@ class TaskQueue {
       updatedAt: new Date(),
     };
     this.tasks.set(id, task);
+    this.emit("task:update", task);
     return task;
   }
 
@@ -89,6 +93,7 @@ class TaskQueue {
     if (updates.result) task.result = updates.result;
     task.updatedAt = new Date();
 
+    this.emit("task:update", task);
     return task;
   }
 
@@ -100,11 +105,11 @@ class TaskQueue {
     const task = this.tasks.get(id);
     if (!task) return undefined;
 
-    // Only cancel if task is pending or running
     if (task.status === "pending" || task.status === "running") {
       task.status = "cancelled";
       task.progress.message = "Cancelled by user";
       task.updatedAt = new Date();
+      this.emit("task:update", task);
     }
     return task;
   }
@@ -116,7 +121,7 @@ class TaskQueue {
 
   cleanup(): void {
     const now = Date.now();
-    const maxAge = 30 * 60 * 1000; // 30 minutes
+    const maxAge = 30 * 60 * 1000;
 
     for (const [id, task] of this.tasks) {
       if (
@@ -131,7 +136,6 @@ class TaskQueue {
   }
 }
 
-// Singleton instance that persists across hot reloads
 const globalForTasks = globalThis as unknown as {
   taskQueue: TaskQueue | undefined;
 };
