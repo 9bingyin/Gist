@@ -12,7 +12,7 @@ export const maxDuration = 30;
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { articleId, content, title } = body;
+    const { articleId, content, title, isReadability } = body;
 
     if (!content) {
       return NextResponse.json(
@@ -41,11 +41,14 @@ export async function POST(request: NextRequest) {
     const model = settingsMap.aiModel || undefined;
     const language = settingsMap.aiLanguage || "English";
 
+    // Use different cache type for readability content
+    const cacheType = isReadability ? "summarize-readability" : "summarize";
+
     // Check cache first
     if (articleId) {
       const cached = await getAiCache<{ summary: string }>(
         articleId,
-        "summarize",
+        cacheType,
         language
       );
       if (cached) {
@@ -179,7 +182,7 @@ Return only the key points, one per line, without any prefixes or formatting sym
 
     // Save to cache
     if (articleId) {
-      await setAiCache(articleId, "summarize", language, result);
+      await setAiCache(articleId, cacheType, language, result);
     }
 
     return NextResponse.json(result);

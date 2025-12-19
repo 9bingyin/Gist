@@ -12,7 +12,7 @@ export const maxDuration = 60;
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { articleId, content, title, summary } = body;
+    const { articleId, content, title, summary, isReadability } = body;
 
     if (!content) {
       return NextResponse.json(
@@ -41,11 +41,14 @@ export async function POST(request: NextRequest) {
     const model = settingsMap.aiModel || undefined;
     const language = settingsMap.aiLanguage || "Chinese";
 
+    // Use different cache type for readability content
+    const cacheType = isReadability ? "translate-readability" : "translate";
+
     // Check cache first
     if (articleId) {
       const cached = await getAiCache<{ title: string | null; summary: string | null; content: string }>(
         articleId,
-        "translate",
+        cacheType,
         language
       );
       if (cached) {
@@ -192,7 +195,7 @@ Example:
 
     // Save to cache
     if (articleId) {
-      await setAiCache(articleId, "translate", language, result);
+      await setAiCache(articleId, cacheType, language, result);
     }
 
     return NextResponse.json(result);

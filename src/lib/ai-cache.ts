@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/db";
 
-export type AiCacheType = "translate" | "translate-lite" | "summarize";
+export type AiCacheType = "translate" | "translate-readability" | "translate-lite" | "summarize" | "summarize-readability";
 
 interface TranslateResult {
   title: string | null;

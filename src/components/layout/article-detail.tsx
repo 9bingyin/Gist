@@ -177,6 +177,7 @@ export function ArticleDetail({ article, onArticleUpdate, autoTranslate, targetL
   const [translatedTitle, setTranslatedTitle] = useState<string | null>(null);
   const [translatedSummary, setTranslatedSummary] = useState<string | null>(null);
   const [translationError, setTranslationError] = useState<string | null>(null);
+  const [translateEnabled, setTranslateEnabled] = useState(false); // Track if user wants translation
 
   // Reset readability mode, summary, translation and errors when article changes
   useEffect(() => {
@@ -184,6 +185,8 @@ export function ArticleDetail({ article, onArticleUpdate, autoTranslate, targetL
     setReadabilityError(null);
     setAiSummary(null);
     setSummaryError(null);
+    setIsLoadingTranslation(false);
+    setTranslateEnabled(false);
     setTranslatedContent(null);
     setTranslatedTitle(null);
     setTranslatedSummary(null);
@@ -192,15 +195,28 @@ export function ArticleDetail({ article, onArticleUpdate, autoTranslate, targetL
 
   // Auto-translate when article changes and autoTranslate is enabled
   useEffect(() => {
-    const autoTranslateContent = async () => {
-      if (!autoTranslate || !article || !targetLanguage || isLoadingTranslation || translatedContent) return;
+    if (!autoTranslate || !article || !targetLanguage) return;
 
-      // Skip if article is already in target language
-      if (!needsTranslation(article.title, article.summary, targetLanguage)) return;
+    // Skip if article is already in target language
+    if (!needsTranslation(article.title, article.summary, targetLanguage)) return;
 
-      const content = article.content || article.summary;
-      if (!content) return;
+    // Enable translation mode for this article
+    setTranslateEnabled(true);
+  }, [article?.id, autoTranslate, targetLanguage]);
 
+  // Perform translation when translateEnabled changes or useReadability changes
+  useEffect(() => {
+    if (!translateEnabled || !article) return;
+
+    const isReadability = useReadability && !!article.readabilityContent;
+    const content = isReadability
+      ? article.readabilityContent
+      : (article.content || article.summary);
+    if (!content) return;
+
+    const abortController = new AbortController();
+
+    const performTranslation = async () => {
       setIsLoadingTranslation(true);
       setTranslationError(null);
       try {
@@ -212,7 +228,9 @@ export function ArticleDetail({ article, onArticleUpdate, autoTranslate, targetL
             content,
             title: article.title,
             summary: article.summary,
+            isReadability,
           }),
+          signal: abortController.signal,
         });
 
         const data = await res.json();
@@ -221,29 +239,45 @@ export function ArticleDetail({ article, onArticleUpdate, autoTranslate, targetL
           throw new Error(data.error || "Translation failed");
         }
 
-        setTranslatedContent(data.content);
-        setTranslatedTitle(data.title);
-        setTranslatedSummary(data.summary);
+        // Only update state if not aborted
+        if (!abortController.signal.aborted) {
+          setTranslatedContent(data.content);
+          setTranslatedTitle(data.title);
+          setTranslatedSummary(data.summary);
 
-        // Update article with translated title/summary for article list
-        if (onArticleUpdate && (data.title || data.summary)) {
-          onArticleUpdate({
-            ...article,
-            translatedTitle: data.title || undefined,
-            translatedSummary: data.summary || undefined,
-          });
+          // Update article with translated title/summary for article list
+          if (onArticleUpdate && (data.title || data.summary)) {
+            onArticleUpdate({
+              ...article,
+              translatedTitle: data.title || undefined,
+              translatedSummary: data.summary || undefined,
+            });
+          }
         }
       } catch (error) {
+        // Ignore abort errors
+        if (error instanceof Error && error.name === "AbortError") {
+          return;
+        }
         const message = error instanceof Error ? error.message : "Translation failed";
-        setTranslationError(message);
-        console.error("Auto-translate error:", error);
+        if (!abortController.signal.aborted) {
+          setTranslationError(message);
+        }
+        console.error("Translation error:", error);
       } finally {
-        setIsLoadingTranslation(false);
+        if (!abortController.signal.aborted) {
+          setIsLoadingTranslation(false);
+        }
       }
     };
 
-    autoTranslateContent();
-  }, [article?.id, autoTranslate, targetLanguage]);
+    performTranslation();
+
+    // Cleanup: abort the request when dependencies change or component unmounts
+    return () => {
+      abortController.abort();
+    };
+  }, [translateEnabled, useReadability, article?.id, article?.readabilityContent]);
 
   // Regenerate summary when readability mode changes (if summary was already shown)
   useEffect(() => {
@@ -253,8 +287,9 @@ export function ArticleDetail({ article, onArticleUpdate, autoTranslate, targetL
       setIsLoadingSummary(true);
       setSummaryError(null);
       try {
-        const content = useReadability
-          ? (article.readabilityContent || article.content || article.summary)
+        const isReadability = useReadability && !!article.readabilityContent;
+        const content = isReadability
+          ? article.readabilityContent
           : (article.content || article.summary);
 
         if (!content) {
@@ -268,6 +303,7 @@ export function ArticleDetail({ article, onArticleUpdate, autoTranslate, targetL
             articleId: article.id,
             content,
             title: article.title,
+            isReadability,
           }),
         });
 
@@ -308,19 +344,9 @@ export function ArticleDetail({ article, onArticleUpdate, autoTranslate, targetL
   const handleToggleReadability = useCallback(async () => {
     if (!article || isLoadingReadability) return;
 
-    // Clear translation when switching readability mode
+    // Clear current translated content (will be re-translated if translateEnabled)
     setTranslatedContent(null);
-    setTranslatedTitle(null);
-    setTranslatedSummary(null);
     setTranslationError(null);
-    // Restore original title/summary in article list
-    if (onArticleUpdate && article) {
-      onArticleUpdate({
-        ...article,
-        translatedTitle: undefined,
-        translatedSummary: undefined,
-      });
-    }
 
     if (useReadability) {
       setUseReadability(false);
@@ -371,8 +397,9 @@ export function ArticleDetail({ article, onArticleUpdate, autoTranslate, targetL
     setIsLoadingSummary(true);
     setSummaryError(null);
     try {
-      const content = useReadability
-        ? (article.readabilityContent || article.content || article.summary)
+      const isReadability = useReadability && !!article.readabilityContent;
+      const content = isReadability
+        ? article.readabilityContent
         : (article.content || article.summary);
 
       if (!content) {
@@ -386,6 +413,7 @@ export function ArticleDetail({ article, onArticleUpdate, autoTranslate, targetL
           articleId: article.id,
           content,
           title: article.title,
+          isReadability,
         }),
       });
 
@@ -405,13 +433,16 @@ export function ArticleDetail({ article, onArticleUpdate, autoTranslate, targetL
     }
   }, [article, isLoadingSummary, aiSummary, useReadability]);
 
-  const handleTranslate = useCallback(async () => {
+  const handleTranslate = useCallback(() => {
     if (!article || isLoadingTranslation) return;
 
-    if (translatedContent) {
+    if (translateEnabled) {
+      // Turn off translation
+      setTranslateEnabled(false);
       setTranslatedContent(null);
       setTranslatedTitle(null);
       setTranslatedSummary(null);
+      setTranslationError(null);
       // Restore original title/summary in article list
       if (onArticleUpdate) {
         onArticleUpdate({
@@ -420,57 +451,11 @@ export function ArticleDetail({ article, onArticleUpdate, autoTranslate, targetL
           translatedSummary: undefined,
         });
       }
-      return;
+    } else {
+      // Turn on translation (will trigger the translation useEffect)
+      setTranslateEnabled(true);
     }
-
-    setIsLoadingTranslation(true);
-    setTranslationError(null);
-    try {
-      const content = useReadability
-        ? (article.readabilityContent || article.content || article.summary)
-        : (article.content || article.summary);
-
-      if (!content) {
-        throw new Error("无可用内容进行翻译");
-      }
-
-      const res = await fetch("/api/ai/translate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          articleId: article.id,
-          content,
-          title: article.title,
-          summary: article.summary,
-        }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || "翻译失败");
-      }
-
-      setTranslatedContent(data.content);
-      setTranslatedTitle(data.title);
-      setTranslatedSummary(data.summary);
-
-      // Update article with translated title/summary for article list
-      if (onArticleUpdate && (data.title || data.summary)) {
-        onArticleUpdate({
-          ...article,
-          translatedTitle: data.title || undefined,
-          translatedSummary: data.summary || undefined,
-        });
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "翻译失败";
-      setTranslationError(message);
-      console.error("Translation error:", error);
-    } finally {
-      setIsLoadingTranslation(false);
-    }
-  }, [article, isLoadingTranslation, translatedContent, useReadability, onArticleUpdate]);
+  }, [article, isLoadingTranslation, translateEnabled, onArticleUpdate]);
 
   if (!article) {
     return (
@@ -543,7 +528,7 @@ export function ArticleDetail({ article, onArticleUpdate, autoTranslate, targetL
                 size="icon"
                 className={cn(
                   "h-8 w-8 text-muted-foreground hover:text-foreground",
-                  translatedContent && "bg-accent text-accent-foreground",
+                  translateEnabled && "bg-accent text-accent-foreground",
                   translationError && "text-destructive hover:text-destructive"
                 )}
                 onClick={handleTranslate}
@@ -557,7 +542,7 @@ export function ArticleDetail({ article, onArticleUpdate, autoTranslate, targetL
               </Button>
             </TooltipTrigger>
             <TooltipContent>
-              <p>{translationError || (translatedContent ? "显示原文" : "AI 翻译")}</p>
+              <p>{translationError || (translateEnabled ? "显示原文" : "AI 翻译")}</p>
             </TooltipContent>
           </Tooltip>
 
