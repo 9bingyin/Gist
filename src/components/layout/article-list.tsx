@@ -313,7 +313,7 @@ export function ArticleList({
 
   return (
     <div className="flex h-full flex-col border-r bg-background">
-      <div className="flex h-14 items-center justify-between px-4 shrink-0 border-b md:h-16 md:border-b-0">
+      <div className="flex h-14 items-center justify-between px-4 shrink-0 md:h-16">
         <div className="flex items-center gap-2 min-w-0 flex-1">
           {showMenuButton && (
             <Button
@@ -364,7 +364,7 @@ export function ArticleList({
             {Array.from(groupedArticles.entries()).map(
               ([date, dateArticles]) => (
                 <div key={date}>
-                  <div className="sticky top-0 z-10 bg-background/95 backdrop-blur px-4 py-3 text-sm font-bold text-foreground">
+                  <div className="sticky top-0 z-10 bg-background px-4 py-2 text-xs font-medium text-muted-foreground">
                     {date}
                   </div>
                   <div className="space-y-0.5">
