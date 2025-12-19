@@ -71,12 +71,12 @@ function groupArticlesByDate(articles: Article[]): Map<string, Article[]> {
     } else if (pubDate.getTime() === tomorrow.getTime()) {
       key = "明天";
     } else if (pubDate.getTime() > today.getTime()) {
-      // Future date - show full date with year for clarity
+      // Future date
       key = pubDate.toLocaleDateString("zh-CN", {
         year: "numeric",
         month: "long",
         day: "numeric",
-      }) + " (计划)";
+      });
     } else {
       key = pubDate.toLocaleDateString("zh-CN", {
         year: "numeric",

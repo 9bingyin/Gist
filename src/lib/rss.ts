@@ -21,8 +21,33 @@ export interface ParsedArticle {
 
 function extractImageFromContent(content?: string): string | undefined {
   if (!content) return undefined;
-  const imgMatch = content.match(/<img[^>]+src=["']([^"']+)["']/i);
-  return imgMatch?.[1];
+
+  // Match all img tags
+  const imgRegex = /<img[^>]+>/gi;
+  let match;
+
+  while ((match = imgRegex.exec(content)) !== null) {
+    const imgTag = match[0];
+
+    // Skip tracking pixels (small dimensions)
+    const widthMatch = imgTag.match(/width=["']?(\d+)/i);
+    const heightMatch = imgTag.match(/height=["']?(\d+)/i);
+
+    if (widthMatch && heightMatch) {
+      const width = parseInt(widthMatch[1], 10);
+      const height = parseInt(heightMatch[1], 10);
+      // Skip if dimensions are too small (likely tracking pixel)
+      if (width <= 10 || height <= 10) continue;
+    }
+
+    // Extract src from this img tag
+    const srcMatch = imgTag.match(/src=["']([^"']+)["']/i);
+    if (srcMatch?.[1]) {
+      return srcMatch[1];
+    }
+  }
+
+  return undefined;
 }
 
 /**

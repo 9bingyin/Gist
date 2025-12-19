@@ -33,6 +33,20 @@ function formatRelativeTime(dateStr: string | null): string {
   const date = new Date(dateStr);
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
+
+  // Handle future dates
+  if (diffMs < 0) {
+    const absDiffMs = Math.abs(diffMs);
+    const diffMinutes = Math.floor(absDiffMs / 60000);
+    const diffHours = Math.floor(diffMinutes / 60);
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffMinutes < 60) return `${diffMinutes || 1} 分钟后`;
+    if (diffHours < 24) return `${diffHours} 小时后`;
+    if (diffDays < 7) return `${diffDays} 天后`;
+    return date.toLocaleDateString("zh-CN", { year: "numeric", month: "long", day: "numeric" });
+  }
+
   const diffSeconds = Math.floor(diffMs / 1000);
   const diffMinutes = Math.floor(diffSeconds / 60);
   const diffHours = Math.floor(diffMinutes / 60);
@@ -42,7 +56,7 @@ function formatRelativeTime(dateStr: string | null): string {
   if (diffMinutes < 60) return `${diffMinutes} 分钟前`;
   if (diffHours < 24) return `${diffHours} 小时前`;
   if (diffDays < 7) return `${diffDays} 天前`;
-  
+
   return date.toLocaleDateString("zh-CN", { year: "numeric", month: "long", day: "numeric" });
 }
 

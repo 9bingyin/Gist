@@ -151,10 +151,16 @@ export default function Home() {
     setLoading(true);
     try {
       if (selectedFeedId) {
+        // Refresh single feed
         await fetch(`/api/feeds/${selectedFeedId}/refresh`, { method: "POST" });
+      } else if (selectedFolderId) {
+        // Refresh only feeds in the selected folder
+        const folderFeeds = feeds.filter((f) => f.folderId === selectedFolderId);
+        for (const feed of folderFeeds) {
+          await fetch(`/api/feeds/${feed.id}/refresh`, { method: "POST" });
+        }
       } else {
-        // Refresh all feeds (maybe optimize to refresh only folder feeds if folder selected?)
-        // For now, refreshing all is safer/simpler
+        // Refresh all feeds
         for (const feed of feeds) {
           await fetch(`/api/feeds/${feed.id}/refresh`, { method: "POST" });
         }
