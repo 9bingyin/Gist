@@ -2,10 +2,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 
 export async function POST(request: NextRequest) {
-  const { olderThanDays, readOnly } = await request.json();
+  const body = await request.json().catch(() => ({}));
+  const rawDays = body.olderThanDays;
+  const parsedDays =
+    rawDays === undefined ? 30 : Number.parseFloat(String(rawDays));
+
+  if (!Number.isFinite(parsedDays) || parsedDays < 0) {
+    return NextResponse.json(
+      { error: "olderThanDays must be a non-negative number" },
+      { status: 400 },
+    );
+  }
 
   const cutoffDate = new Date();
-  cutoffDate.setDate(cutoffDate.getDate() - (olderThanDays || 30));
+  cutoffDate.setDate(cutoffDate.getDate() - parsedDays);
 
   const where: {
     createdAt: { lt: Date };
@@ -14,7 +24,7 @@ export async function POST(request: NextRequest) {
     createdAt: { lt: cutoffDate },
   };
 
-  if (readOnly) {
+  if (body.readOnly === true) {
     where.isRead = true;
   }
 

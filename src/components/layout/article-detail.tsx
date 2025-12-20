@@ -209,8 +209,9 @@ export function ArticleDetail({
   const { t, i18n } = useTranslation();
 
   function formatRelativeTime(dateStr: string | null): string {
-    if (!dateStr) return "";
+    if (!dateStr) return t("time.unknown");
     const date = new Date(dateStr);
+    if (Number.isNaN(date.getTime())) return t("time.unknown");
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
 
@@ -370,6 +371,7 @@ export function ArticleDetail({
     useReadability,
     article?.id,
     article?.readabilityContent,
+    targetLanguage,
   ]);
 
   // Regenerate summary when readability mode changes (if summary was already shown)

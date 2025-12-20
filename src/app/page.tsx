@@ -81,55 +81,63 @@ export default function Home() {
       options: { feedId?: string | null; folderId?: string | null } = {},
     ) => {
       setLoading(true);
-      let url = "/api/articles";
-      const params = new URLSearchParams();
-      if (options.feedId) params.append("feedId", options.feedId);
-      if (options.folderId) params.append("folderId", options.folderId);
+      try {
+        let url = "/api/articles";
+        const params = new URLSearchParams();
+        if (options.feedId) params.append("feedId", options.feedId);
+        if (options.folderId) params.append("folderId", options.folderId);
 
-      if (params.toString()) {
-        url += `?${params.toString()}`;
-      }
-
-      const res = await fetch(url);
-      const data: Article[] = await res.json();
-
-      // Preserve translation fields from existing articles
-      setArticles((prev) => {
-        const translationMap = new Map<
-          string,
-          { translatedTitle?: string; translatedSummary?: string }
-        >();
-        for (const article of prev) {
-          if (article.translatedTitle || article.translatedSummary) {
-            translationMap.set(article.id, {
-              translatedTitle: article.translatedTitle,
-              translatedSummary: article.translatedSummary,
-            });
-          }
+        if (params.toString()) {
+          url += `?${params.toString()}`;
         }
 
-        return data.map((article) => {
-          const translation = translationMap.get(article.id);
-          if (translation) {
-            return { ...article, ...translation };
+        const res = await fetch(url);
+        if (!res.ok) {
+          throw new Error("Failed to fetch articles");
+        }
+        const data: Article[] = await res.json();
+
+        // Preserve translation fields from existing articles
+        setArticles((prev) => {
+          const translationMap = new Map<
+            string,
+            { translatedTitle?: string; translatedSummary?: string }
+          >();
+          for (const article of prev) {
+            if (article.translatedTitle || article.translatedSummary) {
+              translationMap.set(article.id, {
+                translatedTitle: article.translatedTitle,
+                translatedSummary: article.translatedSummary,
+              });
+            }
           }
-          return article;
+
+          return data.map((article) => {
+            const translation = translationMap.get(article.id);
+            if (translation) {
+              return { ...article, ...translation };
+            }
+            return article;
+          });
         });
-      });
 
-      setSelectedArticle((prev) => {
-        if (!prev) return prev;
-        const updated = data.find((a) => a.id === prev.id);
-        if (updated && prev.translatedTitle) {
-          return {
-            ...updated,
-            translatedTitle: prev.translatedTitle,
-            translatedSummary: prev.translatedSummary,
-          };
-        }
-        return updated || prev;
-      });
-      setLoading(false);
+        setSelectedArticle((prev) => {
+          if (!prev) return prev;
+          const updated = data.find((a) => a.id === prev.id);
+          if (updated && prev.translatedTitle) {
+            return {
+              ...updated,
+              translatedTitle: prev.translatedTitle,
+              translatedSummary: prev.translatedSummary,
+            };
+          }
+          return updated || prev;
+        });
+      } catch (error) {
+        console.error("Failed to fetch articles:", error);
+      } finally {
+        setLoading(false);
+      }
     },
     [],
   );

@@ -13,7 +13,7 @@ export interface ParsedFeed {
 
 export interface ParsedArticle {
   title: string;
-  link: string;
+  link?: string;
   content?: string;
   summary?: string;
   pubDate?: Date;
@@ -146,13 +146,14 @@ export async function parseFeed(url: string): Promise<ParsedFeed> {
 
   const items: ParsedArticle[] = (feed.items || []).map((item) => {
     const rssItem = item as RssItem;
+    const link = rssItem.link?.trim() || undefined;
     const rawImageUrl =
       rssItem.enclosure?.url ||
       rssItem["media:content"]?.$?.url ||
       extractImageFromContent(rssItem.content || rssItem["content:encoded"]);
 
     // Convert relative URL to absolute URL using article link as base
-    const imageUrl = toAbsoluteUrl(rawImageUrl, rssItem.link || feed.link);
+    const imageUrl = toAbsoluteUrl(rawImageUrl, link || feed.link);
 
     // For Atom feeds, HTML content might be in summary field instead of content
     // Also decode HTML entities that may be double-encoded in Atom feeds
@@ -184,7 +185,7 @@ export async function parseFeed(url: string): Promise<ParsedFeed> {
 
     return {
       title: rssItem.title || "Untitled",
-      link: rssItem.link || "",
+      link,
       content: htmlContent,
       summary: rssItem.contentSnippet,
       pubDate,

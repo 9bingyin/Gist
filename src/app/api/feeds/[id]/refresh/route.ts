@@ -55,10 +55,14 @@ export async function POST(
     let updatedCount = 0;
 
     for (const item of parsed.items) {
-      if (!item.link) continue;
+      const link = item.link?.trim();
+      if (!link) continue;
 
-      const existing = await prisma.article.findUnique({
-        where: { link: item.link },
+      const existing = await prisma.article.findFirst({
+        where: {
+          feedId: id,
+          link,
+        },
       });
 
       if (existing) {
@@ -75,7 +79,7 @@ export async function POST(
 
         if (contentChanged || pubDateChanged || imageUrlChanged) {
           await prisma.article.update({
-            where: { link: item.link },
+            where: { id: existing.id },
             data: {
               title: item.title,
               content: item.content,
@@ -91,7 +95,7 @@ export async function POST(
         await prisma.article.create({
           data: {
             title: item.title,
-            link: item.link,
+            link,
             content: item.content,
             summary: item.summary,
             imageUrl: item.imageUrl,

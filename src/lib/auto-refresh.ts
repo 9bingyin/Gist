@@ -53,10 +53,14 @@ async function refreshAllFeeds() {
       let newCount = 0;
 
       for (const item of parsed.items) {
-        if (!item.link) continue;
+        const link = item.link?.trim();
+        if (!link) continue;
 
-        const existing = await prisma.article.findUnique({
-          where: { link: item.link },
+        const existing = await prisma.article.findFirst({
+          where: {
+            feedId: feed.id,
+            link,
+          },
         });
 
         if (existing) {
@@ -71,7 +75,7 @@ async function refreshAllFeeds() {
 
           if (contentChanged || pubDateChanged) {
             await prisma.article.update({
-              where: { link: item.link },
+              where: { id: existing.id },
               data: {
                 title: item.title,
                 content: item.content,
@@ -85,7 +89,7 @@ async function refreshAllFeeds() {
           await prisma.article.create({
             data: {
               title: item.title,
-              link: item.link,
+              link,
               content: item.content,
               summary: item.summary,
               imageUrl: item.imageUrl,

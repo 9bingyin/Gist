@@ -123,6 +123,18 @@ async function processImport(taskId: string, items: OpmlItem[]) {
       // Try to parse and add the feed
       try {
         const feedData = await parseFeed(item.xmlUrl);
+        type ParsedItemWithLink = typeof feedData.items[number] & {
+          link: string;
+        };
+        const uniqueItems = new Map<string, ParsedItemWithLink>();
+        for (const article of feedData.items) {
+          const link = article.link?.trim();
+          if (!link) continue;
+          if (!uniqueItems.has(link)) {
+            uniqueItems.set(link, { ...article, link });
+          }
+        }
+        const articles = Array.from(uniqueItems.values()).slice(0, 30);
 
         // Prefer OPML title over parsed title (parsed title might be error message)
         const title = item.title || feedData.title || item.xmlUrl;
@@ -135,7 +147,7 @@ async function processImport(taskId: string, items: OpmlItem[]) {
             description: feedData.description,
             folderId,
             articles: {
-              create: feedData.items.slice(0, 30).map((article) => ({
+              create: articles.map((article) => ({
                 title: article.title,
                 link: article.link,
                 content: article.content,

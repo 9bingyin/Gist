@@ -258,6 +258,7 @@
     }
   },
   "time": {
+    "unknown": "未知",
     "just_now": "刚刚",
     "minutes_ago": "{{count}} 分钟前",
     "hours_ago": "{{count}} 小时前",

@@ -6,10 +6,16 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
-  const { name } = await request.json();
+  const body = await request.json().catch(() => ({}));
+  const name = body?.name;
 
   if (!name || typeof name !== "string" || name.trim() === "") {
     return NextResponse.json({ error: "Name is required" }, { status: 400 });
+  }
+
+  const existing = await prisma.folder.findUnique({ where: { id } });
+  if (!existing) {
+    return NextResponse.json({ error: "Folder not found" }, { status: 404 });
   }
 
   const folder = await prisma.folder.update({
@@ -30,6 +36,11 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
+
+  const existing = await prisma.folder.findUnique({ where: { id } });
+  if (!existing) {
+    return NextResponse.json({ error: "Folder not found" }, { status: 404 });
+  }
 
   await prisma.folder.delete({ where: { id } });
   return NextResponse.json({ success: true });

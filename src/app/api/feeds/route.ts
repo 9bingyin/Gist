@@ -30,6 +30,16 @@ export async function POST(request: NextRequest) {
 
   try {
     const parsed = await parseFeed(url);
+    type ParsedItemWithLink = typeof parsed.items[number] & { link: string };
+    const uniqueItems = new Map<string, ParsedItemWithLink>();
+    for (const item of parsed.items) {
+      const link = item.link?.trim();
+      if (!link) continue;
+      if (!uniqueItems.has(link)) {
+        uniqueItems.set(link, { ...item, link });
+      }
+    }
+    const items = Array.from(uniqueItems.values()).slice(0, 50);
 
     // Create feed first
     const feed = await prisma.feed.create({
@@ -40,7 +50,7 @@ export async function POST(request: NextRequest) {
         description: parsed.description,
         folderId: folderId || null,
         articles: {
-          create: parsed.items.slice(0, 50).map((item) => ({
+          create: items.map((item) => ({
             title: item.title,
             link: item.link,
             content: item.content,

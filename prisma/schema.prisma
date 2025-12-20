@@ -33,7 +33,7 @@ model Feed {
 model Article {
   id                 String    @id @default(cuid())
   title              String
-  link               String    @unique
+  link               String
   content            String?
   readabilityContent String?
   summary            String?
@@ -44,6 +44,7 @@ model Article {
   feed               Feed      @relation(fields: [feedId], references: [id], onDelete: Cascade)
   createdAt          DateTime  @default(now())
 
+  @@unique([feedId, link])
   @@index([feedId])
   @@index([pubDate])
 }

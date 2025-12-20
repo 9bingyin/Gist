@@ -41,8 +41,9 @@ export function ArticleList({
   const { t, i18n } = useTranslation();
 
   function formatDate(dateStr: string | null): string {
-    if (!dateStr) return "";
+    if (!dateStr) return t("time.unknown");
     const date = new Date(dateStr);
+    if (Number.isNaN(date.getTime())) return t("time.unknown");
     const now = new Date();
     const diff = now.getTime() - date.getTime();
 
@@ -90,11 +91,19 @@ export function ArticleList({
     yesterday.setDate(yesterday.getDate() - 1);
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
+    const unknownLabel = t("time.unknown");
 
     for (const article of articles) {
       const pubDate = article.pubDate
         ? new Date(article.pubDate)
         : new Date(article.createdAt);
+      if (Number.isNaN(pubDate.getTime())) {
+        if (!groups.has(unknownLabel)) {
+          groups.set(unknownLabel, []);
+        }
+        groups.get(unknownLabel)!.push(article);
+        continue;
+      }
       pubDate.setHours(0, 0, 0, 0);
 
       let key: string;
@@ -167,6 +176,8 @@ export function ArticleList({
 
     if (articlesToTranslate.length === 0) return;
 
+    const requestedIds = new Set(articlesToTranslate.map((article) => article.id));
+
     // Mark as translating
     for (const article of articlesToTranslate) {
       translatingIds.current.add(article.id);
@@ -213,11 +224,10 @@ export function ArticleList({
       onUpdateArticles(updatedArticles);
     } catch (error) {
       console.error("Auto-translate error:", error);
-      // Remove from translating set on error so they can be retried
-      for (const article of articlesToTranslate) {
-        translatingIds.current.delete(article.id);
-      }
     } finally {
+      for (const id of requestedIds) {
+        translatingIds.current.delete(id);
+      }
       setIsTranslating(false);
     }
   }, [autoTranslate, onUpdateArticles, targetLanguage]);

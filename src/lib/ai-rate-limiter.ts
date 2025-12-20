@@ -70,26 +70,28 @@ class AIRateLimiter {
     }
 
     return new Promise<void>((resolve, reject) => {
+      let timeoutId: ReturnType<typeof setTimeout>;
+      const item: QueueItem = {
+        resolve: () => {
+          clearTimeout(timeoutId);
+          resolve();
+        },
+        reject: (error: Error) => {
+          clearTimeout(timeoutId);
+          reject(error);
+        },
+      };
+
       // Set timeout for this request
-      const timeoutId = setTimeout(() => {
-        const index = this.queue.findIndex((item) => item.resolve === resolve);
+      timeoutId = setTimeout(() => {
+        const index = this.queue.indexOf(item);
         if (index !== -1) {
           this.queue.splice(index, 1);
         }
-        reject(new Error("AI request timeout. Please try again."));
+        item.reject(new Error("AI request timeout. Please try again."));
       }, this.requestTimeout);
 
-      const wrappedResolve = () => {
-        clearTimeout(timeoutId);
-        resolve();
-      };
-
-      const wrappedReject = (error: Error) => {
-        clearTimeout(timeoutId);
-        reject(error);
-      };
-
-      this.queue.push({ resolve: wrappedResolve, reject: wrappedReject });
+      this.queue.push(item);
       this.processQueue();
     });
   }

@@ -258,6 +258,7 @@
     }
   },
   "time": {
+    "unknown": "Unknown",
     "just_now": "Just now",
     "minutes_ago": "{{count}} minute(s) ago",
     "hours_ago": "{{count}} hour(s) ago",

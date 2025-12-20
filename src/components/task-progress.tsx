@@ -22,39 +22,62 @@ export function TaskProgress({ onTaskComplete }: TaskProgressProps) {
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
   const notifiedIdsRef = useRef<Set<string>>(new Set());
   const onTaskCompleteRef = useRef(onTaskComplete);
+  const retryDelayRef = useRef(1000);
 
   useEffect(() => {
     onTaskCompleteRef.current = onTaskComplete;
   }, [onTaskComplete]);
 
   useEffect(() => {
-    const eventSource = new EventSource("/api/tasks/stream");
+    let eventSource: EventSource | null = null;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let closed = false;
 
-    eventSource.onmessage = (event) => {
-      try {
-        const data: Task[] = JSON.parse(event.data);
-        setTasks(data);
+    const connect = () => {
+      if (closed) return;
+      eventSource = new EventSource("/api/tasks/stream");
 
-        for (const task of data) {
-          if (
-            task.status === "completed" &&
-            !notifiedIdsRef.current.has(task.id)
-          ) {
-            notifiedIdsRef.current.add(task.id);
-            onTaskCompleteRef.current?.();
+      eventSource.onmessage = (event) => {
+        try {
+          const data: Task[] = JSON.parse(event.data);
+          setTasks(data);
+          retryDelayRef.current = 1000;
+
+          for (const task of data) {
+            if (
+              task.status === "completed" &&
+              !notifiedIdsRef.current.has(task.id)
+            ) {
+              notifiedIdsRef.current.add(task.id);
+              onTaskCompleteRef.current?.();
+            }
           }
+        } catch (err) {
+          console.error("Failed to parse tasks event:", err);
         }
-      } catch (err) {
-        console.error("Failed to parse tasks event:", err);
-      }
+      };
+
+      eventSource.onerror = () => {
+        eventSource?.close();
+        eventSource = null;
+        if (closed) return;
+
+        const delay = retryDelayRef.current;
+        retryDelayRef.current = Math.min(delay * 2, 30000);
+        retryTimer = setTimeout(connect, delay);
+      };
     };
 
-    eventSource.onerror = () => {
-      eventSource.close();
-    };
+    connect();
 
     return () => {
-      eventSource.close();
+      closed = true;
+      if (eventSource) {
+        eventSource.close();
+      }
+      if (retryTimer) {
+        clearTimeout(retryTimer);
+      }
     };
   }, []);
 
