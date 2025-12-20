@@ -352,7 +352,7 @@ export function AppSidebar({
       {/* Content */}
       <motion.div
         key={selectedContentType}
-        initial={{ x: direction > 0 ? 30 : -30 }}
+        initial={direction === 0 ? false : { x: direction > 0 ? 30 : -30 }}
         animate={{ x: 0 }}
         transition={{ type: "spring", stiffness: 500, damping: 35, mass: 0.8 }}
         className="flex-1 overflow-y-auto px-3 py-2 space-y-6"
