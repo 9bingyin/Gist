@@ -6,7 +6,10 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
-  const body = await request.json();
+  const body = (await request.json().catch(() => ({}))) as Record<
+    string,
+    unknown
+  >;
 
   const feed = await prisma.feed.findUnique({ where: { id } });
   if (!feed) {
@@ -15,12 +18,54 @@ export async function PATCH(
 
   const updateData: { folderId?: string | null; type?: string } = {};
 
-  if ("folderId" in body) {
-    updateData.folderId = body.folderId;
+  const hasFolderId = Object.prototype.hasOwnProperty.call(body, "folderId");
+  const hasType = Object.prototype.hasOwnProperty.call(body, "type");
+
+  if (
+    hasFolderId &&
+    body.folderId !== null &&
+    typeof body.folderId !== "string"
+  ) {
+    return NextResponse.json({ error: "Invalid folderId" }, { status: 400 });
   }
 
-  if ("type" in body) {
-    updateData.type = body.type;
+  let requestedType: string | undefined;
+  if (hasType) {
+    if (typeof body.type !== "string") {
+      return NextResponse.json({ error: "Invalid type" }, { status: 400 });
+    }
+    requestedType = body.type;
+  }
+
+  const isTypeChange = hasType && requestedType !== feed.type;
+
+  if (isTypeChange) {
+    updateData.type = requestedType;
+    updateData.folderId = null;
+  } else {
+    if (hasFolderId) {
+      updateData.folderId = (body.folderId as string | null) ?? null;
+      if (updateData.folderId) {
+        const folder = await prisma.folder.findUnique({
+          where: { id: updateData.folderId },
+          select: { type: true },
+        });
+        if (!folder) {
+          return NextResponse.json(
+            { error: "Folder not found" },
+            { status: 404 },
+          );
+        }
+        updateData.type = folder.type;
+      }
+    }
+  }
+
+  if (Object.keys(updateData).length === 0) {
+    return NextResponse.json(
+      { error: "No valid fields to update" },
+      { status: 400 },
+    );
   }
 
   const updatedFeed = await prisma.feed.update({
