@@ -393,8 +393,13 @@ export default function Home() {
       const folder = folders.find((f) => f.id === selectedFolderId);
       return folder ? folder.name : t("nav.articles");
     }
-    return t("nav.all_articles");
-  }, [selectedFeedId, selectedFolderId, feeds, folders, t]);
+    const titleMap: Record<ContentType, string> = {
+      article: t("nav.all_articles"),
+      picture: t("nav.all_pictures"),
+      notification: t("nav.all_notifications"),
+    };
+    return titleMap[selectedContentType];
+  }, [selectedFeedId, selectedFolderId, feeds, folders, selectedContentType, t]);
 
   if (!layoutLoaded) {
     return <div className="h-screen" />;
@@ -416,7 +421,11 @@ export default function Home() {
         handleSelectFolder(folderId);
         setSidebarOpen(false);
       }}
-      onSelectContentType={setSelectedContentType}
+      onSelectContentType={(type) => {
+        setSelectedContentType(type);
+        setSelectedFeedId(null);
+        setSelectedFolderId(null);
+      }}
       onAddFeed={handleAddFeed}
       onRefreshFeed={handleRefreshFeed}
       onDeleteFeed={handleDeleteFeed}

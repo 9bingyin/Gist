@@ -61,14 +61,16 @@
     "placeholder": "输入 RSS 订阅地址",
     "adding": "添加中...",
     "add": "添加订阅",
-    "error": "添加订阅失败"
+    "error": "添加订阅失败",
+    "url_label": "订阅地址"
   },
   "addfolder": {
     "title": "新建文件夹",
     "placeholder": "文件夹名称",
     "creating": "创建中...",
     "create": "创建文件夹",
-    "error": "创建文件夹失败"
+    "error": "创建文件夹失败",
+    "name_label": "文件夹名称"
   },
   "task": {
     "opml_import": "OPML 导入",
@@ -236,7 +238,9 @@
   },
   "nav": {
     "articles": "文章",
-    "all_articles": "所有文章"
+    "all_articles": "所有文章",
+    "all_pictures": "所有图片",
+    "all_notifications": "所有通知"
   },
   "article": {
     "readability": {
@@ -282,11 +286,5 @@
     "picture": "图片",
     "notification": "通知",
     "select_type": "类型"
-  },
-  "addfeed": {
-    "url_label": "订阅地址"
-  },
-  "addfolder": {
-    "name_label": "文件夹名称"
   }
 }

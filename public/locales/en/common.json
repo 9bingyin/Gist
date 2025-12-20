@@ -61,14 +61,16 @@
     "placeholder": "Enter RSS feed URL",
     "adding": "Adding...",
     "add": "Add feed",
-    "error": "Failed to add feed"
+    "error": "Failed to add feed",
+    "url_label": "Feed URL"
   },
   "addfolder": {
     "title": "New folder",
     "placeholder": "Folder name",
     "creating": "Creating...",
     "create": "Create folder",
-    "error": "Failed to create folder"
+    "error": "Failed to create folder",
+    "name_label": "Folder name"
   },
   "task": {
     "opml_import": "OPML Import",
@@ -236,7 +238,9 @@
   },
   "nav": {
     "articles": "Articles",
-    "all_articles": "All Articles"
+    "all_articles": "All Articles",
+    "all_pictures": "All Pictures",
+    "all_notifications": "All Notifications"
   },
   "article": {
     "readability": {
@@ -282,11 +286,5 @@
     "picture": "Pictures",
     "notification": "Notifications",
     "select_type": "Type"
-  },
-  "addfeed": {
-    "url_label": "Feed URL"
-  },
-  "addfolder": {
-    "name_label": "Folder name"
   }
 }
