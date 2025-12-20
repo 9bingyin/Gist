@@ -111,7 +111,8 @@
     "refresh_feed": "Refresh",
     "move_to_folder": "Move to Folder",
     "remove_from_folder": "Remove from Folder",
-    "delete_feed": "Delete Feed"
+    "delete_feed": "Delete Feed",
+    "change_type": "Change Type"
   },
   "data": {
     "title": "Data Management",
@@ -275,5 +276,17 @@
       "title": "No articles yet",
       "subtitle": "Add a feed to start reading"
     }
+  },
+  "content_type": {
+    "article": "Articles",
+    "picture": "Pictures",
+    "notification": "Notifications",
+    "select_type": "Type"
+  },
+  "addfeed": {
+    "url_label": "Feed URL"
+  },
+  "addfolder": {
+    "name_label": "Folder name"
   }
 }

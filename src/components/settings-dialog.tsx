@@ -66,7 +66,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { MoreHorizontalIcon } from "lucide-react";
-import type { Feed, Folder } from "@/lib/types";
+import type { Feed, Folder, ContentType } from "@/lib/types";
 import type { Task } from "@/lib/task-queue";
 
 type SettingsTab =
@@ -84,13 +84,15 @@ interface SettingsDialogProps {
   onRefreshFeed: (feedId: string) => Promise<void>;
   onDeleteFeed: (feedId: string) => Promise<void>;
   onRefreshAllFeeds: () => Promise<void>;
-  onAddFolder: (name: string) => Promise<void>;
+  onAddFolder: (name: string, type: ContentType) => Promise<void>;
   onDeleteFolder: (folderId: string) => Promise<void>;
   onRenameFolder: (folderId: string, name: string) => Promise<void>;
   onMoveFeedToFolder: (
     feedId: string,
     folderId: string | null,
   ) => Promise<void>;
+  onChangeFeedType: (feedId: string, type: ContentType) => Promise<void>;
+  onChangeFolderType: (folderId: string, type: ContentType) => Promise<void>;
   onDataChange?: () => Promise<void>;
   children?: React.ReactNode;
 }
@@ -107,6 +109,8 @@ export function SettingsDialog({
   onDeleteFolder,
   onRenameFolder,
   onMoveFeedToFolder,
+  onChangeFeedType,
+  onChangeFolderType,
   onDataChange,
   children,
 }: SettingsDialogProps) {
@@ -369,6 +373,7 @@ export function SettingsDialog({
                   onDeleteFeed={onDeleteFeed}
                   onRefreshAll={handleRefreshAll}
                   onMoveFeedToFolder={onMoveFeedToFolder}
+                  onChangeFeedType={onChangeFeedType}
                 />
               )}
               {activeTab === "folders" && (
@@ -378,6 +383,7 @@ export function SettingsDialog({
                   onAddFolder={onAddFolder}
                   onDeleteFolder={onDeleteFolder}
                   onRenameFolder={onRenameFolder}
+                  onChangeFolderType={onChangeFolderType}
                 />
               )}
               {activeTab === "ai" && <AISettings />}
@@ -414,6 +420,7 @@ interface FeedsSettingsProps {
     feedId: string,
     folderId: string | null,
   ) => Promise<void>;
+  onChangeFeedType: (feedId: string, type: ContentType) => Promise<void>;
 }
 
 function FeedsSettings({
@@ -426,6 +433,7 @@ function FeedsSettings({
   onDeleteFeed,
   onRefreshAll,
   onMoveFeedToFolder,
+  onChangeFeedType,
 }: FeedsSettingsProps) {
   const { t } = useTranslation();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -592,7 +600,10 @@ function FeedsSettings({
                   <TableHead className="text-xs font-bold uppercase tracking-wider text-muted-foreground/60">
                     {t("table.folder")}
                   </TableHead>
-                  <TableHead className="w-[100px] text-center text-xs font-bold uppercase tracking-wider text-muted-foreground/60">
+                  <TableHead className="w-[100px] text-xs font-bold uppercase tracking-wider text-muted-foreground/60">
+                    {t("content_type.select_type")}
+                  </TableHead>
+                  <TableHead className="w-[80px] text-center text-xs font-bold uppercase tracking-wider text-muted-foreground/60">
                     {t("table.unread")}
                   </TableHead>
                   <TableHead className="w-[48px] pr-4"></TableHead>
@@ -660,6 +671,29 @@ function FeedsSettings({
                               {folder.name}
                             </SelectItem>
                           ))}
+                        </SelectContent>
+                      </Select>
+                    </TableCell>
+                    <TableCell>
+                      <Select
+                        value={feed.type}
+                        onValueChange={(val) =>
+                          onChangeFeedType(feed.id, val as ContentType)
+                        }
+                      >
+                        <SelectTrigger className="h-7 w-[90px] text-[11px] bg-transparent border-none hover:bg-muted/50 px-2 focus:ring-0">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="rounded-lg shadow-xl border-muted/40">
+                          <SelectItem value="article" className="text-[11px]">
+                            {t("content_type.article")}
+                          </SelectItem>
+                          <SelectItem value="picture" className="text-[11px]">
+                            {t("content_type.picture")}
+                          </SelectItem>
+                          <SelectItem value="notification" className="text-[11px]">
+                            {t("content_type.notification")}
+                          </SelectItem>
                         </SelectContent>
                       </Select>
                     </TableCell>
@@ -739,9 +773,10 @@ function FeedsSettings({
 interface FoldersSettingsProps {
   folders: Folder[];
   feeds: Feed[];
-  onAddFolder: (name: string) => Promise<void>;
+  onAddFolder: (name: string, type: ContentType) => Promise<void>;
   onDeleteFolder: (folderId: string) => Promise<void>;
   onRenameFolder: (folderId: string, name: string) => Promise<void>;
+  onChangeFolderType: (folderId: string, type: ContentType) => Promise<void>;
 }
 
 function FoldersSettings({
@@ -750,6 +785,7 @@ function FoldersSettings({
   onAddFolder,
   onDeleteFolder,
   onRenameFolder,
+  onChangeFolderType,
 }: FoldersSettingsProps) {
   const { t } = useTranslation();
   const [newFolderName, setNewFolderName] = useState("");
@@ -765,7 +801,8 @@ function FoldersSettings({
 
     setIsSubmitting(true);
     try {
-      await onAddFolder(newFolderName.trim());
+      // Default to "article" type when creating from settings
+      await onAddFolder(newFolderName.trim(), "article");
       setNewFolderName("");
     } finally {
       setIsSubmitting(false);
@@ -904,7 +941,10 @@ function FoldersSettings({
                 <TableHead className="text-xs font-bold uppercase tracking-wider text-muted-foreground/60">
                   {t("table.folder_name")}
                 </TableHead>
-                <TableHead className="w-[100px] text-center text-xs font-bold uppercase tracking-wider text-muted-foreground/60">
+                <TableHead className="w-[100px] text-xs font-bold uppercase tracking-wider text-muted-foreground/60">
+                  {t("content_type.select_type")}
+                </TableHead>
+                <TableHead className="w-[80px] text-center text-xs font-bold uppercase tracking-wider text-muted-foreground/60">
                   {t("table.feeds")}
                 </TableHead>
                 <TableHead className="w-[100px] pr-4 text-right text-xs font-bold uppercase tracking-wider text-muted-foreground/60">
@@ -915,7 +955,7 @@ function FoldersSettings({
             <TableBody>
               {folders.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="h-32 text-center">
+                  <TableCell colSpan={5} className="h-32 text-center">
                     <div className="flex flex-col items-center justify-center py-8">
                       <FolderIcon className="size-8 text-muted-foreground/20 mb-2" />
                       <p className="text-sm text-muted-foreground">
@@ -977,6 +1017,29 @@ function FoldersSettings({
                           </span>
                         </div>
                       )}
+                    </TableCell>
+                    <TableCell>
+                      <Select
+                        value={folder.type}
+                        onValueChange={(val) =>
+                          onChangeFolderType(folder.id, val as ContentType)
+                        }
+                      >
+                        <SelectTrigger className="h-7 w-[90px] text-[11px] bg-transparent border-none hover:bg-muted/50 px-2 focus:ring-0">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="rounded-lg shadow-xl border-muted/40">
+                          <SelectItem value="article" className="text-[11px]">
+                            {t("content_type.article")}
+                          </SelectItem>
+                          <SelectItem value="picture" className="text-[11px]">
+                            {t("content_type.picture")}
+                          </SelectItem>
+                          <SelectItem value="notification" className="text-[11px]">
+                            {t("content_type.notification")}
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
                     </TableCell>
                     <TableCell className="text-center">
                       <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-full bg-muted text-muted-foreground text-[10px] font-bold">

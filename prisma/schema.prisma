@@ -9,6 +9,7 @@ datasource db {
 model Folder {
   id        String   @id @default(cuid())
   name      String
+  type      String   @default("article")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   feeds     Feed[]
@@ -21,6 +22,7 @@ model Feed {
   siteUrl     String?
   description String?
   imageUrl    String?
+  type        String    @default("article")
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   articles    Article[]

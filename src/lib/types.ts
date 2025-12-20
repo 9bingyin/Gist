@@ -1,6 +1,9 @@
+export type ContentType = "article" | "picture" | "notification";
+
 export interface Folder {
   id: string;
   name: string;
+  type: ContentType;
   createdAt: string;
   updatedAt: string;
   _count: {
@@ -17,6 +20,7 @@ export interface Feed {
   siteUrl: string | null;
   description: string | null;
   imageUrl: string | null;
+  type: ContentType;
   createdAt: string;
   updatedAt: string;
   folderId: string | null;

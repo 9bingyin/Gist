@@ -111,7 +111,8 @@
     "refresh_feed": "刷新",
     "move_to_folder": "移动到文件夹",
     "remove_from_folder": "移出文件夹",
-    "delete_feed": "删除订阅"
+    "delete_feed": "删除订阅",
+    "change_type": "更改类型"
   },
   "data": {
     "title": "数据管理",
@@ -275,5 +276,17 @@
       "title": "暂无文章",
       "subtitle": "添加订阅源以开始阅读"
     }
+  },
+  "content_type": {
+    "article": "文章",
+    "picture": "图片",
+    "notification": "通知",
+    "select_type": "类型"
+  },
+  "addfeed": {
+    "url_label": "订阅地址"
+  },
+  "addfolder": {
+    "name_label": "文件夹名称"
   }
 }

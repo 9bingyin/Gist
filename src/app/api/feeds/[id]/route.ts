@@ -13,10 +13,14 @@ export async function PATCH(
     return NextResponse.json({ error: "Feed not found" }, { status: 404 });
   }
 
-  const updateData: { folderId?: string | null } = {};
+  const updateData: { folderId?: string | null; type?: string } = {};
 
   if ("folderId" in body) {
     updateData.folderId = body.folderId;
+  }
+
+  if ("type" in body) {
+    updateData.type = body.type;
   }
 
   const updatedFeed = await prisma.feed.update({

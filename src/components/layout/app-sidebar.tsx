@@ -19,6 +19,9 @@ import {
   InfoIcon,
   ArrowDownAZIcon,
   CalendarIcon,
+  ImageIcon,
+  BellIcon,
+  TagIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -36,26 +39,30 @@ import { AddFolderDialog } from "@/components/add-folder-dialog";
 import { SettingsDialog } from "@/components/settings-dialog";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
-import type { Feed, Folder } from "@/lib/types";
+import type { Feed, Folder, ContentType } from "@/lib/types";
 
 interface AppSidebarProps {
   feeds: Feed[];
   folders: Folder[];
   selectedFeedId: string | null;
   selectedFolderId?: string | null;
+  selectedContentType: ContentType;
   onSelectFeed: (feedId: string | null) => void;
   onSelectFolder?: (folderId: string) => void;
-  onAddFeed: (url: string) => Promise<void>;
+  onSelectContentType: (type: ContentType) => void;
+  onAddFeed: (url: string, type: ContentType) => Promise<void>;
   onRefreshFeed: (feedId: string) => Promise<void>;
   onDeleteFeed: (feedId: string) => Promise<void>;
   onRefreshAllFeeds: () => Promise<void>;
-  onAddFolder: (name: string) => Promise<void>;
+  onAddFolder: (name: string, type: ContentType) => Promise<void>;
   onDeleteFolder: (folderId: string) => Promise<void>;
   onRenameFolder: (folderId: string, name: string) => Promise<void>;
   onMoveFeedToFolder: (
     feedId: string,
     folderId: string | null,
   ) => Promise<void>;
+  onChangeFeedType: (feedId: string, type: ContentType) => Promise<void>;
+  onChangeFolderType: (folderId: string, type: ContentType) => Promise<void>;
   onDataChange?: () => Promise<void>;
 }
 
@@ -64,8 +71,10 @@ export function AppSidebar({
   folders,
   selectedFeedId,
   selectedFolderId,
+  selectedContentType,
   onSelectFeed,
   onSelectFolder,
+  onSelectContentType,
   onAddFeed,
   onRefreshFeed,
   onDeleteFeed,
@@ -74,6 +83,8 @@ export function AppSidebar({
   onDeleteFolder,
   onRenameFolder,
   onMoveFeedToFolder,
+  onChangeFeedType,
+  onChangeFolderType,
   onDataChange,
 }: AppSidebarProps) {
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(
@@ -89,11 +100,35 @@ export function AppSidebar({
       .catch(() => {});
   }, []);
 
-  const totalUnread = feeds.reduce(
+  // Filter feeds and folders by content type
+  const filteredFeeds = useMemo(
+    () => feeds.filter((feed) => feed.type === selectedContentType),
+    [feeds, selectedContentType],
+  );
+
+  const filteredFolders = useMemo(
+    () => folders.filter((folder) => folder.type === selectedContentType),
+    [folders, selectedContentType],
+  );
+
+  // Calculate unread count for each content type
+  const contentTypeCounts = useMemo(() => {
+    const counts = {
+      article: 0,
+      picture: 0,
+      notification: 0,
+    };
+    for (const feed of feeds) {
+      counts[feed.type] += feed._count.articles;
+    }
+    return counts;
+  }, [feeds]);
+
+  const totalUnread = filteredFeeds.reduce(
     (sum, feed) => sum + feed._count.articles,
     0,
   );
-  const uncategorizedFeeds = feeds.filter((feed) => !feed.folderId);
+  const uncategorizedFeeds = filteredFeeds.filter((feed) => !feed.folderId);
 
   // Custom sort function: ASCII (English/Numbers) first, then others (Chinese, etc.)
   const compareNames = (nameA: string, nameB: string) => {
@@ -110,14 +145,14 @@ export function AppSidebar({
   const sortedFolders = useMemo(() => {
     if (sortBy === "date") {
       // Sort by createdAt asc (Oldest first)
-      return [...folders].sort(
+      return [...filteredFolders].sort(
         (a, b) =>
           new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
       );
     }
     // Default: Sort by name
-    return [...folders].sort((a, b) => compareNames(a.name, b.name));
-  }, [folders, sortBy]);
+    return [...filteredFolders].sort((a, b) => compareNames(a.name, b.name));
+  }, [filteredFolders, sortBy]);
 
   const sortedUncategorizedFeeds = useMemo(() => {
     if (sortBy === "date") {
@@ -136,7 +171,7 @@ export function AppSidebar({
   const { t } = useTranslation();
 
   const getSortedFolderFeeds = (folderId: string) => {
-    const folderFeeds = feeds.filter((feed) => feed.folderId === folderId);
+    const folderFeeds = filteredFeeds.filter((feed) => feed.folderId === folderId);
     if (sortBy === "date") {
       // Sort by createdAt asc (Oldest first)
       return [...folderFeeds].sort(
@@ -161,7 +196,7 @@ export function AppSidebar({
   };
 
   const getFolderUnreadCount = (folderId: string) => {
-    return feeds
+    return filteredFeeds
       .filter((feed) => feed.folderId === folderId)
       .reduce((sum, feed) => sum + feed._count.articles, 0);
   };
@@ -175,7 +210,7 @@ export function AppSidebar({
           <span>{t("app.name")}</span>
         </div>
         <div className="flex items-center gap-1">
-          <AddFolderDialog onAdd={onAddFolder}>
+          <AddFolderDialog onAdd={onAddFolder} defaultType={selectedContentType}>
             <Button
               variant="ghost"
               size="icon"
@@ -184,7 +219,7 @@ export function AppSidebar({
               <FolderPlusIcon className="h-4 w-4" />
             </Button>
           </AddFolderDialog>
-          <AddFeedDialog onAdd={onAddFeed}>
+          <AddFeedDialog onAdd={onAddFeed} defaultType={selectedContentType}>
             <Button
               variant="ghost"
               size="icon"
@@ -220,6 +255,8 @@ export function AppSidebar({
                 onDeleteFolder={onDeleteFolder}
                 onRenameFolder={onRenameFolder}
                 onMoveFeedToFolder={onMoveFeedToFolder}
+                onChangeFeedType={onChangeFeedType}
+                onChangeFolderType={onChangeFolderType}
                 onDataChange={onDataChange}
               >
                 <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
@@ -239,29 +276,62 @@ export function AppSidebar({
         </div>
       </div>
 
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto px-3 py-2 space-y-6">
-        {/* Main Links */}
-        <div className="space-y-1">
-          <button
-            onClick={() => onSelectFeed(null)}
+      {/* Content Type Switcher */}
+      <div className="relative mb-2 mt-3">
+        <div className="flex h-11 items-center px-1 text-xl text-muted-foreground">
+          <Button
+            variant="ghost"
+            onClick={() => onSelectContentType("article")}
+            aria-label={t("content_type.article")}
             className={cn(
-              "flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-              selectedFeedId === null && selectedFolderId === null
-                ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                : "text-muted-foreground hover:bg-sidebar-accent/50 hover:text-foreground",
+              "flex h-11 w-8 shrink-0 grow flex-col items-center justify-center gap-1 text-[1.375rem]",
+              selectedContentType === "article"
+                ? "text-lime-600 dark:text-lime-500"
+                : "text-muted-foreground"
             )}
           >
-            <FileTextIcon className="size-4" />
-            <span>{t("nav.articles")}</span>
-            {totalUnread > 0 && (
-              <span className="ml-auto text-xs font-normal opacity-70">
-                {totalUnread}
-              </span>
+            <FileTextIcon className="size-[1.375rem]" />
+            <div className="text-[0.625rem] font-medium leading-none">
+              {contentTypeCounts.article}
+            </div>
+          </Button>
+          <Button
+            variant="ghost"
+            onClick={() => onSelectContentType("picture")}
+            aria-label={t("content_type.picture")}
+            className={cn(
+              "flex h-11 w-8 shrink-0 grow flex-col items-center justify-center gap-1 text-[1.375rem]",
+              selectedContentType === "picture"
+                ? "text-lime-600 dark:text-lime-500"
+                : "text-muted-foreground"
             )}
-          </button>
+          >
+            <ImageIcon className="size-[1.375rem]" />
+            <div className="text-[0.625rem] font-medium leading-none">
+              {contentTypeCounts.picture}
+            </div>
+          </Button>
+          <Button
+            variant="ghost"
+            onClick={() => onSelectContentType("notification")}
+            aria-label={t("content_type.notification")}
+            className={cn(
+              "flex h-11 w-8 shrink-0 grow flex-col items-center justify-center gap-1 text-[1.375rem]",
+              selectedContentType === "notification"
+                ? "text-lime-600 dark:text-lime-500"
+                : "text-muted-foreground"
+            )}
+          >
+            <BellIcon className="size-[1.375rem]" />
+            <div className="text-[0.625rem] font-medium leading-none">
+              {contentTypeCounts.notification}
+            </div>
+          </Button>
         </div>
+      </div>
 
+      {/* Content */}
+      <div className="flex-1 overflow-y-auto px-3 py-2 space-y-6">
         {/* Folders & Feeds */}
         {(folders.length > 0 || uncategorizedFeeds.length > 0) && (
           <div className="space-y-1">
@@ -375,6 +445,36 @@ export function AppSidebar({
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent side="right" align="start">
+                        <DropdownMenuSub>
+                          <DropdownMenuSubTrigger>
+                            <TagIcon className="mr-2 size-4" />
+                            {t("actions.change_type")}
+                          </DropdownMenuSubTrigger>
+                          <DropdownMenuSubContent>
+                            <DropdownMenuItem
+                              onClick={() => onChangeFolderType(folder.id, "article")}
+                              className={cn(folder.type === "article" && "bg-accent")}
+                            >
+                              <FileTextIcon className="mr-2 size-4" />
+                              {t("content_type.article")}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => onChangeFolderType(folder.id, "picture")}
+                              className={cn(folder.type === "picture" && "bg-accent")}
+                            >
+                              <ImageIcon className="mr-2 size-4" />
+                              {t("content_type.picture")}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => onChangeFolderType(folder.id, "notification")}
+                              className={cn(folder.type === "notification" && "bg-accent")}
+                            >
+                              <BellIcon className="mr-2 size-4" />
+                              {t("content_type.notification")}
+                            </DropdownMenuItem>
+                          </DropdownMenuSubContent>
+                        </DropdownMenuSub>
+                        <DropdownMenuSeparator />
                         <DropdownMenuItem
                           onClick={() => onDeleteFolder(folder.id)}
                           className="text-destructive focus:text-destructive"
@@ -403,6 +503,7 @@ export function AppSidebar({
                             onRefresh={() => onRefreshFeed(feed.id)}
                             onDelete={() => onDeleteFeed(feed.id)}
                             onMoveToFolder={onMoveFeedToFolder}
+                            onChangeType={onChangeFeedType}
                           />
                         ))
                       )}
@@ -431,6 +532,7 @@ export function AppSidebar({
                       onRefresh={() => onRefreshFeed(feed.id)}
                       onDelete={() => onDeleteFeed(feed.id)}
                       onMoveToFolder={onMoveFeedToFolder}
+                      onChangeType={onChangeFeedType}
                     />
                   ))}
                 </div>
@@ -451,6 +553,7 @@ interface FeedItemProps {
   onRefresh: () => void;
   onDelete: () => void;
   onMoveToFolder: (feedId: string, folderId: string | null) => Promise<void>;
+  onChangeType: (feedId: string, type: ContentType) => Promise<void>;
 }
 
 function FeedItem({
@@ -461,6 +564,7 @@ function FeedItem({
   onRefresh,
   onDelete,
   onMoveToFolder,
+  onChangeType,
 }: FeedItemProps) {
   const { t } = useTranslation();
 
@@ -536,6 +640,36 @@ function FeedItem({
               </DropdownMenuSub>
             </>
           )}
+          <DropdownMenuSeparator />
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              <TagIcon className="mr-2 size-4" />
+              {t("actions.change_type")}
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent>
+              <DropdownMenuItem
+                onClick={() => onChangeType(feed.id, "article")}
+                className={cn(feed.type === "article" && "bg-accent")}
+              >
+                <FileTextIcon className="mr-2 size-4" />
+                {t("content_type.article")}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => onChangeType(feed.id, "picture")}
+                className={cn(feed.type === "picture" && "bg-accent")}
+              >
+                <ImageIcon className="mr-2 size-4" />
+                {t("content_type.picture")}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => onChangeType(feed.id, "notification")}
+                className={cn(feed.type === "notification" && "bg-accent")}
+              >
+                <BellIcon className="mr-2 size-4" />
+                {t("content_type.notification")}
+              </DropdownMenuItem>
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
           <DropdownMenuSeparator />
           <DropdownMenuItem
             onClick={onDelete}

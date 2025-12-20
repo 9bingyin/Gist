@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { FolderPlusIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTranslation } from "react-i18next";
@@ -12,19 +12,39 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import type { ContentType } from "@/lib/types";
 
 interface AddFolderDialogProps {
-  onAdd: (name: string) => Promise<void>;
+  onAdd: (name: string, type: ContentType) => Promise<void>;
+  defaultType?: ContentType;
   children?: React.ReactNode;
 }
 
-export function AddFolderDialog({ onAdd, children }: AddFolderDialogProps) {
+export function AddFolderDialog({
+  onAdd,
+  defaultType = "article",
+  children,
+}: AddFolderDialogProps) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
+  const [type, setType] = useState<ContentType>(defaultType);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   const { t } = useTranslation();
+
+  // Update type when defaultType changes
+  useEffect(() => {
+    setType(defaultType);
+  }, [defaultType]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,7 +54,7 @@ export function AddFolderDialog({ onAdd, children }: AddFolderDialogProps) {
     setError("");
 
     try {
-      await onAdd(name.trim());
+      await onAdd(name.trim(), type);
       setName("");
       setOpen(false);
     } catch (err) {
@@ -58,13 +78,39 @@ export function AddFolderDialog({ onAdd, children }: AddFolderDialogProps) {
           <DialogTitle>{t("addfolder.title")}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <Input
-            placeholder={t("addfolder.placeholder")}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            disabled={loading}
-            autoFocus
-          />
+          <div className="space-y-2">
+            <Label>{t("addfolder.name_label")}</Label>
+            <Input
+              placeholder={t("addfolder.placeholder")}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              disabled={loading}
+              autoFocus
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>{t("content_type.select_type")}</Label>
+            <Select
+              value={type}
+              onValueChange={(v) => setType(v as ContentType)}
+              disabled={loading}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="article">
+                  {t("content_type.article")}
+                </SelectItem>
+                <SelectItem value="picture">
+                  {t("content_type.picture")}
+                </SelectItem>
+                <SelectItem value="notification">
+                  {t("content_type.notification")}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           {error && <p className="text-sm text-red-500">{error}</p>}
           <Button
             type="submit"

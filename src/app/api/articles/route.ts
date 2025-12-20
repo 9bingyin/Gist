@@ -5,6 +5,7 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const feedId = searchParams.get("feedId");
   const folderId = searchParams.get("folderId");
+  const type = searchParams.get("type");
   const unreadOnly = searchParams.get("unreadOnly") === "true";
 
   const where: any = {};
@@ -13,7 +14,14 @@ export async function GET(request: NextRequest) {
   }
   if (folderId) {
     where.feed = {
+      ...where.feed,
       folderId: folderId,
+    };
+  }
+  if (type) {
+    where.feed = {
+      ...where.feed,
+      type: type,
     };
   }
   if (unreadOnly) {

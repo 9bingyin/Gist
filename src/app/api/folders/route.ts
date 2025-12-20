@@ -31,7 +31,7 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const { name } = await request.json();
+  const { name, type = "article" } = await request.json();
 
   if (!name || typeof name !== "string" || name.trim() === "") {
     return NextResponse.json({ error: "Name is required" }, { status: 400 });
@@ -40,6 +40,7 @@ export async function POST(request: NextRequest) {
   const folder = await prisma.folder.create({
     data: {
       name: name.trim(),
+      type,
     },
     include: {
       _count: {

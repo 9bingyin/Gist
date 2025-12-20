@@ -12,7 +12,7 @@ import { ArticleList } from "@/components/layout/article-list";
 import { ArticleDetail } from "@/components/layout/article-detail";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
-import type { Feed, Article, Folder } from "@/lib/types";
+import type { Feed, Article, Folder, ContentType } from "@/lib/types";
 import { useTranslation } from "react-i18next";
 
 const LAYOUT_STORAGE_KEY = "rss-reader-layout";
@@ -33,6 +33,8 @@ export default function Home() {
   const [targetLanguage, setTargetLanguage] = useState("Chinese");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [mobileView, setMobileView] = useState<"list" | "detail">("list");
+  const [selectedContentType, setSelectedContentType] =
+    useState<ContentType>("article");
   const isMobile = useIsMobile();
 
   useEffect(() => {
@@ -78,7 +80,11 @@ export default function Home() {
 
   const fetchArticles = useCallback(
     async (
-      options: { feedId?: string | null; folderId?: string | null } = {},
+      options: {
+        feedId?: string | null;
+        folderId?: string | null;
+        type?: ContentType;
+      } = {},
     ) => {
       setLoading(true);
       try {
@@ -86,6 +92,7 @@ export default function Home() {
         const params = new URLSearchParams();
         if (options.feedId) params.append("feedId", options.feedId);
         if (options.folderId) params.append("folderId", options.folderId);
+        if (options.type) params.append("type", options.type);
 
         if (params.toString()) {
           url += `?${params.toString()}`;
@@ -145,26 +152,26 @@ export default function Home() {
   useEffect(() => {
     fetchFeeds();
     fetchFolders();
-    fetchArticles();
-  }, [fetchFeeds, fetchFolders, fetchArticles]);
+    fetchArticles({ type: selectedContentType });
+  }, [fetchFeeds, fetchFolders, fetchArticles, selectedContentType]);
 
   const handleSelectFeed = (feedId: string | null) => {
     setSelectedFeedId(feedId);
     setSelectedFolderId(null);
-    fetchArticles({ feedId });
+    fetchArticles({ feedId, type: selectedContentType });
   };
 
   const handleSelectFolder = (folderId: string) => {
     setSelectedFolderId(folderId);
     setSelectedFeedId(null);
-    fetchArticles({ folderId });
+    fetchArticles({ folderId, type: selectedContentType });
   };
 
-  const handleAddFeed = async (url: string) => {
+  const handleAddFeed = async (url: string, type: ContentType) => {
     const res = await fetch("/api/feeds", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url }),
+      body: JSON.stringify({ url, type }),
     });
 
     if (!res.ok) {
@@ -173,13 +180,21 @@ export default function Home() {
     }
 
     await fetchFeeds();
-    await fetchArticles({ feedId: selectedFeedId, folderId: selectedFolderId });
+    await fetchArticles({
+      feedId: selectedFeedId,
+      folderId: selectedFolderId,
+      type: selectedContentType,
+    });
   };
 
   const handleRefreshFeed = async (feedId: string) => {
     await fetch(`/api/feeds/${feedId}/refresh`, { method: "POST" });
     await fetchFeeds();
-    await fetchArticles({ feedId: selectedFeedId, folderId: selectedFolderId });
+    await fetchArticles({
+      feedId: selectedFeedId,
+      folderId: selectedFolderId,
+      type: selectedContentType,
+    });
   };
 
   const handleRefreshAllFeeds = async () => {
@@ -187,7 +202,11 @@ export default function Home() {
       await fetch(`/api/feeds/${feed.id}/refresh`, { method: "POST" });
     }
     await fetchFeeds();
-    await fetchArticles({ feedId: selectedFeedId, folderId: selectedFolderId });
+    await fetchArticles({
+      feedId: selectedFeedId,
+      folderId: selectedFolderId,
+      type: selectedContentType,
+    });
   };
 
   const handleDeleteFeed = async (feedId: string) => {
@@ -199,6 +218,7 @@ export default function Home() {
       await fetchArticles({
         feedId: selectedFeedId,
         folderId: selectedFolderId,
+        type: selectedContentType,
       });
     }
   };
@@ -249,17 +269,18 @@ export default function Home() {
       await fetchArticles({
         feedId: selectedFeedId,
         folderId: selectedFolderId,
+        type: selectedContentType,
       });
     } finally {
       setLoading(false);
     }
   };
 
-  const handleAddFolder = async (name: string) => {
+  const handleAddFolder = async (name: string, type: ContentType) => {
     const res = await fetch("/api/folders", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name }),
+      body: JSON.stringify({ name, type }),
     });
 
     if (!res.ok) {
@@ -301,10 +322,33 @@ export default function Home() {
     await fetchFolders();
   };
 
+  const handleChangeFeedType = async (feedId: string, type: ContentType) => {
+    await fetch(`/api/feeds/${feedId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type }),
+    });
+    await fetchFeeds();
+  };
+
+  const handleChangeFolderType = async (folderId: string, type: ContentType) => {
+    await fetch(`/api/folders/${folderId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type }),
+    });
+    await fetchFolders();
+    await fetchFeeds();
+  };
+
   const handleDataChange = async () => {
     await fetchFeeds();
     await fetchFolders();
-    await fetchArticles({ feedId: selectedFeedId, folderId: selectedFolderId });
+    await fetchArticles({
+      feedId: selectedFeedId,
+      folderId: selectedFolderId,
+      type: selectedContentType,
+    });
   };
 
   const handleArticleUpdate = useCallback((updatedArticle: Article) => {
@@ -330,7 +374,11 @@ export default function Home() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ feedId: selectedFeedId }), // TODO: Update backend to support folderId
     });
-    await fetchArticles({ feedId: selectedFeedId, folderId: selectedFolderId });
+    await fetchArticles({
+      feedId: selectedFeedId,
+      folderId: selectedFolderId,
+      type: selectedContentType,
+    });
     await fetchFeeds();
   };
 
@@ -359,6 +407,7 @@ export default function Home() {
       folders={folders}
       selectedFeedId={selectedFeedId}
       selectedFolderId={selectedFolderId}
+      selectedContentType={selectedContentType}
       onSelectFeed={(feedId) => {
         handleSelectFeed(feedId);
         setSidebarOpen(false);
@@ -367,6 +416,7 @@ export default function Home() {
         handleSelectFolder(folderId);
         setSidebarOpen(false);
       }}
+      onSelectContentType={setSelectedContentType}
       onAddFeed={handleAddFeed}
       onRefreshFeed={handleRefreshFeed}
       onDeleteFeed={handleDeleteFeed}
@@ -375,6 +425,8 @@ export default function Home() {
       onDeleteFolder={handleDeleteFolder}
       onRenameFolder={handleRenameFolder}
       onMoveFeedToFolder={handleMoveFeedToFolder}
+      onChangeFeedType={handleChangeFeedType}
+      onChangeFolderType={handleChangeFolderType}
       onDataChange={handleDataChange}
     />
   );
