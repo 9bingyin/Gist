@@ -48,21 +48,23 @@ export default function Home() {
     setLayoutLoaded(true);
   }, []);
 
-  // Fetch auto-translate setting and target language
-  useEffect(() => {
-    const fetchSettings = async () => {
-      try {
-        const res = await fetch("/api/settings");
-        const settings = await res.json();
-        setAutoTranslate(settings.aiAutoTranslate === "true");
-        setTargetLanguage(settings.aiLanguage || "Chinese");
-        setAiEnabled(settings.aiEnabled !== "false");
-      } catch (err) {
-        console.error("Failed to fetch settings:", err);
-      }
-    };
-    fetchSettings();
+  // Fetch settings (extracted for reuse)
+  const fetchSettings = useCallback(async () => {
+    try {
+      const res = await fetch("/api/settings");
+      const settings = await res.json();
+      setAutoTranslate(settings.aiAutoTranslate === "true");
+      setTargetLanguage(settings.aiLanguage || "Chinese");
+      setAiEnabled(settings.aiEnabled !== "false");
+    } catch (err) {
+      console.error("Failed to fetch settings:", err);
+    }
   }, []);
+
+  // Initial settings load
+  useEffect(() => {
+    fetchSettings();
+  }, [fetchSettings]);
 
   const onLayoutChange = useCallback((layout: Layout) => {
     localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(layout));
@@ -322,6 +324,11 @@ export default function Home() {
     });
     await fetchFeeds();
     await fetchFolders();
+    await fetchArticles({
+      feedId: selectedFeedId,
+      folderId: selectedFolderId,
+      type: selectedContentType,
+    });
   };
 
   const handleChangeFeedType = async (feedId: string, type: ContentType) => {
@@ -331,6 +338,11 @@ export default function Home() {
       body: JSON.stringify({ type }),
     });
     await fetchFeeds();
+    await fetchArticles({
+      feedId: selectedFeedId,
+      folderId: selectedFolderId,
+      type: selectedContentType,
+    });
   };
 
   const handleChangeFolderType = async (folderId: string, type: ContentType) => {
@@ -341,6 +353,11 @@ export default function Home() {
     });
     await fetchFolders();
     await fetchFeeds();
+    await fetchArticles({
+      feedId: selectedFeedId,
+      folderId: selectedFolderId,
+      type: selectedContentType,
+    });
   };
 
   const handleDataChange = async () => {
@@ -351,6 +368,7 @@ export default function Home() {
       folderId: selectedFolderId,
       type: selectedContentType,
     });
+    await fetchSettings();
   };
 
   const handleArticleUpdate = useCallback((updatedArticle: Article) => {

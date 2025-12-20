@@ -386,7 +386,7 @@ export function SettingsDialog({
                   onChangeFolderType={onChangeFolderType}
                 />
               )}
-              {activeTab === "ai" && <AISettings />}
+              {activeTab === "ai" && <AISettings onSettingsChange={onDataChange} />}
               {activeTab === "data" && (
                 <DataSettings
                   onDataChange={onDataChange}
@@ -397,7 +397,7 @@ export function SettingsDialog({
                   subscribeToTask={subscribeToTask}
                 />
               )}
-              {activeTab === "debug" && <DebugSettings />}
+              {activeTab === "debug" && <DebugSettings onSettingsChange={onDataChange} />}
               {activeTab === "about" && <AboutSettings />}
             </div>
           </div>
@@ -1575,7 +1575,11 @@ function DataSettings({
   );
 }
 
-function DebugSettings() {
+interface DebugSettingsProps {
+  onSettingsChange?: () => void;
+}
+
+function DebugSettings({ onSettingsChange }: DebugSettingsProps) {
   const { t } = useTranslation();
   const [userAgent, setUserAgent] = useState("");
   const [savedUserAgent, setSavedUserAgent] = useState("");
@@ -1655,6 +1659,7 @@ function DebugSettings() {
       await fetch("/api/auto-refresh", { method: "POST" });
 
       setMessage({ type: "success", text: t("advanced.settings_saved") });
+      onSettingsChange?.();
     } catch {
       setMessage({ type: "error", text: t("advanced.failed_save_settings") });
     } finally {
@@ -1986,7 +1991,11 @@ function DebugSettings() {
   );
 }
 
-function AISettings() {
+interface AISettingsProps {
+  onSettingsChange?: () => void;
+}
+
+function AISettings({ onSettingsChange }: AISettingsProps) {
   const { t } = useTranslation();
   const [aiProvider, setAiProvider] = useState<
     "openai" | "anthropic" | "openai-compatible"
@@ -2094,6 +2103,7 @@ function AISettings() {
       setSavedAiQps(aiQps);
 
       setMessage({ type: "success", text: t("ai.settings_saved") });
+      onSettingsChange?.();
     } catch {
       setMessage({ type: "error", text: t("ai.failed_save") });
     } finally {
