@@ -185,6 +185,8 @@
   "ai": {
     "title": "AI Configuration",
     "title_short": "AI",
+    "enabled": "Enable AI Features",
+    "enabled_desc": "Enable AI-powered features like summarization and translation.",
     "provider": "AI Provider",
     "provider_desc": "Select your preferred AI service provider.",
     "base_url": "Base URL",

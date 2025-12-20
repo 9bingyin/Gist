@@ -185,6 +185,8 @@
   "ai": {
     "title": "AI 配置",
     "title_short": "AI",
+    "enabled": "启用 AI 功能",
+    "enabled_desc": "启用 AI 驱动的功能，如摘要和翻译。",
     "provider": "AI 提供商",
     "provider_desc": "选择你偏好的 AI 服务提供商。",
     "base_url": "Base URL",

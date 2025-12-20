@@ -7,9 +7,6 @@ import {
   RssIcon,
   ClockIcon,
   BookOpenIcon,
-  Share2Icon,
-  BookmarkIcon,
-  MoreHorizontalIcon,
   LoaderIcon,
   SparklesIcon,
   LanguagesIcon,
@@ -32,6 +29,7 @@ interface ArticleDetailProps {
   onArticleUpdate?: (article: Article) => void;
   autoTranslate?: boolean;
   targetLanguage?: string;
+  aiEnabled?: boolean;
   onBack?: () => void;
 }
 
@@ -204,6 +202,7 @@ export function ArticleDetail({
   onArticleUpdate,
   autoTranslate,
   targetLanguage,
+  aiEnabled = true,
   onBack,
 }: ArticleDetailProps) {
   const { t, i18n } = useTranslation();
@@ -622,97 +621,73 @@ export function ArticleDetail({
               </TooltipContent>
             </Tooltip>
 
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className={cn(
-                    "h-8 w-8 text-muted-foreground hover:text-foreground",
-                    aiSummary && "bg-accent text-accent-foreground",
-                    summaryError && "text-destructive hover:text-destructive",
-                  )}
-                  onClick={handleGenerateSummary}
-                  disabled={isLoadingSummary}
-                >
-                  {isLoadingSummary ? (
-                    <LoaderIcon className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <SparklesIcon className="h-4 w-4" />
-                  )}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>
-                  {summaryError ||
-                    (aiSummary
-                      ? t("article.summary.hide")
-                      : t("article.summary.generate"))}
-                </p>
-              </TooltipContent>
-            </Tooltip>
+            {aiEnabled && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className={cn(
+                      "h-8 w-8 text-muted-foreground hover:text-foreground",
+                      aiSummary && "bg-accent text-accent-foreground",
+                      summaryError && "text-destructive hover:text-destructive",
+                    )}
+                    onClick={handleGenerateSummary}
+                    disabled={isLoadingSummary}
+                  >
+                    {isLoadingSummary ? (
+                      <LoaderIcon className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <SparklesIcon className="h-4 w-4" />
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>
+                    {summaryError ||
+                      (aiSummary
+                        ? t("article.summary.hide")
+                        : t("article.summary.generate"))}
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            )}
 
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className={cn(
-                    "h-8 w-8 text-muted-foreground hover:text-foreground",
-                    translateEnabled && "bg-accent text-accent-foreground",
-                    translationError &&
-                      "text-destructive hover:text-destructive",
-                  )}
-                  onClick={handleTranslate}
-                  disabled={isLoadingTranslation}
-                >
-                  {isLoadingTranslation ? (
-                    <LoaderIcon className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <LanguagesIcon className="h-4 w-4" />
-                  )}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>
-                  {translationError ||
-                    (translateEnabled
-                      ? t("article.translate.show_original")
-                      : t("article.translate.ai_translate"))}
-                </p>
-              </TooltipContent>
-            </Tooltip>
+            {aiEnabled && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className={cn(
+                      "h-8 w-8 text-muted-foreground hover:text-foreground",
+                      translateEnabled && "bg-accent text-accent-foreground",
+                      translationError &&
+                        "text-destructive hover:text-destructive",
+                    )}
+                    onClick={handleTranslate}
+                    disabled={isLoadingTranslation}
+                  >
+                    {isLoadingTranslation ? (
+                      <LoaderIcon className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <LanguagesIcon className="h-4 w-4" />
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>
+                    {translationError ||
+                      (translateEnabled
+                        ? t("article.translate.show_original")
+                        : t("article.translate.ai_translate"))}
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            )}
 
             <div className="h-4 w-px bg-border/50 mx-1" />
 
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                >
-                  <Share2Icon className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>{t("article.actions.share")}</p>
-              </TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                >
-                  <BookmarkIcon className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>{t("article.actions.bookmark")}</p>
-              </TooltipContent>
-            </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
@@ -732,20 +707,6 @@ export function ArticleDetail({
               </TooltipTrigger>
               <TooltipContent>
                 <p>{t("article.actions.open_original")}</p>
-              </TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                >
-                  <MoreHorizontalIcon className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>{t("article.actions.more")}</p>
               </TooltipContent>
             </Tooltip>
           </div>

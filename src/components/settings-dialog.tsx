@@ -2006,6 +2006,8 @@ function AISettings() {
   const [savedAiAutoTranslate, setSavedAiAutoTranslate] = useState(false);
   const [aiQps, setAiQps] = useState("2");
   const [savedAiQps, setSavedAiQps] = useState("2");
+  const [aiEnabled, setAiEnabled] = useState(true);
+  const [savedAiEnabled, setSavedAiEnabled] = useState(true);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -2030,9 +2032,12 @@ function AISettings() {
         const language = settings.aiLanguage || "English";
         const autoTranslate = settings.aiAutoTranslate === "true";
         const qps = settings.aiQps || "2";
+        const enabled = settings.aiEnabled !== "false";
 
         setAiProvider(provider);
         setSavedAiProvider(provider);
+        setAiEnabled(enabled);
+        setSavedAiEnabled(enabled);
         setAiBaseUrl(baseUrl);
         setSavedAiBaseUrl(baseUrl);
         setAiApiKey(apiKey);
@@ -2064,6 +2069,7 @@ function AISettings() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          aiEnabled: aiEnabled ? "true" : "false",
           aiProvider,
           aiBaseUrl: aiBaseUrl || "",
           aiApiKey: aiApiKey || "",
@@ -2078,6 +2084,7 @@ function AISettings() {
         throw new Error("Failed to save");
       }
 
+      setSavedAiEnabled(aiEnabled);
       setSavedAiProvider(aiProvider);
       setSavedAiBaseUrl(aiBaseUrl);
       setSavedAiApiKey(aiApiKey);
@@ -2147,6 +2154,7 @@ function AISettings() {
   };
 
   const hasChanges =
+    aiEnabled !== savedAiEnabled ||
     aiProvider !== savedAiProvider ||
     aiBaseUrl !== savedAiBaseUrl ||
     aiApiKey !== savedAiApiKey ||
@@ -2184,6 +2192,38 @@ function AISettings() {
       )}
 
       <div className="space-y-4">
+        {/* AI Enabled Switch */}
+        <div className="rounded-xl border border-muted/40 p-4 bg-card transition-all hover:border-muted-foreground/20">
+          <div className="flex items-center justify-between">
+            <div className="space-y-1">
+              <h4 className="font-semibold text-sm">{t("ai.enabled")}</h4>
+              <p className="text-[11px] text-muted-foreground">
+                {t("ai.enabled_desc")}
+              </p>
+            </div>
+
+            {!loading && (
+              <button
+                type="button"
+                role="switch"
+                aria-checked={aiEnabled}
+                onClick={() => setAiEnabled(!aiEnabled)}
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${
+                  aiEnabled ? "bg-primary" : "bg-muted"
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                    aiEnabled ? "translate-x-5" : "translate-x-0"
+                  }`}
+                />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {aiEnabled && (
+          <>
         {/* AI Provider */}
         <div className="rounded-xl border border-muted/40 p-4 bg-card transition-all hover:border-muted-foreground/20">
           <h4 className="font-semibold text-sm mb-1">{t("ai.title")}</h4>
@@ -2426,19 +2466,24 @@ function AISettings() {
           </div>
         )}
 
+        </>
+        )}
+
         {/* Action Buttons */}
         <div className="flex justify-end gap-3 pt-1">
-          <Button
-            variant="outline"
-            onClick={handleTest}
-            disabled={testing || !aiApiKey}
-            className="rounded-md px-5 h-9 font-bold"
-          >
-            {testing ? (
-              <LoaderIcon className="size-4 animate-spin mr-2" />
-            ) : null}
-            {t("actions.test_connection")}
-          </Button>
+          {aiEnabled && (
+            <Button
+              variant="outline"
+              onClick={handleTest}
+              disabled={testing || !aiApiKey}
+              className="rounded-md px-5 h-9 font-bold"
+            >
+              {testing ? (
+                <LoaderIcon className="size-4 animate-spin mr-2" />
+              ) : null}
+              {t("actions.test_connection")}
+            </Button>
+          )}
           <Button
             onClick={handleSave}
             disabled={saving || !hasChanges}

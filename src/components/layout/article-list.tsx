@@ -20,6 +20,7 @@ interface ArticleListProps {
   loading?: boolean;
   autoTranslate?: boolean;
   targetLanguage?: string;
+  aiEnabled?: boolean;
   showMenuButton?: boolean;
   onMenuClick?: () => void;
 }
@@ -35,6 +36,7 @@ export function ArticleList({
   loading,
   autoTranslate,
   targetLanguage,
+  aiEnabled = true,
   showMenuButton,
   onMenuClick,
 }: ArticleListProps) {
@@ -160,7 +162,7 @@ export function ArticleList({
 
   // Translate visible articles
   const translateVisibleArticles = useCallback(async () => {
-    if (!autoTranslate || !onUpdateArticles || !targetLanguage) return;
+    if (!autoTranslate || !aiEnabled || !onUpdateArticles || !targetLanguage) return;
 
     // Use ref to get latest articles (avoid closure issues)
     const currentArticles = articlesRef.current;
@@ -230,7 +232,7 @@ export function ArticleList({
       }
       setIsTranslating(false);
     }
-  }, [autoTranslate, onUpdateArticles, targetLanguage]);
+  }, [autoTranslate, aiEnabled, onUpdateArticles, targetLanguage]);
 
   // Debounced translate trigger
   const scheduleTranslation = useCallback(() => {
