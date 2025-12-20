@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { getGravatarUrl } from "@/lib/gravatar";
 import {
   RssIcon,
@@ -92,6 +93,24 @@ export function AppSidebar({
   );
   const [email, setEmail] = useState("");
   const [sortBy, setSortBy] = useState<"name" | "date">("name");
+
+  // Animation direction tracking
+  const contentTypeOrder: Record<ContentType, number> = {
+    article: 0,
+    picture: 1,
+    notification: 2,
+  };
+  const prevTypeRef = useRef(selectedContentType);
+  const directionRef = useRef(0);
+
+  if (prevTypeRef.current !== selectedContentType) {
+    directionRef.current =
+      contentTypeOrder[selectedContentType] -
+      contentTypeOrder[prevTypeRef.current];
+    prevTypeRef.current = selectedContentType;
+  }
+
+  const direction = directionRef.current;
 
   useEffect(() => {
     fetch("/api/settings")
@@ -331,7 +350,13 @@ export function AppSidebar({
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto px-3 py-2 space-y-6">
+      <motion.div
+        key={selectedContentType}
+        initial={{ x: direction > 0 ? 30 : -30 }}
+        animate={{ x: 0 }}
+        transition={{ type: "spring", stiffness: 500, damping: 35, mass: 0.8 }}
+        className="flex-1 overflow-y-auto px-3 py-2 space-y-6"
+      >
         {/* Folders & Feeds */}
         {(folders.length > 0 || uncategorizedFeeds.length > 0) && (
           <div className="space-y-1">
@@ -540,7 +565,7 @@ export function AppSidebar({
             )}
           </div>
         )}
-      </div>
+      </motion.div>
     </div>
   );
 }
