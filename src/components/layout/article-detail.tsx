@@ -351,10 +351,11 @@ export function ArticleDetail({
           if (abortController.signal.aborted) return null;
 
           try {
-            const res = await fetch("/api/ai/translate-segment", {
+            const res = await fetch("/api/ai/translate", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
+                mode: "segment",
                 articleId: article.id,
                 segmentIndex: segment.index,
                 content: segment.content,

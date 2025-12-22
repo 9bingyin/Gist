@@ -1679,7 +1679,7 @@ function DebugSettings({ onSettingsChange }: DebugSettingsProps) {
     setRefreshInterval(DEFAULT_REFRESH_INTERVAL.toString());
   };
 
-  const handleClearCache = async (type: "readability" | "content" | "all") => {
+  const handleClearCache = async (type: "readability" | "content" | "ai" | "all") => {
     setClearingCache(true);
     setMessage(null);
 
@@ -1701,6 +1701,9 @@ function DebugSettings({ onSettingsChange }: DebugSettingsProps) {
       }
       if (data.contentCleared > 0) {
         messages.push(`${data.contentCleared} content`);
+      }
+      if (data.aiCacheCleared > 0) {
+        messages.push(`${data.aiCacheCleared} AI cache`);
       }
 
       setMessage({
@@ -1974,6 +1977,15 @@ function DebugSettings({ onSettingsChange }: DebugSettingsProps) {
                 <LoaderIcon className="mr-1.5 size-3 animate-spin" />
               )}
               {t("actions.clear_feed_icons")}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleClearCache("ai")}
+              disabled={clearingCache || clearingIcons}
+              className="rounded-md h-8 text-[11px] font-bold border-destructive/20 hover:bg-destructive/10 hover:text-destructive"
+            >
+              {t("actions.clear_ai_cache")}
             </Button>
             <Button
               variant="outline"

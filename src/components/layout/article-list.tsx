@@ -188,10 +188,11 @@ export function ArticleList({
     setIsTranslating(true);
 
     try {
-      const res = await fetch("/api/ai/translate-lite", {
+      const res = await fetch("/api/ai/translate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          mode: "batch",
           articles: articlesToTranslate.map((a) => ({
             id: a.id,
             title: a.title,
