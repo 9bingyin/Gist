@@ -379,12 +379,43 @@ export default function Home() {
   }, []);
 
   const handleUpdateArticles = useCallback((updatedArticles: Article[]) => {
-    setArticles(updatedArticles);
+    // Use functional update to merge translations without losing other concurrent updates
+    setArticles((prevArticles) => {
+      // Build a map of updated articles for quick lookup
+      const updatesMap = new Map<string, Article>();
+      for (const article of updatedArticles) {
+        updatesMap.set(article.id, article);
+      }
+
+      // Merge updates into current state
+      return prevArticles.map((article) => {
+        const updated = updatesMap.get(article.id);
+        if (updated) {
+          // Only merge translation fields to preserve other state
+          return {
+            ...article,
+            translatedTitle: updated.translatedTitle ?? article.translatedTitle,
+            translatedSummary: updated.translatedSummary ?? article.translatedSummary,
+            translationDisabled: updated.translationDisabled ?? article.translationDisabled,
+          };
+        }
+        return article;
+      });
+    });
+
     // Also update selected article if it was translated
     setSelectedArticle((prev) => {
       if (!prev) return prev;
       const updated = updatedArticles.find((a) => a.id === prev.id);
-      return updated || prev;
+      if (updated) {
+        return {
+          ...prev,
+          translatedTitle: updated.translatedTitle ?? prev.translatedTitle,
+          translatedSummary: updated.translatedSummary ?? prev.translatedSummary,
+          translationDisabled: updated.translationDisabled ?? prev.translationDisabled,
+        };
+      }
+      return prev;
     });
   }, []);
 
