@@ -225,7 +225,14 @@
     "use_default": "Use Default",
     "clear": "Clear",
     "test_connection": "Test Connection",
-    "save_configuration": "Save Configuration"
+    "save_configuration": "Save Configuration",
+    "thinking": "Thinking Mode",
+    "thinking_desc": "Enable extended thinking for deeper reasoning (increases response time and token usage)",
+    "thinking_effort": "Thinking Effort",
+    "thinking_effort_desc": "Control how deeply the model thinks before responding",
+    "thinking_low": "Low",
+    "thinking_medium": "Medium",
+    "thinking_high": "High"
   },
   "ui": {
     "close": "Close",

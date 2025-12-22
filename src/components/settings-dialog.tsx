@@ -2029,6 +2029,14 @@ function AISettings({ onSettingsChange }: AISettingsProps) {
   const [savedAiQps, setSavedAiQps] = useState("2");
   const [aiEnabled, setAiEnabled] = useState(true);
   const [savedAiEnabled, setSavedAiEnabled] = useState(true);
+  const [aiThinking, setAiThinking] = useState(false);
+  const [savedAiThinking, setSavedAiThinking] = useState(false);
+  const [aiThinkingEffort, setAiThinkingEffort] = useState<
+    "low" | "medium" | "high"
+  >("medium");
+  const [savedAiThinkingEffort, setSavedAiThinkingEffort] = useState<
+    "low" | "medium" | "high"
+  >("medium");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -2054,6 +2062,11 @@ function AISettings({ onSettingsChange }: AISettingsProps) {
         const autoTranslate = settings.aiAutoTranslate === "true";
         const qps = settings.aiQps || "2";
         const enabled = settings.aiEnabled !== "false";
+        const thinking = settings.aiThinking === "true";
+        const thinkingEffort = (settings.aiThinkingEffort || "medium") as
+          | "low"
+          | "medium"
+          | "high";
 
         setAiProvider(provider);
         setSavedAiProvider(provider);
@@ -2071,6 +2084,10 @@ function AISettings({ onSettingsChange }: AISettingsProps) {
         setSavedAiAutoTranslate(autoTranslate);
         setAiQps(qps);
         setSavedAiQps(qps);
+        setAiThinking(thinking);
+        setSavedAiThinking(thinking);
+        setAiThinkingEffort(thinkingEffort);
+        setSavedAiThinkingEffort(thinkingEffort);
       } catch (err) {
         console.error("Failed to fetch AI settings:", err);
       } finally {
@@ -2098,6 +2115,8 @@ function AISettings({ onSettingsChange }: AISettingsProps) {
           aiLanguage: aiLanguage || "English",
           aiAutoTranslate: aiAutoTranslate ? "true" : "false",
           aiQps: aiQps || "2",
+          aiThinking: aiThinking ? "true" : "false",
+          aiThinkingEffort: aiThinkingEffort,
         }),
       });
 
@@ -2113,6 +2132,8 @@ function AISettings({ onSettingsChange }: AISettingsProps) {
       setSavedAiLanguage(aiLanguage);
       setSavedAiAutoTranslate(aiAutoTranslate);
       setSavedAiQps(aiQps);
+      setSavedAiThinking(aiThinking);
+      setSavedAiThinkingEffort(aiThinkingEffort);
 
       setMessage({ type: "success", text: t("ai.settings_saved") });
       onSettingsChange?.();
@@ -2183,7 +2204,9 @@ function AISettings({ onSettingsChange }: AISettingsProps) {
     aiModel !== savedAiModel ||
     aiLanguage !== savedAiLanguage ||
     aiAutoTranslate !== savedAiAutoTranslate ||
-    aiQps !== savedAiQps;
+    aiQps !== savedAiQps ||
+    aiThinking !== savedAiThinking ||
+    aiThinkingEffort !== savedAiThinkingEffort;
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -2430,6 +2453,61 @@ function AISettings({ onSettingsChange }: AISettingsProps) {
               </button>
             )}
           </div>
+        </div>
+
+        {/* Thinking Mode */}
+        <div className="rounded-xl border border-muted/40 p-4 bg-card transition-all hover:border-muted-foreground/20">
+          <div className="flex items-center justify-between">
+            <div className="space-y-1">
+              <h4 className="font-semibold text-sm">{t("ai.thinking")}</h4>
+              <p className="text-[11px] text-muted-foreground">
+                {t("ai.thinking_desc")}
+              </p>
+            </div>
+
+            {!loading && (
+              <button
+                type="button"
+                role="switch"
+                aria-checked={aiThinking}
+                onClick={() => setAiThinking(!aiThinking)}
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${
+                  aiThinking ? "bg-primary" : "bg-muted"
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                    aiThinking ? "translate-x-5" : "translate-x-0"
+                  }`}
+                />
+              </button>
+            )}
+          </div>
+
+          {/* Thinking Effort - only show when thinking is enabled */}
+          {aiThinking && !loading && (
+            <div className="mt-4 pt-4 border-t border-muted/40">
+              <h4 className="font-semibold text-sm mb-1">
+                {t("ai.thinking_effort")}
+              </h4>
+              <p className="text-[11px] text-muted-foreground mb-3">
+                {t("ai.thinking_effort_desc")}
+              </p>
+              <div className="flex gap-2">
+                {(["low", "medium", "high"] as const).map((effort) => (
+                  <Button
+                    key={effort}
+                    variant={aiThinkingEffort === effort ? "secondary" : "outline"}
+                    size="sm"
+                    onClick={() => setAiThinkingEffort(effort)}
+                    className="rounded-md h-8 px-4 text-[11px] font-bold flex-1"
+                  >
+                    {t(`ai.thinking_${effort}`)}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Rate Limit (QPS) */}

@@ -25,7 +25,15 @@ export async function POST(request: NextRequest) {
     const settings = await prisma.setting.findMany({
       where: {
         key: {
-          in: ["aiProvider", "aiBaseUrl", "aiApiKey", "aiModel", "aiLanguage"],
+          in: [
+            "aiProvider",
+            "aiBaseUrl",
+            "aiApiKey",
+            "aiModel",
+            "aiLanguage",
+            "aiThinking",
+            "aiThinkingEffort",
+          ],
         },
       },
     });
@@ -40,6 +48,25 @@ export async function POST(request: NextRequest) {
     const apiKey = settingsMap.aiApiKey;
     const model = settingsMap.aiModel || undefined;
     const language = settingsMap.aiLanguage || "English";
+    const thinking = settingsMap.aiThinking === "true";
+    const thinkingEffort = (settingsMap.aiThinkingEffort || "medium") as
+      | "low"
+      | "medium"
+      | "high";
+
+    // Map thinking effort to Anthropic budget tokens
+    const getThinkingBudgetTokens = (effort: "low" | "medium" | "high") => {
+      switch (effort) {
+        case "low":
+          return 5000;
+        case "medium":
+          return 15000;
+        case "high":
+          return 30000;
+        default:
+          return 15000;
+      }
+    };
 
     // Use different cache type for readability content
     const cacheType = isReadability ? "summarize-readability" : "summarize";
@@ -113,6 +140,13 @@ Return only the key points, one per line, without any prefixes or formatting sym
           generateText({
             model: openai(modelName),
             prompt,
+            ...(thinking && {
+              providerOptions: {
+                openai: {
+                  reasoningEffort: thinkingEffort,
+                },
+              },
+            }),
           }),
         );
 
@@ -139,6 +173,13 @@ Return only the key points, one per line, without any prefixes or formatting sym
           generateText({
             model: compatible(modelName),
             prompt,
+            ...(thinking && {
+              providerOptions: {
+                openai: {
+                  reasoningEffort: thinkingEffort,
+                },
+              },
+            }),
           }),
         );
 
@@ -164,6 +205,16 @@ Return only the key points, one per line, without any prefixes or formatting sym
           generateText({
             model: anthropic(modelName),
             prompt,
+            ...(thinking && {
+              providerOptions: {
+                anthropic: {
+                  thinking: {
+                    type: "enabled" as const,
+                    budgetTokens: getThinkingBudgetTokens(thinkingEffort),
+                  },
+                },
+              },
+            }),
           }),
         );
 

@@ -15,12 +15,16 @@ import {
   parseTranslationResponse,
 } from "@/lib/html-text-extractor";
 
+export type ThinkingEffort = "low" | "medium" | "high";
+
 export interface AiSettings {
   provider: string;
   baseUrl?: string;
   apiKey: string;
   model?: string;
   language: string;
+  thinking?: boolean;
+  thinkingEffort?: ThinkingEffort;
 }
 
 /**
@@ -30,7 +34,15 @@ export async function getAiSettings(): Promise<AiSettings | null> {
   const settings = await prisma.setting.findMany({
     where: {
       key: {
-        in: ["aiProvider", "aiBaseUrl", "aiApiKey", "aiModel", "aiLanguage"],
+        in: [
+          "aiProvider",
+          "aiBaseUrl",
+          "aiApiKey",
+          "aiModel",
+          "aiLanguage",
+          "aiThinking",
+          "aiThinkingEffort",
+        ],
       },
     },
   });
@@ -51,6 +63,8 @@ export async function getAiSettings(): Promise<AiSettings | null> {
     apiKey,
     model: settingsMap.aiModel || undefined,
     language: settingsMap.aiLanguage || "Chinese",
+    thinking: settingsMap.aiThinking === "true",
+    thinkingEffort: (settingsMap.aiThinkingEffort as ThinkingEffort) || "medium",
   };
 }
 
@@ -154,6 +168,22 @@ async function translateHtmlContent(
 }
 
 /**
+ * Map thinking effort to Anthropic budget tokens
+ */
+function getThinkingBudgetTokens(effort: ThinkingEffort): number {
+  switch (effort) {
+    case "low":
+      return 5000;
+    case "medium":
+      return 15000;
+    case "high":
+      return 30000;
+    default:
+      return 15000;
+  }
+}
+
+/**
  * Call the AI provider with the given prompt
  */
 async function callAiProvider(prompt: string, settings: AiSettings): Promise<string> {
@@ -169,6 +199,13 @@ async function callAiProvider(prompt: string, settings: AiSettings): Promise<str
       generateText({
         model: openai(modelName),
         prompt,
+        ...(settings.thinking && {
+          providerOptions: {
+            openai: {
+              reasoningEffort: settings.thinkingEffort || "medium",
+            },
+          },
+        }),
       })
     );
 
@@ -186,6 +223,13 @@ async function callAiProvider(prompt: string, settings: AiSettings): Promise<str
       generateText({
         model: compatible(modelName),
         prompt,
+        ...(settings.thinking && {
+          providerOptions: {
+            openai: {
+              reasoningEffort: settings.thinkingEffort || "medium",
+            },
+          },
+        }),
       })
     );
 
@@ -202,6 +246,16 @@ async function callAiProvider(prompt: string, settings: AiSettings): Promise<str
       generateText({
         model: anthropic(modelName),
         prompt,
+        ...(settings.thinking && {
+          providerOptions: {
+            anthropic: {
+              thinking: {
+                type: "enabled" as const,
+                budgetTokens: getThinkingBudgetTokens(settings.thinkingEffort || "medium"),
+              },
+            },
+          },
+        }),
       })
     );
 

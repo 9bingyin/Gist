@@ -225,7 +225,14 @@
     "use_default": "使用默认",
     "clear": "清除",
     "test_connection": "测试连接",
-    "save_configuration": "保存配置"
+    "save_configuration": "保存配置",
+    "thinking": "思考模式",
+    "thinking_desc": "启用扩展思考以获得更深入的推理（会增加响应时间和 token 消耗）",
+    "thinking_effort": "思考强度",
+    "thinking_effort_desc": "控制模型在回答前思考的深度",
+    "thinking_low": "低",
+    "thinking_medium": "中",
+    "thinking_high": "高"
   },
   "ui": {
     "close": "关闭",
