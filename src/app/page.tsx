@@ -202,9 +202,18 @@ export default function Home() {
   };
 
   const handleRefreshAllFeeds = async () => {
-    for (const feed of feeds) {
-      await fetch(`/api/feeds/${feed.id}/refresh`, { method: "POST" });
+    const CONCURRENCY = 5;
+
+    // Batch concurrent refresh
+    for (let i = 0; i < feeds.length; i += CONCURRENCY) {
+      const batch = feeds.slice(i, i + CONCURRENCY);
+      await Promise.allSettled(
+        batch.map((feed) =>
+          fetch(`/api/feeds/${feed.id}/refresh`, { method: "POST" })
+        )
+      );
     }
+
     await fetchFeeds();
     await fetchArticles({
       feedId: selectedFeedId,

@@ -1,7 +1,8 @@
 import { prisma } from "@/lib/db";
-import { parseFeed } from "@/lib/rss";
-import { getFavicon } from "@/lib/favicon";
+import { refreshFeedsWithConcurrency } from "@/lib/feed-refresh";
 import { getRefreshInterval } from "@/lib/settings";
+
+const CONCURRENCY = 5;
 
 const globalForAutoRefresh = globalThis as unknown as {
   autoRefreshInterval: ReturnType<typeof setInterval> | null;
@@ -11,105 +12,22 @@ const globalForAutoRefresh = globalThis as unknown as {
 async function refreshAllFeeds() {
   console.log("[Auto Refresh] Starting refresh of all feeds...");
 
-  const feeds = await prisma.feed.findMany();
+  const feeds = await prisma.feed.findMany({ select: { id: true } });
+  const feedIds = feeds.map((f) => f.id);
 
-  for (const feed of feeds) {
-    try {
-      const parsed = await parseFeed(feed.url);
-
-      // Update feed info if needed
-      const updateData: {
-        imageUrl?: string;
-        title?: string;
-        siteUrl?: string;
-      } = {};
-
-      if (!feed.imageUrl && parsed.link) {
-        const favicon = await getFavicon(parsed.link);
-        if (favicon) {
-          updateData.imageUrl = favicon;
-        }
+  const { success, failed } = await refreshFeedsWithConcurrency(
+    feedIds,
+    CONCURRENCY,
+    (completed, total, feedTitle) => {
+      if (feedTitle) {
+        console.log(`[Auto Refresh] Progress: ${completed}/${total} - ${feedTitle}`);
       }
-
-      if (
-        feed.title === feed.url ||
-        feed.title.includes("not yet whitelisted")
-      ) {
-        updateData.title = parsed.title;
-      }
-
-      if (!feed.siteUrl && parsed.link) {
-        updateData.siteUrl = parsed.link;
-      }
-
-      if (Object.keys(updateData).length > 0) {
-        await prisma.feed.update({
-          where: { id: feed.id },
-          data: updateData,
-        });
-      }
-
-      // Process articles
-      let newCount = 0;
-
-      for (const item of parsed.items) {
-        const link = item.link?.trim();
-        if (!link) continue;
-
-        const existing = await prisma.article.findFirst({
-          where: {
-            feedId: feed.id,
-            link,
-          },
-        });
-
-        if (existing) {
-          const contentChanged =
-            item.content &&
-            (!existing.content || item.content !== existing.content);
-          const pubDateChanged =
-            item.pubDate &&
-            (!existing.pubDate ||
-              new Date(item.pubDate).getTime() !==
-                new Date(existing.pubDate).getTime());
-
-          if (contentChanged || pubDateChanged) {
-            await prisma.article.update({
-              where: { id: existing.id },
-              data: {
-                title: item.title,
-                content: item.content,
-                summary: item.summary,
-                imageUrl: item.imageUrl,
-                pubDate: item.pubDate,
-              },
-            });
-          }
-        } else {
-          await prisma.article.create({
-            data: {
-              title: item.title,
-              link,
-              content: item.content,
-              summary: item.summary,
-              imageUrl: item.imageUrl,
-              pubDate: item.pubDate,
-              feedId: feed.id,
-            },
-          });
-          newCount++;
-        }
-      }
-
-      if (newCount > 0) {
-        console.log(`[Auto Refresh] ${feed.title}: ${newCount} new articles`);
-      }
-    } catch (err) {
-      console.error(`[Auto Refresh] Failed to refresh ${feed.title}:`, err);
     }
-  }
+  );
 
-  console.log("[Auto Refresh] Completed refresh of all feeds");
+  console.log(
+    `[Auto Refresh] Completed: ${success} succeeded, ${failed} failed`
+  );
 }
 
 export async function startAutoRefresh() {
