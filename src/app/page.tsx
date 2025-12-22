@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -23,8 +23,15 @@ export default function Home() {
   const [articles, setArticles] = useState<Article[]>([]);
   const [selectedFeedId, setSelectedFeedId] = useState<string | null>(null);
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
+
+  // Refs to track current selection for async operations
+  const selectedFeedIdRef = useRef(selectedFeedId);
+  const selectedFolderIdRef = useRef(selectedFolderId);
+  selectedFeedIdRef.current = selectedFeedId;
+  selectedFolderIdRef.current = selectedFolderId;
+
   const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [defaultLayout, setDefaultLayout] = useState<Layout | undefined>(
     undefined,
   );
@@ -90,7 +97,6 @@ export default function Home() {
         type?: ContentType;
       } = {},
     ) => {
-      setLoading(true);
       try {
         let url = "/api/articles";
         const params = new URLSearchParams();
@@ -146,8 +152,6 @@ export default function Home() {
         });
       } catch (error) {
         console.error("Failed to fetch articles:", error);
-      } finally {
-        setLoading(false);
       }
     },
     [],
@@ -259,15 +263,19 @@ export default function Home() {
   }, []);
 
   const handleRefresh = async () => {
-    setLoading(true);
+    // Capture current selection at start
+    const feedIdAtStart = selectedFeedId;
+    const folderIdAtStart = selectedFolderId;
+
+    setIsRefreshing(true);
     try {
-      if (selectedFeedId) {
+      if (feedIdAtStart) {
         // Refresh single feed
-        await fetch(`/api/feeds/${selectedFeedId}/refresh`, { method: "POST" });
-      } else if (selectedFolderId) {
+        await fetch(`/api/feeds/${feedIdAtStart}/refresh`, { method: "POST" });
+      } else if (folderIdAtStart) {
         // Refresh only feeds in the selected folder
         const folderFeeds = feeds.filter(
-          (f) => f.folderId === selectedFolderId,
+          (f) => f.folderId === folderIdAtStart,
         );
         for (const feed of folderFeeds) {
           await fetch(`/api/feeds/${feed.id}/refresh`, { method: "POST" });
@@ -279,13 +287,20 @@ export default function Home() {
         }
       }
       await fetchFeeds();
-      await fetchArticles({
-        feedId: selectedFeedId,
-        folderId: selectedFolderId,
-        type: selectedContentType,
-      });
+
+      // Only load articles if user hasn't navigated away
+      if (
+        selectedFeedIdRef.current === feedIdAtStart &&
+        selectedFolderIdRef.current === folderIdAtStart
+      ) {
+        await fetchArticles({
+          feedId: feedIdAtStart,
+          folderId: folderIdAtStart,
+          type: selectedContentType,
+        });
+      }
     } finally {
-      setLoading(false);
+      setIsRefreshing(false);
     }
   };
 
@@ -514,7 +529,7 @@ export default function Home() {
               onRefresh={handleRefresh}
               onMarkAllRead={handleMarkAllRead}
               onUpdateArticles={handleUpdateArticles}
-              loading={loading}
+              loading={isRefreshing}
               autoTranslate={autoTranslate}
               targetLanguage={targetLanguage}
               aiEnabled={aiEnabled}
@@ -574,7 +589,7 @@ export default function Home() {
           onRefresh={handleRefresh}
           onMarkAllRead={handleMarkAllRead}
           onUpdateArticles={handleUpdateArticles}
-          loading={loading}
+          loading={isRefreshing}
           autoTranslate={autoTranslate}
           targetLanguage={targetLanguage}
           aiEnabled={aiEnabled}
