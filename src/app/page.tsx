@@ -30,7 +30,7 @@ export default function Home() {
   );
   const [layoutLoaded, setLayoutLoaded] = useState(false);
   const [autoTranslate, setAutoTranslate] = useState(false);
-  const [targetLanguage, setTargetLanguage] = useState("Chinese");
+  const [targetLanguage, setTargetLanguage] = useState("English");
   const [aiEnabled, setAiEnabled] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [mobileView, setMobileView] = useState<"list" | "detail">("list");
@@ -54,7 +54,7 @@ export default function Home() {
       const res = await fetch("/api/settings");
       const settings = await res.json();
       setAutoTranslate(settings.aiAutoTranslate === "true");
-      setTargetLanguage(settings.aiLanguage || "Chinese");
+      setTargetLanguage(settings.aiLanguage);
       setAiEnabled(settings.aiEnabled !== "false");
     } catch (err) {
       console.error("Failed to fetch settings:", err);

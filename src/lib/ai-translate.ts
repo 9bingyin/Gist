@@ -10,13 +10,11 @@ import { prisma } from "@/lib/db";
 import { getAiCache, setAiCache, AiCacheType } from "@/lib/ai-cache";
 import { withRateLimit } from "@/lib/ai-rate-limiter";
 import {
-  extractTextsFromHtml,
-  parseTranslationResponse,
-} from "@/lib/html-text-extractor";
-import {
   getTranslateTextPrompt,
-  getTranslateSegmentsPrompt,
+  getTranslateHtmlPrompt,
+  type PromptPair,
 } from "@/lib/ai-prompts";
+import { DEFAULT_SETTINGS } from "@/lib/settings-defaults";
 
 export type ThinkingEffort = "low" | "medium" | "high";
 
@@ -61,13 +59,13 @@ export async function getAiSettings(): Promise<AiSettings | null> {
   }
 
   return {
-    provider: settingsMap.aiProvider || "openai",
+    provider: settingsMap.aiProvider || DEFAULT_SETTINGS.aiProvider,
     baseUrl: settingsMap.aiBaseUrl || undefined,
     apiKey,
     model: settingsMap.aiModel || undefined,
-    language: settingsMap.aiLanguage || "Chinese",
-    thinking: settingsMap.aiThinking === "true",
-    thinkingEffort: (settingsMap.aiThinkingEffort as ThinkingEffort) || "medium",
+    language: settingsMap.aiLanguage || DEFAULT_SETTINGS.aiLanguage,
+    thinking: (settingsMap.aiThinking ?? DEFAULT_SETTINGS.aiThinking) === "true",
+    thinkingEffort: (settingsMap.aiThinkingEffort || DEFAULT_SETTINGS.aiThinkingEffort) as ThinkingEffort,
   };
 }
 
@@ -108,7 +106,7 @@ export async function translateContent(
   let translatedContent: string;
 
   if (type === "content") {
-    // For HTML content, extract text nodes, translate them, and replace back
+    // For HTML content, translate directly while preserving structure
     translatedContent = await translateHtmlContent(content, settings);
   } else {
     // For title and summary, translate directly
@@ -133,37 +131,50 @@ async function translatePlainText(
   type: "title" | "summary",
   settings: AiSettings
 ): Promise<string> {
-  const prompt = getTranslateTextPrompt(type, content, settings.language);
-  const response = await callAiProvider(prompt, settings);
-  return cleanResponse(response);
+  const promptPair = getTranslateTextPrompt(type, content, settings.language);
+  const response = await callAiProvider(promptPair, settings);
+  return response.trim();
 }
 
 /**
- * Translate HTML content by extracting text nodes
+ * Strip markdown code block wrapper if present
+ * Handles ```html, ```xml, ``` etc.
+ * Only strips if the inner content looks like HTML (starts with <)
+ */
+function stripMarkdownCodeBlock(text: string): string {
+  const trimmed = text.trim();
+  // Match ```lang or ``` at start and ``` at end
+  const match = trimmed.match(/^```(?:\w+)?\s*\n?([\s\S]*?)\n?```$/);
+  if (match) {
+    const inner = match[1].trim();
+    // Only strip if inner content starts with < (looks like HTML)
+    if (inner.startsWith("<")) {
+      return inner;
+    }
+  }
+  return trimmed;
+}
+
+/**
+ * Translate HTML content directly - LLM preserves HTML structure
  */
 async function translateHtmlContent(
   html: string,
   settings: AiSettings
 ): Promise<string> {
-  // Extract text nodes from HTML
-  const { texts, replaceTexts } = extractTextsFromHtml(html);
-
-  // If no text to translate, return original HTML
-  if (texts.length === 0 || texts.every((t) => !t.trim())) {
+  // If no content or only whitespace, return original
+  if (!html || !html.trim()) {
     return html;
   }
 
-  // Build prompt with numbered text segments
-  const prompt = getTranslateSegmentsPrompt(texts, settings.language);
+  // Build prompt for HTML translation
+  const promptPair = getTranslateHtmlPrompt(html, settings.language);
 
-  // Call AI to translate
-  const response = await callAiProvider(prompt, settings);
+  // Call AI to translate - system prompt instructs LLM to output clean HTML
+  const response = await callAiProvider(promptPair, settings);
 
-  // Parse response back to array
-  const translations = parseTranslationResponse(response, texts.length);
-
-  // Replace text nodes with translations
-  return replaceTexts(translations);
+  // Strip markdown code block wrapper if LLM added it despite instructions
+  return stripMarkdownCodeBlock(response);
 }
 
 /**
@@ -183,9 +194,47 @@ function getThinkingBudgetTokens(effort: ThinkingEffort): number {
 }
 
 /**
- * Call the AI provider with the given prompt
+ * Check if error is a rate limit error (429)
  */
-async function callAiProvider(prompt: string, settings: AiSettings): Promise<string> {
+export function isRateLimitError(error: unknown): boolean {
+  if (error instanceof Error) {
+    const message = error.message;
+    return message.includes("429") || message.includes("rate limit") || message.includes("Rate limit");
+  }
+  return false;
+}
+
+/**
+ * Retry wrapper - retries on error except for rate limit (429)
+ */
+export async function withRetry<T>(fn: () => Promise<T>, maxRetries = 2): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+      // Don't retry on rate limit errors
+      if (isRateLimitError(error)) {
+        throw error;
+      }
+      // Don't retry on last attempt
+      if (attempt === maxRetries) {
+        throw error;
+      }
+      // Wait before retry (exponential backoff)
+      await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
+    }
+  }
+  throw lastError;
+}
+
+/**
+ * Call the AI provider with system + user prompt
+ */
+async function callAiProvider(promptPair: PromptPair, settings: AiSettings): Promise<string> {
+  const { system, prompt } = promptPair;
+
   if (settings.provider === "openai") {
     const openai = createOpenAI({
       apiKey: settings.apiKey,
@@ -194,18 +243,22 @@ async function callAiProvider(prompt: string, settings: AiSettings): Promise<str
 
     const modelName = settings.model || "gpt-4o-mini";
 
-    const result = await withRateLimit(() =>
-      generateText({
-        model: openai(modelName),
-        prompt,
-        ...(settings.thinking && {
-          providerOptions: {
-            openai: {
-              reasoningEffort: settings.thinkingEffort || "medium",
+    const result = await withRetry(() =>
+      withRateLimit(() =>
+        generateText({
+          model: openai(modelName),
+          system,
+          prompt,
+          maxRetries: 0,
+          ...(settings.thinking && {
+            providerOptions: {
+              openai: {
+                reasoningEffort: settings.thinkingEffort || "medium",
+              },
             },
-          },
-        }),
-      })
+          }),
+        })
+      )
     );
 
     return result.text;
@@ -218,18 +271,22 @@ async function callAiProvider(prompt: string, settings: AiSettings): Promise<str
 
     const modelName = settings.model || "llama3.2";
 
-    const result = await withRateLimit(() =>
-      generateText({
-        model: compatible(modelName),
-        prompt,
-        ...(settings.thinking && {
-          providerOptions: {
-            openai: {
-              reasoningEffort: settings.thinkingEffort || "medium",
+    const result = await withRetry(() =>
+      withRateLimit(() =>
+        generateText({
+          model: compatible(modelName),
+          system,
+          prompt,
+          maxRetries: 0,
+          ...(settings.thinking && {
+            providerOptions: {
+              openai: {
+                reasoningEffort: settings.thinkingEffort || "medium",
+              },
             },
-          },
-        }),
-      })
+          }),
+        })
+      )
     );
 
     return result.text;
@@ -241,21 +298,25 @@ async function callAiProvider(prompt: string, settings: AiSettings): Promise<str
 
     const modelName = settings.model || "claude-3-5-haiku-20241022";
 
-    const result = await withRateLimit(() =>
-      generateText({
-        model: anthropic(modelName),
-        prompt,
-        ...(settings.thinking && {
-          providerOptions: {
-            anthropic: {
-              thinking: {
-                type: "enabled" as const,
-                budgetTokens: getThinkingBudgetTokens(settings.thinkingEffort || "medium"),
+    const result = await withRetry(() =>
+      withRateLimit(() =>
+        generateText({
+          model: anthropic(modelName),
+          system,
+          prompt,
+          maxRetries: 0,
+          ...(settings.thinking && {
+            providerOptions: {
+              anthropic: {
+                thinking: {
+                  type: "enabled" as const,
+                  budgetTokens: getThinkingBudgetTokens(settings.thinkingEffort || "medium"),
+                },
               },
             },
-          },
-        }),
-      })
+          }),
+        })
+      )
     );
 
     return result.text;
@@ -265,48 +326,12 @@ async function callAiProvider(prompt: string, settings: AiSettings): Promise<str
 }
 
 /**
- * Clean up AI response (remove markdown code blocks)
- */
-function cleanResponse(response: string): string {
-  let cleaned = response.trim();
-  if (cleaned.startsWith("```html")) {
-    cleaned = cleaned.slice(7);
-  }
-  if (cleaned.startsWith("```")) {
-    cleaned = cleaned.slice(3);
-  }
-  if (cleaned.endsWith("```")) {
-    cleaned = cleaned.slice(0, -3);
-  }
-  return cleaned.trim();
-}
-
-/**
  * Format error message for API response
+ * Returns original error message without translation
  */
 export function formatAiError(error: unknown): string {
-  let errorMessage = "Unknown error occurred";
-
   if (error instanceof Error) {
-    errorMessage = error.message;
-
-    if (
-      errorMessage.includes("401") ||
-      errorMessage.includes("Unauthorized")
-    ) {
-      errorMessage = "Invalid API key";
-    } else if (
-      errorMessage.includes("404") ||
-      errorMessage.includes("model")
-    ) {
-      errorMessage = "Invalid model name or model not found";
-    } else if (errorMessage.includes("429")) {
-      errorMessage = "Rate limit exceeded";
-    } else if (errorMessage.includes("Invalid time value")) {
-      errorMessage =
-        "API response format error. Please check your API key and base URL.";
-    }
+    return error.message;
   }
-
-  return errorMessage;
+  return "Unknown error occurred";
 }

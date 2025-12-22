@@ -217,11 +217,24 @@ export function ArticleList({
         ]);
 
         if (!titleRes.ok) {
-          throw new Error("Title translation failed");
+          let errorMessage = `Title translation failed (${titleRes.status})`;
+          try {
+            const data = await titleRes.json();
+            errorMessage = data.error || errorMessage;
+          } catch {
+            // Response body is empty or not valid JSON
+          }
+          throw new Error(errorMessage);
         }
 
         const titleData = await titleRes.json();
-        const summaryData = summaryRes?.ok ? await summaryRes.json() : null;
+        let summaryData = null;
+        if (summaryRes) {
+          if (summaryRes.ok) {
+            summaryData = await summaryRes.json();
+          }
+          // Silently ignore summary translation errors
+        }
 
         // Update this article immediately
         const latestArticles = articlesRef.current;

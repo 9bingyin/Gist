@@ -2,6 +2,11 @@
  * AI Prompts - Centralized prompt templates for AI features
  */
 
+export interface PromptPair {
+  system: string;
+  prompt: string;
+}
+
 /**
  * Translation prompt for title or summary
  */
@@ -9,32 +14,46 @@ export function getTranslateTextPrompt(
   type: "title" | "summary",
   content: string,
   language: string
-): string {
+): PromptPair {
   const typeLabel = type === "title" ? "Title" : "Summary";
-  return `Translate the following ${typeLabel.toLowerCase()} into ${language}. Return only the translated text, no explanations.
+  return {
+    system: `You are an expert translator. Translate the ${typeLabel.toLowerCase()} into ${language}.
 
-${typeLabel}: ${content}`;
+CRITICAL: You MUST output in ${language}. This is NON-NEGOTIABLE. Any response not in ${language} is a FAILURE.
+
+Rules:
+- Output ONLY the translated text in ${language}, nothing else
+- Preserve the original meaning and tone
+- Keep proper nouns and brand names unchanged
+- NEVER translate URLs
+- NO explanations, NO notes, NO markdown formatting
+- NO leading or trailing newlines`,
+    prompt: content,
+  };
 }
 
 /**
- * Translation prompt for numbered text segments (HTML content)
+ * Translation prompt for HTML content - preserves HTML structure
  */
-export function getTranslateSegmentsPrompt(
-  texts: string[],
+export function getTranslateHtmlPrompt(
+  htmlContent: string,
   language: string
-): string {
-  const numberedTexts = texts.map((text, i) => `[${i}] ${text}`).join("\n");
+): PromptPair {
+  return {
+    system: `You are an expert translator. Translate HTML content into ${language} while preserving the exact HTML structure.
 
-  return `Translate the following numbered text segments into ${language}.
+CRITICAL: You MUST translate ALL text content into ${language}. This is NON-NEGOTIABLE. Any text not in ${language} is a FAILURE.
 
 Rules:
-- Keep the same numbering format [N] for each line
-- Only translate the text after the number
-- Preserve any leading/trailing whitespace in the original text
-- Do not add explanations
-
-Text segments:
-${numberedTexts}`;
+- Preserve ALL HTML tags, attributes, and structure exactly as-is
+- Translate ALL text content between tags into ${language}
+- NEVER translate: URLs, href/src attributes, code inside <code> or <pre> tags, email addresses
+- Output ONLY the translated HTML, nothing else
+- NEVER wrap output in markdown code blocks
+- NEVER add any explanations or comments
+- NO leading or trailing newlines`,
+    prompt: htmlContent,
+  };
 }
 
 /**
@@ -44,46 +63,32 @@ export function getSummarizePrompt(
   content: string,
   title: string | undefined,
   language: string
-): string {
-  const languageInstruction = language
-    ? `You must answer in ${language}.`
-    : "";
+): PromptPair {
+  return {
+    system: `You are an expert summarizer. Extract 3-5 key points from articles.
 
-  return `${languageInstruction}
+CRITICAL: You MUST write the summary in ${language}. This is NON-NEGOTIABLE. Any response not in ${language} is a FAILURE.
 
-<task>
-Summarize the following article by extracting 3-5 key points. Each point should be a concise statement of important information or main ideas.
-Use simple, clear language that is easy to understand for general readers.
-</task>
-
-<requirements>
-- Output in plain text format only
-- Do NOT use Markdown formatting
-- Do NOT use any prefixes: no asterisks (*), hyphens (-), numbers (1., 2.), or bullet symbols
-- Start each point on a new line without any prefix
-- Each point should be a complete sentence
-- Focus on factual information and main ideas
-- Use plain, accessible language - avoid jargon and technical terms when possible
-- Write in a conversational, easy-to-understand style
-</requirements>
-
-<article>
-${title ? `<title>${title}</title>\n\n` : ""}<content>
-${content}
-</content>
-</article>
-
-<output_format>
-Return only the key points, one per line, without any prefixes or formatting symbols.
-</output_format>`;
+Rules:
+- Output plain text ONLY in ${language}, one key point per line
+- Write complete sentences in ${language}
+- NEVER use Markdown formatting or bullet symbols (no *, -, 1., 2.)
+- NEVER add introductions like "Here are the key points:"
+- NEVER add conclusions at the end
+- Use simple, clear language
+- NO leading or trailing newlines`,
+    prompt: title ? `Title: ${title}\n\n${content}` : content,
+  };
 }
 
 /**
  * Test connection prompt with language instruction
  */
-export function getTestPrompt(prompt: string, language: string): string {
-  const languageInstruction = language
-    ? `You must answer me in ${language}. `
-    : "";
-  return languageInstruction + prompt;
+export function getTestPrompt(userPrompt: string, language: string): PromptPair {
+  return {
+    system: language
+      ? `You MUST answer in ${language}. This is NON-NEGOTIABLE. Any response not in ${language} is a FAILURE.`
+      : "You are a helpful assistant.",
+    prompt: userPrompt,
+  };
 }

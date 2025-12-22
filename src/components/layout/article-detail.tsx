@@ -11,6 +11,7 @@ import {
   SparklesIcon,
   LanguagesIcon,
   ArrowLeftIcon,
+  AlertCircleIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -366,8 +367,14 @@ export function ArticleDetail({
             });
 
             if (!res.ok) {
-              const data = await res.json();
-              throw new Error(data.error || "Segment translation failed");
+              let errorMessage = `Translation failed (${res.status})`;
+              try {
+                const data = await res.json();
+                errorMessage = data.error || errorMessage;
+              } catch {
+                // Response body is empty or not valid JSON
+              }
+              throw new Error(errorMessage);
             }
 
             const data = await res.json();
@@ -494,15 +501,21 @@ export function ArticleDetail({
           }),
         });
 
-        const data = await res.json();
-
         if (!res.ok) {
-          throw new Error(data.error || "生成摘要失败");
+          let errorMessage = `Summary failed (${res.status})`;
+          try {
+            const data = await res.json();
+            errorMessage = data.error || errorMessage;
+          } catch {
+            // Response body is empty or not valid JSON
+          }
+          throw new Error(errorMessage);
         }
 
+        const data = await res.json();
         setAiSummary(data.summary);
       } catch (error) {
-        const message = error instanceof Error ? error.message : "生成摘要失败";
+        const message = error instanceof Error ? error.message : "Summary failed";
         setSummaryError(message);
         console.error("Summary error:", error);
       } finally {
@@ -586,11 +599,18 @@ export function ArticleDetail({
         method: "POST",
       });
 
-      const data = await res.json();
-
       if (!res.ok) {
-        throw new Error(data.error || "Failed to fetch readable content");
+        let errorMessage = `Readability failed (${res.status})`;
+        try {
+          const data = await res.json();
+          errorMessage = data.error || errorMessage;
+        } catch {
+          // Response body is empty or not valid JSON
+        }
+        throw new Error(errorMessage);
       }
+
+      const data = await res.json();
       if (data.content && onArticleUpdate) {
         onArticleUpdate({
           ...article,
@@ -638,15 +658,21 @@ export function ArticleDetail({
         }),
       });
 
-      const data = await res.json();
-
       if (!res.ok) {
-        throw new Error(data.error || "生成摘要失败");
+        let errorMessage = `Summary failed (${res.status})`;
+        try {
+          const data = await res.json();
+          errorMessage = data.error || errorMessage;
+        } catch {
+          // Response body is empty or not valid JSON
+        }
+        throw new Error(errorMessage);
       }
 
+      const data = await res.json();
       setAiSummary(data.summary);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "生成摘要失败";
+      const message = error instanceof Error ? error.message : "Summary failed";
       setSummaryError(message);
       console.error("Summary error:", error);
     } finally {
@@ -875,6 +901,16 @@ export function ArticleDetail({
             </div>
           </div>
 
+          {/* AI Errors */}
+          {(translationError || summaryError) && (
+            <div className="mt-6 rounded-lg border border-destructive/20 bg-destructive/5 p-4">
+              <div className="flex items-center gap-2 text-destructive">
+                <AlertCircleIcon className="h-4 w-4 shrink-0" />
+                <span className="text-sm">{translationError || summaryError}</span>
+              </div>
+            </div>
+          )}
+
           {/* AI Summary */}
           {aiSummary && (
             <div className="mt-6 rounded-lg border border-primary/20 bg-primary/5 p-5">
@@ -887,10 +923,7 @@ export function ArticleDetail({
                   .split("\n")
                   .filter((line) => line.trim())
                   .map((point, index) => (
-                    <div key={index} className="flex gap-2">
-                      <span className="text-primary mt-1.5 shrink-0">•</span>
-                      <span className="flex-1">{point.trim()}</span>
-                    </div>
+                    <p key={index}>{point.trim()}</p>
                   ))}
               </div>
             </div>

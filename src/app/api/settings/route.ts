@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { DEFAULT_SETTINGS } from "@/lib/settings-defaults";
 
 // Get all settings or specific setting
 export async function GET(request: NextRequest) {
@@ -10,11 +11,11 @@ export async function GET(request: NextRequest) {
     const setting = await prisma.setting.findUnique({
       where: { key },
     });
-    return NextResponse.json(setting?.value ?? null);
+    return NextResponse.json(setting?.value ?? DEFAULT_SETTINGS[key] ?? null);
   }
 
   const settings = await prisma.setting.findMany();
-  const result: Record<string, string> = {};
+  const result: Record<string, string> = { ...DEFAULT_SETTINGS };
   for (const setting of settings) {
     result[setting.key] = setting.value;
   }

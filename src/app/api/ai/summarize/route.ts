@@ -7,6 +7,8 @@ import { prisma } from "@/lib/db";
 import { getAiCache, setAiCache } from "@/lib/ai-cache";
 import { withRateLimit } from "@/lib/ai-rate-limiter";
 import { getSummarizePrompt } from "@/lib/ai-prompts";
+import { DEFAULT_SETTINGS } from "@/lib/settings-defaults";
+import { formatAiError, withRetry } from "@/lib/ai-translate";
 
 export const maxDuration = 30;
 
@@ -44,13 +46,13 @@ export async function POST(request: NextRequest) {
       settingsMap[setting.key] = setting.value;
     }
 
-    const provider = settingsMap.aiProvider || "openai";
+    const provider = settingsMap.aiProvider || DEFAULT_SETTINGS.aiProvider;
     const baseUrl = settingsMap.aiBaseUrl || undefined;
     const apiKey = settingsMap.aiApiKey;
     const model = settingsMap.aiModel || undefined;
-    const language = settingsMap.aiLanguage || "English";
-    const thinking = settingsMap.aiThinking === "true";
-    const thinkingEffort = (settingsMap.aiThinkingEffort || "medium") as
+    const language = settingsMap.aiLanguage || DEFAULT_SETTINGS.aiLanguage;
+    const thinking = (settingsMap.aiThinking ?? DEFAULT_SETTINGS.aiThinking) === "true";
+    const thinkingEffort = (settingsMap.aiThinkingEffort || DEFAULT_SETTINGS.aiThinkingEffort) as
       | "low"
       | "medium"
       | "high";
@@ -94,8 +96,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create prompt for summarization
-    const prompt = getSummarizePrompt(content, title, language);
+    // Create system + user prompt pair for summarization
+    const promptPair = getSummarizePrompt(content, title, language);
 
     let response: string;
 
@@ -108,28 +110,28 @@ export async function POST(request: NextRequest) {
       const modelName = model || "gpt-4o-mini";
 
       try {
-        const result = await withRateLimit(() =>
-          generateText({
-            model: openai(modelName),
-            prompt,
-            ...(thinking && {
-              providerOptions: {
-                openai: {
-                  reasoningEffort: thinkingEffort,
+        const result = await withRetry(() =>
+          withRateLimit(() =>
+            generateText({
+              model: openai(modelName),
+              system: promptPair.system,
+              prompt: promptPair.prompt,
+              maxRetries: 0,
+              ...(thinking && {
+                providerOptions: {
+                  openai: {
+                    reasoningEffort: thinkingEffort,
+                  },
                 },
-              },
+              }),
             }),
-          }),
+          ),
         );
 
         response = result.text;
       } catch (err) {
         console.error("OpenAI API error:", err);
-        throw new Error(
-          err instanceof Error
-            ? `OpenAI error: ${err.message}`
-            : "Failed to generate summary with OpenAI",
-        );
+        throw err;
       }
     } else if (provider === "openai-compatible") {
       const compatible = createOpenAICompatible({
@@ -141,28 +143,28 @@ export async function POST(request: NextRequest) {
       const modelName = model || "llama3.2";
 
       try {
-        const result = await withRateLimit(() =>
-          generateText({
-            model: compatible(modelName),
-            prompt,
-            ...(thinking && {
-              providerOptions: {
-                openai: {
-                  reasoningEffort: thinkingEffort,
+        const result = await withRetry(() =>
+          withRateLimit(() =>
+            generateText({
+              model: compatible(modelName),
+              system: promptPair.system,
+              prompt: promptPair.prompt,
+              maxRetries: 0,
+              ...(thinking && {
+                providerOptions: {
+                  openai: {
+                    reasoningEffort: thinkingEffort,
+                  },
                 },
-              },
+              }),
             }),
-          }),
+          ),
         );
 
         response = result.text;
       } catch (err) {
         console.error("OpenAI Compatible API error:", err);
-        throw new Error(
-          err instanceof Error
-            ? `OpenAI Compatible error: ${err.message}`
-            : "Failed to generate summary with OpenAI Compatible API",
-        );
+        throw err;
       }
     } else if (provider === "anthropic") {
       const anthropic = createAnthropic({
@@ -173,31 +175,31 @@ export async function POST(request: NextRequest) {
       const modelName = model || "claude-3-5-haiku-20241022";
 
       try {
-        const result = await withRateLimit(() =>
-          generateText({
-            model: anthropic(modelName),
-            prompt,
-            ...(thinking && {
-              providerOptions: {
-                anthropic: {
-                  thinking: {
-                    type: "enabled" as const,
-                    budgetTokens: getThinkingBudgetTokens(thinkingEffort),
+        const result = await withRetry(() =>
+          withRateLimit(() =>
+            generateText({
+              model: anthropic(modelName),
+              system: promptPair.system,
+              prompt: promptPair.prompt,
+              maxRetries: 0,
+              ...(thinking && {
+                providerOptions: {
+                  anthropic: {
+                    thinking: {
+                      type: "enabled" as const,
+                      budgetTokens: getThinkingBudgetTokens(thinkingEffort),
+                    },
                   },
                 },
-              },
+              }),
             }),
-          }),
+          ),
         );
 
         response = result.text;
       } catch (err) {
         console.error("Anthropic API error:", err);
-        throw new Error(
-          err instanceof Error
-            ? `Anthropic error: ${err.message}`
-            : "Failed to generate summary with Anthropic",
-        );
+        throw err;
       }
     } else {
       return NextResponse.json(
@@ -216,31 +218,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(result);
   } catch (error) {
     console.error("AI summarize error:", error);
-
-    let errorMessage = "Unknown error occurred";
-
-    if (error instanceof Error) {
-      errorMessage = error.message;
-
-      // Handle common error patterns
-      if (
-        errorMessage.includes("401") ||
-        errorMessage.includes("Unauthorized")
-      ) {
-        errorMessage = "Invalid API key";
-      } else if (
-        errorMessage.includes("404") ||
-        errorMessage.includes("model")
-      ) {
-        errorMessage = "Invalid model name or model not found";
-      } else if (errorMessage.includes("429")) {
-        errorMessage = "Rate limit exceeded";
-      } else if (errorMessage.includes("Invalid time value")) {
-        errorMessage =
-          "API response format error. Please check your API key and base URL.";
-      }
-    }
-
-    return NextResponse.json({ error: errorMessage }, { status: 500 });
+    return NextResponse.json({ error: formatAiError(error) }, { status: 500 });
   }
 }

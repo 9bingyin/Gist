@@ -5,6 +5,7 @@ import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { prisma } from "@/lib/db";
 import { getTestPrompt } from "@/lib/ai-prompts";
+import { formatAiError, withRetry } from "@/lib/ai-translate";
 
 export const maxDuration = 30;
 
@@ -42,8 +43,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Add language instruction to prompt
-    const fullPrompt = getTestPrompt(prompt, language);
+    // Get system + user prompt pair
+    const promptPair = getTestPrompt(prompt, language);
 
     // Map thinking effort to Anthropic budget tokens
     const getThinkingBudgetTokens = (effort: string) => {
@@ -70,26 +71,26 @@ export async function POST(request: NextRequest) {
       const modelName = model || "gpt-4o-mini";
 
       try {
-        const result = await generateText({
-          model: openai(modelName),
-          prompt: fullPrompt,
-          ...(thinking && {
-            providerOptions: {
-              openai: {
-                reasoningEffort: thinkingEffort || "medium",
+        const result = await withRetry(() =>
+          generateText({
+            model: openai(modelName),
+            system: promptPair.system,
+            prompt: promptPair.prompt,
+            maxRetries: 0,
+            ...(thinking && {
+              providerOptions: {
+                openai: {
+                  reasoningEffort: thinkingEffort || "medium",
+                },
               },
-            },
-          }),
-        });
+            }),
+          })
+        );
 
         response = result.text;
       } catch (err) {
         console.error("OpenAI API error:", err);
-        throw new Error(
-          err instanceof Error
-            ? `OpenAI error: ${err.message}`
-            : "Failed to generate text with OpenAI",
-        );
+        throw err;
       }
     } else if (provider === "openai-compatible") {
       const compatible = createOpenAICompatible({
@@ -101,26 +102,26 @@ export async function POST(request: NextRequest) {
       const modelName = model || "llama3.2";
 
       try {
-        const result = await generateText({
-          model: compatible(modelName),
-          prompt: fullPrompt,
-          ...(thinking && {
-            providerOptions: {
-              openai: {
-                reasoningEffort: thinkingEffort || "medium",
+        const result = await withRetry(() =>
+          generateText({
+            model: compatible(modelName),
+            system: promptPair.system,
+            prompt: promptPair.prompt,
+            maxRetries: 0,
+            ...(thinking && {
+              providerOptions: {
+                openai: {
+                  reasoningEffort: thinkingEffort || "medium",
+                },
               },
-            },
-          }),
-        });
+            }),
+          })
+        );
 
         response = result.text;
       } catch (err) {
         console.error("OpenAI Compatible API error:", err);
-        throw new Error(
-          err instanceof Error
-            ? `OpenAI Compatible error: ${err.message}`
-            : "Failed to generate text with OpenAI Compatible API",
-        );
+        throw err;
       }
     } else if (provider === "anthropic") {
       const anthropic = createAnthropic({
@@ -131,29 +132,29 @@ export async function POST(request: NextRequest) {
       const modelName = model || "claude-3-5-haiku-20241022";
 
       try {
-        const result = await generateText({
-          model: anthropic(modelName),
-          prompt: fullPrompt,
-          ...(thinking && {
-            providerOptions: {
-              anthropic: {
-                thinking: {
-                  type: "enabled" as const,
-                  budgetTokens: getThinkingBudgetTokens(thinkingEffort || "medium"),
+        const result = await withRetry(() =>
+          generateText({
+            model: anthropic(modelName),
+            system: promptPair.system,
+            prompt: promptPair.prompt,
+            maxRetries: 0,
+            ...(thinking && {
+              providerOptions: {
+                anthropic: {
+                  thinking: {
+                    type: "enabled" as const,
+                    budgetTokens: getThinkingBudgetTokens(thinkingEffort || "medium"),
+                  },
                 },
               },
-            },
-          }),
-        });
+            }),
+          })
+        );
 
         response = result.text;
       } catch (err) {
         console.error("Anthropic API error:", err);
-        throw new Error(
-          err instanceof Error
-            ? `Anthropic error: ${err.message}`
-            : "Failed to generate text with Anthropic",
-        );
+        throw err;
       }
     } else {
       return NextResponse.json(
@@ -165,31 +166,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ response });
   } catch (error) {
     console.error("AI test error:", error);
-
-    let errorMessage = "Unknown error occurred";
-
-    if (error instanceof Error) {
-      errorMessage = error.message;
-
-      // Handle common error patterns
-      if (
-        errorMessage.includes("401") ||
-        errorMessage.includes("Unauthorized")
-      ) {
-        errorMessage = "Invalid API key";
-      } else if (
-        errorMessage.includes("404") ||
-        errorMessage.includes("model")
-      ) {
-        errorMessage = "Invalid model name or model not found";
-      } else if (errorMessage.includes("429")) {
-        errorMessage = "Rate limit exceeded";
-      } else if (errorMessage.includes("Invalid time value")) {
-        errorMessage =
-          "API response format error. Please check your API key and base URL.";
-      }
-    }
-
-    return NextResponse.json({ error: errorMessage }, { status: 500 });
+    return NextResponse.json({ error: formatAiError(error) }, { status: 500 });
   }
 }
