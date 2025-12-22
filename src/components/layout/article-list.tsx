@@ -167,11 +167,12 @@ export function ArticleList({
     // Use ref to get latest articles (avoid closure issues)
     const currentArticles = articlesRef.current;
 
-    // Collect articles that need translation (visible, not yet translated, and not in target language)
+    // Collect articles that need translation (visible, not yet translated, not disabled, and not in target language)
     const articlesToTranslate = currentArticles.filter(
       (article) =>
         visibleArticleIds.current.has(article.id) &&
         !article.translatedTitle &&
+        !article.translationDisabled &&
         !translatingIds.current.has(article.id) &&
         needsTranslation(article.title, article.summary, targetLanguage),
     );

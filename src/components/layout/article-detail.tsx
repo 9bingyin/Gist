@@ -283,13 +283,16 @@ export function ArticleDetail({
   useEffect(() => {
     if (!autoTranslate || !article || !targetLanguage) return;
 
+    // Skip if user manually disabled translation for this article
+    if (article.translationDisabled) return;
+
     // Skip if article is already in target language
     if (!needsTranslation(article.title, article.summary, targetLanguage))
       return;
 
     // Enable translation mode for this article
     setTranslateEnabled(true);
-  }, [article?.id, autoTranslate, targetLanguage]);
+  }, [article?.id, autoTranslate, targetLanguage, article?.translationDisabled]);
 
   // Perform translation when translateEnabled changes or useReadability changes
   useEffect(() => {
@@ -537,17 +540,25 @@ export function ArticleDetail({
       setTranslatedTitle(null);
       setTranslatedSummary(null);
       setTranslationError(null);
-      // Restore original title/summary in article list
+      // Mark as translation disabled and clear translation data
       if (onArticleUpdate) {
         onArticleUpdate({
           ...article,
           translatedTitle: undefined,
           translatedSummary: undefined,
+          translationDisabled: true,
         });
       }
     } else {
       // Turn on translation (will trigger the translation useEffect)
       setTranslateEnabled(true);
+      // Clear the disabled flag
+      if (onArticleUpdate) {
+        onArticleUpdate({
+          ...article,
+          translationDisabled: false,
+        });
+      }
     }
   }, [article, isLoadingTranslation, translateEnabled, onArticleUpdate]);
 

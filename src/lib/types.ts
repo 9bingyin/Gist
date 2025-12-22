@@ -49,4 +49,5 @@ export interface Article {
   // Temporary fields for translation (not persisted)
   translatedTitle?: string;
   translatedSummary?: string;
+  translationDisabled?: boolean; // User manually disabled translation for this article
 }
