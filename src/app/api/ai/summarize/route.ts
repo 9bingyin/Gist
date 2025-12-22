@@ -130,11 +130,12 @@ export async function POST(request: NextRequest) {
     // Acquire rate limit before streaming
     await acquireRateLimit();
 
-    // Stream the response
+    // Stream the response with abort signal for cancellation support
     const result = streamText({
       model: aiModel,
       system: promptPair.system,
       prompt: promptPair.prompt,
+      abortSignal: request.signal,
       maxRetries: 0,
       ...(thinking && provider === "anthropic" && {
         providerOptions: {

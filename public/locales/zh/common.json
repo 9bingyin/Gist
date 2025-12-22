@@ -259,11 +259,13 @@
     },
     "summary": {
       "generate": "AI 概括",
-      "hide": "隐藏摘要"
+      "hide": "隐藏摘要",
+      "cancel": "取消概括"
     },
     "translate": {
       "show_original": "显示原文",
-      "ai_translate": "AI 翻译"
+      "ai_translate": "AI 翻译",
+      "cancel": "取消翻译"
     },
     "actions": {
       "share": "分享",

@@ -275,10 +275,19 @@ export function ArticleDetail({
   const [segments, setSegments] = useState<ContentSegment[]>([]);
   const [translatedSegments, setTranslatedSegments] = useState<Map<number, string>>(new Map());
 
+  // AbortController refs for cancellation
+  const summaryAbortRef = useRef<AbortController | null>(null);
+  const translationAbortRef = useRef<AbortController | null>(null);
+
   // Reset readability mode, summary, translation and errors when article changes
   useEffect(() => {
+    // Abort any ongoing requests
+    summaryAbortRef.current?.abort();
+    translationAbortRef.current?.abort();
+
     setUseReadability(false);
     setReadabilityError(null);
+    setIsLoadingSummary(false);
     setAiSummary(null);
     setSummaryError(null);
     setIsLoadingTranslation(false);
@@ -323,7 +332,10 @@ export function ArticleDetail({
       : article.content || article.summary;
     if (!content) return;
 
+    // Abort previous translation and create new controller
+    translationAbortRef.current?.abort();
     const abortController = new AbortController();
+    translationAbortRef.current = abortController;
 
     const performSegmentedTranslation = async () => {
       setIsLoadingTranslation(true);
@@ -484,9 +496,14 @@ export function ArticleDetail({
 
   // Regenerate summary when readability mode changes (if summary was already shown)
   useEffect(() => {
-    const regenerateSummary = async () => {
-      if (!aiSummary || isLoadingSummary || !article) return;
+    if (!aiSummary || isLoadingSummary || !article) return;
 
+    // Abort previous summary request
+    summaryAbortRef.current?.abort();
+    const abortController = new AbortController();
+    summaryAbortRef.current = abortController;
+
+    const regenerateSummary = async () => {
       setIsLoadingSummary(true);
       setSummaryError(null);
       setAiSummary(""); // Initialize for streaming
@@ -509,6 +526,7 @@ export function ArticleDetail({
             title: article.title,
             isReadability,
           }),
+          signal: abortController.signal,
         });
 
         if (!res.ok) {
@@ -538,26 +556,45 @@ export function ArticleDetail({
           const decoder = new TextDecoder();
           let fullText = "";
 
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
+          try {
+            while (true) {
+              if (abortController.signal.aborted) {
+                reader.cancel();
+                return;
+              }
 
-            const chunk = decoder.decode(value, { stream: true });
-            fullText += chunk;
-            setAiSummary(fullText);
+              const { done, value } = await reader.read();
+              if (done) break;
+
+              const chunk = decoder.decode(value, { stream: true });
+              fullText += chunk;
+              setAiSummary(fullText);
+            }
+          } catch (readError) {
+            reader.cancel().catch(() => {});
+            throw readError;
           }
         }
       } catch (error) {
+        if (error instanceof Error && error.name === "AbortError") {
+          return;
+        }
         const message = error instanceof Error ? error.message : "Summary failed";
         setSummaryError(message);
         setAiSummary(null);
         console.error("Summary error:", error);
       } finally {
-        setIsLoadingSummary(false);
+        if (!abortController.signal.aborted) {
+          setIsLoadingSummary(false);
+        }
       }
     };
 
     regenerateSummary();
+
+    return () => {
+      abortController.abort();
+    };
   }, [useReadability]);
 
   const processedContent = useMemo(() => {
@@ -662,12 +699,25 @@ export function ArticleDetail({
   }, [article, isLoadingReadability, useReadability, onArticleUpdate]);
 
   const handleGenerateSummary = useCallback(async () => {
-    if (!article || isLoadingSummary) return;
+    if (!article) return;
 
+    // If loading, abort the request
+    if (isLoadingSummary) {
+      summaryAbortRef.current?.abort();
+      setIsLoadingSummary(false);
+      setAiSummary(null);
+      return;
+    }
+
+    // If already have summary, toggle it off
     if (aiSummary) {
       setAiSummary(null);
       return;
     }
+
+    // Create new AbortController
+    const abortController = new AbortController();
+    summaryAbortRef.current = abortController;
 
     setIsLoadingSummary(true);
     setSummaryError(null);
@@ -691,6 +741,7 @@ export function ArticleDetail({
           title: article.title,
           isReadability,
         }),
+        signal: abortController.signal,
       });
 
       if (!res.ok) {
@@ -720,22 +771,41 @@ export function ArticleDetail({
         const decoder = new TextDecoder();
         let fullText = "";
 
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
+        try {
+          while (true) {
+            // Check abort status before reading
+            if (abortController.signal.aborted) {
+              reader.cancel();
+              return;
+            }
 
-          const chunk = decoder.decode(value, { stream: true });
-          fullText += chunk;
-          setAiSummary(fullText);
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            const chunk = decoder.decode(value, { stream: true });
+            fullText += chunk;
+            setAiSummary(fullText);
+          }
+        } catch (readError) {
+          // Cancel reader on error
+          reader.cancel().catch(() => {});
+          throw readError;
         }
       }
     } catch (error) {
+      // Ignore abort errors
+      if (error instanceof Error && error.name === "AbortError") {
+        return;
+      }
       const message = error instanceof Error ? error.message : "Summary failed";
       setSummaryError(message);
       setAiSummary(null);
       console.error("Summary error:", error);
     } finally {
-      setIsLoadingSummary(false);
+      // Only update loading state if not aborted
+      if (!summaryAbortRef.current?.signal.aborted) {
+        setIsLoadingSummary(false);
+      }
     }
   }, [article, isLoadingSummary, aiSummary, useReadability]);
 
@@ -764,7 +834,20 @@ export function ArticleDetail({
   }, []);
 
   const handleTranslate = useCallback(() => {
-    if (!article || isLoadingTranslation) return;
+    if (!article) return;
+
+    // If loading, abort the translation
+    if (isLoadingTranslation) {
+      translationAbortRef.current?.abort();
+      setIsLoadingTranslation(false);
+      setTranslateEnabled(false);
+      setTranslatedContent(null);
+      setTranslatedTitle(null);
+      setTranslatedSummary(null);
+      setSegments([]);
+      setTranslatedSegments(new Map());
+      return;
+    }
 
     if (translateEnabled) {
       // Turn off translation
@@ -877,7 +960,6 @@ export function ArticleDetail({
                       summaryError && "text-destructive hover:text-destructive",
                     )}
                     onClick={handleGenerateSummary}
-                    disabled={isLoadingSummary}
                   >
                     {isLoadingSummary ? (
                       <LoaderIcon className="h-4 w-4 animate-spin" />
@@ -889,9 +971,11 @@ export function ArticleDetail({
                 <TooltipContent>
                   <p>
                     {summaryError ||
-                      (aiSummary
-                        ? t("article.summary.hide")
-                        : t("article.summary.generate"))}
+                      (isLoadingSummary
+                        ? t("article.summary.cancel")
+                        : aiSummary
+                          ? t("article.summary.hide")
+                          : t("article.summary.generate"))}
                   </p>
                 </TooltipContent>
               </Tooltip>
@@ -910,7 +994,6 @@ export function ArticleDetail({
                         "text-destructive hover:text-destructive",
                     )}
                     onClick={handleTranslate}
-                    disabled={isLoadingTranslation}
                   >
                     {isLoadingTranslation ? (
                       <LoaderIcon className="h-4 w-4 animate-spin" />
@@ -922,9 +1005,11 @@ export function ArticleDetail({
                 <TooltipContent>
                   <p>
                     {translationError ||
-                      (translateEnabled
-                        ? t("article.translate.show_original")
-                        : t("article.translate.ai_translate"))}
+                      (isLoadingTranslation
+                        ? t("article.translate.cancel")
+                        : translateEnabled
+                          ? t("article.translate.show_original")
+                          : t("article.translate.ai_translate"))}
                   </p>
                 </TooltipContent>
               </Tooltip>

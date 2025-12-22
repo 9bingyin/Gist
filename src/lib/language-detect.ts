@@ -18,53 +18,6 @@ const ISO_TO_LANGUAGE: Record<string, string> = {
   spa: "Spanish",
 };
 
-// Map our language names to ISO 639-3 codes for matching
-const LANGUAGE_TO_ISO: Record<string, string[]> = {
-  chinese: ["cmn", "zho"],
-  japanese: ["jpn"],
-  korean: ["kor"],
-  english: ["eng"],
-  french: ["fra"],
-  german: ["deu"],
-  spanish: ["spa"],
-};
-
-// Language aliases for matching (lowercase)
-const LANGUAGE_ALIASES: Record<string, string> = {
-  // Chinese
-  "chinese": "chinese",
-  "中文": "chinese",
-  "简体中文": "chinese",
-  "繁體中文": "chinese",
-  "simplified chinese": "chinese",
-  "traditional chinese": "chinese",
-  // Japanese
-  "japanese": "japanese",
-  "日本語": "japanese",
-  // Korean
-  "korean": "korean",
-  "한국어": "korean",
-  // English
-  "english": "english",
-  // French
-  "french": "french",
-  "français": "french",
-  // German
-  "german": "german",
-  "deutsch": "german",
-  // Spanish
-  "spanish": "spanish",
-  "español": "spanish",
-};
-
-/**
- * Normalize language name for comparison
- */
-function normalizeLanguage(lang: string): string {
-  const lower = lang.toLowerCase().trim();
-  return LANGUAGE_ALIASES[lower] || lower;
-}
-
 /**
  * Detect the language of text
  * Returns language name or null if uncertain
@@ -100,7 +53,7 @@ export function isTargetLanguage(
 
   if (!detected) return false;
 
-  return normalizeLanguage(detected) === normalizeLanguage(targetLanguage);
+  return detected.toLowerCase() === targetLanguage.toLowerCase();
 }
 
 /**
@@ -119,6 +72,6 @@ export function needsTranslation(
   // If can't detect, assume needs translation
   if (!detected) return true;
 
-  // Check if detected language matches target (using normalized names)
-  return normalizeLanguage(detected) !== normalizeLanguage(targetLanguage);
+  // Check if detected language matches target
+  return detected.toLowerCase() !== targetLanguage.toLowerCase();
 }

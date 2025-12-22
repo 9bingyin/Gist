@@ -78,6 +78,7 @@ interface TranslateOptions {
   articleId?: string;
   cacheType?: AiCacheType;
   title?: string;
+  signal?: AbortSignal;
 }
 
 /**
@@ -86,7 +87,7 @@ interface TranslateOptions {
 export async function translateContent(
   options: TranslateOptions
 ): Promise<string> {
-  const { content, type, settings, articleId, cacheType, title } = options;
+  const { content, type, settings, articleId, cacheType, title, signal } = options;
 
   if (!content || content.trim().length === 0) {
     return "";
@@ -108,10 +109,10 @@ export async function translateContent(
 
   if (type === "content") {
     // For HTML content, translate directly while preserving structure
-    translatedContent = await translateHtmlContent(content, settings, title);
+    translatedContent = await translateHtmlContent(content, settings, title, signal);
   } else {
     // For title and summary, translate directly
-    translatedContent = await translatePlainText(content, type, settings);
+    translatedContent = await translatePlainText(content, type, settings, signal);
   }
 
   // Save to cache
@@ -130,10 +131,11 @@ export async function translateContent(
 async function translatePlainText(
   content: string,
   type: "title" | "summary",
-  settings: AiSettings
+  settings: AiSettings,
+  signal?: AbortSignal
 ): Promise<string> {
   const promptPair = getTranslateTextPrompt(type, content, settings.language);
-  const response = await callAiProvider(promptPair, settings);
+  const response = await callAiProvider(promptPair, settings, signal);
   return response.trim();
 }
 
@@ -162,7 +164,8 @@ function stripMarkdownCodeBlock(text: string): string {
 async function translateHtmlContent(
   html: string,
   settings: AiSettings,
-  title?: string
+  title?: string,
+  signal?: AbortSignal
 ): Promise<string> {
   // If no content or only whitespace, return original
   if (!html || !html.trim()) {
@@ -173,7 +176,7 @@ async function translateHtmlContent(
   const promptPair = getTranslateHtmlPrompt(html, settings.language, title);
 
   // Call AI to translate - system prompt instructs LLM to output clean HTML
-  const response = await callAiProvider(promptPair, settings);
+  const response = await callAiProvider(promptPair, settings, signal);
 
   // Strip markdown code block wrapper if LLM added it despite instructions
   return stripMarkdownCodeBlock(response);
@@ -234,7 +237,11 @@ export async function withRetry<T>(fn: () => Promise<T>, maxRetries = 2): Promis
 /**
  * Call the AI provider with system + user prompt
  */
-async function callAiProvider(promptPair: PromptPair, settings: AiSettings): Promise<string> {
+async function callAiProvider(
+  promptPair: PromptPair,
+  settings: AiSettings,
+  signal?: AbortSignal
+): Promise<string> {
   const { system, prompt } = promptPair;
 
   if (settings.provider === "openai") {
@@ -251,6 +258,7 @@ async function callAiProvider(promptPair: PromptPair, settings: AiSettings): Pro
           model: openai(modelName),
           system,
           prompt,
+          abortSignal: signal,
           maxRetries: 0,
           ...(settings.thinking && {
             providerOptions: {
@@ -279,6 +287,7 @@ async function callAiProvider(promptPair: PromptPair, settings: AiSettings): Pro
           model: compatible(modelName),
           system,
           prompt,
+          abortSignal: signal,
           maxRetries: 0,
           ...(settings.thinking && {
             providerOptions: {
@@ -306,6 +315,7 @@ async function callAiProvider(promptPair: PromptPair, settings: AiSettings): Pro
           model: anthropic(modelName),
           system,
           prompt,
+          abortSignal: signal,
           maxRetries: 0,
           ...(settings.thinking && {
             providerOptions: {

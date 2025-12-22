@@ -259,11 +259,13 @@
     },
     "summary": {
       "generate": "AI Summary",
-      "hide": "Hide Summary"
+      "hide": "Hide Summary",
+      "cancel": "Cancel summary"
     },
     "translate": {
       "show_original": "Show original",
-      "ai_translate": "AI Translate"
+      "ai_translate": "AI Translate",
+      "cancel": "Cancel translation"
     },
     "actions": {
       "share": "Share",

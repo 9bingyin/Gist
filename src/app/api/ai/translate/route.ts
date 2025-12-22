@@ -48,9 +48,9 @@ export async function POST(request: NextRequest) {
     }
 
     if (body.mode === "segment") {
-      return handleSegmentMode(body, settings);
+      return handleSegmentMode(body, settings, request.signal);
     } else if (body.mode === "batch") {
-      return handleBatchMode(body, settings);
+      return handleBatchMode(body, settings, request.signal);
     } else {
       return NextResponse.json(
         { error: "Invalid mode. Use 'segment' or 'batch'." },
@@ -69,7 +69,8 @@ export async function POST(request: NextRequest) {
 // Handle segment translation mode
 async function handleSegmentMode(
   body: SegmentRequest,
-  settings: Awaited<ReturnType<typeof getAiSettings>>
+  settings: Awaited<ReturnType<typeof getAiSettings>>,
+  signal: AbortSignal
 ) {
   const { articleId, segmentIndex, content, type, isReadability, title } = body;
 
@@ -116,6 +117,7 @@ async function handleSegmentMode(
     articleId,
     cacheType,
     title,
+    signal,
   });
 
   return NextResponse.json({
@@ -128,7 +130,8 @@ async function handleSegmentMode(
 // Handle batch translation mode
 async function handleBatchMode(
   body: BatchRequest,
-  settings: Awaited<ReturnType<typeof getAiSettings>>
+  settings: Awaited<ReturnType<typeof getAiSettings>>,
+  signal: AbortSignal
 ) {
   const { articles } = body;
 
@@ -179,12 +182,14 @@ async function handleBatchMode(
         content: article.title,
         type: "title",
         settings,
+        signal,
       }),
       article.summary
         ? translateContent({
             content: article.summary,
             type: "summary",
             settings,
+            signal,
           })
         : Promise.resolve(null),
     ]);
