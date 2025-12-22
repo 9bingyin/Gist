@@ -9,6 +9,11 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { prisma } from "@/lib/db";
 import { getAiCache, setAiCache, AiCacheType } from "@/lib/ai-cache";
 import { withRateLimit } from "@/lib/ai-rate-limiter";
+import {
+  extractTextsFromHtml,
+  buildTranslationPrompt,
+  parseTranslationResponse,
+} from "@/lib/html-text-extractor";
 
 export interface AiSettings {
   provider: string;
@@ -83,33 +88,75 @@ export async function translateContent(
     }
   }
 
-  // Build prompt based on type
-  let prompt: string;
+  let translatedContent: string;
 
-  if (type === "title") {
-    prompt = `Translate the following title into ${settings.language}. Return only the translated text, no explanations.
-
-Title: ${content}`;
-  } else if (type === "summary") {
-    prompt = `Translate the following summary into ${settings.language}. Return only the translated text, no explanations.
-
-Summary: ${content}`;
+  if (type === "content") {
+    // For HTML content, extract text nodes, translate them, and replace back
+    translatedContent = await translateHtmlContent(content, settings);
   } else {
-    // Content - preserve HTML
-    prompt = `Translate the following HTML content into ${settings.language}.
-
-Requirements:
-- Translate all text content into ${settings.language}
-- Keep all HTML tags intact (e.g., <p>, <h1>, <a>, <img>, etc.)
-- Preserve all HTML attributes (href, src, class, etc.) unchanged
-- Return only the translated HTML, no explanations
-
-Content:
-${content}`;
+    // For title and summary, translate directly
+    translatedContent = await translatePlainText(content, type, settings);
   }
 
-  let response: string;
+  // Save to cache
+  if (articleId && cacheType) {
+    await setAiCache(articleId, cacheType, settings.language, {
+      content: translatedContent,
+    });
+  }
 
+  return translatedContent;
+}
+
+/**
+ * Translate plain text (title or summary)
+ */
+async function translatePlainText(
+  content: string,
+  type: "title" | "summary",
+  settings: AiSettings
+): Promise<string> {
+  const typeLabel = type === "title" ? "Title" : "Summary";
+  const prompt = `Translate the following ${typeLabel.toLowerCase()} into ${settings.language}. Return only the translated text, no explanations.
+
+${typeLabel}: ${content}`;
+
+  const response = await callAiProvider(prompt, settings);
+  return cleanResponse(response);
+}
+
+/**
+ * Translate HTML content by extracting text nodes
+ */
+async function translateHtmlContent(
+  html: string,
+  settings: AiSettings
+): Promise<string> {
+  // Extract text nodes from HTML
+  const { texts, replaceTexts } = extractTextsFromHtml(html);
+
+  // If no text to translate, return original HTML
+  if (texts.length === 0 || texts.every((t) => !t.trim())) {
+    return html;
+  }
+
+  // Build prompt with numbered text segments
+  const prompt = buildTranslationPrompt(texts, settings.language);
+
+  // Call AI to translate
+  const response = await callAiProvider(prompt, settings);
+
+  // Parse response back to array
+  const translations = parseTranslationResponse(response, texts.length);
+
+  // Replace text nodes with translations
+  return replaceTexts(translations);
+}
+
+/**
+ * Call the AI provider with the given prompt
+ */
+async function callAiProvider(prompt: string, settings: AiSettings): Promise<string> {
   if (settings.provider === "openai") {
     const openai = createOpenAI({
       apiKey: settings.apiKey,
@@ -125,7 +172,7 @@ ${content}`;
       })
     );
 
-    response = result.text;
+    return result.text;
   } else if (settings.provider === "openai-compatible") {
     const compatible = createOpenAICompatible({
       name: "custom",
@@ -142,7 +189,7 @@ ${content}`;
       })
     );
 
-    response = result.text;
+    return result.text;
   } else if (settings.provider === "anthropic") {
     const anthropic = createAnthropic({
       apiKey: settings.apiKey,
@@ -158,32 +205,27 @@ ${content}`;
       })
     );
 
-    response = result.text;
+    return result.text;
   } else {
     throw new Error("Unsupported AI provider");
   }
+}
 
-  // Clean up response (remove any markdown code blocks if present)
-  let translatedContent = response.trim();
-  if (translatedContent.startsWith("```html")) {
-    translatedContent = translatedContent.slice(7);
+/**
+ * Clean up AI response (remove markdown code blocks)
+ */
+function cleanResponse(response: string): string {
+  let cleaned = response.trim();
+  if (cleaned.startsWith("```html")) {
+    cleaned = cleaned.slice(7);
   }
-  if (translatedContent.startsWith("```")) {
-    translatedContent = translatedContent.slice(3);
+  if (cleaned.startsWith("```")) {
+    cleaned = cleaned.slice(3);
   }
-  if (translatedContent.endsWith("```")) {
-    translatedContent = translatedContent.slice(0, -3);
+  if (cleaned.endsWith("```")) {
+    cleaned = cleaned.slice(0, -3);
   }
-  translatedContent = translatedContent.trim();
-
-  // Save to cache
-  if (articleId && cacheType) {
-    await setAiCache(articleId, cacheType, settings.language, {
-      content: translatedContent,
-    });
-  }
-
-  return translatedContent;
+  return cleaned.trim();
 }
 
 /**
