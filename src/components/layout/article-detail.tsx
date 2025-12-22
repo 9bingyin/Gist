@@ -41,6 +41,33 @@ interface ArticleDetailProps {
 
 // formatRelativeTime is implemented inside the component to access translations
 
+function AiSummaryBox({ content }: { content: string | null }) {
+  if (!content) return null;
+
+  return (
+    <div className="ai-summary-box mt-6 rounded-lg border border-primary/20 bg-primary/5 overflow-hidden">
+      <div className="ai-summary-grid">
+        <div className="ai-summary-content">
+          <div className="p-5">
+            <div className="flex items-center gap-2 mb-3">
+              <SparklesIcon className="h-4 w-4 text-primary" />
+              <h3 className="text-sm font-semibold text-primary">AI 概括</h3>
+            </div>
+            <div className="text-sm leading-relaxed text-foreground space-y-2">
+              {content
+                .split("\n")
+                .filter((line) => line.trim())
+                .map((point, index) => (
+                  <p key={index}>{point.trim()}</p>
+                ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function sanitizeHtml(html: string): string {
   if (typeof window === "undefined") {
     return html;
@@ -1080,22 +1107,7 @@ export function ArticleDetail({
           )}
 
           {/* AI Summary */}
-          {aiSummary && (
-            <div className="mt-6 rounded-lg border border-primary/20 bg-primary/5 p-5">
-              <div className="flex items-center gap-2 mb-3">
-                <SparklesIcon className="h-4 w-4 text-primary" />
-                <h3 className="text-sm font-semibold text-primary">AI 概括</h3>
-              </div>
-              <div className="text-sm leading-relaxed text-foreground space-y-2">
-                {aiSummary
-                  .split("\n")
-                  .filter((line) => line.trim())
-                  .map((point, index) => (
-                    <p key={index}>{point.trim()}</p>
-                  ))}
-              </div>
-            </div>
-          )}
+          <AiSummaryBox content={aiSummary} />
         </header>
 
         {/* Article Content */}
