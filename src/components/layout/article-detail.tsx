@@ -310,6 +310,13 @@ export function ArticleDetail({
   useEffect(() => {
     if (!translateEnabled || !article) return;
 
+    // Re-validate translation need to prevent stale state issues
+    // (e.g., when switching articles quickly, translateEnabled may still be true from previous article)
+    if (targetLanguage && !needsTranslation(article.title, article.summary, targetLanguage)) {
+      setTranslateEnabled(false);
+      return;
+    }
+
     const isReadability = useReadability && !!article.readabilityContent;
     const content = isReadability
       ? article.readabilityContent
