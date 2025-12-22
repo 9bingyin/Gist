@@ -5,7 +5,7 @@ export async function POST(request: NextRequest) {
   const { feedId, folderId, articleIds } = await request.json();
 
   // Build where clause with priority: articleIds > feedId > folderId > all
-  // biome-ignore lint/suspicious/noExplicitAny: Prisma where type is complex
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Prisma where type is complex
   const where: any = { isRead: false };
 
   if (articleIds && articleIds.length > 0) {

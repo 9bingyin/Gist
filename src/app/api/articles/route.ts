@@ -8,6 +8,7 @@ export async function GET(request: NextRequest) {
   const type = searchParams.get("type");
   const unreadOnly = searchParams.get("unreadOnly") === "true";
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Prisma where type is complex
   const where: any = {};
   if (feedId) {
     where.feedId = feedId;

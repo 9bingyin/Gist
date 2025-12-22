@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { getGravatarUrl } from "@/lib/gravatar";
 import {
@@ -95,22 +95,32 @@ export function AppSidebar({
   const [sortBy, setSortBy] = useState<"name" | "date">("name");
 
   // Animation direction tracking
-  const contentTypeOrder: Record<ContentType, number> = {
-    article: 0,
-    picture: 1,
-    notification: 2,
-  };
-  const prevTypeRef = useRef(selectedContentType);
-  const directionRef = useRef(0);
+  const contentTypeList: ContentType[] = ["article", "picture", "notification"];
+  const orderIndex = contentTypeList.indexOf(selectedContentType);
 
-  if (prevTypeRef.current !== selectedContentType) {
-    directionRef.current =
-      contentTypeOrder[selectedContentType] -
-      contentTypeOrder[prevTypeRef.current];
-    prevTypeRef.current = selectedContentType;
-  }
+  const prevOrderIndexRef = useRef(-1);
+  const [isReady, setIsReady] = useState(false);
+  const [direction, setDirection] = useState<"left" | "right">("right");
+  const [currentAnimatedType, setCurrentAnimatedType] = useState(selectedContentType);
 
-  const direction = directionRef.current;
+  useLayoutEffect(() => {
+    const prevOrderIndex = prevOrderIndexRef.current;
+    if (prevOrderIndex !== orderIndex) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (prevOrderIndex < orderIndex) setDirection("right");
+       
+      else setDirection("left");
+    }
+    setTimeout(() => {
+       
+      setCurrentAnimatedType(selectedContentType);
+    }, 0);
+    if (prevOrderIndexRef.current !== -1) {
+       
+      setIsReady(true);
+    }
+    prevOrderIndexRef.current = orderIndex;
+  }, [orderIndex, selectedContentType]);
 
   useEffect(() => {
     fetch("/api/settings")
@@ -121,13 +131,13 @@ export function AppSidebar({
 
   // Filter feeds and folders by content type
   const filteredFeeds = useMemo(
-    () => feeds.filter((feed) => feed.type === selectedContentType),
-    [feeds, selectedContentType],
+    () => feeds.filter((feed) => feed.type === currentAnimatedType),
+    [feeds, currentAnimatedType],
   );
 
   const filteredFolders = useMemo(
-    () => folders.filter((folder) => folder.type === selectedContentType),
-    [folders, selectedContentType],
+    () => folders.filter((folder) => folder.type === currentAnimatedType),
+    [folders, currentAnimatedType],
   );
 
   // Calculate unread count for each content type
@@ -350,13 +360,16 @@ export function AppSidebar({
       </div>
 
       {/* Content */}
-      <motion.div
-        key={selectedContentType}
-        initial={direction === 0 ? false : { x: direction > 0 ? 30 : -30 }}
-        animate={{ x: 0 }}
-        transition={{ type: "spring", stiffness: 500, damping: 35, mass: 0.8 }}
-        className="flex-1 overflow-y-auto px-3 py-2 space-y-6"
-      >
+      <div className="flex-1 overflow-hidden relative">
+        <AnimatePresence mode="popLayout">
+          <motion.div
+            key={currentAnimatedType}
+            initial={isReady ? { x: direction === "right" ? "100%" : "-100%" } : false}
+            animate={{ x: 0 }}
+            exit={{ x: direction === "right" ? "-100%" : "100%" }}
+            transition={{ type: "spring", duration: 0.4, bounce: 0.15 }}
+            className="absolute inset-0 overflow-y-auto px-3 py-2 space-y-6"
+        >
         {/* Folders & Feeds */}
         {(folders.length > 0 || uncategorizedFeeds.length > 0) && (
           <div className="space-y-1">
@@ -565,7 +578,9 @@ export function AppSidebar({
             )}
           </div>
         )}
-      </motion.div>
+          </motion.div>
+        </AnimatePresence>
+      </div>
     </div>
   );
 }

@@ -70,6 +70,7 @@ class AIRateLimiter {
     }
 
     return new Promise<void>((resolve, reject) => {
+      // eslint-disable-next-line prefer-const -- timeoutId is assigned after item definition due to circular reference
       let timeoutId: ReturnType<typeof setTimeout>;
       const item: QueueItem = {
         resolve: () => {
