@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useCallback, useEffect } from "react";
+import { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import DOMPurify from "dompurify";
 import {
   ExternalLinkIcon,
@@ -680,6 +680,30 @@ export function ArticleDetail({
     }
   }, [article, isLoadingSummary, aiSummary, useReadability]);
 
+  // Track if there was a selection before mousedown (to distinguish click from drag-select)
+  const hadSelectionRef = useRef(false);
+
+  const handleMouseDown = useCallback(() => {
+    const selection = window.getSelection();
+    hadSelectionRef.current = !!(selection && selection.toString().length > 0);
+  }, []);
+
+  // Clear text selection when clicking empty areas (not when finishing a drag-select)
+  const handleClearSelection = useCallback((e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+
+    // Don't clear if clicking interactive elements
+    if (target.closest('a') || target.closest('button')) {
+      return;
+    }
+
+    // Only clear if there was already a selection before this click
+    // (not if user just finished drag-selecting)
+    if (hadSelectionRef.current) {
+      window.getSelection()?.removeAllRanges();
+    }
+  }, []);
+
   const handleTranslate = useCallback(() => {
     if (!article || isLoadingTranslation) return;
 
@@ -736,7 +760,7 @@ export function ArticleDetail({
   }
 
   return (
-    <div className="h-full overflow-y-auto bg-background">
+    <div className="h-full overflow-y-auto bg-background" onMouseDown={handleMouseDown} onClick={handleClearSelection}>
       {/* Toolbar */}
       <TooltipProvider>
         <div className="sticky top-0 z-10 flex items-center gap-1 border-b bg-background/95 px-4 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/60">

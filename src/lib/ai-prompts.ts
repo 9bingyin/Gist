@@ -47,7 +47,7 @@ CRITICAL: You MUST translate ALL text content into ${language}. This is NON-NEGO
 Rules:
 - Preserve ALL HTML tags, attributes, and structure exactly as-is
 - Translate ALL text content between tags into ${language}
-- NEVER translate: URLs, href/src attributes, code inside <code> or <pre> tags, email addresses
+- NEVER translate: URLs, href/src attributes, content inside <pre> tags (code blocks), email addresses
 - Output ONLY the translated HTML, nothing else
 - NEVER wrap output in markdown code blocks
 - NEVER add any explanations or comments
