@@ -155,3 +155,10 @@ export async function withRateLimit<T>(fn: () => Promise<T>): Promise<T> {
   await aiRateLimiter.acquire();
   return fn();
 }
+
+/**
+ * Acquire rate limit slot (for streaming or other non-wrapped usage)
+ */
+export async function acquireRateLimit(): Promise<void> {
+  await aiRateLimiter.acquire();
+}

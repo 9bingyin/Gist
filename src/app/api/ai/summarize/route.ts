@@ -1,16 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { generateText } from "ai";
+import { streamText } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { prisma } from "@/lib/db";
 import { getAiCache, setAiCache } from "@/lib/ai-cache";
-import { withRateLimit } from "@/lib/ai-rate-limiter";
+import { acquireRateLimit } from "@/lib/ai-rate-limiter";
 import { getSummarizePrompt } from "@/lib/ai-prompts";
 import { DEFAULT_SETTINGS } from "@/lib/settings-defaults";
-import { formatAiError, withRetry } from "@/lib/ai-translate";
+import { formatAiError } from "@/lib/ai-translate";
 
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 export async function POST(request: NextRequest) {
   try {
@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
     // Use different cache type for readability content
     const cacheType = isReadability ? "summarize-readability" : "summarize";
 
-    // Check cache first
+    // Check cache first - return as non-streaming JSON
     if (articleId) {
       const cached = await getAiCache<{ summary: string }>(
         articleId,
@@ -82,7 +82,7 @@ export async function POST(request: NextRequest) {
         language,
       );
       if (cached) {
-        return NextResponse.json(cached);
+        return NextResponse.json({ ...cached, cached: true });
       }
     }
 
@@ -99,108 +99,27 @@ export async function POST(request: NextRequest) {
     // Create system + user prompt pair for summarization
     const promptPair = getSummarizePrompt(content, title, language);
 
-    let response: string;
-
+    // Create the model based on provider
+    let aiModel;
     if (provider === "openai") {
       const openai = createOpenAI({
         apiKey,
         baseURL: baseUrl || undefined,
       });
-
-      const modelName = model || "gpt-4o-mini";
-
-      try {
-        const result = await withRetry(() =>
-          withRateLimit(() =>
-            generateText({
-              model: openai(modelName),
-              system: promptPair.system,
-              prompt: promptPair.prompt,
-              maxRetries: 0,
-              ...(thinking && {
-                providerOptions: {
-                  openai: {
-                    reasoningEffort: thinkingEffort,
-                  },
-                },
-              }),
-            }),
-          ),
-        );
-
-        response = result.text;
-      } catch (err) {
-        console.error("OpenAI API error:", err);
-        throw err;
-      }
+      aiModel = openai(model || "gpt-4o-mini");
     } else if (provider === "openai-compatible") {
       const compatible = createOpenAICompatible({
         name: "custom",
         apiKey,
         baseURL: baseUrl || "http://localhost:11434/v1",
       });
-
-      const modelName = model || "llama3.2";
-
-      try {
-        const result = await withRetry(() =>
-          withRateLimit(() =>
-            generateText({
-              model: compatible(modelName),
-              system: promptPair.system,
-              prompt: promptPair.prompt,
-              maxRetries: 0,
-              ...(thinking && {
-                providerOptions: {
-                  openai: {
-                    reasoningEffort: thinkingEffort,
-                  },
-                },
-              }),
-            }),
-          ),
-        );
-
-        response = result.text;
-      } catch (err) {
-        console.error("OpenAI Compatible API error:", err);
-        throw err;
-      }
+      aiModel = compatible(model || "llama3.2");
     } else if (provider === "anthropic") {
       const anthropic = createAnthropic({
         apiKey,
         baseURL: baseUrl || undefined,
       });
-
-      const modelName = model || "claude-3-5-haiku-20241022";
-
-      try {
-        const result = await withRetry(() =>
-          withRateLimit(() =>
-            generateText({
-              model: anthropic(modelName),
-              system: promptPair.system,
-              prompt: promptPair.prompt,
-              maxRetries: 0,
-              ...(thinking && {
-                providerOptions: {
-                  anthropic: {
-                    thinking: {
-                      type: "enabled" as const,
-                      budgetTokens: getThinkingBudgetTokens(thinkingEffort),
-                    },
-                  },
-                },
-              }),
-            }),
-          ),
-        );
-
-        response = result.text;
-      } catch (err) {
-        console.error("Anthropic API error:", err);
-        throw err;
-      }
+      aiModel = anthropic(model || "claude-3-5-haiku-20241022");
     } else {
       return NextResponse.json(
         { error: "Unsupported AI provider" },
@@ -208,14 +127,41 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const result = { summary: response };
+    // Acquire rate limit before streaming
+    await acquireRateLimit();
 
-    // Save to cache
-    if (articleId) {
-      await setAiCache(articleId, cacheType, language, result);
-    }
+    // Stream the response
+    const result = streamText({
+      model: aiModel,
+      system: promptPair.system,
+      prompt: promptPair.prompt,
+      maxRetries: 0,
+      ...(thinking && provider === "anthropic" && {
+        providerOptions: {
+          anthropic: {
+            thinking: {
+              type: "enabled" as const,
+              budgetTokens: getThinkingBudgetTokens(thinkingEffort),
+            },
+          },
+        },
+      }),
+      ...(thinking && provider !== "anthropic" && {
+        providerOptions: {
+          openai: {
+            reasoningEffort: thinkingEffort,
+          },
+        },
+      }),
+      async onFinish({ text }) {
+        // Save to cache after streaming completes
+        if (articleId && text) {
+          await setAiCache(articleId, cacheType, language, { summary: text });
+        }
+      },
+    });
 
-    return NextResponse.json(result);
+    return result.toTextStreamResponse();
   } catch (error) {
     console.error("AI summarize error:", error);
     return NextResponse.json({ error: formatAiError(error) }, { status: 500 });

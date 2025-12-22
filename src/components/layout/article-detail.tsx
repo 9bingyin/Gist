@@ -482,6 +482,7 @@ export function ArticleDetail({
 
       setIsLoadingSummary(true);
       setSummaryError(null);
+      setAiSummary(""); // Initialize for streaming
       try {
         const isReadability = useReadability && !!article.readabilityContent;
         const content = isReadability
@@ -514,11 +515,35 @@ export function ArticleDetail({
           throw new Error(errorMessage);
         }
 
-        const data = await res.json();
-        setAiSummary(data.summary);
+        const contentType = res.headers.get("content-type") || "";
+
+        // Check if response is JSON (cached) or stream
+        if (contentType.includes("application/json")) {
+          const data = await res.json();
+          setAiSummary(data.summary);
+        } else {
+          // Handle streaming response
+          const reader = res.body?.getReader();
+          if (!reader) {
+            throw new Error("No response body");
+          }
+
+          const decoder = new TextDecoder();
+          let fullText = "";
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            const chunk = decoder.decode(value, { stream: true });
+            fullText += chunk;
+            setAiSummary(fullText);
+          }
+        }
       } catch (error) {
         const message = error instanceof Error ? error.message : "Summary failed";
         setSummaryError(message);
+        setAiSummary(null);
         console.error("Summary error:", error);
       } finally {
         setIsLoadingSummary(false);
@@ -639,6 +664,7 @@ export function ArticleDetail({
 
     setIsLoadingSummary(true);
     setSummaryError(null);
+    setAiSummary(""); // Initialize for streaming
     try {
       const isReadability = useReadability && !!article.readabilityContent;
       const content = isReadability
@@ -671,11 +697,35 @@ export function ArticleDetail({
         throw new Error(errorMessage);
       }
 
-      const data = await res.json();
-      setAiSummary(data.summary);
+      const contentType = res.headers.get("content-type") || "";
+
+      // Check if response is JSON (cached) or stream
+      if (contentType.includes("application/json")) {
+        const data = await res.json();
+        setAiSummary(data.summary);
+      } else {
+        // Handle streaming response
+        const reader = res.body?.getReader();
+        if (!reader) {
+          throw new Error("No response body");
+        }
+
+        const decoder = new TextDecoder();
+        let fullText = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value, { stream: true });
+          fullText += chunk;
+          setAiSummary(fullText);
+        }
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Summary failed";
       setSummaryError(message);
+      setAiSummary(null);
       console.error("Summary error:", error);
     } finally {
       setIsLoadingSummary(false);
