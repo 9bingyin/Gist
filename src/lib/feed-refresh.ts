@@ -7,8 +7,12 @@ import { parseFeed, type ParsedArticle } from "@/lib/rss";
 import { getFavicon } from "@/lib/favicon";
 import { iconFileExists } from "@/lib/icon-storage";
 
-// Lock to prevent concurrent refresh of the same feed
-const refreshingFeeds = new Set<string>();
+// Lock timeout: 5 minutes
+const REFRESH_LOCK_TIMEOUT_MS = 5 * 60 * 1000;
+
+// Global concurrency limit
+let globalConcurrentRefreshes = 0;
+const MAX_GLOBAL_CONCURRENT = 10;
 
 export interface RefreshResult {
   success: boolean;
@@ -47,13 +51,44 @@ function needsUpdate(existing: ExistingArticle, item: ParsedArticle): boolean {
  * Refresh a single feed with optimized batch DB operations
  */
 export async function refreshFeed(feedId: string): Promise<RefreshResult> {
-  // Check if this feed is already being refreshed
-  if (refreshingFeeds.has(feedId)) {
-    return { success: false, newCount: 0, updatedCount: 0, total: 0, error: "Feed is already being refreshed" };
+  // Check global concurrency limit
+  if (globalConcurrentRefreshes >= MAX_GLOBAL_CONCURRENT) {
+    return { success: false, newCount: 0, updatedCount: 0, total: 0, error: "Too many concurrent refreshes" };
   }
 
-  // Acquire lock
-  refreshingFeeds.add(feedId);
+  // Acquire database lock using transaction
+  const lockResult = await prisma.$transaction(async (tx) => {
+    const feed = await tx.feed.findUnique({
+      where: { id: feedId },
+      select: { id: true, refreshingAt: true },
+    });
+
+    if (!feed) {
+      return { error: "Feed not found" as const };
+    }
+
+    // Check if already refreshing (with timeout)
+    if (
+      feed.refreshingAt &&
+      Date.now() - feed.refreshingAt.getTime() < REFRESH_LOCK_TIMEOUT_MS
+    ) {
+      return { error: "Feed is already being refreshed" as const };
+    }
+
+    // Acquire lock
+    await tx.feed.update({
+      where: { id: feedId },
+      data: { refreshingAt: new Date() },
+    });
+
+    return { success: true as const };
+  });
+
+  if ("error" in lockResult) {
+    return { success: false, newCount: 0, updatedCount: 0, total: 0, error: lockResult.error };
+  }
+
+  globalConcurrentRefreshes++;
 
   try {
     const feed = await prisma.feed.findUnique({ where: { id: feedId } });
@@ -145,9 +180,22 @@ export async function refreshFeed(feedId: string): Promise<RefreshResult> {
 
     // Batch create new articles
     if (newArticles.length > 0) {
-      await prisma.article.createMany({
-        data: newArticles,
-      });
+      try {
+        await prisma.article.createMany({
+          data: newArticles,
+        });
+      } catch (error) {
+        // Handle duplicate key errors gracefully (concurrent refresh scenario)
+        // SQLite returns SQLITE_CONSTRAINT for duplicates
+        if (
+          error instanceof Error &&
+          error.message.includes("UNIQUE constraint failed")
+        ) {
+          console.log(`Some articles already exist, skipping duplicates`);
+        } else {
+          throw error;
+        }
+      }
     }
 
     // Parallel execute updates
@@ -176,8 +224,14 @@ export async function refreshFeed(feedId: string): Promise<RefreshResult> {
       error: error instanceof Error ? error.message : "Failed to refresh feed",
     };
   } finally {
-    // Release lock
-    refreshingFeeds.delete(feedId);
+    // Release database lock and global counter
+    globalConcurrentRefreshes--;
+    await prisma.feed.update({
+      where: { id: feedId },
+      data: { refreshingAt: null },
+    }).catch(() => {
+      // Ignore error if feed was deleted
+    });
   }
 }
 

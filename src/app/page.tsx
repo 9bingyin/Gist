@@ -30,6 +30,10 @@ export default function Home() {
   selectedFeedIdRef.current = selectedFeedId;
   selectedFolderIdRef.current = selectedFolderId;
 
+  // Request version tracking for fetchArticles to handle race conditions
+  const fetchArticlesVersionRef = useRef(0);
+  const fetchArticlesAbortRef = useRef<AbortController | null>(null);
+
   const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [defaultLayout, setDefaultLayout] = useState<Layout | undefined>(
@@ -97,6 +101,14 @@ export default function Home() {
         type?: ContentType;
       } = {},
     ) => {
+      // Abort previous request
+      fetchArticlesAbortRef.current?.abort();
+      const controller = new AbortController();
+      fetchArticlesAbortRef.current = controller;
+
+      // Increment version to track this request
+      const currentVersion = ++fetchArticlesVersionRef.current;
+
       try {
         let url = "/api/articles";
         const params = new URLSearchParams();
@@ -108,11 +120,16 @@ export default function Home() {
           url += `?${params.toString()}`;
         }
 
-        const res = await fetch(url);
+        const res = await fetch(url, { signal: controller.signal });
         if (!res.ok) {
           throw new Error("Failed to fetch articles");
         }
         const data: Article[] = await res.json();
+
+        // Ignore stale response
+        if (currentVersion !== fetchArticlesVersionRef.current) {
+          return;
+        }
 
         // Preserve translation fields from existing articles
         setArticles((prev) => {
@@ -151,6 +168,10 @@ export default function Home() {
           return updated || prev;
         });
       } catch (error) {
+        // Ignore abort errors
+        if (error instanceof Error && error.name === "AbortError") {
+          return;
+        }
         console.error("Failed to fetch articles:", error);
       }
     },
@@ -273,18 +294,19 @@ export default function Home() {
         // Refresh single feed
         await fetch(`/api/feeds/${feedIdAtStart}/refresh`, { method: "POST" });
       } else if (folderIdAtStart) {
-        // Refresh only feeds in the selected folder
+        // Refresh only feeds in the selected folder (concurrent)
         const folderFeeds = feeds.filter(
           (f) => f.folderId === folderIdAtStart,
         );
-        for (const feed of folderFeeds) {
-          await fetch(`/api/feeds/${feed.id}/refresh`, { method: "POST" });
-        }
+        await Promise.allSettled(
+          folderFeeds.map((feed) =>
+            fetch(`/api/feeds/${feed.id}/refresh`, { method: "POST" }),
+          ),
+        );
       } else {
-        // Refresh all feeds
-        for (const feed of feeds) {
-          await fetch(`/api/feeds/${feed.id}/refresh`, { method: "POST" });
-        }
+        // Refresh all feeds using handleRefreshAllFeeds
+        await handleRefreshAllFeeds();
+        return; // handleRefreshAllFeeds handles fetchFeeds/fetchArticles
       }
       await fetchFeeds();
 
@@ -396,9 +418,30 @@ export default function Home() {
   };
 
   const handleArticleUpdate = useCallback((updatedArticle: Article) => {
-    setSelectedArticle(updatedArticle);
+    // Use field-level merge to preserve concurrent updates
+    setSelectedArticle((prev) => {
+      if (!prev || prev.id !== updatedArticle.id) return updatedArticle;
+      return {
+        ...prev,
+        ...updatedArticle,
+        // Preserve translation fields unless explicitly provided
+        translatedTitle: updatedArticle.translatedTitle ?? prev.translatedTitle,
+        translatedSummary:
+          updatedArticle.translatedSummary ?? prev.translatedSummary,
+      };
+    });
+
     setArticles((prev) =>
-      prev.map((a) => (a.id === updatedArticle.id ? updatedArticle : a)),
+      prev.map((a) => {
+        if (a.id !== updatedArticle.id) return a;
+        return {
+          ...a,
+          ...updatedArticle,
+          translatedTitle: updatedArticle.translatedTitle ?? a.translatedTitle,
+          translatedSummary:
+            updatedArticle.translatedSummary ?? a.translatedSummary,
+        };
+      }),
     );
   }, []);
 
@@ -444,15 +487,26 @@ export default function Home() {
   }, []);
 
   const handleMarkAllRead = async () => {
+    // Capture current unread article IDs to prevent race conditions
+    const articleIdsToMark = articles.filter((a) => !a.isRead).map((a) => a.id);
+
+    if (articleIdsToMark.length === 0) return;
+
+    // Optimistic update
+    setArticles((prev) =>
+      prev.map((a) =>
+        articleIdsToMark.includes(a.id) ? { ...a, isRead: true } : a,
+      ),
+    );
+
     await fetch("/api/articles/mark-all-read", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ feedId: selectedFeedId }), // TODO: Update backend to support folderId
-    });
-    await fetchArticles({
-      feedId: selectedFeedId,
-      folderId: selectedFolderId,
-      type: selectedContentType,
+      body: JSON.stringify({
+        feedId: selectedFeedId,
+        folderId: selectedFolderId,
+        articleIds: articleIdsToMark,
+      }),
     });
     await fetchFeeds();
   };

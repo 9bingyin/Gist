@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useCallback, useState } from "react";
+import { useEffect, useRef, useCallback } from "react";
 import { RefreshCwIcon, CheckCircleIcon, MenuIcon } from "lucide-react";
 import striptags from "striptags";
 import { Button } from "@/components/ui/button";
@@ -154,7 +154,6 @@ export function ArticleList({
     null,
   );
   const observerRef = useRef<IntersectionObserver | null>(null);
-  const [isTranslating, setIsTranslating] = useState(false);
 
   // Use ref to always have access to the latest articles (avoid closure issues)
   const articlesRef = useRef(articles);
@@ -183,29 +182,30 @@ export function ArticleList({
     for (const article of articlesToTranslate) {
       translatingIds.current.add(article.id);
     }
-    setIsTranslating(true);
 
-    // Translate each article separately, title and summary update independently
+    // Helper to update a single article (uses latest state via ref)
+    const updateSingleArticle = (
+      articleId: string,
+      translation: { title?: string; summary?: string },
+    ) => {
+      const latestArticles = articlesRef.current;
+      const updatedArticles = latestArticles.map((a) => {
+        if (a.id === articleId) {
+          return {
+            ...a,
+            ...(translation.title && { translatedTitle: translation.title }),
+            ...(translation.summary && {
+              translatedSummary: translation.summary,
+            }),
+          };
+        }
+        return a;
+      });
+      onUpdateArticles(updatedArticles);
+    };
+
+    // Translate each article, update immediately when done
     const translateArticle = async (article: (typeof articlesToTranslate)[0]) => {
-      // Track translated parts to avoid race condition
-      const translated: { title?: string; summary?: string } = {};
-
-      // Helper to update article with all translated parts so far
-      const updateArticle = () => {
-        const latestArticles = articlesRef.current;
-        const updatedArticles = latestArticles.map((a) => {
-          if (a.id === article.id) {
-            return {
-              ...a,
-              ...(translated.title && { translatedTitle: translated.title }),
-              ...(translated.summary && { translatedSummary: translated.summary }),
-            };
-          }
-          return a;
-        });
-        onUpdateArticles(updatedArticles);
-      };
-
       // Translate title - update immediately when done
       const translateTitle = async () => {
         try {
@@ -233,10 +233,13 @@ export function ArticleList({
           }
 
           const data = await res.json();
-          translated.title = data.content;
-          updateArticle();
+          // Immediately update UI with title
+          updateSingleArticle(article.id, { title: data.content });
         } catch (error) {
-          console.error(`Title translation error for article ${article.id}:`, error);
+          console.error(
+            `Title translation error for article ${article.id}:`,
+            error,
+          );
         }
       };
 
@@ -259,12 +262,15 @@ export function ArticleList({
 
           if (res.ok) {
             const data = await res.json();
-            translated.summary = data.content;
-            updateArticle();
+            // Immediately update UI with summary
+            updateSingleArticle(article.id, { summary: data.content });
           }
           // Silently ignore summary translation errors
         } catch (error) {
-          console.error(`Summary translation error for article ${article.id}:`, error);
+          console.error(
+            `Summary translation error for article ${article.id}:`,
+            error,
+          );
         }
       };
 
@@ -277,11 +283,7 @@ export function ArticleList({
     };
 
     // Start all translations in parallel
-    try {
-      await Promise.all(articlesToTranslate.map(translateArticle));
-    } finally {
-      setIsTranslating(false);
-    }
+    await Promise.all(articlesToTranslate.map(translateArticle));
   }, [autoTranslate, aiEnabled, onUpdateArticles, targetLanguage]);
 
   // Debounced translate trigger

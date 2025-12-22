@@ -22,11 +22,12 @@ model Feed {
   siteUrl     String?
   description String?
   imageUrl    String?
-  type        String    @default("article")
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  articles    Article[]
-  folderId    String?
+  type         String    @default("article")
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  refreshingAt DateTime?
+  articles     Article[]
+  folderId     String?
   folder      Folder?   @relation(fields: [folderId], references: [id], onDelete: SetNull)
 
   @@index([folderId])

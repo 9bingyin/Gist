@@ -306,6 +306,9 @@ export function ArticleDetail({
   const summaryAbortRef = useRef<AbortController | null>(null);
   const translationAbortRef = useRef<AbortController | null>(null);
 
+  // Track which article has been updated to prevent duplicate onArticleUpdate calls
+  const translationUpdatedForRef = useRef<string | null>(null);
+
   // Reset readability mode, summary, translation and errors when article changes
   useEffect(() => {
     // Abort any ongoing requests
@@ -325,6 +328,9 @@ export function ArticleDetail({
     setTranslationError(null);
     setSegments([]);
     setTranslatedSegments(new Map());
+
+    // Reset translation update tracking
+    translationUpdatedForRef.current = null;
   }, [article?.id]);
 
   // Auto-translate when article changes and autoTranslate is enabled
@@ -368,6 +374,9 @@ export function ArticleDetail({
       setIsLoadingTranslation(true);
       setTranslationError(null);
       setTranslatedSegments(new Map());
+
+      // Reset update tracking for this translation (allows re-update when mode changes)
+      translationUpdatedForRef.current = null;
 
       try {
         // Build segments from content
@@ -482,7 +491,17 @@ export function ArticleDetail({
         setTranslatedContent(assembled.content);
 
         // Update article with translated title/summary for article list
-        if (onArticleUpdate && (assembled.title || assembled.summary)) {
+        // Only update if:
+        // 1. onArticleUpdate is available
+        // 2. We have translation results
+        // 3. This article hasn't been updated yet (prevent duplicate calls)
+        // 4. Article ID still matches (prevent updating wrong article)
+        if (
+          onArticleUpdate &&
+          (assembled.title || assembled.summary) &&
+          translationUpdatedForRef.current !== article.id
+        ) {
+          translationUpdatedForRef.current = article.id;
           onArticleUpdate({
             ...article,
             translatedTitle: assembled.title || undefined,
