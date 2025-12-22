@@ -1,6 +1,10 @@
 /**
  * HTML content segmentation utility for parallel translation
+ * Uses cheerio for proper HTML parsing to handle nested elements correctly
  */
+
+import * as cheerio from "cheerio";
+import type { Element } from "domhandler";
 
 export interface ContentSegment {
   index: number;
@@ -9,8 +13,8 @@ export interface ContentSegment {
   isImage?: boolean; // Image segments should not be translated
 }
 
-// Block-level elements that can be used as segment boundaries
-const BLOCK_ELEMENTS = [
+// Top-level block elements used for segmentation
+const TOP_LEVEL_BLOCKS = new Set([
   "p",
   "h1",
   "h2",
@@ -22,8 +26,8 @@ const BLOCK_ELEMENTS = [
   "pre",
   "ul",
   "ol",
-  "li",
   "table",
+  "figure",
   "div",
   "section",
   "article",
@@ -31,43 +35,39 @@ const BLOCK_ELEMENTS = [
   "header",
   "footer",
   "nav",
-  "figure",
-  "figcaption",
   "hr",
-  "br",
-];
+]);
 
-// Elements that contain images and should be skipped
-const IMAGE_ELEMENTS = ["img", "figure", "picture", "video", "audio", "iframe"];
+// Media elements that should be marked as image segments
+const MEDIA_ELEMENTS = new Set(["img", "picture", "video", "audio", "iframe"]);
 
 /**
- * Check if an HTML string contains only image/media elements
+ * Check if an element is a media-only segment (no meaningful text)
  */
-function isImageSegment(html: string): boolean {
-  const trimmed = html.trim();
-  if (!trimmed) return false;
+function isMediaSegment(
+  $el: cheerio.Cheerio<Element>,
+  $: cheerio.CheerioAPI
+): boolean {
+  const tagName = $el.prop("tagName")?.toLowerCase();
+  if (!tagName) return false;
 
-  // Check if starts with image-related tags
-  const lowerHtml = trimmed.toLowerCase();
+  // Direct media element
+  if (MEDIA_ELEMENTS.has(tagName)) return true;
 
-  // Direct image tag
-  if (lowerHtml.startsWith("<img")) return true;
-
-  // Figure containing image
-  if (lowerHtml.startsWith("<figure")) {
-    return /<img\s/i.test(trimmed);
+  // Figure containing media with minimal text
+  if (tagName === "figure") {
+    const hasMedia =
+      $el.find("img, picture, video, audio, iframe").length > 0;
+    const textContent = $el.text().trim();
+    // Allow figcaption with short text
+    return hasMedia && textContent.length < 50;
   }
 
-  // Picture element
-  if (lowerHtml.startsWith("<picture")) return true;
-
-  // Video/audio/iframe
-  if (
-    lowerHtml.startsWith("<video") ||
-    lowerHtml.startsWith("<audio") ||
-    lowerHtml.startsWith("<iframe")
-  ) {
-    return true;
+  // Paragraph containing only media
+  if (tagName === "p") {
+    const textContent = $el.text().trim();
+    const hasMedia = $el.find("img, picture, video, audio, iframe").length > 0;
+    return textContent.length === 0 && hasMedia;
   }
 
   return false;
@@ -84,7 +84,7 @@ function hasTextContent(html: string): boolean {
 }
 
 /**
- * Segment HTML content by block elements
+ * Segment HTML content using cheerio for proper parsing
  * Returns an array of content segments with proper indexing
  */
 export function segmentHtmlContent(html: string): ContentSegment[] {
@@ -92,87 +92,73 @@ export function segmentHtmlContent(html: string): ContentSegment[] {
     return [];
   }
 
+  const $ = cheerio.load(html, { xml: false });
   const segments: ContentSegment[] = [];
-
-  // Build regex pattern for block elements
-  // Match: <tag>...</tag> or self-closing <tag />
-  const blockPattern = new RegExp(
-    `(<(?:${BLOCK_ELEMENTS.join("|")})[^>]*>(?:[\\s\\S]*?)<\\/(?:${BLOCK_ELEMENTS.join("|")})>|<(?:${IMAGE_ELEMENTS.join("|")})[^>]*\\/?>|<hr[^>]*\\/?>|<br[^>]*\\/?>)`,
-    "gi"
-  );
-
-  let lastIndex = 0;
-  let match: RegExpExecArray | null;
   let segmentIndex = 0;
 
-  // Find all block-level elements
-  const matches: Array<{ content: string; start: number; end: number }> = [];
+  // Get children from body or root
+  const children = $("body").length
+    ? $("body").children().toArray()
+    : $.root().children().toArray();
 
-  while ((match = blockPattern.exec(html)) !== null) {
-    matches.push({
-      content: match[0],
-      start: match.index,
-      end: match.index + match[0].length,
+  // Process each top-level child
+  for (const node of children) {
+    if (node.type !== "tag") {
+      // Handle text nodes at root level
+      const textContent = $(node).text().trim();
+      if (textContent.length >= 2) {
+        segments.push({
+          index: segmentIndex++,
+          content: textContent,
+          type: "content",
+          isImage: false,
+        });
+      }
+      continue;
+    }
+
+    const element = node as Element;
+    const $el = $(element);
+    const tagName = element.tagName.toLowerCase();
+    const outerHtml = $.html($el);
+
+    // Skip empty elements
+    if (!outerHtml || !outerHtml.trim()) continue;
+
+    // Check if it's a media segment
+    const isMedia = isMediaSegment($el, $);
+
+    // For block elements, add as segment if has content or is media
+    if (TOP_LEVEL_BLOCKS.has(tagName)) {
+      if (isMedia || hasTextContent(outerHtml)) {
+        segments.push({
+          index: segmentIndex++,
+          content: outerHtml,
+          type: "content",
+          isImage: isMedia,
+        });
+      }
+    } else {
+      // For other elements (span, a, etc.), include if has text
+      if (hasTextContent(outerHtml)) {
+        segments.push({
+          index: segmentIndex++,
+          content: outerHtml,
+          type: "content",
+          isImage: false,
+        });
+      }
+    }
+  }
+
+  // If no segments found but has content, treat entire HTML as one segment
+  if (segments.length === 0 && hasTextContent(html)) {
+    segments.push({
+      index: 0,
+      content: html.trim(),
+      type: "content",
+      isImage: false,
     });
-  }
-
-  // If no matches found, treat entire content as one segment
-  if (matches.length === 0) {
-    if (hasTextContent(html)) {
-      segments.push({
-        index: 0,
-        content: html.trim(),
-        type: "content",
-        isImage: isImageSegment(html),
-      });
-    }
-    return segments;
-  }
-
-  // Process matches and gaps between them
-  for (const m of matches) {
-    // Check for content between last match and current match
-    if (m.start > lastIndex) {
-      const gap = html.slice(lastIndex, m.start).trim();
-      if (gap && hasTextContent(gap)) {
-        segments.push({
-          index: segmentIndex++,
-          content: gap,
-          type: "content",
-          isImage: isImageSegment(gap),
-        });
-      }
-    }
-
-    // Add current match as segment
-    const content = m.content.trim();
-    if (content) {
-      const isImage = isImageSegment(content);
-      // Skip empty or whitespace-only text segments
-      if (isImage || hasTextContent(content)) {
-        segments.push({
-          index: segmentIndex++,
-          content,
-          type: "content",
-          isImage,
-        });
-      }
-    }
-
-    lastIndex = m.end;
-  }
-
-  // Check for remaining content after last match
-  if (lastIndex < html.length) {
-    const remaining = html.slice(lastIndex).trim();
-    if (remaining && hasTextContent(remaining)) {
-      segments.push({
-        index: segmentIndex++,
-        content: remaining,
-        type: "content",
-        isImage: isImageSegment(remaining),
-      });
-    }
   }
 
   return segments;

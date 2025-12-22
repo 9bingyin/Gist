@@ -7,11 +7,11 @@ import * as cheerio from "cheerio";
 import type { AnyNode, Element, Text } from "domhandler";
 
 // Elements that should not have their text translated
+// Note: <code> is NOT in this list - only skip code inside <pre>
 const SKIP_ELEMENTS = new Set([
   "script",
   "style",
-  "code",
-  "pre",
+  "pre", // <pre> blocks (including <pre><code>) should not be translated
   "kbd",
   "samp",
   "var",
