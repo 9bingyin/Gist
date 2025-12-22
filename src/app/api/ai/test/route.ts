@@ -4,6 +4,7 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { prisma } from "@/lib/db";
+import { getTestPrompt } from "@/lib/ai-prompts";
 
 export const maxDuration = 30;
 
@@ -42,10 +43,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Add language instruction to prompt
-    const languageInstruction = language
-      ? `You must answer me in ${language}. `
-      : "";
-    const fullPrompt = languageInstruction + prompt;
+    const fullPrompt = getTestPrompt(prompt, language);
 
     // Map thinking effort to Anthropic budget tokens
     const getThinkingBudgetTokens = (effort: string) => {

@@ -11,9 +11,12 @@ import { getAiCache, setAiCache, AiCacheType } from "@/lib/ai-cache";
 import { withRateLimit } from "@/lib/ai-rate-limiter";
 import {
   extractTextsFromHtml,
-  buildTranslationPrompt,
   parseTranslationResponse,
 } from "@/lib/html-text-extractor";
+import {
+  getTranslateTextPrompt,
+  getTranslateSegmentsPrompt,
+} from "@/lib/ai-prompts";
 
 export type ThinkingEffort = "low" | "medium" | "high";
 
@@ -130,11 +133,7 @@ async function translatePlainText(
   type: "title" | "summary",
   settings: AiSettings
 ): Promise<string> {
-  const typeLabel = type === "title" ? "Title" : "Summary";
-  const prompt = `Translate the following ${typeLabel.toLowerCase()} into ${settings.language}. Return only the translated text, no explanations.
-
-${typeLabel}: ${content}`;
-
+  const prompt = getTranslateTextPrompt(type, content, settings.language);
   const response = await callAiProvider(prompt, settings);
   return cleanResponse(response);
 }
@@ -155,7 +154,7 @@ async function translateHtmlContent(
   }
 
   // Build prompt with numbered text segments
-  const prompt = buildTranslationPrompt(texts, settings.language);
+  const prompt = getTranslateSegmentsPrompt(texts, settings.language);
 
   // Call AI to translate
   const response = await callAiProvider(prompt, settings);

@@ -6,6 +6,7 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { prisma } from "@/lib/db";
 import { getAiCache, setAiCache } from "@/lib/ai-cache";
 import { withRateLimit } from "@/lib/ai-rate-limiter";
+import { getSummarizePrompt } from "@/lib/ai-prompts";
 
 export const maxDuration = 30;
 
@@ -94,36 +95,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create prompt for summarization
-    const languageInstruction = language
-      ? `You must answer in ${language}.`
-      : "";
-    const prompt = `${languageInstruction}
-
-<task>
-Summarize the following article by extracting 3-5 key points. Each point should be a concise statement of important information or main ideas.
-Use simple, clear language that is easy to understand for general readers.
-</task>
-
-<requirements>
-- Output in plain text format only
-- Do NOT use Markdown formatting
-- Do NOT use any prefixes: no asterisks (*), hyphens (-), numbers (1., 2.), or bullet symbols (•)
-- Start each point on a new line without any prefix
-- Each point should be a complete sentence
-- Focus on factual information and main ideas
-- Use plain, accessible language - avoid jargon and technical terms when possible
-- Write in a conversational, easy-to-understand style
-</requirements>
-
-<article>
-${title ? `<title>${title}</title>\n\n` : ""}<content>
-${content}
-</content>
-</article>
-
-<output_format>
-Return only the key points, one per line, without any prefixes or formatting symbols.
-</output_format>`;
+    const prompt = getSummarizePrompt(content, title, language);
 
     let response: string;
 

@@ -95,27 +95,6 @@ export function extractTextsFromHtml(html: string): ExtractionResult {
 }
 
 /**
- * Build a prompt with numbered text segments for translation
- */
-export function buildTranslationPrompt(texts: string[], language: string): string {
-  // Filter out whitespace-only texts and build numbered list
-  const numberedTexts = texts
-    .map((text, i) => `[${i}] ${text}`)
-    .join("\n");
-
-  return `Translate the following numbered text segments into ${language}.
-
-Rules:
-- Keep the same numbering format [N] for each line
-- Only translate the text after the number
-- Preserve any leading/trailing whitespace in the original text
-- Do not add explanations
-
-Text segments:
-${numberedTexts}`;
-}
-
-/**
  * Parse translation response back to array
  */
 export function parseTranslationResponse(response: string, expectedCount: number): string[] {
