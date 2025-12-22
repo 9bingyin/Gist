@@ -21,6 +21,11 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { needsTranslation } from "@/lib/language-detect";
+import {
+  buildTranslationSegments,
+  assembleTranslatedContent,
+  type ContentSegment,
+} from "@/lib/content-segmenter";
 import { useTranslation } from "react-i18next";
 import type { Article } from "@/lib/types";
 
@@ -265,6 +270,10 @@ export function ArticleDetail({
   const [translationError, setTranslationError] = useState<string | null>(null);
   const [translateEnabled, setTranslateEnabled] = useState(false); // Track if user wants translation
 
+  // Segment-based translation state
+  const [segments, setSegments] = useState<ContentSegment[]>([]);
+  const [translatedSegments, setTranslatedSegments] = useState<Map<number, string>>(new Map());
+
   // Reset readability mode, summary, translation and errors when article changes
   useEffect(() => {
     setUseReadability(false);
@@ -277,6 +286,8 @@ export function ArticleDetail({
     setTranslatedTitle(null);
     setTranslatedSummary(null);
     setTranslationError(null);
+    setSegments([]);
+    setTranslatedSegments(new Map());
   }, [article?.id]);
 
   // Auto-translate when article changes and autoTranslate is enabled
@@ -294,7 +305,7 @@ export function ArticleDetail({
     setTranslateEnabled(true);
   }, [article?.id, autoTranslate, targetLanguage, article?.translationDisabled]);
 
-  // Perform translation when translateEnabled changes or useReadability changes
+  // Perform segmented parallel translation when translateEnabled changes or useReadability changes
   useEffect(() => {
     if (!translateEnabled || !article) return;
 
@@ -306,46 +317,123 @@ export function ArticleDetail({
 
     const abortController = new AbortController();
 
-    const performTranslation = async () => {
+    const performSegmentedTranslation = async () => {
       setIsLoadingTranslation(true);
       setTranslationError(null);
+      setTranslatedSegments(new Map());
+
       try {
-        const res = await fetch("/api/ai/translate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            articleId: article.id,
-            content,
-            title: article.title,
-            summary: article.summary,
-            isReadability,
-          }),
-          signal: abortController.signal,
+        // Build segments from content
+        const allSegments = buildTranslationSegments(
+          article.title,
+          article.summary,
+          content
+        );
+        setSegments(allSegments);
+
+        // Separate image segments (no translation needed) from text segments
+        const imageSegments = allSegments.filter((s) => s.isImage);
+        const textSegments = allSegments.filter((s) => !s.isImage);
+
+        // Immediately add image segments to translated map
+        if (imageSegments.length > 0) {
+          setTranslatedSegments((prev) => {
+            const newMap = new Map(prev);
+            for (const seg of imageSegments) {
+              newMap.set(seg.index, seg.content);
+            }
+            return newMap;
+          });
+        }
+
+        // Translate text segments in parallel
+        const translatePromises = textSegments.map(async (segment) => {
+          if (abortController.signal.aborted) return null;
+
+          try {
+            const res = await fetch("/api/ai/translate-segment", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                articleId: article.id,
+                segmentIndex: segment.index,
+                content: segment.content,
+                type: segment.type,
+                isReadability,
+              }),
+              signal: abortController.signal,
+            });
+
+            if (!res.ok) {
+              const data = await res.json();
+              throw new Error(data.error || "Segment translation failed");
+            }
+
+            const data = await res.json();
+
+            // Update translated segments map immediately
+            if (!abortController.signal.aborted) {
+              setTranslatedSegments((prev) => {
+                const newMap = new Map(prev);
+                newMap.set(segment.index, data.content);
+                return newMap;
+              });
+            }
+
+            return { index: segment.index, content: data.content, type: segment.type };
+          } catch (error) {
+            if (error instanceof Error && error.name === "AbortError") {
+              return null;
+            }
+            console.error(`Segment ${segment.index} translation error:`, error);
+            // On error, keep original content
+            if (!abortController.signal.aborted) {
+              setTranslatedSegments((prev) => {
+                const newMap = new Map(prev);
+                newMap.set(segment.index, segment.content);
+                return newMap;
+              });
+            }
+            return { index: segment.index, content: segment.content, type: segment.type };
+          }
         });
 
-        const data = await res.json();
+        // Wait for all translations to complete
+        const results = await Promise.all(translatePromises);
 
-        if (!res.ok) {
-          throw new Error(data.error || "Translation failed");
+        if (abortController.signal.aborted) return;
+
+        // Assemble final result
+        const finalTranslatedMap = new Map<number, string>();
+
+        // Add image segments
+        for (const seg of imageSegments) {
+          finalTranslatedMap.set(seg.index, seg.content);
         }
 
-        // Only update state if not aborted
-        if (!abortController.signal.aborted) {
-          setTranslatedContent(data.content);
-          setTranslatedTitle(data.title);
-          setTranslatedSummary(data.summary);
-
-          // Update article with translated title/summary for article list
-          if (onArticleUpdate && (data.title || data.summary)) {
-            onArticleUpdate({
-              ...article,
-              translatedTitle: data.title || undefined,
-              translatedSummary: data.summary || undefined,
-            });
+        // Add translated text segments
+        for (const result of results) {
+          if (result) {
+            finalTranslatedMap.set(result.index, result.content);
           }
         }
+
+        // Assemble content
+        const assembled = assembleTranslatedContent(allSegments, finalTranslatedMap);
+
+        setTranslatedTitle(assembled.title);
+        setTranslatedSummary(assembled.summary);
+        setTranslatedContent(assembled.content);
+
+        // Update article with translated title/summary for article list
+        if (onArticleUpdate && (assembled.title || assembled.summary)) {
+          onArticleUpdate({
+            ...article,
+            translatedTitle: assembled.title || undefined,
+            translatedSummary: assembled.summary || undefined,
+          });
+        }
       } catch (error) {
-        // Ignore abort errors
         if (error instanceof Error && error.name === "AbortError") {
           return;
         }
@@ -362,7 +450,7 @@ export function ArticleDetail({
       }
     };
 
-    performTranslation();
+    performSegmentedTranslation();
 
     // Cleanup: abort the request when dependencies change or component unmounts
     return () => {
@@ -374,6 +462,7 @@ export function ArticleDetail({
     article?.id,
     article?.readabilityContent,
     targetLanguage,
+    onArticleUpdate,
   ]);
 
   // Regenerate summary when readability mode changes (if summary was already shown)
@@ -426,9 +515,22 @@ export function ArticleDetail({
   const processedContent = useMemo(() => {
     if (!article) return null;
 
-    // Use translated content if available
+    // Use fully translated content if available
     if (translatedContent) {
       return processContent(translatedContent, article.link);
+    }
+
+    // If translation is in progress, show partially translated content
+    if (translateEnabled && segments.length > 0 && translatedSegments.size > 0) {
+      // Build content from translated segments (content type only, not title/summary)
+      const contentSegments = segments.filter(
+        (s) => s.type === "content"
+      );
+      const partialContent = contentSegments
+        .sort((a, b) => a.index - b.index)
+        .map((seg) => translatedSegments.get(seg.index) ?? seg.content)
+        .join("\n");
+      return processContent(partialContent, article.link);
     }
 
     const content = useReadability
@@ -436,14 +538,35 @@ export function ArticleDetail({
       : article.content;
     if (!content) return null;
     return processContent(content, article.link);
-  }, [article, useReadability, translatedContent]);
+  }, [article, useReadability, translatedContent, translateEnabled, segments, translatedSegments]);
+
+  // Get display title (real-time during translation)
+  const displayTitle = useMemo(() => {
+    if (!article) return null;
+    if (translatedTitle) return translatedTitle;
+
+    // Check if title is being translated
+    if (translateEnabled && segments.length > 0) {
+      const titleSegment = segments.find((s) => s.type === "title");
+      if (titleSegment) {
+        const translated = translatedSegments.get(titleSegment.index);
+        if (translated) return translated;
+      }
+    }
+
+    return article.title;
+  }, [article, translatedTitle, translateEnabled, segments, translatedSegments]);
 
   const handleToggleReadability = useCallback(async () => {
     if (!article || isLoadingReadability) return;
 
     // Clear current translated content (will be re-translated if translateEnabled)
     setTranslatedContent(null);
+    setTranslatedTitle(null);
+    setTranslatedSummary(null);
     setTranslationError(null);
+    setSegments([]);
+    setTranslatedSegments(new Map());
 
     if (useReadability) {
       setUseReadability(false);
@@ -728,7 +851,7 @@ export function ArticleDetail({
         {/* Article Header */}
         <header className="mb-8">
           <h1 className="text-3xl font-bold leading-tight tracking-tight text-foreground">
-            {translatedTitle || article.title}
+            {displayTitle}
           </h1>
 
           <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">

@@ -5,7 +5,8 @@ export type AiCacheType =
   | "translate-readability"
   | "translate-lite"
   | "summarize"
-  | "summarize-readability";
+  | "summarize-readability"
+  | string; // Allow dynamic types like "translate-segment-0", "translate-segment-1", etc.
 
 interface TranslateResult {
   title: string | null;
@@ -24,7 +25,11 @@ interface SummarizeResult {
   summary: string;
 }
 
-type CacheResult = TranslateResult | TranslateLiteResult | SummarizeResult;
+interface SegmentResult {
+  content: string;
+}
+
+type CacheResult = TranslateResult | TranslateLiteResult | SummarizeResult | SegmentResult;
 
 /**
  * Get cached AI result
