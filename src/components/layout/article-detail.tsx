@@ -362,6 +362,8 @@ export function ArticleDetail({
                 content: segment.content,
                 type: segment.type,
                 isReadability,
+                // Pass title for content translation context
+                ...(segment.type === "content" && { title: article.title }),
               }),
               signal: abortController.signal,
             });

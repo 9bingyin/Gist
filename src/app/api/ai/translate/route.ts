@@ -16,6 +16,7 @@ interface SegmentRequest {
   content: string;
   type: "title" | "summary" | "content";
   isReadability?: boolean;
+  title?: string;
 }
 
 // Batch mode request
@@ -70,7 +71,7 @@ async function handleSegmentMode(
   body: SegmentRequest,
   settings: Awaited<ReturnType<typeof getAiSettings>>
 ) {
-  const { articleId, segmentIndex, content, type, isReadability } = body;
+  const { articleId, segmentIndex, content, type, isReadability, title } = body;
 
   if (!content || content.trim().length === 0) {
     return NextResponse.json(
@@ -114,6 +115,7 @@ async function handleSegmentMode(
     settings,
     articleId,
     cacheType,
+    title,
   });
 
   return NextResponse.json({

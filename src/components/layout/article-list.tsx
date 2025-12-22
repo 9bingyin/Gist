@@ -185,12 +185,31 @@ export function ArticleList({
     }
     setIsTranslating(true);
 
-    // Translate each article separately and update immediately when done
+    // Translate each article separately, title and summary update independently
     const translateArticle = async (article: (typeof articlesToTranslate)[0]) => {
-      try {
-        // Translate title and summary in parallel
-        const [titleRes, summaryRes] = await Promise.all([
-          fetch("/api/ai/translate", {
+      // Track translated parts to avoid race condition
+      const translated: { title?: string; summary?: string } = {};
+
+      // Helper to update article with all translated parts so far
+      const updateArticle = () => {
+        const latestArticles = articlesRef.current;
+        const updatedArticles = latestArticles.map((a) => {
+          if (a.id === article.id) {
+            return {
+              ...a,
+              ...(translated.title && { translatedTitle: translated.title }),
+              ...(translated.summary && { translatedSummary: translated.summary }),
+            };
+          }
+          return a;
+        });
+        onUpdateArticles(updatedArticles);
+      };
+
+      // Translate title - update immediately when done
+      const translateTitle = async () => {
+        try {
+          const res = await fetch("/api/ai/translate", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -200,57 +219,58 @@ export function ArticleList({
               content: article.title,
               type: "title",
             }),
-          }),
-          article.summary
-            ? fetch("/api/ai/translate", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  mode: "segment",
-                  articleId: article.id,
-                  segmentIndex: 1,
-                  content: article.summary,
-                  type: "summary",
-                }),
-              })
-            : null,
-        ]);
+          });
 
-        if (!titleRes.ok) {
-          let errorMessage = `Title translation failed (${titleRes.status})`;
-          try {
-            const data = await titleRes.json();
-            errorMessage = data.error || errorMessage;
-          } catch {
-            // Response body is empty or not valid JSON
+          if (!res.ok) {
+            let errorMessage = `Title translation failed (${res.status})`;
+            try {
+              const data = await res.json();
+              errorMessage = data.error || errorMessage;
+            } catch {
+              // Response body is empty or not valid JSON
+            }
+            throw new Error(errorMessage);
           }
-          throw new Error(errorMessage);
-        }
 
-        const titleData = await titleRes.json();
-        let summaryData = null;
-        if (summaryRes) {
-          if (summaryRes.ok) {
-            summaryData = await summaryRes.json();
+          const data = await res.json();
+          translated.title = data.content;
+          updateArticle();
+        } catch (error) {
+          console.error(`Title translation error for article ${article.id}:`, error);
+        }
+      };
+
+      // Translate summary - update immediately when done
+      const translateSummary = async () => {
+        if (!article.summary) return;
+
+        try {
+          const res = await fetch("/api/ai/translate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              mode: "segment",
+              articleId: article.id,
+              segmentIndex: 1,
+              content: article.summary,
+              type: "summary",
+            }),
+          });
+
+          if (res.ok) {
+            const data = await res.json();
+            translated.summary = data.content;
+            updateArticle();
           }
           // Silently ignore summary translation errors
+        } catch (error) {
+          console.error(`Summary translation error for article ${article.id}:`, error);
         }
+      };
 
-        // Update this article immediately
-        const latestArticles = articlesRef.current;
-        const updatedArticles = latestArticles.map((a) => {
-          if (a.id === article.id) {
-            return {
-              ...a,
-              translatedTitle: titleData.content,
-              translatedSummary: summaryData?.content || undefined,
-            };
-          }
-          return a;
-        });
-        onUpdateArticles(updatedArticles);
-      } catch (error) {
-        console.error(`Translation error for article ${article.id}:`, error);
+      // Run both in parallel, each updates UI independently
+      try {
+        await Promise.all([translateTitle(), translateSummary()]);
       } finally {
         translatingIds.current.delete(article.id);
       }

@@ -77,6 +77,7 @@ interface TranslateOptions {
   settings: AiSettings;
   articleId?: string;
   cacheType?: AiCacheType;
+  title?: string;
 }
 
 /**
@@ -85,7 +86,7 @@ interface TranslateOptions {
 export async function translateContent(
   options: TranslateOptions
 ): Promise<string> {
-  const { content, type, settings, articleId, cacheType } = options;
+  const { content, type, settings, articleId, cacheType, title } = options;
 
   if (!content || content.trim().length === 0) {
     return "";
@@ -107,7 +108,7 @@ export async function translateContent(
 
   if (type === "content") {
     // For HTML content, translate directly while preserving structure
-    translatedContent = await translateHtmlContent(content, settings);
+    translatedContent = await translateHtmlContent(content, settings, title);
   } else {
     // For title and summary, translate directly
     translatedContent = await translatePlainText(content, type, settings);
@@ -160,7 +161,8 @@ function stripMarkdownCodeBlock(text: string): string {
  */
 async function translateHtmlContent(
   html: string,
-  settings: AiSettings
+  settings: AiSettings,
+  title?: string
 ): Promise<string> {
   // If no content or only whitespace, return original
   if (!html || !html.trim()) {
@@ -168,7 +170,7 @@ async function translateHtmlContent(
   }
 
   // Build prompt for HTML translation
-  const promptPair = getTranslateHtmlPrompt(html, settings.language);
+  const promptPair = getTranslateHtmlPrompt(html, settings.language, title);
 
   // Call AI to translate - system prompt instructs LLM to output clean HTML
   const response = await callAiProvider(promptPair, settings);

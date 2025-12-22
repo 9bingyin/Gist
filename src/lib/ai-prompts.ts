@@ -37,10 +37,12 @@ Rules:
  */
 export function getTranslateHtmlPrompt(
   htmlContent: string,
-  language: string
+  language: string,
+  title?: string
 ): PromptPair {
   return {
     system: `You are an expert translator. Translate HTML content into ${language} while preserving the exact HTML structure.
+${title ? `\nArticle Title: ${title}` : ""}
 
 CRITICAL: You MUST translate ALL text content into ${language}. This is NON-NEGOTIABLE. Any text not in ${language} is a FAILURE.
 
@@ -66,6 +68,7 @@ export function getSummarizePrompt(
 ): PromptPair {
   return {
     system: `You are an expert summarizer. Extract 3-5 key points from articles.
+${title ? `\nArticle Title: ${title}` : ""}
 
 CRITICAL: You MUST write the summary in ${language}. This is NON-NEGOTIABLE. Any response not in ${language} is a FAILURE.
 
@@ -77,7 +80,7 @@ Rules:
 - NEVER add conclusions at the end
 - Use simple, clear language
 - NO leading or trailing newlines`,
-    prompt: title ? `Title: ${title}\n\n${content}` : content,
+    prompt: content,
   };
 }
 
