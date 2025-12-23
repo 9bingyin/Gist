@@ -43,6 +43,7 @@ model Article {
   imageUrl           String?
   pubDate            DateTime?
   isRead             Boolean   @default(false)
+  isStarred          Boolean   @default(false)
   feedId             String
   feed               Feed      @relation(fields: [feedId], references: [id], onDelete: Cascade)
   createdAt          DateTime  @default(now())
@@ -50,6 +51,7 @@ model Article {
   @@unique([feedId, link])
   @@index([feedId])
   @@index([pubDate])
+  @@index([isStarred])
 }
 
 model Setting {

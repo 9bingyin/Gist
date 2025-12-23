@@ -250,7 +250,8 @@
     "articles": "Articles",
     "all_articles": "All Articles",
     "all_pictures": "All Pictures",
-    "all_notifications": "All Notifications"
+    "all_notifications": "All Notifications",
+    "starred": "Starred"
   },
   "article": {
     "readability": {
@@ -271,7 +272,9 @@
       "share": "Share",
       "bookmark": "Bookmark",
       "open_original": "Open original",
-      "more": "More"
+      "more": "More",
+      "star": "Star",
+      "unstar": "Unstar"
     }
   },
   "time": {

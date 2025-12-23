@@ -1,3 +1,5 @@
 [tools]
 bun = "latest"
+"npm:typescript" = "latest"
+"npm:typescript-language-server" = "latest"
 sqlite = "latest"

@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState, useCallback, useEffect, useRef } from "react";
-import DOMPurify from "dompurify";
+import { useState, useCallback, useEffect, useRef } from "react";
+import { ArticleContent } from "@/components/ui/article-content";
 import {
   ExternalLinkIcon,
   RssIcon,
@@ -12,6 +12,7 @@ import {
   LanguagesIcon,
   ArrowLeftIcon,
   AlertCircleIcon,
+  StarIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,24 +23,20 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { needsTranslation } from "@/lib/language-detect";
-import {
-  buildTranslationSegments,
-  assembleTranslatedContent,
-  type ContentSegment,
-} from "@/lib/content-segmenter";
 import { useTranslation } from "react-i18next";
+import { useArticleTranslation } from "@/hooks/use-article-translation";
+import { translateArticle } from "@/lib/services/translation-service";
 import type { Article } from "@/lib/types";
 
 interface ArticleDetailProps {
   article: Article | null;
   onArticleUpdate?: (article: Article) => void;
+  onToggleStar?: (article: Article) => void;
   autoTranslate?: boolean;
   targetLanguage?: string;
   aiEnabled?: boolean;
   onBack?: () => void;
 }
-
-// formatRelativeTime is implemented inside the component to access translations
 
 function AiSummaryBox({ content }: { content: string | null }) {
   if (!content) return null;
@@ -68,171 +65,10 @@ function AiSummaryBox({ content }: { content: string | null }) {
   );
 }
 
-function sanitizeHtml(html: string): string {
-  if (typeof window === "undefined") {
-    return html;
-  }
-
-  return DOMPurify.sanitize(html, {
-    ALLOWED_TAGS: [
-      "p",
-      "br",
-      "strong",
-      "b",
-      "em",
-      "i",
-      "u",
-      "s",
-      "strike",
-      "h1",
-      "h2",
-      "h3",
-      "h4",
-      "h5",
-      "h6",
-      "ul",
-      "ol",
-      "li",
-      "blockquote",
-      "pre",
-      "code",
-      "a",
-      "img",
-      "figure",
-      "figcaption",
-      "table",
-      "thead",
-      "tbody",
-      "tr",
-      "th",
-      "td",
-      "hr",
-      "div",
-      "span",
-      "sup",
-      "sub",
-      "small",
-      "mark",
-      "abbr",
-      "video",
-      "source",
-      "audio",
-      "dl",
-      "dt",
-      "dd",
-      "details",
-      "summary",
-    ],
-    ALLOWED_ATTR: [
-      "href",
-      "src",
-      "alt",
-      "title",
-      "class",
-      "id",
-      "style",
-      "target",
-      "rel",
-      "width",
-      "height",
-      "controls",
-      "autoplay",
-      "loop",
-      "muted",
-      "poster",
-      "type",
-      "colspan",
-      "rowspan",
-      "datetime",
-      "open",
-    ],
-    ADD_ATTR: ["target"],
-    FORBID_TAGS: ["script", "iframe", "form", "input", "button"],
-    FORBID_ATTR: ["onerror", "onload", "onclick", "onmouseover"],
-  });
-}
-
-/**
- * Convert relative URL to absolute URL based on the article link
- */
-function toAbsoluteUrl(
-  url: string,
-  baseUrl: string | undefined,
-): string | null {
-  // Already absolute URL
-  if (url.startsWith("http://") || url.startsWith("https://")) {
-    return url;
-  }
-
-  // Protocol-relative URL
-  if (url.startsWith("//")) {
-    return `https:${url}`;
-  }
-
-  // Data URI or already proxied - skip
-  if (url.startsWith("data:") || url.startsWith("/api/")) {
-    return null;
-  }
-
-  // Relative URL - need base URL
-  if (!baseUrl) return null;
-
-  try {
-    const base = new URL(baseUrl);
-
-    // Absolute path (starts with /)
-    if (url.startsWith("/")) {
-      return `${base.origin}${url}`;
-    }
-
-    // Relative path (e.g., "images/photo.jpg" or "../images/photo.jpg")
-    const basePath = base.pathname.substring(
-      0,
-      base.pathname.lastIndexOf("/") + 1,
-    );
-    return `${base.origin}${basePath}${url}`;
-  } catch {
-    return null;
-  }
-}
-
-function processContent(content: string, articleLink?: string): string {
-  let processed = sanitizeHtml(content);
-
-  // Add target="_blank" to all links
-  processed = processed.replace(
-    /<a\s+(?![^>]*target=)/gi,
-    '<a target="_blank" rel="noopener noreferrer" ',
-  );
-
-  // Proxy all image URLs (including converting relative paths to absolute)
-  processed = processed.replace(
-    /<img([^>]*)\ssrc=["']([^"']+)["']/gi,
-    (match, attrs, src) => {
-      const absoluteUrl = toAbsoluteUrl(src, articleLink);
-
-      // Skip if conversion failed or not applicable (data URIs, already proxied)
-      if (!absoluteUrl) {
-        return match;
-      }
-
-      const proxiedSrc = `/api/proxy/image?url=${encodeURIComponent(absoluteUrl)}`;
-      return `<img${attrs} src="${proxiedSrc}"`;
-    },
-  );
-
-  // Add loading="lazy" to images
-  processed = processed.replace(
-    /<img\s+(?![^>]*loading=)/gi,
-    '<img loading="lazy" ',
-  );
-
-  return processed;
-}
-
 export function ArticleDetail({
   article,
   onArticleUpdate,
+  onToggleStar,
   autoTranslate,
   targetLanguage,
   aiEnabled = true,
@@ -260,7 +96,7 @@ export function ArticleDetail({
       if (diffDays < 7) return t("time.in_days", { count: diffDays });
       return date.toLocaleDateString(
         i18n.language === "zh" ? "zh-CN" : "en-US",
-        { year: "numeric", month: "long", day: "numeric" },
+        { year: "numeric", month: "long", day: "numeric" }
       );
     }
 
@@ -288,30 +124,32 @@ export function ArticleDetail({
   const [aiSummary, setAiSummary] = useState<string | null>(null);
   const [summaryError, setSummaryError] = useState<string | null>(null);
   const [isLoadingTranslation, setIsLoadingTranslation] = useState(false);
-  const [translatedContent, setTranslatedContent] = useState<string | null>(
-    null,
-  );
-  const [translatedTitle, setTranslatedTitle] = useState<string | null>(null);
-  const [translatedSummary, setTranslatedSummary] = useState<string | null>(
-    null,
-  );
   const [translationError, setTranslationError] = useState<string | null>(null);
-  const [translateEnabled, setTranslateEnabled] = useState(false); // Track if user wants translation
-
-  // Segment-based translation state
-  const [segments, setSegments] = useState<ContentSegment[]>([]);
-  const [translatedSegments, setTranslatedSegments] = useState<Map<number, string>>(new Map());
+  const [translateEnabled, setTranslateEnabled] = useState(false);
 
   // AbortController refs for cancellation
   const summaryAbortRef = useRef<AbortController | null>(null);
   const translationAbortRef = useRef<AbortController | null>(null);
 
-  // Track which article has been updated to prevent duplicate onArticleUpdate calls
-  const translationUpdatedForRef = useRef<string | null>(null);
+  // Get translation from global store
+  const translation = useArticleTranslation({
+    articleId: article?.id ?? "",
+    language: targetLanguage ?? "en",
+    enabled: translateEnabled && !!article && !article.translationDisabled,
+  });
 
-  // Reset readability mode, summary, translation and errors when article changes
+  // Determine display content
+  const displayTitle = translateEnabled && translation?.title
+    ? translation.title
+    : article?.title ?? "";
+  const displayContent = translateEnabled && translation?.content
+    ? translation.content
+    : useReadability && article?.readabilityContent
+      ? article.readabilityContent
+      : article?.content ?? "";
+
+  // Reset state when article changes
   useEffect(() => {
-    // Abort any ongoing requests
     summaryAbortRef.current?.abort();
     translationAbortRef.current?.abort();
 
@@ -322,15 +160,7 @@ export function ArticleDetail({
     setSummaryError(null);
     setIsLoadingTranslation(false);
     setTranslateEnabled(false);
-    setTranslatedContent(null);
-    setTranslatedTitle(null);
-    setTranslatedSummary(null);
     setTranslationError(null);
-    setSegments([]);
-    setTranslatedSegments(new Map());
-
-    // Reset translation update tracking
-    translationUpdatedForRef.current = null;
   }, [article?.id]);
 
   // Auto-translate when article changes and autoTranslate is enabled
@@ -344,170 +174,51 @@ export function ArticleDetail({
     if (!needsTranslation(article.title, article.summary, targetLanguage))
       return;
 
-    // Enable translation mode for this article
+    // Enable translation mode
     setTranslateEnabled(true);
   }, [article?.id, autoTranslate, targetLanguage, article?.translationDisabled]);
 
-  // Perform segmented parallel translation when translateEnabled changes or useReadability changes
+  // Perform translation when translateEnabled changes
   useEffect(() => {
-    if (!translateEnabled || !article) return;
+    if (!translateEnabled || !article || !targetLanguage) return;
 
-    // Re-validate translation need to prevent stale state issues
-    // (e.g., when switching articles quickly, translateEnabled may still be true from previous article)
-    if (targetLanguage && !needsTranslation(article.title, article.summary, targetLanguage)) {
+    // Skip if already have translation in store
+    if (translation?.content) {
+      setIsLoadingTranslation(false);
+      return;
+    }
+
+    // Skip if article is in target language
+    if (!needsTranslation(article.title, article.summary, targetLanguage)) {
       setTranslateEnabled(false);
       return;
     }
 
-    const isReadability = useReadability && !!article.readabilityContent;
-    const content = isReadability
-      ? article.readabilityContent
-      : article.content || article.summary;
-    if (!content) return;
-
-    // Abort previous translation and create new controller
+    // Abort previous and create new controller
     translationAbortRef.current?.abort();
     const abortController = new AbortController();
     translationAbortRef.current = abortController;
 
-    const performSegmentedTranslation = async () => {
+    const performTranslation = async () => {
       setIsLoadingTranslation(true);
       setTranslationError(null);
-      setTranslatedSegments(new Map());
-
-      // Reset update tracking for this translation (allows re-update when mode changes)
-      translationUpdatedForRef.current = null;
 
       try {
-        // Build segments from content
-        const allSegments = buildTranslationSegments(
-          article.title,
-          article.summary,
-          content
+        const isReadability = useReadability && !!article.readabilityContent;
+        const content = isReadability
+          ? article.readabilityContent!
+          : article.content || article.summary || "";
+
+        await translateArticle(
+          {
+            articleId: article.id,
+            title: article.title,
+            summary: article.summary,
+            content,
+            isReadability,
+          },
+          abortController.signal
         );
-        setSegments(allSegments);
-
-        // Separate image segments (no translation needed) from text segments
-        const imageSegments = allSegments.filter((s) => s.isImage);
-        const textSegments = allSegments.filter((s) => !s.isImage);
-
-        // Immediately add image segments to translated map
-        if (imageSegments.length > 0) {
-          setTranslatedSegments((prev) => {
-            const newMap = new Map(prev);
-            for (const seg of imageSegments) {
-              newMap.set(seg.index, seg.content);
-            }
-            return newMap;
-          });
-        }
-
-        // Translate text segments in parallel
-        const translatePromises = textSegments.map(async (segment) => {
-          if (abortController.signal.aborted) return null;
-
-          try {
-            const res = await fetch("/api/ai/translate", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                mode: "segment",
-                articleId: article.id,
-                segmentIndex: segment.index,
-                content: segment.content,
-                type: segment.type,
-                isReadability,
-                // Pass title for content translation context
-                ...(segment.type === "content" && { title: article.title }),
-              }),
-              signal: abortController.signal,
-            });
-
-            if (!res.ok) {
-              let errorMessage = `Translation failed (${res.status})`;
-              try {
-                const data = await res.json();
-                errorMessage = data.error || errorMessage;
-              } catch {
-                // Response body is empty or not valid JSON
-              }
-              throw new Error(errorMessage);
-            }
-
-            const data = await res.json();
-
-            // Update translated segments map immediately
-            if (!abortController.signal.aborted) {
-              setTranslatedSegments((prev) => {
-                const newMap = new Map(prev);
-                newMap.set(segment.index, data.content);
-                return newMap;
-              });
-            }
-
-            return { index: segment.index, content: data.content, type: segment.type };
-          } catch (error) {
-            if (error instanceof Error && error.name === "AbortError") {
-              return null;
-            }
-            console.error(`Segment ${segment.index} translation error:`, error);
-            // On error, keep original content
-            if (!abortController.signal.aborted) {
-              setTranslatedSegments((prev) => {
-                const newMap = new Map(prev);
-                newMap.set(segment.index, segment.content);
-                return newMap;
-              });
-            }
-            return { index: segment.index, content: segment.content, type: segment.type };
-          }
-        });
-
-        // Wait for all translations to complete
-        const results = await Promise.all(translatePromises);
-
-        if (abortController.signal.aborted) return;
-
-        // Assemble final result
-        const finalTranslatedMap = new Map<number, string>();
-
-        // Add image segments
-        for (const seg of imageSegments) {
-          finalTranslatedMap.set(seg.index, seg.content);
-        }
-
-        // Add translated text segments
-        for (const result of results) {
-          if (result) {
-            finalTranslatedMap.set(result.index, result.content);
-          }
-        }
-
-        // Assemble content
-        const assembled = assembleTranslatedContent(allSegments, finalTranslatedMap);
-
-        setTranslatedTitle(assembled.title);
-        setTranslatedSummary(assembled.summary);
-        setTranslatedContent(assembled.content);
-
-        // Update article with translated title/summary for article list
-        // Only update if:
-        // 1. onArticleUpdate is available
-        // 2. We have translation results
-        // 3. This article hasn't been updated yet (prevent duplicate calls)
-        // 4. Article ID still matches (prevent updating wrong article)
-        if (
-          onArticleUpdate &&
-          (assembled.title || assembled.summary) &&
-          translationUpdatedForRef.current !== article.id
-        ) {
-          translationUpdatedForRef.current = article.id;
-          onArticleUpdate({
-            ...article,
-            translatedTitle: assembled.title || undefined,
-            translatedSummary: assembled.summary || undefined,
-          });
-        }
       } catch (error) {
         if (error instanceof Error && error.name === "AbortError") {
           return;
@@ -525,26 +236,17 @@ export function ArticleDetail({
       }
     };
 
-    performSegmentedTranslation();
+    performTranslation();
 
-    // Cleanup: abort the request when dependencies change or component unmounts
     return () => {
       abortController.abort();
     };
-  }, [
-    translateEnabled,
-    useReadability,
-    article?.id,
-    article?.readabilityContent,
-    targetLanguage,
-    onArticleUpdate,
-  ]);
+  }, [translateEnabled, useReadability, article?.id, targetLanguage, translation?.content]);
 
-  // Regenerate summary when readability mode changes (if summary was already shown)
+  // Regenerate summary when readability mode changes
   useEffect(() => {
     if (!aiSummary || isLoadingSummary || !article) return;
 
-    // Abort previous summary request
     summaryAbortRef.current?.abort();
     const abortController = new AbortController();
     summaryAbortRef.current = abortController;
@@ -552,7 +254,7 @@ export function ArticleDetail({
     const regenerateSummary = async () => {
       setIsLoadingSummary(true);
       setSummaryError(null);
-      setAiSummary(""); // Initialize for streaming
+      setAiSummary("");
       try {
         const isReadability = useReadability && !!article.readabilityContent;
         const content = isReadability
@@ -560,7 +262,7 @@ export function ArticleDetail({
           : article.content || article.summary;
 
         if (!content) {
-          throw new Error("无可用内容进行概括");
+          throw new Error("No content available");
         }
 
         const res = await fetch("/api/ai/summarize", {
@@ -581,54 +283,41 @@ export function ArticleDetail({
             const data = await res.json();
             errorMessage = data.error || errorMessage;
           } catch {
-            // Response body is empty or not valid JSON
+            // Ignore
           }
           throw new Error(errorMessage);
         }
 
         const contentType = res.headers.get("content-type") || "";
 
-        // Check if response is JSON (cached) or stream
         if (contentType.includes("application/json")) {
           const data = await res.json();
           setAiSummary(data.summary);
         } else {
-          // Handle streaming response
           const reader = res.body?.getReader();
-          if (!reader) {
-            throw new Error("No response body");
-          }
+          if (!reader) throw new Error("No response body");
 
           const decoder = new TextDecoder();
           let fullText = "";
 
-          try {
-            while (true) {
-              if (abortController.signal.aborted) {
-                reader.cancel();
-                return;
-              }
-
-              const { done, value } = await reader.read();
-              if (done) break;
-
-              const chunk = decoder.decode(value, { stream: true });
-              fullText += chunk;
-              setAiSummary(fullText);
+          while (true) {
+            if (abortController.signal.aborted) {
+              reader.cancel();
+              return;
             }
-          } catch (readError) {
-            reader.cancel().catch(() => {});
-            throw readError;
+            const { done, value } = await reader.read();
+            if (done) break;
+            const chunk = decoder.decode(value, { stream: true });
+            fullText += chunk;
+            setAiSummary(fullText);
           }
         }
       } catch (error) {
-        if (error instanceof Error && error.name === "AbortError") {
-          return;
-        }
-        const message = error instanceof Error ? error.message : "Summary failed";
+        if (error instanceof Error && error.name === "AbortError") return;
+        const message =
+          error instanceof Error ? error.message : "Summary failed";
         setSummaryError(message);
         setAiSummary(null);
-        console.error("Summary error:", error);
       } finally {
         if (!abortController.signal.aborted) {
           setIsLoadingSummary(false);
@@ -643,61 +332,11 @@ export function ArticleDetail({
     };
   }, [useReadability]);
 
-  const processedContent = useMemo(() => {
-    if (!article) return null;
-
-    // Use fully translated content if available
-    if (translatedContent) {
-      return processContent(translatedContent, article.link);
-    }
-
-    // If translation is in progress, show partially translated content
-    if (translateEnabled && segments.length > 0 && translatedSegments.size > 0) {
-      // Build content from translated segments (content type only, not title/summary)
-      const contentSegments = segments.filter(
-        (s) => s.type === "content"
-      );
-      const partialContent = contentSegments
-        .sort((a, b) => a.index - b.index)
-        .map((seg) => translatedSegments.get(seg.index) ?? seg.content)
-        .join("\n");
-      return processContent(partialContent, article.link);
-    }
-
-    const content = useReadability
-      ? article.readabilityContent
-      : article.content;
-    if (!content) return null;
-    return processContent(content, article.link);
-  }, [article, useReadability, translatedContent, translateEnabled, segments, translatedSegments]);
-
-  // Get display title (real-time during translation)
-  const displayTitle = useMemo(() => {
-    if (!article) return null;
-    if (translatedTitle) return translatedTitle;
-
-    // Check if title is being translated
-    if (translateEnabled && segments.length > 0) {
-      const titleSegment = segments.find((s) => s.type === "title");
-      if (titleSegment) {
-        const translated = translatedSegments.get(titleSegment.index);
-        if (translated) return translated;
-      }
-    }
-
-    return article.title;
-  }, [article, translatedTitle, translateEnabled, segments, translatedSegments]);
-
   const handleToggleReadability = useCallback(async () => {
     if (!article || isLoadingReadability) return;
 
-    // Clear current translated content (will be re-translated if translateEnabled)
-    setTranslatedContent(null);
-    setTranslatedTitle(null);
-    setTranslatedSummary(null);
+    // Reset translation state when switching content mode
     setTranslationError(null);
-    setSegments([]);
-    setTranslatedSegments(new Map());
 
     if (useReadability) {
       setUseReadability(false);
@@ -722,7 +361,7 @@ export function ArticleDetail({
           const data = await res.json();
           errorMessage = data.error || errorMessage;
         } catch {
-          // Response body is empty or not valid JSON
+          // Ignore
         }
         throw new Error(errorMessage);
       }
@@ -736,9 +375,8 @@ export function ArticleDetail({
         setUseReadability(true);
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : "获取失败";
+      const message = error instanceof Error ? error.message : "Failed";
       setReadabilityError(message);
-      console.error("Readability error:", error);
     } finally {
       setIsLoadingReadability(false);
     }
@@ -747,7 +385,6 @@ export function ArticleDetail({
   const handleGenerateSummary = useCallback(async () => {
     if (!article) return;
 
-    // If loading, abort the request
     if (isLoadingSummary) {
       summaryAbortRef.current?.abort();
       setIsLoadingSummary(false);
@@ -755,19 +392,17 @@ export function ArticleDetail({
       return;
     }
 
-    // If already have summary, toggle it off
     if (aiSummary) {
       setAiSummary(null);
       return;
     }
 
-    // Create new AbortController
     const abortController = new AbortController();
     summaryAbortRef.current = abortController;
 
     setIsLoadingSummary(true);
     setSummaryError(null);
-    setAiSummary(""); // Initialize for streaming
+    setAiSummary("");
     try {
       const isReadability = useReadability && !!article.readabilityContent;
       const content = isReadability
@@ -775,7 +410,7 @@ export function ArticleDetail({
         : article.content || article.summary;
 
       if (!content) {
-        throw new Error("无可用内容进行概括");
+        throw new Error("No content available");
       }
 
       const res = await fetch("/api/ai/summarize", {
@@ -796,66 +431,48 @@ export function ArticleDetail({
           const data = await res.json();
           errorMessage = data.error || errorMessage;
         } catch {
-          // Response body is empty or not valid JSON
+          // Ignore
         }
         throw new Error(errorMessage);
       }
 
       const contentType = res.headers.get("content-type") || "";
 
-      // Check if response is JSON (cached) or stream
       if (contentType.includes("application/json")) {
         const data = await res.json();
         setAiSummary(data.summary);
       } else {
-        // Handle streaming response
         const reader = res.body?.getReader();
-        if (!reader) {
-          throw new Error("No response body");
-        }
+        if (!reader) throw new Error("No response body");
 
         const decoder = new TextDecoder();
         let fullText = "";
 
-        try {
-          while (true) {
-            // Check abort status before reading
-            if (abortController.signal.aborted) {
-              reader.cancel();
-              return;
-            }
-
-            const { done, value } = await reader.read();
-            if (done) break;
-
-            const chunk = decoder.decode(value, { stream: true });
-            fullText += chunk;
-            setAiSummary(fullText);
+        while (true) {
+          if (abortController.signal.aborted) {
+            reader.cancel();
+            return;
           }
-        } catch (readError) {
-          // Cancel reader on error
-          reader.cancel().catch(() => {});
-          throw readError;
+          const { done, value } = await reader.read();
+          if (done) break;
+          const chunk = decoder.decode(value, { stream: true });
+          fullText += chunk;
+          setAiSummary(fullText);
         }
       }
     } catch (error) {
-      // Ignore abort errors
-      if (error instanceof Error && error.name === "AbortError") {
-        return;
-      }
+      if (error instanceof Error && error.name === "AbortError") return;
       const message = error instanceof Error ? error.message : "Summary failed";
       setSummaryError(message);
       setAiSummary(null);
-      console.error("Summary error:", error);
     } finally {
-      // Only update loading state if not aborted
       if (!summaryAbortRef.current?.signal.aborted) {
         setIsLoadingSummary(false);
       }
     }
   }, [article, isLoadingSummary, aiSummary, useReadability]);
 
-  // Track if there was a selection before mousedown (to distinguish click from drag-select)
+  // Track selection for click handling
   const hadSelectionRef = useRef(false);
 
   const handleMouseDown = useCallback(() => {
@@ -863,17 +480,9 @@ export function ArticleDetail({
     hadSelectionRef.current = !!(selection && selection.toString().length > 0);
   }, []);
 
-  // Clear text selection when clicking empty areas (not when finishing a drag-select)
   const handleClearSelection = useCallback((e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
-
-    // Don't clear if clicking interactive elements
-    if (target.closest('a') || target.closest('button')) {
-      return;
-    }
-
-    // Only clear if there was already a selection before this click
-    // (not if user just finished drag-selecting)
+    if (target.closest("a") || target.closest("button")) return;
     if (hadSelectionRef.current) {
       window.getSelection()?.removeAllRanges();
     }
@@ -882,39 +491,31 @@ export function ArticleDetail({
   const handleTranslate = useCallback(() => {
     if (!article) return;
 
-    // If loading, abort the translation
     if (isLoadingTranslation) {
       translationAbortRef.current?.abort();
       setIsLoadingTranslation(false);
       setTranslateEnabled(false);
-      setTranslatedContent(null);
-      setTranslatedTitle(null);
-      setTranslatedSummary(null);
-      setSegments([]);
-      setTranslatedSegments(new Map());
+      // Set translationDisabled to sync with list
+      if (onArticleUpdate) {
+        onArticleUpdate({
+          ...article,
+          translationDisabled: true,
+        });
+      }
       return;
     }
 
     if (translateEnabled) {
-      // Turn off translation
       setTranslateEnabled(false);
-      setTranslatedContent(null);
-      setTranslatedTitle(null);
-      setTranslatedSummary(null);
       setTranslationError(null);
-      // Mark as translation disabled and clear translation data
       if (onArticleUpdate) {
         onArticleUpdate({
           ...article,
-          translatedTitle: undefined,
-          translatedSummary: undefined,
           translationDisabled: true,
         });
       }
     } else {
-      // Turn on translation (will trigger the translation useEffect)
       setTranslateEnabled(true);
-      // Clear the disabled flag
       if (onArticleUpdate) {
         onArticleUpdate({
           ...article,
@@ -948,7 +549,11 @@ export function ArticleDetail({
   }
 
   return (
-    <div className="h-full overflow-y-auto bg-background" onMouseDown={handleMouseDown} onClick={handleClearSelection}>
+    <div
+      className="h-full overflow-y-auto bg-background"
+      onMouseDown={handleMouseDown}
+      onClick={handleClearSelection}
+    >
       {/* Toolbar */}
       <TooltipProvider>
         <div className="sticky top-0 z-10 flex items-center gap-1 border-b bg-background/95 px-4 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -972,7 +577,7 @@ export function ArticleDetail({
                     "h-8 w-8 text-muted-foreground hover:text-foreground",
                     useReadability && "bg-accent text-accent-foreground",
                     readabilityError &&
-                      "text-destructive hover:text-destructive",
+                      "text-destructive hover:text-destructive"
                   )}
                   onClick={handleToggleReadability}
                   disabled={isLoadingReadability}
@@ -1003,7 +608,7 @@ export function ArticleDetail({
                     className={cn(
                       "h-8 w-8 text-muted-foreground hover:text-foreground",
                       aiSummary && "bg-accent text-accent-foreground",
-                      summaryError && "text-destructive hover:text-destructive",
+                      summaryError && "text-destructive hover:text-destructive"
                     )}
                     onClick={handleGenerateSummary}
                   >
@@ -1037,7 +642,7 @@ export function ArticleDetail({
                       "h-8 w-8 text-muted-foreground hover:text-foreground",
                       translateEnabled && "bg-accent text-accent-foreground",
                       translationError &&
-                        "text-destructive hover:text-destructive",
+                        "text-destructive hover:text-destructive"
                     )}
                     onClick={handleTranslate}
                   >
@@ -1060,6 +665,33 @@ export function ArticleDetail({
                 </TooltipContent>
               </Tooltip>
             )}
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={cn(
+                    "h-8 w-8 text-muted-foreground hover:text-foreground",
+                    article.isStarred && "text-yellow-500 hover:text-yellow-600"
+                  )}
+                  onClick={() => onToggleStar?.(article)}
+                >
+                  {article.isStarred ? (
+                    <StarIcon className="h-4 w-4 fill-current" />
+                  ) : (
+                    <StarIcon className="h-4 w-4" />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>
+                  {article.isStarred
+                    ? t("article.actions.unstar")
+                    : t("article.actions.star")}
+                </p>
+              </TooltipContent>
+            </Tooltip>
 
             <div className="h-4 w-px bg-border/50 mx-1" />
 
@@ -1120,7 +752,9 @@ export function ArticleDetail({
             <div className="mt-6 rounded-lg border border-destructive/20 bg-destructive/5 p-4">
               <div className="flex items-center gap-2 text-destructive">
                 <AlertCircleIcon className="h-4 w-4 shrink-0" />
-                <span className="text-sm">{translationError || summaryError}</span>
+                <span className="text-sm">
+                  {translationError || summaryError}
+                </span>
               </div>
             </div>
           )}
@@ -1131,8 +765,8 @@ export function ArticleDetail({
 
         {/* Article Content */}
         <article className="article-content max-w-none">
-          {processedContent ? (
-            <div dangerouslySetInnerHTML={{ __html: processedContent }} />
+          {displayContent ? (
+            <ArticleContent content={displayContent} articleLink={article.link} />
           ) : article.summary ? (
             <div className="text-foreground leading-relaxed">
               <p>{article.summary}</p>
@@ -1141,7 +775,7 @@ export function ArticleDetail({
             <div className="flex flex-col items-center justify-center py-12 text-center bg-muted/30 rounded-lg">
               <RssIcon className="mb-4 h-10 w-10 text-muted-foreground/30" />
               <p className="text-muted-foreground mb-4">
-                无法获取该文章的正文内容
+                {t("article.content.no_content")}
               </p>
               <Button variant="outline" size="sm" asChild>
                 <a
@@ -1150,7 +784,7 @@ export function ArticleDetail({
                   rel="noopener noreferrer"
                 >
                   <ExternalLinkIcon className="mr-2 h-4 w-4" />
-                  打开原文
+                  {t("article.actions.open_original")}
                 </a>
               </Button>
             </div>

@@ -11,7 +11,7 @@ export type AiCacheType =
 interface TranslateResult {
   title: string | null;
   summary: string | null;
-  content: string;
+  content: string | null;
 }
 
 interface TranslateLiteResult {

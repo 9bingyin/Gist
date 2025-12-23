@@ -1,12 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, memo } from "react";
 import { RefreshCwIcon, CheckCircleIcon, MenuIcon } from "lucide-react";
 import striptags from "striptags";
 import { Button } from "@/components/ui/button";
+import { LazyImage } from "@/components/ui/lazy-image";
 import { cn } from "@/lib/utils";
 import { needsTranslation } from "@/lib/language-detect";
 import { useTranslation } from "react-i18next";
+import { useArticleTranslation } from "@/hooks/use-article-translation";
+import { translateArticlesBatch } from "@/lib/services/translation-service";
 import type { Article } from "@/lib/types";
 
 interface ArticleListProps {
@@ -16,7 +19,6 @@ interface ArticleListProps {
   onSelectArticle: (article: Article) => void;
   onRefresh: () => void;
   onMarkAllRead: () => Promise<void>;
-  onUpdateArticles?: (articles: Article[]) => void;
   loading?: boolean;
   autoTranslate?: boolean;
   targetLanguage?: string;
@@ -25,6 +27,110 @@ interface ArticleListProps {
   onMenuClick?: () => void;
 }
 
+interface ArticleListItemProps {
+  article: Article;
+  isSelected: boolean;
+  onClick: () => void;
+  formatDate: (dateStr: string | null) => string;
+  autoTranslate: boolean;
+  targetLanguage: string;
+}
+
+/**
+ * Single article list item with translation support
+ */
+const ArticleListItem = memo(function ArticleListItem({
+  article,
+  isSelected,
+  onClick,
+  formatDate,
+  autoTranslate,
+  targetLanguage,
+}: ArticleListItemProps) {
+  // Get translation from global store
+  const translation = useArticleTranslation({
+    articleId: article.id,
+    language: targetLanguage,
+    enabled: autoTranslate && !article.translationDisabled,
+  });
+
+  // Use translated content if available
+  const displayTitle = translation?.title || article.title;
+  const displaySummary = translation?.summary || article.summary;
+
+  return (
+    <button
+      data-article-id={article.id}
+      onClick={onClick}
+      className={cn(
+        "group relative flex w-full gap-3 px-4 py-4 text-left transition-all hover:bg-accent/50",
+        isSelected ? "bg-accent shadow-sm" : "",
+        article.isRead ? "opacity-75" : ""
+      )}
+    >
+      {/* Unread Indicator */}
+      {!article.isRead && (
+        <div className="absolute left-1.5 top-6 h-1.5 w-1.5 rounded-full bg-orange-500" />
+      )}
+
+      {/* Feed Icon */}
+      <div className="mt-0.5 shrink-0">
+        {article.feed.imageUrl ? (
+          <img
+            src={`/api/icons/${article.feed.imageUrl}`}
+            alt=""
+            className="h-5 w-5 rounded-sm object-cover"
+          />
+        ) : (
+          <div className="flex h-5 w-5 items-center justify-center rounded-sm bg-muted text-[10px] font-bold">
+            {article.feed.title.charAt(0).toUpperCase()}
+          </div>
+        )}
+      </div>
+
+      {/* Content */}
+      <div className="min-w-0 flex-1 flex flex-col gap-1">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span className="truncate font-medium text-foreground/70">
+            {article.feed.title}
+          </span>
+          <span>·</span>
+          <span className="shrink-0">
+            {formatDate(article.pubDate || article.createdAt)}
+          </span>
+        </div>
+
+        <h3
+          className={cn(
+            "line-clamp-2 text-[15px] font-bold leading-snug text-foreground",
+            article.isRead && "font-normal text-muted-foreground"
+          )}
+        >
+          {displayTitle}
+        </h3>
+
+        {displaySummary && (
+          <p className="line-clamp-2 text-xs text-muted-foreground/80 leading-relaxed mt-0.5">
+            {striptags(displaySummary)}
+          </p>
+        )}
+      </div>
+
+      {/* Thumbnail */}
+      {article.imageUrl && (
+        <div className="shrink-0 pl-1">
+          <LazyImage
+            src={`/api/proxy/image?url=${encodeURIComponent(article.imageUrl)}`}
+            alt=""
+            containerClassName="h-16 w-16 rounded-md border border-border/40"
+            className="h-full w-full object-cover"
+          />
+        </div>
+      )}
+    </button>
+  );
+});
+
 export function ArticleList({
   title,
   articles,
@@ -32,7 +138,6 @@ export function ArticleList({
   onSelectArticle,
   onRefresh,
   onMarkAllRead,
-  onUpdateArticles,
   loading,
   autoTranslate,
   targetLanguage,
@@ -41,6 +146,12 @@ export function ArticleList({
   onMenuClick,
 }: ArticleListProps) {
   const { t, i18n } = useTranslation();
+  const containerRef = useRef<HTMLDivElement>(null);
+  const observerRef = useRef<IntersectionObserver | null>(null);
+  const visibleArticleIds = useRef<Set<string>>(new Set());
+  const translateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const translateAbortRef = useRef<AbortController | null>(null);
+  const translatedArticleIds = useRef<Set<string>>(new Set());
 
   function formatDate(dateStr: string | null): string {
     if (!dateStr) return t("time.unknown");
@@ -64,7 +175,7 @@ export function ArticleList({
 
       return date.toLocaleDateString(
         i18n.language === "zh" ? "zh-CN" : "en-US",
-        { month: "short", day: "numeric" },
+        { month: "short", day: "numeric" }
       );
     }
 
@@ -116,14 +227,13 @@ export function ArticleList({
       } else if (pubDate.getTime() === tomorrow.getTime()) {
         key = t("time.tomorrow");
       } else if (pubDate.getTime() > today.getTime()) {
-        // Future date
         key = pubDate.toLocaleDateString(
           i18n.language === "zh" ? "zh-CN" : "en-US",
           {
             year: "numeric",
             month: "long",
             day: "numeric",
-          },
+          }
         );
       } else {
         key = pubDate.toLocaleDateString(
@@ -132,7 +242,7 @@ export function ArticleList({
             year: "numeric",
             month: "long",
             day: "numeric",
-          },
+          }
         );
       }
 
@@ -145,146 +255,57 @@ export function ArticleList({
     return groups;
   }
 
-  const groupedArticles = groupArticlesByDate(articles);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const articleRefs = useRef<Map<string, HTMLElement>>(new Map());
-  const visibleArticleIds = useRef<Set<string>>(new Set());
-  const translatingIds = useRef<Set<string>>(new Set());
-  const translateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null,
-  );
-  const observerRef = useRef<IntersectionObserver | null>(null);
-
-  // Use ref to always have access to the latest articles (avoid closure issues)
-  const articlesRef = useRef(articles);
-  articlesRef.current = articles;
+  // Create articles map for quick lookup
+  const articlesMap = new Map(articles.map((a) => [a.id, a]));
 
   // Translate visible articles
   const translateVisibleArticles = useCallback(async () => {
-    if (!autoTranslate || !aiEnabled || !onUpdateArticles || !targetLanguage) return;
+    if (!autoTranslate || !aiEnabled || !targetLanguage) return;
 
-    // Use ref to get latest articles (avoid closure issues)
-    const currentArticles = articlesRef.current;
+    // Collect articles that need translation
+    const articlesToTranslate: Array<{
+      id: string;
+      title: string;
+      summary: string | null;
+    }> = [];
 
-    // Collect articles that need translation (visible, not yet translated, not disabled, and not in target language)
-    const articlesToTranslate = currentArticles.filter(
-      (article) =>
-        visibleArticleIds.current.has(article.id) &&
-        !article.translatedTitle &&
+    for (const articleId of visibleArticleIds.current) {
+      const article = articlesMap.get(articleId);
+      if (
+        article &&
         !article.translationDisabled &&
-        !translatingIds.current.has(article.id) &&
-        needsTranslation(article.title, article.summary, targetLanguage),
-    );
+        !translatedArticleIds.current.has(articleId) &&
+        needsTranslation(article.title, article.summary, targetLanguage)
+      ) {
+        articlesToTranslate.push({
+          id: article.id,
+          title: article.title,
+          summary: article.summary,
+        });
+        translatedArticleIds.current.add(articleId);
+      }
+    }
 
     if (articlesToTranslate.length === 0) return;
 
-    // Mark as translating
-    for (const article of articlesToTranslate) {
-      translatingIds.current.add(article.id);
-    }
+    // Create new AbortController
+    translateAbortRef.current?.abort();
+    const abortController = new AbortController();
+    translateAbortRef.current = abortController;
 
-    // Helper to update a single article (uses latest state via ref)
-    const updateSingleArticle = (
-      articleId: string,
-      translation: { title?: string; summary?: string },
-    ) => {
-      const latestArticles = articlesRef.current;
-      const updatedArticles = latestArticles.map((a) => {
-        if (a.id === articleId) {
-          return {
-            ...a,
-            ...(translation.title && { translatedTitle: translation.title }),
-            ...(translation.summary && {
-              translatedSummary: translation.summary,
-            }),
-          };
-        }
-        return a;
-      });
-      onUpdateArticles(updatedArticles);
-    };
-
-    // Translate each article, update immediately when done
-    const translateArticle = async (article: (typeof articlesToTranslate)[0]) => {
-      // Translate title - update immediately when done
-      const translateTitle = async () => {
-        try {
-          const res = await fetch("/api/ai/translate", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              mode: "segment",
-              articleId: article.id,
-              segmentIndex: 0,
-              content: article.title,
-              type: "title",
-            }),
-          });
-
-          if (!res.ok) {
-            let errorMessage = `Title translation failed (${res.status})`;
-            try {
-              const data = await res.json();
-              errorMessage = data.error || errorMessage;
-            } catch {
-              // Response body is empty or not valid JSON
-            }
-            throw new Error(errorMessage);
-          }
-
-          const data = await res.json();
-          // Immediately update UI with title
-          updateSingleArticle(article.id, { title: data.content });
-        } catch (error) {
-          console.error(
-            `Title translation error for article ${article.id}:`,
-            error,
-          );
-        }
-      };
-
-      // Translate summary - update immediately when done
-      const translateSummary = async () => {
-        if (!article.summary) return;
-
-        try {
-          const res = await fetch("/api/ai/translate", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              mode: "segment",
-              articleId: article.id,
-              segmentIndex: 1,
-              content: article.summary,
-              type: "summary",
-            }),
-          });
-
-          if (res.ok) {
-            const data = await res.json();
-            // Immediately update UI with summary
-            updateSingleArticle(article.id, { summary: data.content });
-          }
-          // Silently ignore summary translation errors
-        } catch (error) {
-          console.error(
-            `Summary translation error for article ${article.id}:`,
-            error,
-          );
-        }
-      };
-
-      // Run both in parallel, each updates UI independently
-      try {
-        await Promise.all([translateTitle(), translateSummary()]);
-      } finally {
-        translatingIds.current.delete(article.id);
+    try {
+      await translateArticlesBatch(articlesToTranslate, abortController.signal);
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") {
+        return;
       }
-    };
-
-    // Start all translations in parallel
-    await Promise.all(articlesToTranslate.map(translateArticle));
-  }, [autoTranslate, aiEnabled, onUpdateArticles, targetLanguage]);
+      console.error("Batch translation error:", error);
+      // On error, remove from translated set to allow retry
+      for (const article of articlesToTranslate) {
+        translatedArticleIds.current.delete(article.id);
+      }
+    }
+  }, [autoTranslate, aiEnabled, targetLanguage, articlesMap]);
 
   // Debounced translate trigger
   const scheduleTranslation = useCallback(() => {
@@ -293,19 +314,13 @@ export function ArticleList({
     }
     translateTimeoutRef.current = setTimeout(() => {
       translateVisibleArticles();
-    }, 300);
+    }, 1000);
   }, [translateVisibleArticles]);
 
-  // Store scheduleTranslation in ref to avoid dependency issues
-  const scheduleTranslationRef = useRef(scheduleTranslation);
-  scheduleTranslationRef.current = scheduleTranslation;
-
-  // Set up Intersection Observer for visible articles detection
+  // Set up Intersection Observer
   useEffect(() => {
-    // Disconnect previous observer
     if (observerRef.current) {
       observerRef.current.disconnect();
-      observerRef.current = null;
     }
 
     if (!autoTranslate) return;
@@ -322,59 +337,42 @@ export function ArticleList({
             visibleArticleIds.current.delete(articleId);
           }
         }
-        scheduleTranslationRef.current();
+        scheduleTranslation();
       },
       {
         root: containerRef.current,
         rootMargin: "50px",
         threshold: 0,
-      },
+      }
     );
 
-    // Store observer in ref for dynamic observation
     observerRef.current = observer;
 
-    // Observe all existing article elements
-    articleRefs.current.forEach((element) => {
-      observer.observe(element);
-    });
+    // Observe all article elements
+    const container = containerRef.current;
+    if (container) {
+      const elements = container.querySelectorAll("[data-article-id]");
+      elements.forEach((el) => observer.observe(el));
+    }
 
     return () => {
       observer.disconnect();
-      observerRef.current = null;
       if (translateTimeoutRef.current) {
         clearTimeout(translateTimeoutRef.current);
       }
     };
-  }, [autoTranslate]);
+  }, [autoTranslate, scheduleTranslation, articles]);
 
-  // Reset translating IDs only when article IDs change (not when translations are added)
+  // Reset when article IDs change
   const articleIdsKey = articles.map((a) => a.id).join(",");
   useEffect(() => {
-    translatingIds.current.clear();
+    translateAbortRef.current?.abort();
+    translateAbortRef.current = null;
     visibleArticleIds.current.clear();
+    translatedArticleIds.current.clear();
   }, [articleIdsKey]);
 
-  // Register article ref and observe for visibility
-  const registerArticleRef = useCallback(
-    (id: string, element: HTMLElement | null) => {
-      if (element) {
-        articleRefs.current.set(id, element);
-        // Observe new element if observer exists
-        if (observerRef.current) {
-          observerRef.current.observe(element);
-        }
-      } else {
-        const existingElement = articleRefs.current.get(id);
-        if (existingElement && observerRef.current) {
-          observerRef.current.unobserve(existingElement);
-        }
-        articleRefs.current.delete(id);
-        visibleArticleIds.current.delete(id);
-      }
-    },
-    [],
-  );
+  const groupedArticles = groupArticlesByDate(articles);
 
   return (
     <div className="flex h-full flex-col border-r bg-background">
@@ -434,87 +432,19 @@ export function ArticleList({
                   </div>
                   <div className="space-y-0.5">
                     {dateArticles.map((article) => (
-                      <button
+                      <ArticleListItem
                         key={article.id}
-                        ref={(el) => registerArticleRef(article.id, el)}
-                        data-article-id={article.id}
+                        article={article}
+                        isSelected={selectedArticleId === article.id}
                         onClick={() => onSelectArticle(article)}
-                        className={cn(
-                          "group relative flex w-full gap-3 px-4 py-4 text-left transition-all hover:bg-accent/50",
-                          selectedArticleId === article.id
-                            ? "bg-accent shadow-sm"
-                            : "",
-                          article.isRead ? "opacity-75" : "",
-                        )}
-                      >
-                        {/* Unread Indicator */}
-                        {!article.isRead && (
-                          <div className="absolute left-1.5 top-6 h-1.5 w-1.5 rounded-full bg-orange-500" />
-                        )}
-
-                        {/* Feed Icon */}
-                        <div className="mt-0.5 shrink-0">
-                          {article.feed.imageUrl ? (
-                            <img
-                              src={`/api/icons/${article.feed.imageUrl}`}
-                              alt=""
-                              className="h-5 w-5 rounded-sm object-cover"
-                            />
-                          ) : (
-                            <div className="flex h-5 w-5 items-center justify-center rounded-sm bg-muted text-[10px] font-bold">
-                              {article.feed.title.charAt(0).toUpperCase()}
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Content */}
-                        <div className="min-w-0 flex-1 flex flex-col gap-1">
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <span className="truncate font-medium text-foreground/70">
-                              {article.feed.title}
-                            </span>
-                            <span>·</span>
-                            <span className="shrink-0">
-                              {formatDate(article.pubDate || article.createdAt)}
-                            </span>
-                          </div>
-
-                          <h3
-                            className={cn(
-                              "line-clamp-2 text-[15px] font-bold leading-snug text-foreground",
-                              article.isRead &&
-                                "font-normal text-muted-foreground",
-                            )}
-                          >
-                            {article.translatedTitle || article.title}
-                          </h3>
-
-                          {(article.translatedSummary || article.summary) && (
-                            <p className="line-clamp-2 text-xs text-muted-foreground/80 leading-relaxed mt-0.5">
-                              {striptags(
-                                article.translatedSummary ||
-                                  article.summary ||
-                                  ""
-                              )}
-                            </p>
-                          )}
-                        </div>
-
-                        {/* Thumbnail */}
-                        {article.imageUrl && (
-                          <div className="shrink-0 pl-1">
-                            <img
-                              src={`/api/proxy/image?url=${encodeURIComponent(article.imageUrl)}`}
-                              alt=""
-                              className="h-16 w-16 rounded-md object-cover bg-muted border border-border/40"
-                            />
-                          </div>
-                        )}
-                      </button>
+                        formatDate={formatDate}
+                        autoTranslate={autoTranslate ?? false}
+                        targetLanguage={targetLanguage ?? "en"}
+                      />
                     ))}
                   </div>
                 </div>
-              ),
+              )
             )}
           </div>
         )}

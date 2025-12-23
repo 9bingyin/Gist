@@ -250,7 +250,8 @@
     "articles": "文章",
     "all_articles": "所有文章",
     "all_pictures": "所有图片",
-    "all_notifications": "所有通知"
+    "all_notifications": "所有通知",
+    "starred": "收藏"
   },
   "article": {
     "readability": {
@@ -271,7 +272,9 @@
       "share": "分享",
       "bookmark": "收藏",
       "open_original": "打开原文",
-      "more": "更多"
+      "more": "更多",
+      "star": "收藏",
+      "unstar": "取消收藏"
     }
   },
   "time": {

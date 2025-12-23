@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAiCache, getAiCacheBatch, setAiCacheBatch, AiCacheType } from "@/lib/ai-cache";
+import { getAiCache, getAiCacheBatch, setAiCache, setAiCacheBatch, AiCacheType } from "@/lib/ai-cache";
 import {
   getAiSettings,
   translateContent,
@@ -8,18 +8,17 @@ import {
 
 export const maxDuration = 60;
 
-// Segment mode request
-interface SegmentRequest {
-  mode: "segment";
+// Full article translation request
+interface FullRequest {
+  mode: "full";
   articleId: string;
-  segmentIndex: number;
+  title: string;
+  summary: string | null;
   content: string;
-  type: "title" | "summary" | "content";
   isReadability?: boolean;
-  title?: string;
 }
 
-// Batch mode request
+// Batch mode request (for list view - title + summary only)
 interface BatchRequest {
   mode: "batch";
   articles: Array<{
@@ -29,7 +28,7 @@ interface BatchRequest {
   }>;
 }
 
-type TranslateRequest = SegmentRequest | BatchRequest;
+type TranslateRequest = FullRequest | BatchRequest;
 
 export async function POST(request: NextRequest) {
   try {
@@ -47,13 +46,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (body.mode === "segment") {
-      return handleSegmentMode(body, settings, request.signal);
+    if (body.mode === "full") {
+      return handleFullMode(body, settings, request.signal);
     } else if (body.mode === "batch") {
       return handleBatchMode(body, settings, request.signal);
     } else {
       return NextResponse.json(
-        { error: "Invalid mode. Use 'segment' or 'batch'." },
+        { error: "Invalid mode. Use 'full' or 'batch'." },
         { status: 400 }
       );
     }
@@ -66,20 +65,13 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Handle segment translation mode
-async function handleSegmentMode(
-  body: SegmentRequest,
+// Handle full article translation
+async function handleFullMode(
+  body: FullRequest,
   settings: Awaited<ReturnType<typeof getAiSettings>>,
   signal: AbortSignal
 ) {
-  const { articleId, segmentIndex, content, type, isReadability, title } = body;
-
-  if (!content || content.trim().length === 0) {
-    return NextResponse.json(
-      { error: "Content is required" },
-      { status: 400 }
-    );
-  }
+  const { articleId, title, summary, content, isReadability } = body;
 
   if (!settings) {
     return NextResponse.json(
@@ -88,46 +80,71 @@ async function handleSegmentMode(
     );
   }
 
-  // Segment cache type includes segment index
-  const cacheType: AiCacheType = isReadability
-    ? `translate-segment-readability-${segmentIndex}`
-    : `translate-segment-${segmentIndex}`;
+  const cacheType: AiCacheType = isReadability ? "translate-readability" : "translate";
 
   // Check cache first
-  if (articleId) {
-    const cached = await getAiCache<{ content: string }>(
-      articleId,
-      cacheType,
-      settings.language
-    );
-    if (cached) {
-      return NextResponse.json({
-        segmentIndex,
-        content: cached.content,
-        cached: true,
-      });
-    }
-  }
-
-  // Translate the segment
-  const translatedContent = await translateContent({
-    content,
-    type,
-    settings,
+  const cached = await getAiCache<{ title: string | null; summary: string | null; content: string | null }>(
     articleId,
     cacheType,
-    title,
-    signal,
+    settings.language
+  );
+
+  if (cached) {
+    return NextResponse.json({
+      title: cached.title,
+      summary: cached.summary,
+      content: cached.content,
+      language: settings.language,
+      cached: true,
+    });
+  }
+
+  // Translate title, summary, and content in parallel
+  const [translatedTitle, translatedSummary, translatedContent] = await Promise.all([
+    title
+      ? translateContent({
+          content: title,
+          type: "title",
+          settings,
+          signal,
+        })
+      : Promise.resolve(null),
+    summary
+      ? translateContent({
+          content: summary,
+          type: "summary",
+          settings,
+          signal,
+        })
+      : Promise.resolve(null),
+    content
+      ? translateContent({
+          content,
+          type: "content",
+          settings,
+          title,
+          signal,
+        })
+      : Promise.resolve(null),
+  ]);
+
+  // Save to cache
+  await setAiCache(articleId, cacheType, settings.language, {
+    title: translatedTitle,
+    summary: translatedSummary,
+    content: translatedContent,
   });
 
   return NextResponse.json({
-    segmentIndex,
+    title: translatedTitle,
+    summary: translatedSummary,
     content: translatedContent,
+    language: settings.language,
     cached: false,
   });
 }
 
-// Handle batch translation mode
+// Handle batch translation mode with NDJSON streaming (title + summary only, for list view)
 async function handleBatchMode(
   body: BatchRequest,
   settings: Awaited<ReturnType<typeof getAiSettings>>,
@@ -149,88 +166,89 @@ async function handleBatchMode(
     );
   }
 
-  // Limit batch size to prevent too many parallel requests
+  const language = settings.language;
   const batchArticles = articles.slice(0, 10);
-
-  // Check cache first
   const articleIds = batchArticles.map((a) => a.id);
   const cachedTranslations = await getAiCacheBatch(
     articleIds,
     "translate-lite",
-    settings.language
+    language
   );
 
-  // Filter out already cached articles
-  const uncachedArticles = batchArticles.filter(
-    (a) => !cachedTranslations.has(a.id)
-  );
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    async start(controller) {
+      // Helper to send NDJSON line
+      const sendLine = (data: { id: string; title: string; summary: string | null; language: string; cached?: boolean }) => {
+        controller.enqueue(encoder.encode(JSON.stringify(data) + "\n"));
+      };
 
-  // If all articles are cached, return cached results
-  if (uncachedArticles.length === 0) {
-    const results: Record<string, { title: string; summary: string | null }> =
-      {};
-    cachedTranslations.forEach((value, key) => {
-      results[key] = value;
-    });
-    return NextResponse.json({ translations: results });
-  }
+      // First, send all cached results immediately
+      for (const [id, translation] of cachedTranslations) {
+        sendLine({
+          id,
+          title: translation.title,
+          summary: translation.summary,
+          language,
+          cached: true,
+        });
+      }
 
-  // Translate each article's title and summary in parallel
-  const translationPromises = uncachedArticles.map(async (article) => {
-    const [translatedTitle, translatedSummary] = await Promise.all([
-      translateContent({
-        content: article.title,
-        type: "title",
-        settings,
-        signal,
-      }),
-      article.summary
-        ? translateContent({
-            content: article.summary,
-            type: "summary",
-            settings,
-            signal,
-          })
-        : Promise.resolve(null),
-    ]);
+      // Then translate uncached articles one by one
+      const uncachedArticles = batchArticles.filter(
+        (a) => !cachedTranslations.has(a.id)
+      );
 
-    return {
-      id: article.id,
-      title: translatedTitle,
-      summary: translatedSummary,
-    };
+      for (const article of uncachedArticles) {
+        if (signal.aborted) break;
+
+        try {
+          const [translatedTitle, translatedSummary] = await Promise.all([
+            translateContent({
+              content: article.title,
+              type: "title",
+              settings,
+              signal,
+            }),
+            article.summary
+              ? translateContent({
+                  content: article.summary,
+                  type: "summary",
+                  settings,
+                  signal,
+                })
+              : Promise.resolve(null),
+          ]);
+
+          // Save to cache
+          await setAiCacheBatch(
+            new Map([[article.id, { title: translatedTitle, summary: translatedSummary }]]),
+            "translate-lite",
+            language
+          );
+
+          // Send result immediately
+          sendLine({
+            id: article.id,
+            title: translatedTitle,
+            summary: translatedSummary,
+            language,
+          });
+        } catch (error) {
+          if (signal.aborted) break;
+          console.error(`Translation error for article ${article.id}:`, error);
+        }
+      }
+
+      controller.close();
+    },
   });
 
-  const translatedArticles = await Promise.all(translationPromises);
-
-  // Build new translations map
-  const newTranslations = new Map<
-    string,
-    { title: string; summary: string | null }
-  >();
-  for (const article of translatedArticles) {
-    if (article.title) {
-      newTranslations.set(article.id, {
-        title: article.title,
-        summary: article.summary,
-      });
-    }
-  }
-
-  // Save new translations to cache
-  if (newTranslations.size > 0) {
-    await setAiCacheBatch(newTranslations, "translate-lite", settings.language);
-  }
-
-  // Merge cached and new translations
-  const results: Record<string, { title: string; summary: string | null }> =
-    {};
-  cachedTranslations.forEach((value, key) => {
-    results[key] = value;
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "application/x-ndjson",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    },
   });
-  newTranslations.forEach((value, key) => {
-    results[key] = value;
-  });
-
-  return NextResponse.json({ translations: results });
 }

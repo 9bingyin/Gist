@@ -23,6 +23,7 @@ import {
   ImageIcon,
   BellIcon,
   TagIcon,
+  StarIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -48,9 +49,11 @@ interface AppSidebarProps {
   selectedFeedId: string | null;
   selectedFolderId?: string | null;
   selectedContentType: ContentType;
+  isStarredView?: boolean;
   onSelectFeed: (feedId: string | null) => void;
   onSelectFolder?: (folderId: string) => void;
   onSelectContentType: (type: ContentType) => void;
+  onSelectStarred?: () => void;
   onAddFeed: (url: string, type: ContentType) => Promise<void>;
   onRefreshFeed: (feedId: string) => Promise<void>;
   onDeleteFeed: (feedId: string) => Promise<void>;
@@ -73,9 +76,11 @@ export function AppSidebar({
   selectedFeedId,
   selectedFolderId,
   selectedContentType,
+  isStarredView,
   onSelectFeed,
   onSelectFolder,
   onSelectContentType,
+  onSelectStarred,
   onAddFeed,
   onRefreshFeed,
   onDeleteFeed,
@@ -274,6 +279,14 @@ export function AppSidebar({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuItem
+                onSelect={() => onSelectStarred?.()}
+                className={cn(isStarredView && "bg-accent")}
+              >
+                <StarIcon className="mr-2 size-4" />
+                {t("nav.starred")}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
               <SettingsDialog
                 feeds={feeds}
                 folders={folders}

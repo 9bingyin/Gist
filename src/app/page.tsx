@@ -47,6 +47,7 @@ export default function Home() {
   const [mobileView, setMobileView] = useState<"list" | "detail">("list");
   const [selectedContentType, setSelectedContentType] =
     useState<ContentType>("article");
+  const [isStarredView, setIsStarredView] = useState(false);
   const isMobile = useIsMobile();
 
   useEffect(() => {
@@ -99,6 +100,7 @@ export default function Home() {
         feedId?: string | null;
         folderId?: string | null;
         type?: ContentType;
+        starred?: boolean;
       } = {},
     ) => {
       // Abort previous request
@@ -109,18 +111,28 @@ export default function Home() {
       // Increment version to track this request
       const currentVersion = ++fetchArticlesVersionRef.current;
 
+      // Don't clear articles immediately - keep showing old data until new data arrives
+      // This prevents "no articles" flash during fast folder switching
+
       try {
         let url = "/api/articles";
         const params = new URLSearchParams();
-        if (options.feedId) params.append("feedId", options.feedId);
-        if (options.folderId) params.append("folderId", options.folderId);
-        if (options.type) params.append("type", options.type);
+        if (options.starred) {
+          params.append("starred", "true");
+        } else {
+          if (options.feedId) params.append("feedId", options.feedId);
+          if (options.folderId) params.append("folderId", options.folderId);
+          if (options.type) params.append("type", options.type);
+        }
 
         if (params.toString()) {
           url += `?${params.toString()}`;
         }
 
-        const res = await fetch(url, { signal: controller.signal });
+        const res = await fetch(url, {
+          signal: controller.signal,
+          priority: "high",
+        } as RequestInit);
         if (!res.ok) {
           throw new Error("Failed to fetch articles");
         }
@@ -131,40 +143,12 @@ export default function Home() {
           return;
         }
 
-        // Preserve translation fields from existing articles
-        setArticles((prev) => {
-          const translationMap = new Map<
-            string,
-            { translatedTitle?: string; translatedSummary?: string }
-          >();
-          for (const article of prev) {
-            if (article.translatedTitle || article.translatedSummary) {
-              translationMap.set(article.id, {
-                translatedTitle: article.translatedTitle,
-                translatedSummary: article.translatedSummary,
-              });
-            }
-          }
-
-          return data.map((article) => {
-            const translation = translationMap.get(article.id);
-            if (translation) {
-              return { ...article, ...translation };
-            }
-            return article;
-          });
-        });
+        // Set articles directly (translation state is now managed in global store)
+        setArticles(data);
 
         setSelectedArticle((prev) => {
           if (!prev) return prev;
           const updated = data.find((a) => a.id === prev.id);
-          if (updated && prev.translatedTitle) {
-            return {
-              ...updated,
-              translatedTitle: prev.translatedTitle,
-              translatedSummary: prev.translatedSummary,
-            };
-          }
           return updated || prev;
         });
       } catch (error) {
@@ -185,16 +169,66 @@ export default function Home() {
   }, [fetchFeeds, fetchFolders, fetchArticles, selectedContentType]);
 
   const handleSelectFeed = (feedId: string | null) => {
+    setIsStarredView(false);
     setSelectedFeedId(feedId);
     setSelectedFolderId(null);
     fetchArticles({ feedId, type: selectedContentType });
   };
 
   const handleSelectFolder = (folderId: string) => {
+    setIsStarredView(false);
     setSelectedFolderId(folderId);
     setSelectedFeedId(null);
     fetchArticles({ folderId, type: selectedContentType });
   };
+
+  const handleSelectStarred = useCallback(() => {
+    setIsStarredView(true);
+    setSelectedFeedId(null);
+    setSelectedFolderId(null);
+    fetchArticles({ starred: true });
+  }, [fetchArticles]);
+
+  const handleToggleStar = useCallback(
+    async (article: Article) => {
+      const newStarred = !article.isStarred;
+
+      // Optimistic update
+      setArticles((prev) =>
+        prev.map((a) =>
+          a.id === article.id ? { ...a, isStarred: newStarred } : a
+        )
+      );
+
+      if (selectedArticle?.id === article.id) {
+        setSelectedArticle((prev) =>
+          prev ? { ...prev, isStarred: newStarred } : null
+        );
+      }
+
+      try {
+        await fetch(`/api/articles/${article.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ isStarred: newStarred }),
+        });
+      } catch (error) {
+        // Rollback on error
+        setArticles((prev) =>
+          prev.map((a) =>
+            a.id === article.id ? { ...a, isStarred: article.isStarred } : a
+          )
+        );
+        if (selectedArticle?.id === article.id) {
+          setSelectedArticle((prev) =>
+            prev ? { ...prev, isStarred: article.isStarred } : null
+          );
+        }
+        console.error("Failed to toggle star:", error);
+      }
+    },
+    [selectedArticle]
+  );
 
   const handleAddFeed = async (url: string, type: ContentType) => {
     const res = await fetch("/api/feeds", {
@@ -418,73 +452,18 @@ export default function Home() {
   };
 
   const handleArticleUpdate = useCallback((updatedArticle: Article) => {
-    // Use field-level merge to preserve concurrent updates
     setSelectedArticle((prev) => {
       if (!prev || prev.id !== updatedArticle.id) return updatedArticle;
-      return {
-        ...prev,
-        ...updatedArticle,
-        // Preserve translation fields unless explicitly provided
-        translatedTitle: updatedArticle.translatedTitle ?? prev.translatedTitle,
-        translatedSummary:
-          updatedArticle.translatedSummary ?? prev.translatedSummary,
-      };
+      return { ...prev, ...updatedArticle };
     });
 
     setArticles((prev) =>
-      prev.map((a) => {
-        if (a.id !== updatedArticle.id) return a;
-        return {
-          ...a,
-          ...updatedArticle,
-          translatedTitle: updatedArticle.translatedTitle ?? a.translatedTitle,
-          translatedSummary:
-            updatedArticle.translatedSummary ?? a.translatedSummary,
-        };
-      }),
+      prev.map((a) =>
+        a.id === updatedArticle.id ? { ...a, ...updatedArticle } : a
+      )
     );
   }, []);
 
-  const handleUpdateArticles = useCallback((updatedArticles: Article[]) => {
-    // Use functional update to merge translations without losing other concurrent updates
-    setArticles((prevArticles) => {
-      // Build a map of updated articles for quick lookup
-      const updatesMap = new Map<string, Article>();
-      for (const article of updatedArticles) {
-        updatesMap.set(article.id, article);
-      }
-
-      // Merge updates into current state
-      return prevArticles.map((article) => {
-        const updated = updatesMap.get(article.id);
-        if (updated) {
-          // Only merge translation fields to preserve other state
-          return {
-            ...article,
-            translatedTitle: updated.translatedTitle ?? article.translatedTitle,
-            translatedSummary: updated.translatedSummary ?? article.translatedSummary,
-            translationDisabled: updated.translationDisabled ?? article.translationDisabled,
-          };
-        }
-        return article;
-      });
-    });
-
-    // Also update selected article if it was translated
-    setSelectedArticle((prev) => {
-      if (!prev) return prev;
-      const updated = updatedArticles.find((a) => a.id === prev.id);
-      if (updated) {
-        return {
-          ...prev,
-          translatedTitle: updated.translatedTitle ?? prev.translatedTitle,
-          translatedSummary: updated.translatedSummary ?? prev.translatedSummary,
-          translationDisabled: updated.translationDisabled ?? prev.translationDisabled,
-        };
-      }
-      return prev;
-    });
-  }, []);
 
   const handleMarkAllRead = async () => {
     // Capture current unread article IDs to prevent race conditions
@@ -514,6 +493,9 @@ export default function Home() {
   const { t } = useTranslation();
 
   const listTitle = useMemo(() => {
+    if (isStarredView) {
+      return t("nav.starred");
+    }
     if (selectedFeedId) {
       const feed = feeds.find((f) => f.id === selectedFeedId);
       return feed ? feed.title : t("nav.articles");
@@ -528,7 +510,7 @@ export default function Home() {
       notification: t("nav.all_notifications"),
     };
     return titleMap[selectedContentType];
-  }, [selectedFeedId, selectedFolderId, feeds, folders, selectedContentType, t]);
+  }, [isStarredView, selectedFeedId, selectedFolderId, feeds, folders, selectedContentType, t]);
 
   if (!layoutLoaded) {
     return <div className="h-screen" />;
@@ -542,6 +524,7 @@ export default function Home() {
       selectedFeedId={selectedFeedId}
       selectedFolderId={selectedFolderId}
       selectedContentType={selectedContentType}
+      isStarredView={isStarredView}
       onSelectFeed={(feedId) => {
         handleSelectFeed(feedId);
         setSidebarOpen(false);
@@ -551,9 +534,15 @@ export default function Home() {
         setSidebarOpen(false);
       }}
       onSelectContentType={(type) => {
+        setIsStarredView(false);
         setSelectedContentType(type);
         setSelectedFeedId(null);
         setSelectedFolderId(null);
+        fetchArticles({ type });
+      }}
+      onSelectStarred={() => {
+        handleSelectStarred();
+        setSidebarOpen(false);
       }}
       onAddFeed={handleAddFeed}
       onRefreshFeed={handleRefreshFeed}
@@ -582,7 +571,6 @@ export default function Home() {
               onSelectArticle={handleSelectArticle}
               onRefresh={handleRefresh}
               onMarkAllRead={handleMarkAllRead}
-              onUpdateArticles={handleUpdateArticles}
               loading={isRefreshing}
               autoTranslate={autoTranslate}
               targetLanguage={targetLanguage}
@@ -600,6 +588,7 @@ export default function Home() {
           <ArticleDetail
             article={selectedArticle}
             onArticleUpdate={handleArticleUpdate}
+            onToggleStar={handleToggleStar}
             autoTranslate={autoTranslate}
             targetLanguage={targetLanguage}
             aiEnabled={aiEnabled}
@@ -642,7 +631,6 @@ export default function Home() {
           onSelectArticle={handleSelectArticle}
           onRefresh={handleRefresh}
           onMarkAllRead={handleMarkAllRead}
-          onUpdateArticles={handleUpdateArticles}
           loading={isRefreshing}
           autoTranslate={autoTranslate}
           targetLanguage={targetLanguage}
@@ -654,6 +642,7 @@ export default function Home() {
         <ArticleDetail
           article={selectedArticle}
           onArticleUpdate={handleArticleUpdate}
+          onToggleStar={handleToggleStar}
           autoTranslate={autoTranslate}
           targetLanguage={targetLanguage}
           aiEnabled={aiEnabled}

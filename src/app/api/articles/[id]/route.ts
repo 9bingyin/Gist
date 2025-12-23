@@ -8,9 +8,20 @@ export async function PATCH(
   const { id } = await params;
   const body = await request.json().catch(() => ({}));
 
-  if (typeof body.isRead !== "boolean") {
+  // Build update data
+  const updateData: { isRead?: boolean; isStarred?: boolean } = {};
+
+  if (typeof body.isRead === "boolean") {
+    updateData.isRead = body.isRead;
+  }
+
+  if (typeof body.isStarred === "boolean") {
+    updateData.isStarred = body.isStarred;
+  }
+
+  if (Object.keys(updateData).length === 0) {
     return NextResponse.json(
-      { error: "isRead must be a boolean" },
+      { error: "At least one of isRead or isStarred must be provided" },
       { status: 400 },
     );
   }
@@ -22,7 +33,12 @@ export async function PATCH(
 
   const article = await prisma.article.update({
     where: { id },
-    data: { isRead: body.isRead },
+    data: updateData,
+    include: {
+      feed: {
+        select: { id: true, title: true, imageUrl: true },
+      },
+    },
   });
 
   return NextResponse.json(article);

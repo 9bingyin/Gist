@@ -39,6 +39,7 @@ export interface Article {
   imageUrl: string | null;
   pubDate: string | null;
   isRead: boolean;
+  isStarred: boolean;
   feedId: string;
   createdAt: string;
   feed: {

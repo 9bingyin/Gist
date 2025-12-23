@@ -7,24 +7,31 @@ export async function GET(request: NextRequest) {
   const folderId = searchParams.get("folderId");
   const type = searchParams.get("type");
   const unreadOnly = searchParams.get("unreadOnly") === "true";
+  const starred = searchParams.get("starred") === "true";
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Prisma where type is complex
   const where: any = {};
-  if (feedId) {
-    where.feedId = feedId;
+
+  if (starred) {
+    where.isStarred = true;
+  } else {
+    if (feedId) {
+      where.feedId = feedId;
+    }
+    if (folderId) {
+      where.feed = {
+        ...where.feed,
+        folderId: folderId,
+      };
+    }
+    if (type) {
+      where.feed = {
+        ...where.feed,
+        type: type,
+      };
+    }
   }
-  if (folderId) {
-    where.feed = {
-      ...where.feed,
-      folderId: folderId,
-    };
-  }
-  if (type) {
-    where.feed = {
-      ...where.feed,
-      type: type,
-    };
-  }
+
   if (unreadOnly) {
     where.isRead = false;
   }
