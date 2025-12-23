@@ -472,21 +472,6 @@ export function ArticleDetail({
     }
   }, [article, isLoadingSummary, aiSummary, useReadability]);
 
-  // Track selection for click handling
-  const hadSelectionRef = useRef(false);
-
-  const handleMouseDown = useCallback(() => {
-    const selection = window.getSelection();
-    hadSelectionRef.current = !!(selection && selection.toString().length > 0);
-  }, []);
-
-  const handleClearSelection = useCallback((e: React.MouseEvent) => {
-    const target = e.target as HTMLElement;
-    if (target.closest("a") || target.closest("button")) return;
-    if (hadSelectionRef.current) {
-      window.getSelection()?.removeAllRanges();
-    }
-  }, []);
 
   const handleTranslate = useCallback(() => {
     if (!article) return;
@@ -525,6 +510,32 @@ export function ArticleDetail({
     }
   }, [article, isLoadingTranslation, translateEnabled, onArticleUpdate]);
 
+  // Track if there was selection before mousedown
+  const hadSelectionOnMouseDown = useRef(false);
+
+  const handleMouseDown = useCallback(() => {
+    const selection = window.getSelection();
+    hadSelectionOnMouseDown.current = !!(
+      selection &&
+      !selection.isCollapsed &&
+      selection.toString().trim()
+    );
+  }, []);
+
+  const handleClick = useCallback((e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+    if (target.closest("a") || target.closest("button")) return;
+
+    // Double/triple click: let browser handle native selection
+    if (e.detail > 1) return;
+
+    // Only clear if there was selection before mousedown
+    // This prevents clearing drag-to-select
+    if (hadSelectionOnMouseDown.current) {
+      window.getSelection()?.removeAllRanges();
+    }
+  }, []);
+
   if (!article) {
     return (
       <div className="flex h-full flex-col bg-background/50">
@@ -552,7 +563,7 @@ export function ArticleDetail({
     <div
       className="h-full overflow-y-auto bg-background"
       onMouseDown={handleMouseDown}
-      onClick={handleClearSelection}
+      onClick={handleClick}
     >
       {/* Toolbar */}
       <TooltipProvider>
