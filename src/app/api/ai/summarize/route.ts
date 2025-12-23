@@ -3,6 +3,7 @@ import { streamText } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { createAnthropic } from "@ai-sdk/anthropic";
+import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { prisma } from "@/lib/db";
 import { getAiCache, setAiCache } from "@/lib/ai-cache";
 import { acquireRateLimit } from "@/lib/ai-rate-limiter";
@@ -120,6 +121,12 @@ export async function POST(request: NextRequest) {
         baseURL: baseUrl || undefined,
       });
       aiModel = anthropic(model || "claude-3-5-haiku-20241022");
+    } else if (provider === "openrouter") {
+      const openrouter = createOpenRouter({
+        apiKey,
+        baseURL: baseUrl || undefined,
+      });
+      aiModel = openrouter(model || "x-ai/grok-4.1-fast");
     } else {
       return NextResponse.json(
         { error: "Unsupported AI provider" },
@@ -147,7 +154,21 @@ export async function POST(request: NextRequest) {
           },
         },
       }),
-      ...(thinking && provider !== "anthropic" && {
+      ...(thinking && provider === "openrouter" && {
+        providerOptions: {
+          openrouter: {
+            reasoning: { enabled: true },
+          },
+        },
+      }),
+      ...(!thinking && provider === "openrouter" && {
+        providerOptions: {
+          openrouter: {
+            reasoning: { enabled: false },
+          },
+        },
+      }),
+      ...(thinking && provider !== "anthropic" && provider !== "openrouter" && {
         providerOptions: {
           openai: {
             reasoningEffort: thinkingEffort,

@@ -6,6 +6,7 @@ import { generateText } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { createAnthropic } from "@ai-sdk/anthropic";
+import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { prisma } from "@/lib/db";
 import { getAiCache, setAiCache, AiCacheType } from "@/lib/ai-cache";
 import { withRateLimit } from "@/lib/ai-rate-limiter";
@@ -327,6 +328,32 @@ async function callAiProvider(
               },
             },
           }),
+        })
+      )
+    );
+
+    return result.text;
+  } else if (settings.provider === "openrouter") {
+    const openrouter = createOpenRouter({
+      apiKey: settings.apiKey,
+      baseURL: settings.baseUrl || undefined,
+    });
+
+    const modelName = settings.model || "x-ai/grok-4.1-fast";
+
+    const result = await withRetry(() =>
+      withRateLimit(() =>
+        generateText({
+          model: openrouter(modelName),
+          system,
+          prompt,
+          abortSignal: signal,
+          maxRetries: 0,
+          providerOptions: {
+            openrouter: {
+              reasoning: { enabled: settings.thinking ?? false },
+            },
+          },
         })
       )
     );

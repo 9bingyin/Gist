@@ -2010,10 +2010,10 @@ interface AISettingsProps {
 function AISettings({ onSettingsChange }: AISettingsProps) {
   const { t } = useTranslation();
   const [aiProvider, setAiProvider] = useState<
-    "openai" | "anthropic" | "openai-compatible"
+    "openai" | "anthropic" | "openai-compatible" | "openrouter"
   >("openai");
   const [savedAiProvider, setSavedAiProvider] = useState<
-    "openai" | "anthropic" | "openai-compatible"
+    "openai" | "anthropic" | "openai-compatible" | "openrouter"
   >("openai");
   const [aiBaseUrl, setAiBaseUrl] = useState("");
   const [savedAiBaseUrl, setSavedAiBaseUrl] = useState("");
@@ -2054,7 +2054,8 @@ function AISettings({ onSettingsChange }: AISettingsProps) {
         const provider = (settings.aiProvider || "openai") as
           | "openai"
           | "anthropic"
-          | "openai-compatible";
+          | "openai-compatible"
+          | "openrouter";
         const baseUrl = settings.aiBaseUrl || "";
         const apiKey = settings.aiApiKey || "";
         const model = settings.aiModel || "";
@@ -2285,7 +2286,7 @@ function AISettings({ onSettingsChange }: AISettingsProps) {
               value={aiProvider}
               onValueChange={(value) =>
                 setAiProvider(
-                  value as "openai" | "anthropic" | "openai-compatible",
+                  value as "openai" | "anthropic" | "openai-compatible" | "openrouter",
                 )
               }
             >
@@ -2301,6 +2302,9 @@ function AISettings({ onSettingsChange }: AISettingsProps) {
                 </SelectItem>
                 <SelectItem value="openai-compatible">
                   {t("ai.provider_openai_compatible")}
+                </SelectItem>
+                <SelectItem value="openrouter">
+                  OpenRouter
                 </SelectItem>
               </SelectContent>
             </Select>
@@ -2324,7 +2328,9 @@ function AISettings({ onSettingsChange }: AISettingsProps) {
                     ? "https://api.openai.com/v1"
                     : aiProvider === "anthropic"
                       ? "https://api.anthropic.com/v1"
-                      : "http://localhost:11434/v1"
+                      : aiProvider === "openrouter"
+                        ? "https://openrouter.ai/api/v1"
+                        : "http://localhost:11434/v1"
                 }
                 className="font-mono text-[11px] rounded-md border-muted-foreground/20 bg-muted/20"
               />
@@ -2367,7 +2373,9 @@ function AISettings({ onSettingsChange }: AISettingsProps) {
                   ? "gpt-4o-mini"
                   : aiProvider === "anthropic"
                     ? "claude-3-5-haiku-20241022"
-                    : "llama3.2"
+                    : aiProvider === "openrouter"
+                      ? "x-ai/grok-4.1-fast"
+                      : "llama3.2"
               }
               className="font-mono text-[11px] rounded-md border-muted-foreground/20 bg-muted/20"
             />

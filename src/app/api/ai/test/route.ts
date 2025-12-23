@@ -3,6 +3,7 @@ import { generateText } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { createAnthropic } from "@ai-sdk/anthropic";
+import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { prisma } from "@/lib/db";
 import { getTestPrompt } from "@/lib/ai-prompts";
 import { formatAiError, withRetry } from "@/lib/ai-translate";
@@ -154,6 +155,34 @@ export async function POST(request: NextRequest) {
         response = result.text;
       } catch (err) {
         console.error("Anthropic API error:", err);
+        throw err;
+      }
+    } else if (provider === "openrouter") {
+      const openrouter = createOpenRouter({
+        apiKey,
+        baseURL: baseUrl || undefined,
+      });
+
+      const modelName = model || "x-ai/grok-4.1-fast";
+
+      try {
+        const result = await withRetry(() =>
+          generateText({
+            model: openrouter(modelName),
+            system: promptPair.system,
+            prompt: promptPair.prompt,
+            maxRetries: 0,
+            providerOptions: {
+              openrouter: {
+                reasoning: { enabled: thinking },
+              },
+            },
+          })
+        );
+
+        response = result.text;
+      } catch (err) {
+        console.error("OpenRouter API error:", err);
         throw err;
       }
     } else {
