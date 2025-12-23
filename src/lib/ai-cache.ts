@@ -3,22 +3,14 @@ import { prisma } from "@/lib/db";
 export type AiCacheType =
   | "translate"
   | "translate-readability"
-  | "translate-lite"
   | "summarize"
   | "summarize-readability"
-  | string; // Allow dynamic types like "translate-segment-0", "translate-segment-1", etc.
+  | string; // Allow dynamic types
 
 interface TranslateResult {
   title: string | null;
   summary: string | null;
   content: string | null;
-}
-
-interface TranslateLiteResult {
-  [articleId: string]: {
-    title: string;
-    summary: string | null;
-  };
 }
 
 interface SummarizeResult {
@@ -29,7 +21,7 @@ interface SegmentResult {
   content: string;
 }
 
-type CacheResult = TranslateResult | TranslateLiteResult | SummarizeResult | SegmentResult;
+type CacheResult = TranslateResult | SummarizeResult | SegmentResult;
 
 /**
  * Get cached AI result
@@ -94,13 +86,13 @@ export async function setAiCache(
 }
 
 /**
- * Get multiple cached translations for translate-lite
+ * Get multiple cached translations
  */
 export async function getAiCacheBatch(
   articleIds: string[],
   type: AiCacheType,
   language: string,
-): Promise<Map<string, TranslateLiteResult[string]>> {
+): Promise<Map<string, TranslateResult>> {
   try {
     const caches = await prisma.aiCache.findMany({
       where: {
@@ -110,52 +102,15 @@ export async function getAiCacheBatch(
       },
     });
 
-    const result = new Map<string, TranslateLiteResult[string]>();
+    const result = new Map<string, TranslateResult>();
     for (const cache of caches) {
-      const parsed = JSON.parse(cache.result) as TranslateLiteResult[string];
+      const parsed = JSON.parse(cache.result) as TranslateResult;
       result.set(cache.articleId, parsed);
     }
     return result;
   } catch (error) {
     console.error("Failed to get AI cache batch:", error);
     return new Map();
-  }
-}
-
-/**
- * Set multiple cached translations for translate-lite
- */
-export async function setAiCacheBatch(
-  translations: Map<string, TranslateLiteResult[string]>,
-  type: AiCacheType,
-  language: string,
-): Promise<void> {
-  try {
-    const operations = Array.from(translations.entries()).map(
-      ([articleId, result]) =>
-        prisma.aiCache.upsert({
-          where: {
-            articleId_type_language: {
-              articleId,
-              type,
-              language,
-            },
-          },
-          update: {
-            result: JSON.stringify(result),
-          },
-          create: {
-            articleId,
-            type,
-            language,
-            result: JSON.stringify(result),
-          },
-        }),
-    );
-
-    await prisma.$transaction(operations);
-  } catch (error) {
-    console.error("Failed to set AI cache batch:", error);
   }
 }
 

@@ -1,4 +1,55 @@
 import { translationActions } from "@/lib/stores/translation-store";
+import { readNdjsonStream } from "@/lib/stream";
+
+type TranslationField = "title" | "summary" | "content";
+
+interface TranslationResponse {
+  id: string;
+  title: string | null;
+  summary: string | null;
+  content: string | null;
+  language: string;
+}
+
+// Track in-flight requests to prevent duplicate calls
+const inFlightRequests = new Map<string, Promise<void>>();
+
+/**
+ * Core translation function using unified NDJSON streaming API
+ */
+async function translateArticles(
+  articles: Array<{
+    id: string;
+    title: string;
+    summary: string | null;
+    content?: string;
+    isReadability?: boolean;
+  }>,
+  fields: TranslationField[],
+  signal?: AbortSignal
+): Promise<void> {
+  if (articles.length === 0) return;
+
+  const response = await fetch("/api/ai/translate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ articles, fields }),
+    signal,
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || "Translation failed");
+  }
+
+  await readNdjsonStream<TranslationResponse>(response, (data) => {
+    translationActions.set(data.id, data.language, {
+      title: data.title,
+      summary: data.summary,
+      content: data.content,
+    });
+  });
+}
 
 interface TranslateArticleParams {
   articleId: string;
@@ -8,15 +59,6 @@ interface TranslateArticleParams {
   isReadability?: boolean;
 }
 
-interface TranslateArticleResult {
-  title: string | null;
-  summary: string | null;
-  content: string | null;
-}
-
-// Track in-flight requests to prevent duplicate calls
-const inFlightRequests = new Map<string, Promise<TranslateArticleResult>>();
-
 /**
  * Translate a full article (title, summary, content)
  * Results are automatically saved to the store and database
@@ -24,7 +66,7 @@ const inFlightRequests = new Map<string, Promise<TranslateArticleResult>>();
 export async function translateArticle(
   params: TranslateArticleParams,
   signal?: AbortSignal
-): Promise<TranslateArticleResult> {
+): Promise<void> {
   const { articleId, title, summary, content, isReadability } = params;
   const requestKey = `${articleId}-${isReadability ? "readability" : "normal"}`;
 
@@ -36,44 +78,11 @@ export async function translateArticle(
 
   const request = (async () => {
     try {
-      const response = await fetch("/api/ai/translate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          mode: "full",
-          articleId,
-          title,
-          summary,
-          content,
-          isReadability,
-        }),
-        signal,
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Translation failed");
-      }
-
-      const result: {
-        title: string | null;
-        summary: string | null;
-        content: string | null;
-        language: string;
-      } = await response.json();
-
-      // Update the store with the translation result
-      translationActions.set(articleId, result.language, {
-        title: result.title,
-        summary: result.summary,
-        content: result.content,
-      });
-
-      return {
-        title: result.title,
-        summary: result.summary,
-        content: result.content,
-      };
+      await translateArticles(
+        [{ id: articleId, title, summary, content, isReadability }],
+        ["title", "summary", "content"],
+        signal
+      );
     } finally {
       inFlightRequests.delete(requestKey);
     }
@@ -91,73 +100,11 @@ export async function translateArticlesBatch(
   articles: Array<{ id: string; title: string; summary: string | null }>,
   signal?: AbortSignal
 ): Promise<void> {
-  if (articles.length === 0) return;
-
-  const response = await fetch("/api/ai/translate", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      mode: "batch",
-      articles,
-    }),
-    signal,
-  });
-
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || "Batch translation failed");
-  }
-
-  // Read NDJSON stream
-  const reader = response.body?.getReader();
-  if (!reader) throw new Error("No response body");
-
-  const decoder = new TextDecoder();
-  let buffer = "";
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() || "";
-
-    for (const line of lines) {
-      if (!line.trim()) continue;
-      try {
-        const data: {
-          id: string;
-          title: string;
-          summary: string | null;
-          language: string;
-        } = JSON.parse(line);
-
-        // Update store immediately for each translation
-        translationActions.set(data.id, data.language, {
-          title: data.title,
-          summary: data.summary,
-          content: null,
-        });
-      } catch {
-        // Ignore parse errors
-      }
-    }
-  }
-
-  // Process any remaining data in buffer
-  if (buffer.trim()) {
-    try {
-      const data = JSON.parse(buffer);
-      translationActions.set(data.id, data.language, {
-        title: data.title,
-        summary: data.summary,
-        content: null,
-      });
-    } catch {
-      // Ignore
-    }
-  }
+  return translateArticles(
+    articles.map((a) => ({ id: a.id, title: a.title, summary: a.summary })),
+    ["title", "summary"],
+    signal
+  );
 }
 
 /**

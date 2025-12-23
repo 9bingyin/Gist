@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAiCache, getAiCacheBatch, setAiCache, setAiCacheBatch, AiCacheType } from "@/lib/ai-cache";
+import { getAiCacheBatch, setAiCache, type AiCacheType } from "@/lib/ai-cache";
 import {
   getAiSettings,
   translateContent,
@@ -8,31 +8,38 @@ import {
 
 export const maxDuration = 60;
 
-// Full article translation request
-interface FullRequest {
-  mode: "full";
-  articleId: string;
-  title: string;
-  summary: string | null;
-  content: string;
-  isReadability?: boolean;
-}
+type TranslationField = "title" | "summary" | "content";
 
-// Batch mode request (for list view - title + summary only)
-interface BatchRequest {
-  mode: "batch";
+interface TranslateRequest {
   articles: Array<{
     id: string;
     title: string;
     summary: string | null;
+    content?: string;
+    isReadability?: boolean;
   }>;
+  fields: TranslationField[];
 }
-
-type TranslateRequest = FullRequest | BatchRequest;
 
 export async function POST(request: NextRequest) {
   try {
     const body: TranslateRequest = await request.json();
+    const { articles, fields } = body;
+
+    // Validate request
+    if (!articles || !Array.isArray(articles) || articles.length === 0) {
+      return NextResponse.json(
+        { error: "Articles array is required" },
+        { status: 400 }
+      );
+    }
+
+    if (!fields || !Array.isArray(fields) || fields.length === 0) {
+      return NextResponse.json(
+        { error: "Fields array is required" },
+        { status: 400 }
+      );
+    }
 
     // Get AI settings
     const settings = await getAiSettings();
@@ -46,16 +53,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (body.mode === "full") {
-      return handleFullMode(body, settings, request.signal);
-    } else if (body.mode === "batch") {
-      return handleBatchMode(body, settings, request.signal);
-    } else {
-      return NextResponse.json(
-        { error: "Invalid mode. Use 'full' or 'batch'." },
-        { status: 400 }
-      );
-    }
+    return handleTranslation(articles, fields, settings, request.signal);
   } catch (error) {
     console.error("AI translate error:", error);
     return NextResponse.json(
@@ -65,173 +63,90 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Handle full article translation
-async function handleFullMode(
-  body: FullRequest,
-  settings: Awaited<ReturnType<typeof getAiSettings>>,
+// Unified translation handler with NDJSON streaming
+async function handleTranslation(
+  articles: TranslateRequest["articles"],
+  fields: TranslationField[],
+  settings: NonNullable<Awaited<ReturnType<typeof getAiSettings>>>,
   signal: AbortSignal
 ) {
-  const { articleId, title, summary, content, isReadability } = body;
-
-  if (!settings) {
-    return NextResponse.json(
-      { error: "AI settings not available" },
-      { status: 400 }
-    );
-  }
-
-  const cacheType: AiCacheType = isReadability ? "translate-readability" : "translate";
-
-  // Check cache first
-  const cached = await getAiCache<{ title: string | null; summary: string | null; content: string | null }>(
-    articleId,
-    cacheType,
-    settings.language
-  );
-
-  if (cached) {
-    return NextResponse.json({
-      title: cached.title,
-      summary: cached.summary,
-      content: cached.content,
-      language: settings.language,
-      cached: true,
-    });
-  }
-
-  // Translate title, summary, and content in parallel
-  const [translatedTitle, translatedSummary, translatedContent] = await Promise.all([
-    title
-      ? translateContent({
-          content: title,
-          type: "title",
-          settings,
-          signal,
-        })
-      : Promise.resolve(null),
-    summary
-      ? translateContent({
-          content: summary,
-          type: "summary",
-          settings,
-          signal,
-        })
-      : Promise.resolve(null),
-    content
-      ? translateContent({
-          content,
-          type: "content",
-          settings,
-          title,
-          signal,
-        })
-      : Promise.resolve(null),
-  ]);
-
-  // Save to cache
-  await setAiCache(articleId, cacheType, settings.language, {
-    title: translatedTitle,
-    summary: translatedSummary,
-    content: translatedContent,
-  });
-
-  return NextResponse.json({
-    title: translatedTitle,
-    summary: translatedSummary,
-    content: translatedContent,
-    language: settings.language,
-    cached: false,
-  });
-}
-
-// Handle batch translation mode with NDJSON streaming (title + summary only, for list view)
-async function handleBatchMode(
-  body: BatchRequest,
-  settings: Awaited<ReturnType<typeof getAiSettings>>,
-  signal: AbortSignal
-) {
-  const { articles } = body;
-
-  if (!articles || !Array.isArray(articles) || articles.length === 0) {
-    return NextResponse.json(
-      { error: "Articles array is required" },
-      { status: 400 }
-    );
-  }
-
-  if (!settings) {
-    return NextResponse.json(
-      { error: "AI settings not available" },
-      { status: 400 }
-    );
-  }
-
   const language = settings.language;
   const batchArticles = articles.slice(0, 10);
   const articleIds = batchArticles.map((a) => a.id);
-  const cachedTranslations = await getAiCacheBatch(
-    articleIds,
-    "translate-lite",
-    language
-  );
+  const includesContent = fields.includes("content");
+
+  // Determine cache type based on whether any article uses readability
+  const hasReadability = batchArticles.some((a) => a.isReadability);
+  const cacheType: AiCacheType = hasReadability ? "translate-readability" : "translate";
+
+  // Get cached translations
+  const cachedTranslations = await getAiCacheBatch(articleIds, cacheType, language);
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
-      // Helper to send NDJSON line
-      const sendLine = (data: { id: string; title: string; summary: string | null; language: string; cached?: boolean }) => {
+      const sendLine = (data: {
+        id: string;
+        title: string | null;
+        summary: string | null;
+        content: string | null;
+        language: string;
+        cached?: boolean;
+      }) => {
         controller.enqueue(encoder.encode(JSON.stringify(data) + "\n"));
       };
 
-      // First, send all cached results immediately
-      for (const [id, translation] of cachedTranslations) {
-        sendLine({
-          id,
-          title: translation.title,
-          summary: translation.summary,
-          language,
-          cached: true,
-        });
-      }
-
-      // Then translate uncached articles one by one
-      const uncachedArticles = batchArticles.filter(
-        (a) => !cachedTranslations.has(a.id)
-      );
-
-      for (const article of uncachedArticles) {
+      for (const article of batchArticles) {
         if (signal.aborted) break;
 
+        const cached = cachedTranslations.get(article.id);
+
+        // Check if all requested fields are cached
+        const needsTitle = fields.includes("title") && !cached?.title;
+        const needsSummary = fields.includes("summary") && article.summary && !cached?.summary;
+        const needsContent = includesContent && article.content && !cached?.content;
+
+        if (!needsTitle && !needsSummary && !needsContent && cached) {
+          // All requested fields are cached
+          sendLine({
+            id: article.id,
+            title: cached.title ?? null,
+            summary: cached.summary ?? null,
+            content: cached.content ?? null,
+            language,
+            cached: true,
+          });
+          continue;
+        }
+
         try {
-          const [translatedTitle, translatedSummary] = await Promise.all([
-            translateContent({
-              content: article.title,
-              type: "title",
-              settings,
-              signal,
-            }),
-            article.summary
-              ? translateContent({
-                  content: article.summary,
-                  type: "summary",
-                  settings,
-                  signal,
-                })
-              : Promise.resolve(null),
+          // Translate missing fields
+          const [translatedTitle, translatedSummary, translatedContent] = await Promise.all([
+            needsTitle
+              ? translateContent({ content: article.title, type: "title", settings, signal })
+              : Promise.resolve(cached?.title ?? null),
+            needsSummary
+              ? translateContent({ content: article.summary!, type: "summary", settings, signal })
+              : Promise.resolve(cached?.summary ?? null),
+            needsContent
+              ? translateContent({ content: article.content!, type: "content", settings, title: article.title, signal })
+              : Promise.resolve(cached?.content ?? null),
           ]);
 
-          // Save to cache
-          await setAiCacheBatch(
-            new Map([[article.id, { title: translatedTitle, summary: translatedSummary }]]),
-            "translate-lite",
-            language
-          );
+          // Merge with existing cache and save
+          const newCache = {
+            title: translatedTitle,
+            summary: translatedSummary,
+            content: translatedContent,
+          };
+          await setAiCache(article.id, cacheType, language, newCache);
 
-          // Send result immediately
+          // Send result
           sendLine({
             id: article.id,
             title: translatedTitle,
             summary: translatedSummary,
+            content: translatedContent,
             language,
           });
         } catch (error) {
