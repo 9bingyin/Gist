@@ -15,6 +15,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import type { Feed, Article, Folder, ContentType } from "@/lib/types";
 import { useTranslation } from "react-i18next";
 import { useImageAbort } from "@/lib/contexts/image-abort-context";
+import { useArticleUpdates, type ArticleUpdateEvent } from "@/hooks/use-article-updates";
 
 const LAYOUT_STORAGE_KEY = "rss-reader-layout";
 
@@ -50,6 +51,7 @@ export default function Home() {
   const [selectedContentType, setSelectedContentType] =
     useState<ContentType>("article");
   const [isStarredView, setIsStarredView] = useState(false);
+  const [pendingCount, setPendingCount] = useState(0);
   const isMobile = useIsMobile();
   const { abortAll: abortAllImages } = useImageAbort();
 
@@ -182,6 +184,7 @@ export default function Home() {
     setIsStarredView(false);
     setSelectedFeedId(feedId);
     setSelectedFolderId(null);
+    setPendingCount(0);
     fetchArticles({ feedId, type: selectedContentType });
   };
 
@@ -191,6 +194,7 @@ export default function Home() {
     setIsStarredView(false);
     setSelectedFolderId(folderId);
     setSelectedFeedId(null);
+    setPendingCount(0);
     fetchArticles({ folderId, type: selectedContentType });
   };
 
@@ -200,6 +204,7 @@ export default function Home() {
     setIsStarredView(true);
     setSelectedFeedId(null);
     setSelectedFolderId(null);
+    setPendingCount(0);
     fetchArticles({ starred: true });
   }, [abortAllImages, fetchArticles]);
 
@@ -330,6 +335,41 @@ export default function Home() {
   const handleBackToList = useCallback(() => {
     setMobileView("list");
   }, []);
+
+  // Subscribe to article updates from SSE
+  useArticleUpdates({
+    onUpdate: useCallback(
+      (event: ArticleUpdateEvent) => {
+        // Skip if in starred view
+        if (isStarredView) return;
+
+        // Check if update is relevant to current view
+        const isRelevant =
+          selectedFeedId === null ||
+          selectedFeedId === event.feedId ||
+          (selectedFolderId !== null &&
+            feeds.some(
+              (f) => f.id === event.feedId && f.folderId === selectedFolderId
+            ));
+
+        if (isRelevant) {
+          setPendingCount((prev) => prev + event.newCount);
+        }
+      },
+      [selectedFeedId, selectedFolderId, isStarredView, feeds]
+    ),
+  });
+
+  // Load new articles when user clicks the banner
+  const handleLoadNewArticles = useCallback(() => {
+    setPendingCount(0);
+    fetchArticles({
+      feedId: selectedFeedId,
+      folderId: selectedFolderId,
+      type: selectedContentType,
+    });
+    fetchFeeds();
+  }, [selectedFeedId, selectedFolderId, selectedContentType, fetchArticles, fetchFeeds]);
 
   const handleRefresh = async () => {
     // Capture current selection at start
@@ -480,12 +520,11 @@ export default function Home() {
 
 
   const handleMarkAllRead = async () => {
-    // Capture current unread article IDs to prevent race conditions
+    // Optimistic update: mark all currently displayed unread articles as read
     const articleIdsToMark = articles.filter((a) => !a.isRead).map((a) => a.id);
 
     if (articleIdsToMark.length === 0) return;
 
-    // Optimistic update
     setArticles((prev) =>
       prev.map((a) =>
         articleIdsToMark.includes(a.id) ? { ...a, isRead: true } : a,
@@ -493,13 +532,14 @@ export default function Home() {
     );
 
     try {
+      // API will mark ALL matching articles in DB (not just displayed ones)
       await fetch("/api/articles/mark-all-read", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           feedId: selectedFeedId,
           folderId: selectedFolderId,
-          articleIds: articleIdsToMark,
+          type: !selectedFeedId && !selectedFolderId ? selectedContentType : undefined,
         }),
       });
       await fetchFeeds();
@@ -563,6 +603,7 @@ export default function Home() {
         setSelectedContentType(type);
         setSelectedFeedId(null);
         setSelectedFolderId(null);
+        setPendingCount(0);
         fetchArticles({ type });
       }}
       onSelectStarred={() => {
@@ -602,6 +643,8 @@ export default function Home() {
               aiEnabled={aiEnabled}
               showMenuButton
               onMenuClick={() => setSidebarOpen(true)}
+              pendingCount={pendingCount}
+              onLoadNewArticles={handleLoadNewArticles}
             />
             <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
               <SheetContent side="left" className="w-[280px] p-0" hideCloseButton>
@@ -660,6 +703,8 @@ export default function Home() {
           autoTranslate={autoTranslate}
           targetLanguage={targetLanguage}
           aiEnabled={aiEnabled}
+          pendingCount={pendingCount}
+          onLoadNewArticles={handleLoadNewArticles}
         />
       </ResizablePanel>
       <ResizableHandle />

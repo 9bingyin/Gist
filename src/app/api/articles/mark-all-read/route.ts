@@ -2,21 +2,21 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 
 export async function POST(request: NextRequest) {
-  const { feedId, folderId, articleIds } = await request.json();
+  const { feedId, folderId, type } = await request.json();
 
-  // Build where clause with priority: articleIds > feedId > folderId > all
+  // Build where clause: feedId > folderId > type > all
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Prisma where type is complex
   const where: any = { isRead: false };
 
-  if (articleIds && articleIds.length > 0) {
-    // Precise: mark specific articles (safest option)
-    where.id = { in: articleIds };
-  } else if (feedId) {
+  if (feedId) {
     // Mark all unread in specific feed
     where.feedId = feedId;
   } else if (folderId) {
     // Mark all unread in feeds belonging to folder
     where.feed = { folderId };
+  } else if (type) {
+    // Mark all unread in feeds of specific type
+    where.feed = { type };
   }
   // If none specified, marks all unread articles
 
