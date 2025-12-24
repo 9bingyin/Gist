@@ -295,7 +295,9 @@
       "title": "No articles yet",
       "subtitle": "Add a feed to start reading"
     },
-    "new_articles": "{{count}} new article(s)"
+    "new_articles": "{{count}} new article(s)",
+    "show_all": "Show all",
+    "show_unread_only": "Show unread only"
   },
   "content_type": {
     "article": "Articles",

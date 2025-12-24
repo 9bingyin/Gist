@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useCallback, memo } from "react";
-import { RefreshCwIcon, CheckCircleIcon, MenuIcon, ArrowUpIcon } from "lucide-react";
+import { RefreshCwIcon, CheckCircleIcon, MenuIcon, ArrowUpIcon, CircleIcon } from "lucide-react";
 import striptags from "striptags";
 import { Button } from "@/components/ui/button";
 import { LazyImage } from "@/components/ui/lazy-image";
@@ -28,6 +28,8 @@ interface ArticleListProps {
   onMenuClick?: () => void;
   pendingCount?: number;
   onLoadNewArticles?: () => void;
+  unreadOnly?: boolean;
+  onToggleUnreadOnly?: () => void;
 }
 
 interface ArticleListItemProps {
@@ -149,6 +151,8 @@ export function ArticleList({
   onMenuClick,
   pendingCount = 0,
   onLoadNewArticles,
+  unreadOnly = false,
+  onToggleUnreadOnly,
 }: ArticleListProps) {
   const { t, i18n } = useTranslation();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -398,6 +402,24 @@ export function ArticleList({
           </h2>
         </div>
         <div className="flex items-center gap-1 shrink-0">
+          {onToggleUnreadOnly && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onToggleUnreadOnly}
+              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+              title={unreadOnly ? t("articles.show_all") : t("articles.show_unread_only")}
+            >
+              {unreadOnly ? (
+                <span className="relative flex h-4 w-4 items-center justify-center">
+                  <CircleIcon className="h-4 w-4" />
+                  <span className="absolute h-2 w-2 rounded-full bg-current" />
+                </span>
+              ) : (
+                <CircleIcon className="h-4 w-4" />
+              )}
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="icon"

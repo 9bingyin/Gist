@@ -52,6 +52,7 @@ export default function Home() {
     useState<ContentType>("article");
   const [isStarredView, setIsStarredView] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
+  const [unreadOnly, setUnreadOnly] = useState(false);
   const isMobile = useIsMobile();
   const { abortAll: abortAllImages } = useImageAbort();
 
@@ -106,6 +107,7 @@ export default function Home() {
         folderId?: string | null;
         type?: ContentType;
         starred?: boolean;
+        unreadOnly?: boolean;
       } = {},
     ) => {
       // Abort previous request
@@ -130,6 +132,7 @@ export default function Home() {
           if (options.folderId) params.append("folderId", options.folderId);
           if (options.type) params.append("type", options.type);
         }
+        if (options.unreadOnly) params.append("unreadOnly", "true");
 
         if (params.toString()) {
           url += `?${params.toString()}`;
@@ -367,9 +370,26 @@ export default function Home() {
       feedId: selectedFeedId,
       folderId: selectedFolderId,
       type: selectedContentType,
+      unreadOnly,
     });
     fetchFeeds();
-  }, [selectedFeedId, selectedFolderId, selectedContentType, fetchArticles, fetchFeeds]);
+  }, [selectedFeedId, selectedFolderId, selectedContentType, unreadOnly, fetchArticles, fetchFeeds]);
+
+  // Toggle unread only filter
+  const handleToggleUnreadOnly = useCallback(() => {
+    const newUnreadOnly = !unreadOnly;
+    setUnreadOnly(newUnreadOnly);
+    if (isStarredView) {
+      fetchArticles({ starred: true, unreadOnly: newUnreadOnly });
+    } else {
+      fetchArticles({
+        feedId: selectedFeedId,
+        folderId: selectedFolderId,
+        type: selectedContentType,
+        unreadOnly: newUnreadOnly,
+      });
+    }
+  }, [unreadOnly, isStarredView, selectedFeedId, selectedFolderId, selectedContentType, fetchArticles]);
 
   const handleRefresh = async () => {
     // Capture current selection at start
@@ -407,6 +427,7 @@ export default function Home() {
           feedId: feedIdAtStart,
           folderId: folderIdAtStart,
           type: selectedContentType,
+          unreadOnly,
         });
       }
     } finally {
@@ -645,6 +666,8 @@ export default function Home() {
               onMenuClick={() => setSidebarOpen(true)}
               pendingCount={pendingCount}
               onLoadNewArticles={handleLoadNewArticles}
+              unreadOnly={unreadOnly}
+              onToggleUnreadOnly={handleToggleUnreadOnly}
             />
             <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
               <SheetContent side="left" className="w-[280px] p-0" hideCloseButton>
@@ -705,6 +728,8 @@ export default function Home() {
           aiEnabled={aiEnabled}
           pendingCount={pendingCount}
           onLoadNewArticles={handleLoadNewArticles}
+          unreadOnly={unreadOnly}
+          onToggleUnreadOnly={handleToggleUnreadOnly}
         />
       </ResizablePanel>
       <ResizableHandle />
