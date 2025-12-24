@@ -1,7 +1,9 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
+import { useImageAbort } from "@/lib/contexts/image-abort-context";
+import { ImageQueueCancelledError } from "@/lib/image-queue";
 
 interface LazyImageProps {
   src: string;
@@ -16,20 +18,69 @@ export function LazyImage({
   className,
   containerClassName,
 }: LazyImageProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [isInView, setIsInView] = useState(false);
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
   const [isError, setIsError] = useState(false);
+  const { fetchImage } = useImageAbort();
+  const blobUrlRef = useRef<string | null>(null);
 
-  const handleLoad = useCallback(() => {
-    setIsLoaded(true);
+  // IntersectionObserver to detect if element is in viewport
+  useEffect(() => {
+    const element = containerRef.current;
+    if (!element) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setIsInView(entry.isIntersecting);
+      },
+      { rootMargin: "50px" }
+    );
+
+    observer.observe(element);
+    return () => observer.disconnect();
   }, []);
 
-  const handleError = useCallback(() => {
-    setIsError(true);
-  }, []);
+  // Only fetch when in view
+  useEffect(() => {
+    if (!isInView || isLoaded) return;
+
+    let isMounted = true;
+    const { promise, cancel } = fetchImage(src);
+
+    promise
+      .then((blob) => {
+        if (isMounted) {
+          const url = URL.createObjectURL(blob);
+          blobUrlRef.current = url;
+          setBlobUrl(url);
+          setIsLoaded(true);
+        }
+      })
+      .catch((error) => {
+        if (error instanceof ImageQueueCancelledError) {
+          return;
+        }
+        if (isMounted) {
+          setIsError(true);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+      cancel();
+      if (blobUrlRef.current) {
+        URL.revokeObjectURL(blobUrlRef.current);
+        blobUrlRef.current = null;
+      }
+    };
+  }, [isInView, isLoaded, src, fetchImage]);
 
   if (isError) {
     return (
       <div
+        ref={containerRef}
         className={cn(
           "flex items-center justify-center bg-muted text-muted-foreground",
           containerClassName
@@ -53,24 +104,24 @@ export function LazyImage({
   }
 
   return (
-    <div className={cn("relative overflow-hidden bg-muted", containerClassName)}>
-      {/* Placeholder */}
+    <div
+      ref={containerRef}
+      className={cn("relative overflow-hidden bg-muted", containerClassName)}
+    >
       {!isLoaded && (
         <div className="absolute inset-0 animate-pulse bg-muted" />
       )}
-      {/* Image */}
-      <img
-        src={src}
-        alt={alt}
-        loading="lazy"
-        onLoad={handleLoad}
-        onError={handleError}
-        className={cn(
-          "transition-opacity duration-200",
-          isLoaded ? "opacity-100" : "opacity-0",
-          className
-        )}
-      />
+      {blobUrl && (
+        <img
+          src={blobUrl}
+          alt={alt}
+          className={cn(
+            "transition-opacity duration-200",
+            isLoaded ? "opacity-100" : "opacity-0",
+            className
+          )}
+        />
+      )}
     </div>
   );
 }

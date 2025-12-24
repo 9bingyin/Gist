@@ -14,6 +14,7 @@ import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
 import type { Feed, Article, Folder, ContentType } from "@/lib/types";
 import { useTranslation } from "react-i18next";
+import { useImageAbort } from "@/lib/contexts/image-abort-context";
 
 const LAYOUT_STORAGE_KEY = "rss-reader-layout";
 
@@ -50,6 +51,7 @@ export default function Home() {
     useState<ContentType>("article");
   const [isStarredView, setIsStarredView] = useState(false);
   const isMobile = useIsMobile();
+  const { abortAll: abortAllImages } = useImageAbort();
 
   useEffect(() => {
     const saved = localStorage.getItem(LAYOUT_STORAGE_KEY);
@@ -175,6 +177,7 @@ export default function Home() {
   }, [fetchFeeds, fetchFolders, fetchArticles, selectedContentType]);
 
   const handleSelectFeed = (feedId: string | null) => {
+    abortAllImages();
     setArticles([]);
     setIsStarredView(false);
     setSelectedFeedId(feedId);
@@ -183,6 +186,7 @@ export default function Home() {
   };
 
   const handleSelectFolder = (folderId: string) => {
+    abortAllImages();
     setArticles([]);
     setIsStarredView(false);
     setSelectedFolderId(folderId);
@@ -191,12 +195,13 @@ export default function Home() {
   };
 
   const handleSelectStarred = useCallback(() => {
+    abortAllImages();
     setArticles([]);
     setIsStarredView(true);
     setSelectedFeedId(null);
     setSelectedFolderId(null);
     fetchArticles({ starred: true });
-  }, [fetchArticles]);
+  }, [abortAllImages, fetchArticles]);
 
   const handleToggleStar = useCallback(
     async (article: Article) => {

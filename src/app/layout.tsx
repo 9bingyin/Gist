@@ -4,6 +4,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { APP_NAME } from "@/lib/constants";
 import "./globals.css";
 import { I18nProvider } from "@/components/i18n-provider";
+import { ImageAbortProvider } from "@/lib/contexts/image-abort-context";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -56,7 +57,9 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <I18nProvider>
-          <ThemeProvider>{children}</ThemeProvider>
+          <ImageAbortProvider>
+            <ThemeProvider>{children}</ThemeProvider>
+          </ImageAbortProvider>
         </I18nProvider>
       </body>
     </html>
