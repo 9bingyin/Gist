@@ -492,16 +492,26 @@ export default function Home() {
       ),
     );
 
-    await fetch("/api/articles/mark-all-read", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        feedId: selectedFeedId,
-        folderId: selectedFolderId,
-        articleIds: articleIdsToMark,
-      }),
-    });
-    await fetchFeeds();
+    try {
+      await fetch("/api/articles/mark-all-read", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          feedId: selectedFeedId,
+          folderId: selectedFolderId,
+          articleIds: articleIdsToMark,
+        }),
+      });
+      await fetchFeeds();
+    } catch (error) {
+      console.error("Failed to mark all read:", error);
+      // Rollback optimistic update
+      setArticles((prev) =>
+        prev.map((a) =>
+          articleIdsToMark.includes(a.id) ? { ...a, isRead: false } : a,
+        ),
+      );
+    }
   };
 
   const { t } = useTranslation();

@@ -14,6 +14,20 @@ const REFRESH_LOCK_TIMEOUT_MS = 5 * 60 * 1000;
 let globalConcurrentRefreshes = 0;
 const MAX_GLOBAL_CONCURRENT = 10;
 
+// In-flight request locks to prevent duplicate refresh for the same feed
+const feedRefreshLocks = new Map<string, Promise<RefreshResult>>();
+
+/**
+ * Atomically try to acquire a global slot
+ */
+function tryAcquireGlobalSlot(): boolean {
+  if (globalConcurrentRefreshes >= MAX_GLOBAL_CONCURRENT) {
+    return false;
+  }
+  globalConcurrentRefreshes++;
+  return true;
+}
+
 export interface RefreshResult {
   success: boolean;
   newCount: number;
@@ -51,188 +65,199 @@ function needsUpdate(existing: ExistingArticle, item: ParsedArticle): boolean {
  * Refresh a single feed with optimized batch DB operations
  */
 export async function refreshFeed(feedId: string): Promise<RefreshResult> {
-  // Check global concurrency limit
-  if (globalConcurrentRefreshes >= MAX_GLOBAL_CONCURRENT) {
+  // Check if there's already a refresh in progress for this feed
+  const existingRequest = feedRefreshLocks.get(feedId);
+  if (existingRequest) {
+    return existingRequest;
+  }
+
+  // Atomically try to acquire global slot before any async operation
+  if (!tryAcquireGlobalSlot()) {
     return { success: false, newCount: 0, updatedCount: 0, total: 0, error: "Too many concurrent refreshes" };
   }
 
-  // Acquire database lock using transaction
-  const lockResult = await prisma.$transaction(async (tx) => {
-    const feed = await tx.feed.findUnique({
-      where: { id: feedId },
-      select: { id: true, refreshingAt: true },
-    });
+  // Create the refresh promise and store it in the lock map
+  const refreshPromise = (async (): Promise<RefreshResult> => {
+    try {
+      // Acquire database lock using transaction
+      const lockResult = await prisma.$transaction(async (tx) => {
+        const feed = await tx.feed.findUnique({
+          where: { id: feedId },
+          select: { id: true, refreshingAt: true },
+        });
 
-    if (!feed) {
-      return { error: "Feed not found" as const };
-    }
+        if (!feed) {
+          return { error: "Feed not found" as const };
+        }
 
-    // Check if already refreshing (with timeout)
-    if (
-      feed.refreshingAt &&
-      Date.now() - feed.refreshingAt.getTime() < REFRESH_LOCK_TIMEOUT_MS
-    ) {
-      return { error: "Feed is already being refreshed" as const };
-    }
+        // Check if already refreshing (with timeout)
+        if (
+          feed.refreshingAt &&
+          Date.now() - feed.refreshingAt.getTime() < REFRESH_LOCK_TIMEOUT_MS
+        ) {
+          return { error: "Feed is already being refreshed" as const };
+        }
 
-    // Acquire lock
-    await tx.feed.update({
-      where: { id: feedId },
-      data: { refreshingAt: new Date() },
-    });
+        // Acquire lock
+        await tx.feed.update({
+          where: { id: feedId },
+          data: { refreshingAt: new Date() },
+        });
 
-    return { success: true as const };
-  });
+        return { success: true as const };
+      });
 
-  if ("error" in lockResult) {
-    return { success: false, newCount: 0, updatedCount: 0, total: 0, error: lockResult.error };
-  }
+      if ("error" in lockResult) {
+        return { success: false, newCount: 0, updatedCount: 0, total: 0, error: lockResult.error };
+      }
 
-  globalConcurrentRefreshes++;
+      const feed = await prisma.feed.findUnique({ where: { id: feedId } });
+      if (!feed) {
+        return { success: false, newCount: 0, updatedCount: 0, total: 0, error: "Feed not found" };
+      }
 
-  try {
-    const feed = await prisma.feed.findUnique({ where: { id: feedId } });
-    if (!feed) {
-      return { success: false, newCount: 0, updatedCount: 0, total: 0, error: "Feed not found" };
-    }
+      const parsed = await parseFeed(feed.url);
 
-    const parsed = await parseFeed(feed.url);
+      // Update feed info
+      const updateData: { imageUrl?: string; title?: string; siteUrl?: string } = {};
 
-    // Update feed info
-    const updateData: { imageUrl?: string; title?: string; siteUrl?: string } = {};
-
-    if (parsed.link) {
-      const needsFavicon = !feed.imageUrl || !(await iconFileExists(feed.imageUrl));
-      if (needsFavicon) {
-        const favicon = await getFavicon(parsed.link);
-        if (favicon) {
-          updateData.imageUrl = favicon;
+      if (parsed.link) {
+        const needsFavicon = !feed.imageUrl || !(await iconFileExists(feed.imageUrl));
+        if (needsFavicon) {
+          const favicon = await getFavicon(parsed.link);
+          if (favicon) {
+            updateData.imageUrl = favicon;
+          }
         }
       }
-    }
 
-    if (feed.title === feed.url || feed.title.includes("not yet whitelisted")) {
-      updateData.title = parsed.title;
-    }
+      if (feed.title === feed.url || feed.title.includes("not yet whitelisted")) {
+        updateData.title = parsed.title;
+      }
 
-    if (!feed.siteUrl && parsed.link) {
-      updateData.siteUrl = parsed.link;
-    }
+      if (!feed.siteUrl && parsed.link) {
+        updateData.siteUrl = parsed.link;
+      }
 
-    if (Object.keys(updateData).length > 0) {
+      if (Object.keys(updateData).length > 0) {
+        await prisma.feed.update({
+          where: { id: feedId },
+          data: updateData,
+        });
+      }
+
+      // Batch query existing articles
+      const existingArticles = await prisma.article.findMany({
+        where: { feedId },
+        select: { id: true, link: true, content: true, pubDate: true, imageUrl: true },
+      });
+      const existingMap = new Map(existingArticles.map((a) => [a.link, a]));
+
+      // Classify articles: new vs needs update
+      const newArticles: {
+        title: string;
+        link: string;
+        content: string | null | undefined;
+        summary: string | null | undefined;
+        imageUrl: string | null | undefined;
+        pubDate: Date | null | undefined;
+        feedId: string;
+      }[] = [];
+      const updatePromises: Promise<unknown>[] = [];
+
+      for (const item of parsed.items) {
+        const link = item.link?.trim();
+        if (!link) continue;
+
+        const existing = existingMap.get(link);
+        if (existing) {
+          if (needsUpdate(existing, item)) {
+            updatePromises.push(
+              prisma.article.update({
+                where: { id: existing.id },
+                data: {
+                  title: item.title,
+                  content: item.content,
+                  summary: item.summary,
+                  imageUrl: item.imageUrl ?? null,
+                  pubDate: item.pubDate,
+                },
+              })
+            );
+          }
+        } else {
+          newArticles.push({
+            title: item.title,
+            link,
+            content: item.content,
+            summary: item.summary,
+            imageUrl: item.imageUrl,
+            pubDate: item.pubDate,
+            feedId,
+          });
+        }
+      }
+
+      // Batch create new articles
+      if (newArticles.length > 0) {
+        try {
+          await prisma.article.createMany({
+            data: newArticles,
+          });
+        } catch (error) {
+          // Handle duplicate key errors gracefully (concurrent refresh scenario)
+          // SQLite returns SQLITE_CONSTRAINT for duplicates
+          if (
+            error instanceof Error &&
+            error.message.includes("UNIQUE constraint failed")
+          ) {
+            console.log(`Some articles already exist, skipping duplicates`);
+          } else {
+            throw error;
+          }
+        }
+      }
+
+      // Parallel execute updates
+      await Promise.all(updatePromises);
+
+      const newCount = newArticles.length;
+      const updatedCount = updatePromises.length;
+
+      if (newCount > 0 || updatedCount > 0) {
+        console.log(`Refreshed feed ${feed.title}: ${newCount} new, ${updatedCount} updated`);
+      }
+
+      return {
+        success: true,
+        newCount,
+        updatedCount,
+        total: parsed.items.length,
+      };
+    } catch (error) {
+      console.error(`Failed to refresh feed ${feedId}:`, error);
+      return {
+        success: false,
+        newCount: 0,
+        updatedCount: 0,
+        total: 0,
+        error: error instanceof Error ? error.message : "Failed to refresh feed",
+      };
+    } finally {
+      // Release database lock and global counter
+      globalConcurrentRefreshes--;
+      feedRefreshLocks.delete(feedId);
       await prisma.feed.update({
         where: { id: feedId },
-        data: updateData,
+        data: { refreshingAt: null },
+      }).catch(() => {
+        // Ignore error if feed was deleted
       });
     }
+  })();
 
-    // Batch query existing articles
-    const existingArticles = await prisma.article.findMany({
-      where: { feedId },
-      select: { id: true, link: true, content: true, pubDate: true, imageUrl: true },
-    });
-    const existingMap = new Map(existingArticles.map((a) => [a.link, a]));
-
-    // Classify articles: new vs needs update
-    const newArticles: {
-      title: string;
-      link: string;
-      content: string | null | undefined;
-      summary: string | null | undefined;
-      imageUrl: string | null | undefined;
-      pubDate: Date | null | undefined;
-      feedId: string;
-    }[] = [];
-    const updatePromises: Promise<unknown>[] = [];
-
-    for (const item of parsed.items) {
-      const link = item.link?.trim();
-      if (!link) continue;
-
-      const existing = existingMap.get(link);
-      if (existing) {
-        if (needsUpdate(existing, item)) {
-          updatePromises.push(
-            prisma.article.update({
-              where: { id: existing.id },
-              data: {
-                title: item.title,
-                content: item.content,
-                summary: item.summary,
-                imageUrl: item.imageUrl ?? null,
-                pubDate: item.pubDate,
-              },
-            })
-          );
-        }
-      } else {
-        newArticles.push({
-          title: item.title,
-          link,
-          content: item.content,
-          summary: item.summary,
-          imageUrl: item.imageUrl,
-          pubDate: item.pubDate,
-          feedId,
-        });
-      }
-    }
-
-    // Batch create new articles
-    if (newArticles.length > 0) {
-      try {
-        await prisma.article.createMany({
-          data: newArticles,
-        });
-      } catch (error) {
-        // Handle duplicate key errors gracefully (concurrent refresh scenario)
-        // SQLite returns SQLITE_CONSTRAINT for duplicates
-        if (
-          error instanceof Error &&
-          error.message.includes("UNIQUE constraint failed")
-        ) {
-          console.log(`Some articles already exist, skipping duplicates`);
-        } else {
-          throw error;
-        }
-      }
-    }
-
-    // Parallel execute updates
-    await Promise.all(updatePromises);
-
-    const newCount = newArticles.length;
-    const updatedCount = updatePromises.length;
-
-    if (newCount > 0 || updatedCount > 0) {
-      console.log(`Refreshed feed ${feed.title}: ${newCount} new, ${updatedCount} updated`);
-    }
-
-    return {
-      success: true,
-      newCount,
-      updatedCount,
-      total: parsed.items.length,
-    };
-  } catch (error) {
-    console.error(`Failed to refresh feed ${feedId}:`, error);
-    return {
-      success: false,
-      newCount: 0,
-      updatedCount: 0,
-      total: 0,
-      error: error instanceof Error ? error.message : "Failed to refresh feed",
-    };
-  } finally {
-    // Release database lock and global counter
-    globalConcurrentRefreshes--;
-    await prisma.feed.update({
-      where: { id: feedId },
-      data: { refreshingAt: null },
-    }).catch(() => {
-      // Ignore error if feed was deleted
-    });
-  }
+  feedRefreshLocks.set(feedId, refreshPromise);
+  return refreshPromise;
 }
 
 /**

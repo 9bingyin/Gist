@@ -13,7 +13,12 @@ import { formatAiError } from "@/lib/ai-translate";
 
 export const maxDuration = 60;
 
+// In-flight request tracking to prevent duplicate AI calls
+const inFlightSummarizeRequests = new Set<string>();
+
 export async function POST(request: NextRequest) {
+  let requestKey: string | null = null;
+
   try {
     const body = await request.json();
     const { articleId, content, title, isReadability } = body;
@@ -85,6 +90,18 @@ export async function POST(request: NextRequest) {
       if (cached) {
         return NextResponse.json({ ...cached, cached: true });
       }
+    }
+
+    // Check for duplicate in-flight request
+    requestKey = articleId ? `${articleId}-${cacheType}-${language}` : null;
+    if (requestKey) {
+      if (inFlightSummarizeRequests.has(requestKey)) {
+        return NextResponse.json(
+          { error: "Request already in progress", retry: true },
+          { status: 429 },
+        );
+      }
+      inFlightSummarizeRequests.add(requestKey);
     }
 
     if (!apiKey) {
@@ -180,11 +197,19 @@ export async function POST(request: NextRequest) {
         if (articleId && text) {
           await setAiCache(articleId, cacheType, language, { summary: text });
         }
+        // Clean up in-flight tracking
+        if (requestKey) {
+          inFlightSummarizeRequests.delete(requestKey);
+        }
       },
     });
 
     return result.toTextStreamResponse();
   } catch (error) {
+    // Clean up in-flight tracking on error
+    if (requestKey) {
+      inFlightSummarizeRequests.delete(requestKey);
+    }
     console.error("AI summarize error:", error);
     return NextResponse.json({ error: formatAiError(error) }, { status: 500 });
   }

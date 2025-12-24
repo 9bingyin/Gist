@@ -4,12 +4,32 @@ import { Readability } from "@mozilla/readability";
 import { prisma } from "@/lib/db";
 import { getUserAgent } from "@/lib/settings";
 
+// Track in-flight readability requests
+const inFlightReadability = new Map<string, Promise<NextResponse>>();
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
 
+  // Check for existing in-flight request
+  const existingRequest = inFlightReadability.get(id);
+  if (existingRequest) {
+    return existingRequest;
+  }
+
+  const responsePromise = processReadability(id);
+  inFlightReadability.set(id, responsePromise);
+
+  try {
+    return await responsePromise;
+  } finally {
+    inFlightReadability.delete(id);
+  }
+}
+
+async function processReadability(id: string): Promise<NextResponse> {
   const article = await prisma.article.findUnique({
     where: { id },
   });
@@ -18,7 +38,7 @@ export async function POST(
     return NextResponse.json({ error: "Article not found" }, { status: 404 });
   }
 
-  // If already cached, return cached content
+  // Double-check cache (in case another request just finished)
   if (article.readabilityContent) {
     return NextResponse.json({
       content: article.readabilityContent,

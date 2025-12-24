@@ -4,6 +4,9 @@ import path from "path";
 const ICONS_DIR = path.join(process.cwd(), "data", "icons");
 const ICON_TIMEOUT = 10000;
 
+// Track in-flight icon downloads by hostname
+const inFlightIconDownloads = new Map<string, Promise<string | null>>();
+
 /**
  * Ensure icons directory exists
  */
@@ -62,11 +65,31 @@ export async function downloadAndSaveIcon(
   iconUrl: string,
   siteUrl: string,
 ): Promise<string | null> {
+  const hostname = getHostname(siteUrl);
+  if (!hostname) return null;
+
+  // Check for existing in-flight download for this hostname
+  const existingDownload = inFlightIconDownloads.get(hostname);
+  if (existingDownload) {
+    return existingDownload;
+  }
+
+  const downloadPromise = performIconDownload(iconUrl, hostname);
+  inFlightIconDownloads.set(hostname, downloadPromise);
+
+  try {
+    return await downloadPromise;
+  } finally {
+    inFlightIconDownloads.delete(hostname);
+  }
+}
+
+async function performIconDownload(
+  iconUrl: string,
+  hostname: string,
+): Promise<string | null> {
   try {
     await ensureIconsDir();
-
-    const hostname = getHostname(siteUrl);
-    if (!hostname) return null;
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), ICON_TIMEOUT);
@@ -85,8 +108,11 @@ export async function downloadAndSaveIcon(
     const extension = getExtension(contentType, iconUrl);
     const filename = `${hostname}.${extension}`;
     const filepath = path.join(ICONS_DIR, filename);
+    const tempPath = filepath + ".tmp";
 
-    await fs.writeFile(filepath, Buffer.from(buffer));
+    // Write to temp file first, then atomic rename
+    await fs.writeFile(tempPath, Buffer.from(buffer));
+    await fs.rename(tempPath, filepath);
 
     return filename;
   } catch {

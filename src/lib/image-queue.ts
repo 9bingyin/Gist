@@ -6,6 +6,7 @@ export class ImageQueueCancelledError extends Error {
 }
 
 interface QueueItem {
+  id: number;
   url: string;
   resolve: (blob: Blob) => void;
   reject: (error: Error) => void;
@@ -16,39 +17,89 @@ export interface FetchResult {
   cancel: () => void;
 }
 
+// Track shared URL requests with reference counting
+interface SharedRequest {
+  promise: Promise<Blob>;
+  refCount: number;
+  controller: AbortController;
+}
+
 class ImageQueue {
   private maxConcurrent = 4;
   private queue: QueueItem[] = [];
   private activeCount = 0;
-  private activeRequests = new Map<string, AbortController>();
+  private nextId = 0;
+  // Track active requests by unique ID
+  private activeRequests = new Map<number, AbortController>();
+  // Track shared URL requests for deduplication
+  private urlRequests = new Map<string, SharedRequest>();
 
   fetch(url: string): FetchResult {
+    // Check if there's already a request for this URL
+    const existing = this.urlRequests.get(url);
+    if (existing) {
+      existing.refCount++;
+      return {
+        promise: existing.promise,
+        cancel: () => {
+          existing.refCount--;
+          if (existing.refCount <= 0) {
+            this.cancelUrl(url);
+          }
+        },
+      };
+    }
+
+    const itemId = this.nextId++;
+    const controller = new AbortController();
     let queueItem: QueueItem | null = null;
 
     const promise = new Promise<Blob>((resolve, reject) => {
-      queueItem = { url, resolve, reject };
+      queueItem = { id: itemId, url, resolve, reject };
       this.queue.push(queueItem);
-      this.processQueue();
     });
 
+    // Create shared request entry BEFORE calling processQueue
+    const sharedRequest: SharedRequest = {
+      promise,
+      refCount: 1,
+      controller,
+    };
+    this.urlRequests.set(url, sharedRequest);
+
+    // Now process the queue
+    this.processQueue();
+
     const cancel = () => {
-      if (!queueItem) return;
-
-      // Try to remove from queue first
-      const index = this.queue.indexOf(queueItem);
-      if (index !== -1) {
-        this.queue.splice(index, 1);
-        return;
-      }
-
-      // If already in progress, abort it
-      const controller = this.activeRequests.get(url);
-      if (controller) {
-        controller.abort();
+      const shared = this.urlRequests.get(url);
+      if (shared) {
+        shared.refCount--;
+        if (shared.refCount <= 0) {
+          this.cancelUrl(url);
+        }
       }
     };
 
     return { promise, cancel };
+  }
+
+  private cancelUrl(url: string) {
+    const shared = this.urlRequests.get(url);
+    if (!shared) return;
+
+    // Remove from queue if still queued
+    const queueIndex = this.queue.findIndex((item) => item.url === url);
+    if (queueIndex !== -1) {
+      const item = this.queue[queueIndex];
+      this.queue.splice(queueIndex, 1);
+      item.reject(new ImageQueueCancelledError());
+      this.urlRequests.delete(url);
+      return;
+    }
+
+    // Abort if in progress
+    shared.controller.abort();
+    this.urlRequests.delete(url);
   }
 
   clear() {
@@ -63,6 +114,7 @@ class ImageQueue {
       controller.abort();
     }
     this.activeRequests.clear();
+    this.urlRequests.clear();
   }
 
   private processQueue() {
@@ -73,11 +125,17 @@ class ImageQueue {
     const item = this.queue.shift();
     if (!item) return;
 
-    this.activeCount++;
-    const controller = new AbortController();
-    this.activeRequests.set(item.url, controller);
+    const shared = this.urlRequests.get(item.url);
+    if (!shared) {
+      // Request was cancelled before processing, try next item
+      this.processQueue();
+      return;
+    }
 
-    fetch(item.url, { signal: controller.signal })
+    this.activeCount++;
+    this.activeRequests.set(item.id, shared.controller);
+
+    fetch(item.url, { signal: shared.controller.signal })
       .then((response) => {
         if (!response.ok) {
           throw new Error(`Failed to load image: ${response.status}`);
@@ -95,7 +153,8 @@ class ImageQueue {
         }
       })
       .finally(() => {
-        this.activeRequests.delete(item.url);
+        this.activeRequests.delete(item.id);
+        this.urlRequests.delete(item.url);
         this.activeCount--;
         this.processQueue();
       });

@@ -34,13 +34,20 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  for (const { key, value } of updates) {
-    await prisma.setting.upsert({
-      where: { key },
-      update: { value },
-      create: { key, value },
-    });
+  if (updates.length === 0) {
+    return NextResponse.json({ success: true });
   }
+
+  // Use transaction to ensure atomic update
+  await prisma.$transaction(
+    updates.map(({ key, value }) =>
+      prisma.setting.upsert({
+        where: { key },
+        update: { value },
+        create: { key, value },
+      })
+    )
+  );
 
   return NextResponse.json({ success: true });
 }
