@@ -24,6 +24,9 @@ export interface Feed {
   createdAt: string;
   updatedAt: string;
   folderId: string | null;
+  errorCount: number;
+  lastError: string | null;
+  errorAt: string | null;
   _count: {
     articles: number;
   };

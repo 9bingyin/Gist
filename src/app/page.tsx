@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -655,44 +656,62 @@ export default function Home() {
   // Mobile layout
   if (isMobile) {
     return (
-      <div className="h-screen flex flex-col">
-        {mobileView === "list" ? (
-          <>
-            <ArticleList
-              title={listTitle}
-              articles={articles}
-              selectedArticleId={selectedArticle?.id ?? null}
-              onSelectArticle={handleSelectArticle}
-              onRefresh={handleRefresh}
-              onMarkAllRead={handleMarkAllRead}
-              loading={isRefreshing || isFetching}
-              autoTranslate={autoTranslate}
-              targetLanguage={targetLanguage}
-              aiEnabled={aiEnabled}
-              showMenuButton
-              onMenuClick={() => setSidebarOpen(true)}
-              pendingCount={pendingCount}
-              onLoadNewArticles={handleLoadNewArticles}
-              unreadOnly={unreadOnly}
-              onToggleUnreadOnly={handleToggleUnreadOnly}
-            />
-            <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
-              <SheetContent side="left" className="w-[280px] p-0" hideCloseButton>
-                {sidebarContent}
-              </SheetContent>
-            </Sheet>
-          </>
-        ) : (
-          <ArticleDetail
-            article={selectedArticle}
-            onArticleUpdate={handleArticleUpdate}
-            onToggleStar={handleToggleStar}
-            autoTranslate={autoTranslate}
-            targetLanguage={targetLanguage}
-            aiEnabled={aiEnabled}
-            onBack={handleBackToList}
-          />
-        )}
+      <div className="h-screen flex flex-col overflow-hidden">
+        <AnimatePresence mode="popLayout" initial={false}>
+          {mobileView === "list" ? (
+            <motion.div
+              key="list"
+              initial={{ x: "-100%", opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: "-100%", opacity: 0 }}
+              transition={{ type: "spring", duration: 0.3, bounce: 0 }}
+              className="h-full"
+            >
+              <ArticleList
+                title={listTitle}
+                articles={articles}
+                selectedArticleId={selectedArticle?.id ?? null}
+                onSelectArticle={handleSelectArticle}
+                onRefresh={handleRefresh}
+                onMarkAllRead={handleMarkAllRead}
+                loading={isRefreshing || isFetching}
+                autoTranslate={autoTranslate}
+                targetLanguage={targetLanguage}
+                aiEnabled={aiEnabled}
+                showMenuButton
+                onMenuClick={() => setSidebarOpen(true)}
+                pendingCount={pendingCount}
+                onLoadNewArticles={handleLoadNewArticles}
+                unreadOnly={unreadOnly}
+                onToggleUnreadOnly={handleToggleUnreadOnly}
+              />
+            </motion.div>
+          ) : (
+            <motion.div
+              key="detail"
+              initial={{ x: "100%", opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: "100%", opacity: 0 }}
+              transition={{ type: "spring", duration: 0.3, bounce: 0 }}
+              className="h-full"
+            >
+              <ArticleDetail
+                article={selectedArticle}
+                onArticleUpdate={handleArticleUpdate}
+                onToggleStar={handleToggleStar}
+                autoTranslate={autoTranslate}
+                targetLanguage={targetLanguage}
+                aiEnabled={aiEnabled}
+                onBack={handleBackToList}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+        <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
+          <SheetContent side="left" className="w-[280px] p-0" hideCloseButton>
+            {sidebarContent}
+          </SheetContent>
+        </Sheet>
       </div>
     );
   }

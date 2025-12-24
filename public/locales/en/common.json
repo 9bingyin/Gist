@@ -247,6 +247,9 @@
     "sort_date": "Sort by date",
     "uncategorized": "Uncategorized"
   },
+  "feed": {
+    "error_since": "Error since"
+  },
   "nav": {
     "articles": "Articles",
     "all_articles": "All Articles",

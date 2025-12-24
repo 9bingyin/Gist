@@ -239,6 +239,7 @@ export async function refreshFeed(feedId: string): Promise<RefreshResult> {
           lastFetchedAt: new Date(),
           errorCount: 0,
           lastError: null,
+          errorAt: null,
         },
       });
 
@@ -258,6 +259,7 @@ export async function refreshFeed(feedId: string): Promise<RefreshResult> {
         data: {
           errorCount: { increment: 1 },
           lastError: errorMessage,
+          errorAt: new Date(),
         },
       }).catch(() => {});
 

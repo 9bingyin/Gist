@@ -24,6 +24,7 @@ import {
   BellIcon,
   TagIcon,
   StarIcon,
+  CircleXIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -39,6 +40,7 @@ import {
 import { AddFeedDialog } from "@/components/add-feed-dialog";
 import { AddFolderDialog } from "@/components/add-folder-dialog";
 import { SettingsDialog } from "@/components/settings-dialog";
+import { ErrorTooltip } from "@/components/ui/error-tooltip";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
 import type { Feed, Folder, ContentType } from "@/lib/types";
@@ -620,16 +622,18 @@ function FeedItem({
   onChangeType,
 }: FeedItemProps) {
   const { t } = useTranslation();
+  const hasError = !!(feed.errorAt && feed.lastError);
 
   return (
     <div className="group relative">
       <button
         onClick={onSelect}
         className={cn(
-          "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
+          "flex w-full items-center gap-2 rounded-md px-2 py-1.5 pr-8 text-sm transition-colors",
           isSelected
             ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
             : "text-muted-foreground hover:bg-sidebar-accent/50 hover:text-foreground",
+          hasError && "text-red-500",
         )}
       >
         {feed.imageUrl ? (
@@ -642,6 +646,11 @@ function FeedItem({
           <RssIcon className="size-3.5 shrink-0" />
         )}
         <span className="truncate">{feed.title}</span>
+        {hasError && (
+          <ErrorTooltip errorAt={feed.errorAt} errorMessage={feed.lastError}>
+            <CircleXIcon className="size-3.5 shrink-0 text-red-500" />
+          </ErrorTooltip>
+        )}
         {feed._count.articles > 0 && (
           <span className="ml-auto text-xs opacity-70 transition-opacity duration-200 group-hover:opacity-0 group-has-[[data-state=open]]:opacity-0">
             {feed._count.articles}

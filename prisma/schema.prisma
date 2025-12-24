@@ -29,6 +29,7 @@ model Feed {
   lastFetchedAt DateTime?
   errorCount    Int       @default(0)
   lastError     String?
+  errorAt       DateTime?
   articles      Article[]
   folderId      String?
   folder        Folder?   @relation(fields: [folderId], references: [id], onDelete: SetNull)
