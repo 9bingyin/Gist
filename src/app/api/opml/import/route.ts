@@ -90,12 +90,15 @@ async function processImport(taskId: string, items: OpmlItem[]) {
     try {
       // Create folder if needed
       let folderId: string | null = null;
+      let folderType: string = "article";
       if (item.folder) {
         const existingFolder = await prisma.folder.findFirst({
           where: { name: item.folder },
+          select: { id: true, type: true },
         });
         if (existingFolder) {
           folderId = existingFolder.id;
+          folderType = existingFolder.type;
         } else {
           const newFolder = await prisma.folder.create({
             data: { name: item.folder },
@@ -146,6 +149,7 @@ async function processImport(taskId: string, items: OpmlItem[]) {
             siteUrl: feedData.link || item.htmlUrl,
             description: feedData.description,
             folderId,
+            type: folderType,
             articles: {
               create: articles.map((article) => ({
                 title: article.title,
@@ -179,6 +183,7 @@ async function processImport(taskId: string, items: OpmlItem[]) {
             url: item.xmlUrl,
             siteUrl: item.htmlUrl,
             folderId,
+            type: folderType,
           },
         });
         imported++;
