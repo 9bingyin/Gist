@@ -36,6 +36,7 @@ export default function Home() {
 
   const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isFetching, setIsFetching] = useState(false);
   const [defaultLayout, setDefaultLayout] = useState<Layout | undefined>(
     undefined,
   );
@@ -114,6 +115,7 @@ export default function Home() {
       // Don't clear articles immediately - keep showing old data until new data arrives
       // This prevents "no articles" flash during fast folder switching
 
+      setIsFetching(true);
       try {
         let url = "/api/articles";
         const params = new URLSearchParams();
@@ -157,6 +159,10 @@ export default function Home() {
           return;
         }
         console.error("Failed to fetch articles:", error);
+      } finally {
+        if (currentVersion === fetchArticlesVersionRef.current) {
+          setIsFetching(false);
+        }
       }
     },
     [],
@@ -169,6 +175,7 @@ export default function Home() {
   }, [fetchFeeds, fetchFolders, fetchArticles, selectedContentType]);
 
   const handleSelectFeed = (feedId: string | null) => {
+    setArticles([]);
     setIsStarredView(false);
     setSelectedFeedId(feedId);
     setSelectedFolderId(null);
@@ -176,6 +183,7 @@ export default function Home() {
   };
 
   const handleSelectFolder = (folderId: string) => {
+    setArticles([]);
     setIsStarredView(false);
     setSelectedFolderId(folderId);
     setSelectedFeedId(null);
@@ -183,6 +191,7 @@ export default function Home() {
   };
 
   const handleSelectStarred = useCallback(() => {
+    setArticles([]);
     setIsStarredView(true);
     setSelectedFeedId(null);
     setSelectedFolderId(null);
@@ -534,6 +543,7 @@ export default function Home() {
         setSidebarOpen(false);
       }}
       onSelectContentType={(type) => {
+        setArticles([]);
         setIsStarredView(false);
         setSelectedContentType(type);
         setSelectedFeedId(null);
@@ -571,7 +581,7 @@ export default function Home() {
               onSelectArticle={handleSelectArticle}
               onRefresh={handleRefresh}
               onMarkAllRead={handleMarkAllRead}
-              loading={isRefreshing}
+              loading={isRefreshing || isFetching}
               autoTranslate={autoTranslate}
               targetLanguage={targetLanguage}
               aiEnabled={aiEnabled}
@@ -631,7 +641,7 @@ export default function Home() {
           onSelectArticle={handleSelectArticle}
           onRefresh={handleRefresh}
           onMarkAllRead={handleMarkAllRead}
-          loading={isRefreshing}
+          loading={isRefreshing || isFetching}
           autoTranslate={autoTranslate}
           targetLanguage={targetLanguage}
           aiEnabled={aiEnabled}

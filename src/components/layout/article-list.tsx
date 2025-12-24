@@ -5,6 +5,7 @@ import { RefreshCwIcon, CheckCircleIcon, MenuIcon } from "lucide-react";
 import striptags from "striptags";
 import { Button } from "@/components/ui/button";
 import { LazyImage } from "@/components/ui/lazy-image";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { needsTranslation } from "@/lib/language-detect";
 import { useTranslation } from "react-i18next";
@@ -418,10 +419,24 @@ export function ArticleList({
       </div>
       <div ref={containerRef} className="flex-1 overflow-y-auto">
         {articles.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center p-8 text-center text-muted-foreground gap-2">
-            <p>{t("articles.empty.title")}</p>
-            <p className="text-xs">{t("articles.empty.subtitle")}</p>
-          </div>
+          loading ? (
+            <div className="p-4 space-y-4">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="flex gap-3">
+                  <Skeleton className="h-5 w-5 rounded-sm" />
+                  <div className="flex-1 space-y-2">
+                    <Skeleton className="h-4 w-3/4" />
+                    <Skeleton className="h-3 w-1/2" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="flex h-full flex-col items-center justify-center p-8 text-center text-muted-foreground gap-2">
+              <p>{t("articles.empty.title")}</p>
+              <p className="text-xs">{t("articles.empty.subtitle")}</p>
+            </div>
+          )
         ) : (
           <div className="pb-4">
             {Array.from(groupedArticles.entries()).map(
