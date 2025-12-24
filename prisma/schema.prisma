@@ -8,7 +8,7 @@ datasource db {
 
 model Folder {
   id        String   @id @default(cuid())
-  name      String
+  name      String   @unique
   type      String   @default("article")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
