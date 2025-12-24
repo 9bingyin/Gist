@@ -158,6 +158,7 @@ export async function refreshFeed(feedId: string): Promise<RefreshResult> {
       const newArticles: {
         title: string;
         link: string;
+        guid: string | undefined;
         content: string | null | undefined;
         summary: string | null | undefined;
         imageUrl: string | null | undefined;
@@ -190,6 +191,7 @@ export async function refreshFeed(feedId: string): Promise<RefreshResult> {
           newArticles.push({
             title: item.title,
             link,
+            guid: item.guid,
             content: item.content,
             summary: item.summary,
             imageUrl: item.imageUrl,
@@ -230,6 +232,16 @@ export async function refreshFeed(feedId: string): Promise<RefreshResult> {
         articleEvents.notifyUpdate(feedId, newCount, updatedCount);
       }
 
+      // Update success status
+      await prisma.feed.update({
+        where: { id: feedId },
+        data: {
+          lastFetchedAt: new Date(),
+          errorCount: 0,
+          lastError: null,
+        },
+      });
+
       return {
         success: true,
         newCount,
@@ -238,12 +250,23 @@ export async function refreshFeed(feedId: string): Promise<RefreshResult> {
       };
     } catch (error) {
       console.error(`Failed to refresh feed ${feedId}:`, error);
+      const errorMessage = error instanceof Error ? error.message : "Failed to refresh feed";
+
+      // Update error status
+      await prisma.feed.update({
+        where: { id: feedId },
+        data: {
+          errorCount: { increment: 1 },
+          lastError: errorMessage,
+        },
+      }).catch(() => {});
+
       return {
         success: false,
         newCount: 0,
         updatedCount: 0,
         total: 0,
-        error: error instanceof Error ? error.message : "Failed to refresh feed",
+        error: errorMessage,
       };
     } finally {
       // Release database lock and global counter

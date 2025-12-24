@@ -10,6 +10,7 @@
     "ai": "AI",
     "data": "数据",
     "debug": "高级",
+    "security": "安全",
     "about": "关于"
   },
   "app": {
@@ -304,5 +305,38 @@
     "picture": "图片",
     "notification": "通知",
     "select_type": "类型"
+  },
+  "auth": {
+    "login": "登录",
+    "logout": "退出登录",
+    "register": "创建账号",
+    "username": "用户名",
+    "email": "邮箱",
+    "password": "密码",
+    "confirm_password": "确认密码",
+    "identifier": "用户名或邮箱",
+    "login_description": "登录以继续使用",
+    "invalid_credentials": "用户名/邮箱或密码错误",
+    "register_failed": "创建账号失败",
+    "password_mismatch": "两次密码输入不一致"
+  },
+  "setup": {
+    "title": "欢迎使用 {{name}}",
+    "description": "创建你的账号以开始使用",
+    "create_account": "创建账号"
+  },
+  "security": {
+    "title": "安全",
+    "description": "管理你的账号安全设置",
+    "account_info": "账号信息",
+    "created_at": "创建时间",
+    "change_password": "修改密码",
+    "change_password_desc": "定期更换密码以保护账号安全",
+    "current_password": "当前密码",
+    "new_password": "新密码",
+    "confirm_new_password": "确认新密码",
+    "password_changed": "密码修改成功",
+    "password_change_failed": "密码修改失败",
+    "logout_desc": "退出当前账号，需要重新登录"
   }
 }

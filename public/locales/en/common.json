@@ -10,6 +10,7 @@
     "ai": "AI",
     "data": "Data",
     "debug": "Advanced",
+    "security": "Security",
     "about": "About"
   },
   "app": {
@@ -304,5 +305,38 @@
     "picture": "Pictures",
     "notification": "Notifications",
     "select_type": "Type"
+  },
+  "auth": {
+    "login": "Login",
+    "logout": "Logout",
+    "register": "Register",
+    "username": "Username",
+    "email": "Email",
+    "password": "Password",
+    "confirm_password": "Confirm Password",
+    "identifier": "Username or Email",
+    "login_description": "Sign in to continue",
+    "invalid_credentials": "Invalid username/email or password",
+    "register_failed": "Failed to create account",
+    "password_mismatch": "Passwords do not match"
+  },
+  "setup": {
+    "title": "Welcome to {{name}}",
+    "description": "Create your account to get started",
+    "create_account": "Create Account"
+  },
+  "security": {
+    "title": "Security",
+    "description": "Manage your account security settings",
+    "account_info": "Account Information",
+    "created_at": "Created At",
+    "change_password": "Change Password",
+    "change_password_desc": "Change your password regularly to keep your account secure",
+    "current_password": "Current Password",
+    "new_password": "New Password",
+    "confirm_new_password": "Confirm New Password",
+    "password_changed": "Password changed successfully",
+    "password_change_failed": "Failed to change password",
+    "logout_desc": "Sign out of your account"
   }
 }

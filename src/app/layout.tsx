@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
+import { AuthProvider } from "@/components/auth-provider";
 import { APP_NAME } from "@/lib/constants";
 import "./globals.css";
 import { I18nProvider } from "@/components/i18n-provider";
@@ -58,7 +59,9 @@ export default function RootLayout({
       >
         <I18nProvider>
           <ImageAbortProvider>
-            <ThemeProvider>{children}</ThemeProvider>
+            <ThemeProvider>
+              <AuthProvider>{children}</AuthProvider>
+            </ThemeProvider>
           </ImageAbortProvider>
         </I18nProvider>
       </body>

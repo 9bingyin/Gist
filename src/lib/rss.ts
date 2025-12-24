@@ -14,6 +14,7 @@ export interface ParsedFeed {
 export interface ParsedArticle {
   title: string;
   link?: string;
+  guid?: string;
   content?: string;
   summary?: string;
   pubDate?: Date;
@@ -107,11 +108,13 @@ type RssItem = {
   "content:encoded"?: string;
   title?: string;
   link?: string;
+  guid?: string;
+  id?: string;
   contentSnippet?: string;
   summary?: string;
   pubDate?: string;
-  isoDate?: string; // rss-parser converts Atom's updated/published to isoDate
-  contentType?: ContentType; // SEC EDGAR custom field
+  isoDate?: string;
+  contentType?: ContentType;
 };
 
 async function fetchFeedWithUA(url: string, userAgent: string) {
@@ -186,6 +189,7 @@ export async function parseFeed(url: string): Promise<ParsedFeed> {
     return {
       title: rssItem.title || "Untitled",
       link,
+      guid: rssItem.guid || rssItem.id || link,
       content: htmlContent,
       summary: rssItem.contentSnippet,
       pubDate,

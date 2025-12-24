@@ -28,6 +28,8 @@ import {
   StopCircleIcon,
   AlertCircleIcon,
   SparklesIcon,
+  ShieldIcon,
+  LogOutIcon,
 } from "lucide-react";
 import {
   Dialog,
@@ -76,6 +78,7 @@ type SettingsTab =
   | "general"
   | "data"
   | "debug"
+  | "security"
   | "about";
 
 interface SettingsDialogProps {
@@ -226,6 +229,11 @@ export function SettingsDialog({
         id: "debug",
         label: t("menu.debug"),
         icon: <BugIcon className="size-4" />,
+      },
+      {
+        id: "security",
+        label: t("menu.security"),
+        icon: <ShieldIcon className="size-4" />,
       },
       {
         id: "about",
@@ -398,6 +406,7 @@ export function SettingsDialog({
                 />
               )}
               {activeTab === "debug" && <DebugSettings onSettingsChange={onDataChange} />}
+              {activeTab === "security" && <SecuritySettings onClose={() => setOpen(false)} />}
               {activeTab === "about" && <AboutSettings />}
             </div>
           </div>
@@ -2628,6 +2637,193 @@ function AboutSettings() {
             {t("app.description")}
           </p>
         </div>
+      </div>
+    </div>
+  );
+}
+
+interface SecuritySettingsProps {
+  onClose: () => void;
+}
+
+function SecuritySettings({ onClose }: SecuritySettingsProps) {
+  const { t } = useTranslation();
+  const [user, setUser] = useState<{
+    username: string;
+    email: string;
+    createdAt: string;
+  } | null>(null);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  useEffect(() => {
+    const fetchUser = async () => {
+      try {
+        const res = await fetch("/api/auth/status");
+        const data = await res.json();
+        if (data.user) {
+          setUser(data.user);
+        }
+      } catch (err) {
+        console.error("Failed to fetch user:", err);
+      }
+    };
+    fetchUser();
+  }, []);
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setSuccess("");
+
+    if (newPassword !== confirmPassword) {
+      setError(t("auth.password_mismatch"));
+      return;
+    }
+
+    setIsChangingPassword(true);
+    try {
+      const res = await fetch("/api/auth/password", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || t("security.password_change_failed"));
+        return;
+      }
+
+      setSuccess(t("security.password_changed"));
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch {
+      setError(t("security.password_change_failed"));
+    } finally {
+      setIsChangingPassword(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    setIsLoggingOut(true);
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+      onClose();
+      window.location.href = "/login";
+    } catch (err) {
+      console.error("Logout failed:", err);
+      setIsLoggingOut(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-500">
+      <div>
+        <h3 className="text-lg font-semibold tracking-tight">
+          {t("security.title")}
+        </h3>
+        <p className="text-[13px] text-muted-foreground mt-1">
+          {t("security.description")}
+        </p>
+      </div>
+
+      {user && (
+        <div className="rounded-xl border border-muted/40 p-4 bg-card">
+          <h4 className="font-semibold text-sm mb-3">{t("security.account_info")}</h4>
+          <div className="space-y-2 text-sm">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">{t("auth.username")}</span>
+              <span className="font-medium">{user.username}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">{t("auth.email")}</span>
+              <span className="font-medium">{user.email}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">{t("security.created_at")}</span>
+              <span className="font-medium">
+                {new Date(user.createdAt).toLocaleDateString()}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="rounded-xl border border-muted/40 p-4 bg-card">
+        <h4 className="font-semibold text-sm mb-1">{t("security.change_password")}</h4>
+        <p className="text-[11px] text-muted-foreground mb-4">
+          {t("security.change_password_desc")}
+        </p>
+
+        <form onSubmit={handleChangePassword} className="space-y-3">
+          <Input
+            type="password"
+            placeholder={t("security.current_password")}
+            value={currentPassword}
+            onChange={(e) => setCurrentPassword(e.target.value)}
+            required
+            autoComplete="current-password"
+          />
+          <Input
+            type="password"
+            placeholder={t("security.new_password")}
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            required
+            minLength={8}
+            autoComplete="new-password"
+          />
+          <Input
+            type="password"
+            placeholder={t("security.confirm_new_password")}
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            required
+            minLength={8}
+            autoComplete="new-password"
+          />
+
+          {error && <p className="text-destructive text-sm">{error}</p>}
+          {success && <p className="text-green-600 text-sm">{success}</p>}
+
+          <Button
+            type="submit"
+            disabled={isChangingPassword}
+            className="w-full"
+          >
+            {isChangingPassword && (
+              <LoaderIcon className="mr-2 size-4 animate-spin" />
+            )}
+            {t("security.change_password")}
+          </Button>
+        </form>
+      </div>
+
+      <div className="rounded-xl border border-destructive/40 p-4 bg-card">
+        <h4 className="font-semibold text-sm mb-1">{t("auth.logout")}</h4>
+        <p className="text-[11px] text-muted-foreground mb-4">
+          {t("security.logout_desc")}
+        </p>
+        <Button
+          variant="destructive"
+          onClick={handleLogout}
+          disabled={isLoggingOut}
+          className="w-full"
+        >
+          {isLoggingOut && (
+            <LoaderIcon className="mr-2 size-4 animate-spin" />
+          )}
+          <LogOutIcon className="mr-2 size-4" />
+          {t("auth.logout")}
+        </Button>
       </div>
     </div>
   );

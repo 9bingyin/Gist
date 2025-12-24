@@ -7,7 +7,8 @@
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
-    "generate-icons": "bun run scripts/generate-icons.ts"
+    "generate-icons": "bun run scripts/generate-icons.ts",
+    "reset-password": "bun run scripts/reset-password.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^2.0.56",
@@ -35,6 +36,7 @@
     "@serwist/next": "^9.2.3",
     "@tailwindcss/typography": "^0.5.19",
     "ai": "^5.0.115",
+    "bcryptjs": "^3.0.3",
     "better-sqlite3": "^12.5.0",
     "cheerio": "^1.1.2",
     "class-variance-authority": "^0.7.1",
@@ -72,6 +74,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/bcryptjs": "^3.0.0",
     "@types/better-sqlite3": "^7.6.13",
     "@types/dompurify": "^3.2.0",
     "@types/he": "^1.2.3",

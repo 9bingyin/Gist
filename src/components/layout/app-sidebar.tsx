@@ -128,9 +128,9 @@ export function AppSidebar({
   }, [orderIndex, selectedContentType]);
 
   useEffect(() => {
-    fetch("/api/settings")
+    fetch("/api/auth/status")
       .then((res) => res.json())
-      .then((settings) => setEmail(settings.email || ""))
+      .then((data) => setEmail(data.user?.email || ""))
       .catch(() => {});
   }, []);
 

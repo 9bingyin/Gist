@@ -16,27 +16,32 @@ model Folder {
 }
 
 model Feed {
-  id          String    @id @default(cuid())
-  title       String
-  url         String    @unique
-  siteUrl     String?
-  description String?
-  imageUrl    String?
-  type         String    @default("article")
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  refreshingAt DateTime?
-  articles     Article[]
-  folderId     String?
-  folder      Folder?   @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  id            String    @id @default(cuid())
+  title         String
+  url           String    @unique
+  siteUrl       String?
+  description   String?
+  imageUrl      String?
+  type          String    @default("article")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  refreshingAt  DateTime?
+  lastFetchedAt DateTime?
+  errorCount    Int       @default(0)
+  lastError     String?
+  articles      Article[]
+  folderId      String?
+  folder        Folder?   @relation(fields: [folderId], references: [id], onDelete: SetNull)
 
   @@index([folderId])
+  @@index([type])
 }
 
 model Article {
   id                 String    @id @default(cuid())
   title              String
   link               String
+  guid               String?
   content            String?
   readabilityContent String?
   summary            String?
@@ -47,11 +52,15 @@ model Article {
   feedId             String
   feed               Feed      @relation(fields: [feedId], references: [id], onDelete: Cascade)
   createdAt          DateTime  @default(now())
+  aiCaches           AiCache[]
 
   @@unique([feedId, link])
   @@index([feedId])
   @@index([pubDate])
   @@index([isStarred])
+  @@index([isRead])
+  @@index([feedId, isRead])
+  @@index([feedId, pubDate])
 }
 
 model Setting {
@@ -63,11 +72,21 @@ model Setting {
 model AiCache {
   id        String   @id @default(cuid())
   articleId String
-  type      String   // translate, translate-lite, summarize
-  language  String   // target language
-  result    String   // JSON string of cached result
+  article   Article  @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  type      String
+  language  String
+  result    String
   createdAt DateTime @default(now())
 
   @@unique([articleId, type, language])
   @@index([articleId])
+}
+
+model User {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }

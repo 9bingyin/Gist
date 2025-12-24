@@ -16,6 +16,7 @@ import type { Feed, Article, Folder, ContentType } from "@/lib/types";
 import { useTranslation } from "react-i18next";
 import { useImageAbort } from "@/lib/contexts/image-abort-context";
 import { useArticleUpdates, type ArticleUpdateEvent } from "@/hooks/use-article-updates";
+import { useAuth } from "@/components/auth-provider";
 
 const LAYOUT_STORAGE_KEY = "rss-reader-layout";
 
@@ -55,6 +56,7 @@ export default function Home() {
   const [unreadOnly, setUnreadOnly] = useState(false);
   const isMobile = useIsMobile();
   const { abortAll: abortAllImages } = useImageAbort();
+  const { user, loading: authLoading } = useAuth();
 
   useEffect(() => {
     const saved = localStorage.getItem(LAYOUT_STORAGE_KEY);
@@ -644,6 +646,11 @@ export default function Home() {
       onDataChange={handleDataChange}
     />
   );
+
+  // Show nothing while checking auth (AuthProvider handles redirects)
+  if (authLoading || !user) {
+    return null;
+  }
 
   // Mobile layout
   if (isMobile) {
