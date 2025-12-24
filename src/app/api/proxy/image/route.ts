@@ -50,6 +50,7 @@ export async function GET(request: NextRequest) {
       headers: {
         "User-Agent": userAgent,
         Accept: "image/*",
+        Referer: parsedUrl.origin,
       },
     });
     clearTimeout(timeoutId);
