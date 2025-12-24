@@ -512,14 +512,16 @@ export function ArticleDetail({
 
   // Track if there was selection before mousedown
   const hadSelectionOnMouseDown = useRef(false);
+  const mouseDownPos = useRef<{ x: number; y: number } | null>(null);
 
-  const handleMouseDown = useCallback(() => {
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
     const selection = window.getSelection();
     hadSelectionOnMouseDown.current = !!(
       selection &&
       !selection.isCollapsed &&
       selection.toString().trim()
     );
+    mouseDownPos.current = { x: e.clientX, y: e.clientY };
   }, []);
 
   const handleClick = useCallback((e: React.MouseEvent) => {
@@ -528,6 +530,14 @@ export function ArticleDetail({
 
     // Double/triple click: let browser handle native selection
     if (e.detail > 1) return;
+
+    // Check for drag
+    if (mouseDownPos.current) {
+      const dx = Math.abs(e.clientX - mouseDownPos.current.x);
+      const dy = Math.abs(e.clientY - mouseDownPos.current.y);
+      // If moved significantly, consider it a drag/select operation
+      if (dx > 5 || dy > 5) return;
+    }
 
     // Only clear if there was selection before mousedown
     // This prevents clearing drag-to-select

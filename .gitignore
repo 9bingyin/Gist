@@ -58,6 +58,7 @@ next-env.d.ts
 # AI assistants config
 .mcp.json
 .claude/
+.gemini/
 .gemini-clipboard/
 
 # PWA
@@ -67,3 +68,5 @@ public/workbox-*.js
 public/workbox-*.js.map
 public/swe-worker-*.js
 public/swe-worker-*.js.map
+
+TODO.md
