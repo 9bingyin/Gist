@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useCallback, memo } from "react";
-import { RefreshCwIcon, CheckCircleIcon, MenuIcon } from "lucide-react";
+import { RefreshCwIcon, CheckCircleIcon, MenuIcon, ArrowUpIcon } from "lucide-react";
 import striptags from "striptags";
 import { Button } from "@/components/ui/button";
 import { LazyImage } from "@/components/ui/lazy-image";
@@ -26,6 +26,8 @@ interface ArticleListProps {
   aiEnabled?: boolean;
   showMenuButton?: boolean;
   onMenuClick?: () => void;
+  pendingCount?: number;
+  onLoadNewArticles?: () => void;
 }
 
 interface ArticleListItemProps {
@@ -145,6 +147,8 @@ export function ArticleList({
   aiEnabled = true,
   showMenuButton,
   onMenuClick,
+  pendingCount = 0,
+  onLoadNewArticles,
 }: ArticleListProps) {
   const { t, i18n } = useTranslation();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -417,6 +421,18 @@ export function ArticleList({
           </Button>
         </div>
       </div>
+      {pendingCount > 0 && onLoadNewArticles && (
+        <button
+          onClick={() => {
+            onLoadNewArticles();
+            containerRef.current?.scrollTo({ top: 0 });
+          }}
+          className="shrink-0 w-full bg-primary/10 hover:bg-primary/20 text-primary py-2 px-4 flex items-center justify-center gap-2 text-sm font-medium transition-colors"
+        >
+          <ArrowUpIcon className="h-4 w-4" />
+          {t("articles.new_articles", { count: pendingCount })}
+        </button>
+      )}
       <div ref={containerRef} className="flex-1 overflow-y-auto">
         {articles.length === 0 ? (
           loading ? (

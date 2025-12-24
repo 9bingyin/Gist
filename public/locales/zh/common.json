@@ -294,7 +294,8 @@
     "empty": {
       "title": "暂无文章",
       "subtitle": "添加订阅源以开始阅读"
-    }
+    },
+    "new_articles": "{{count}} 篇新文章"
   },
   "content_type": {
     "article": "文章",

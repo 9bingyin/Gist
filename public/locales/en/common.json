@@ -294,7 +294,8 @@
     "empty": {
       "title": "No articles yet",
       "subtitle": "Add a feed to start reading"
-    }
+    },
+    "new_articles": "{{count}} new article(s)"
   },
   "content_type": {
     "article": "Articles",

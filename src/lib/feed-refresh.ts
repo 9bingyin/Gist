@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 import { parseFeed, type ParsedArticle } from "@/lib/rss";
 import { getFavicon } from "@/lib/favicon";
 import { iconFileExists } from "@/lib/icon-storage";
+import { articleEvents } from "@/lib/article-events";
 
 // Lock timeout: 5 minutes
 const REFRESH_LOCK_TIMEOUT_MS = 5 * 60 * 1000;
@@ -226,6 +227,7 @@ export async function refreshFeed(feedId: string): Promise<RefreshResult> {
 
       if (newCount > 0 || updatedCount > 0) {
         console.log(`Refreshed feed ${feed.title}: ${newCount} new, ${updatedCount} updated`);
+        articleEvents.notifyUpdate(feedId, newCount, updatedCount);
       }
 
       return {
