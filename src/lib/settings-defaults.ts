@@ -10,4 +10,8 @@ export const DEFAULT_SETTINGS: Record<string, string> = {
   aiThinkingEffort: "medium",
   aiAutoTranslate: "false",
   aiEnabled: "true",
+
+  // Reading Settings
+  alwaysReadability: "false",
+  alwaysSummary: "false",
 };

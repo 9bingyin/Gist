@@ -1,7 +1,66 @@
-- 这个项目使用 bun
+## 项目概述
 
-- 使用 shadcn MCP 搜索并自动为项目安装所需的组件
+Gist 是一个现代 RSS 阅读器应用，使用 Next.js 16 + React 19 + TypeScript 构建，支持 AI 翻译/总结、OPML 导入导出、后台自动刷新等功能。
 
-- 使用 sqlite3 工具查看数据库 dev.db
+## 开发命令
 
-- 不要将上游接口的错误翻译成我的语言再返回，而是原样返回防止用户困惑
+```bash
+# 安装依赖
+bun install
+
+# 开发服务器
+bun run dev
+
+# 生产构建和启动
+bun run build
+bun run start
+
+# 代码检查
+bun run lint
+
+# Prisma 数据库操作
+bunx prisma generate      # 生成客户端
+bunx prisma db push       # 推送 schema 到数据库
+bunx prisma studio        # 可视化数据库管理
+
+# 其他脚本
+bun run reset-password    # 重置用户密码
+bun run generate-icons    # 生成 PWA 图标
+```
+
+## 技术栈
+
+- **框架**: Next.js 16 (App Router) + React 19
+- **数据库**: SQLite (Better SQLite3) + Prisma 7 ORM
+- **UI**: Tailwind CSS 4 + shadcn/ui + Radix UI
+- **状态管理**: Zustand
+- **AI SDK**: Vercel AI SDK (支持 Anthropic、OpenAI、OpenRouter)
+- **国际化**: i18next + react-i18next
+- **PWA**: Serwist
+
+## 核心模块
+
+- **feed-refresh.ts**: 订阅源刷新逻辑，支持并发控制和锁机制，防止重复刷新
+- **ai-translate.ts**: 统一的 AI 翻译接口，支持多提供商（Anthropic/OpenAI/OpenRouter）、缓存和限流
+- **task-queue.ts**: 后台任务队列，支持 SSE 实时推送任务进度
+- **rss.ts**: RSS/Atom 解析，包含图片提取和编码处理
+
+## 数据库模型
+
+数据库文件为 `dev.db`（SQLite），使用 `sqlite3 dev.db` 查看。主要模型：
+
+- **User**: 用户认证
+- **Folder**: 文件夹（支持 article/image/notification 类型）
+- **Feed**: RSS 订阅源
+- **Article**: 文章
+- **Setting**: 应用设置（JSON 格式）
+- **AiCache**: AI 操作缓存
+
+## 开发规范
+
+- 使用 bun 而非 npm/yarn
+- 使用 shadcn MCP 搜索并安装 UI 组件
+- 上游接口的错误信息原样返回，不翻译
+- API 路由使用 Next.js App Router 格式
+- 数据库操作通过 Prisma ORM
+- 优先使用 LSP (Language Server Protocol) 工具进行代码导航、重构、类型检查等操作

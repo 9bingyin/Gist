@@ -30,7 +30,12 @@
     "language_desc": "选择界面语言或使用浏览器自动检测。",
     "language_auto": "自动（使用浏览器）",
     "language_en": "English",
-    "language_zh": "中文"
+    "language_zh": "中文",
+    "always_readability": "始终显示原文",
+    "always_readability_desc": "切换文章时自动获取并显示原文内容（Readability 模式）。",
+    "save": "保存",
+    "settings_saved": "设置已保存",
+    "settings_error": "保存设置失败"
   },
   "feeds": {
     "title": "订阅",
@@ -203,6 +208,8 @@
     "output_language_desc": "AI 应在响应中使用的语言。",
     "auto_translate": "自动翻译",
     "auto_translate_desc": "自动翻译非目标语言的文章。仅翻译可见内容以节省 tokens。",
+    "always_summary": "自动概况",
+    "always_summary_desc": "切换文章时自动生成 AI 概况。",
     "rate_limit": "速率限制 (QPS)",
     "rate_limit_desc": "每秒最大 AI 请求数。较低的值可防止 API 速率限制错误。",
     "requests_per_second": "请求/秒",

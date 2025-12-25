@@ -30,7 +30,12 @@
     "language_desc": "Select UI language or use browser auto-detection.",
     "language_auto": "Auto (Browser)",
     "language_en": "English",
-    "language_zh": "中文"
+    "language_zh": "中文",
+    "always_readability": "Always Show Original",
+    "always_readability_desc": "Automatically fetch and display original content (Readability mode) when switching articles.",
+    "save": "Save",
+    "settings_saved": "Settings saved",
+    "settings_error": "Failed to save settings"
   },
   "feeds": {
     "title": "Subscriptions",
@@ -203,6 +208,8 @@
     "output_language_desc": "The language AI should use in its responses.",
     "auto_translate": "Auto Translate",
     "auto_translate_desc": "Automatically translate non-target language articles. Only visible content will be translated to save tokens.",
+    "always_summary": "Auto Summary",
+    "always_summary_desc": "Automatically generate AI summary when switching articles.",
     "rate_limit": "Rate Limit (QPS)",
     "rate_limit_desc": "Maximum AI requests per second. Lower values prevent API rate limit errors.",
     "requests_per_second": "requests/second",
@@ -284,22 +291,29 @@
   "time": {
     "unknown": "Unknown",
     "just_now": "Just now",
-    "minutes_ago": "{{count}} minute(s) ago",
-    "hours_ago": "{{count}} hour(s) ago",
-    "days_ago": "{{count}} day(s) ago",
+    "minutes_ago_one": "{{count}} minute ago",
+    "minutes_ago_other": "{{count}} minutes ago",
+    "hours_ago_one": "{{count}} hour ago",
+    "hours_ago_other": "{{count}} hours ago",
+    "days_ago_one": "{{count}} day ago",
+    "days_ago_other": "{{count}} days ago",
     "yesterday": "Yesterday",
     "today": "Today",
     "tomorrow": "Tomorrow",
-    "in_minutes": "in {{count}} minute(s)",
-    "in_hours": "in {{count}} hour(s)",
-    "in_days": "in {{count}} day(s)"
+    "in_minutes_one": "in {{count}} minute",
+    "in_minutes_other": "in {{count}} minutes",
+    "in_hours_one": "in {{count}} hour",
+    "in_hours_other": "in {{count}} hours",
+    "in_days_one": "in {{count}} day",
+    "in_days_other": "in {{count}} days"
   },
   "articles": {
     "empty": {
       "title": "No articles yet",
       "subtitle": "Add a feed to start reading"
     },
-    "new_articles": "{{count}} new article(s)",
+    "new_articles_one": "{{count}} new article",
+    "new_articles_other": "{{count}} new articles",
     "show_all": "Show all",
     "show_unread_only": "Show unread only"
   },

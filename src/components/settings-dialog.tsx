@@ -369,7 +369,7 @@ export function SettingsDialog({
           {/* Content */}
           <div className="flex-1 overflow-y-auto p-4 md:p-6 scroll-smooth bg-background">
             <div className="max-w-3xl mx-auto">
-              {activeTab === "general" && <GeneralSettings />}
+              {activeTab === "general" && <GeneralSettings onSettingsChange={onDataChange} />}
               {activeTab === "feeds" && (
                 <FeedsSettings
                   feeds={feeds}
@@ -1088,7 +1088,11 @@ function FoldersSettings({
   );
 }
 
-function GeneralSettings() {
+interface GeneralSettingsProps {
+  onSettingsChange?: () => void;
+}
+
+function GeneralSettings({ onSettingsChange }: GeneralSettingsProps) {
   const { theme, setTheme } = useTheme();
   const { t } = useTranslation();
   const [lang, setLang] = useState<string>(() => {
@@ -1096,6 +1100,14 @@ function GeneralSettings() {
     const saved = localStorage.getItem("lang");
     return saved || "auto";
   });
+  const [alwaysReadability, setAlwaysReadability] = useState(false);
+  const [savedAlwaysReadability, setSavedAlwaysReadability] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1111,6 +1123,55 @@ function GeneralSettings() {
       import("@/i18n").then((i) => i.default.changeLanguage(lang));
     }
   }, [lang]);
+
+  // Load settings from server
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const res = await fetch("/api/settings");
+        if (!res.ok) throw new Error("Failed to fetch settings");
+        const settings = await res.json();
+
+        const readability = settings.alwaysReadability === "true";
+        setAlwaysReadability(readability);
+        setSavedAlwaysReadability(readability);
+      } catch (err) {
+        console.error("Failed to fetch general settings:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchSettings();
+  }, []);
+
+  // Save settings
+  const handleSave = async () => {
+    setSaving(true);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          alwaysReadability: alwaysReadability ? "true" : "false",
+        }),
+      });
+
+      if (!res.ok) throw new Error("Failed to save settings");
+
+      setSavedAlwaysReadability(alwaysReadability);
+      setMessage({ type: "success", text: t("general.settings_saved") });
+      onSettingsChange?.();
+    } catch (err) {
+      console.error("Failed to save general settings:", err);
+      setMessage({ type: "error", text: t("general.settings_error") });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const hasChanges = alwaysReadability !== savedAlwaysReadability;
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -1197,6 +1258,55 @@ function GeneralSettings() {
             </div>
           </div>
         </div>
+
+        {/* Always Readability */}
+        <div className="rounded-xl border border-muted/40 p-4 bg-card transition-all hover:border-muted-foreground/20">
+          <div className="flex items-center justify-between">
+            <div className="space-y-1">
+              <h4 className="font-semibold text-sm">
+                {t("general.always_readability")}
+              </h4>
+              <p className="text-[11px] text-muted-foreground">
+                {t("general.always_readability_desc")}
+              </p>
+            </div>
+
+            {!loading && (
+              <button
+                type="button"
+                role="switch"
+                aria-checked={alwaysReadability}
+                onClick={() => setAlwaysReadability(!alwaysReadability)}
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${
+                  alwaysReadability ? "bg-primary" : "bg-muted"
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                    alwaysReadability ? "translate-x-5" : "translate-x-0"
+                  }`}
+                />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Save Button */}
+        {hasChanges && (
+          <div className="flex items-center gap-3">
+            <Button onClick={handleSave} disabled={saving} className="gap-2">
+              {saving && <LoaderIcon className="size-4 animate-spin" />}
+              {t("general.save")}
+            </Button>
+            {message && (
+              <span
+                className={`text-sm ${message.type === "success" ? "text-green-600" : "text-red-600"}`}
+              >
+                {message.text}
+              </span>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -2046,6 +2156,8 @@ function AISettings({ onSettingsChange }: AISettingsProps) {
   const [savedAiThinkingEffort, setSavedAiThinkingEffort] = useState<
     "low" | "medium" | "high"
   >("medium");
+  const [alwaysSummary, setAlwaysSummary] = useState(false);
+  const [savedAlwaysSummary, setSavedAlwaysSummary] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -2077,6 +2189,7 @@ function AISettings({ onSettingsChange }: AISettingsProps) {
           | "low"
           | "medium"
           | "high";
+        const summary = settings.alwaysSummary === "true";
 
         setAiProvider(provider);
         setSavedAiProvider(provider);
@@ -2098,6 +2211,8 @@ function AISettings({ onSettingsChange }: AISettingsProps) {
         setSavedAiThinking(thinking);
         setAiThinkingEffort(thinkingEffort);
         setSavedAiThinkingEffort(thinkingEffort);
+        setAlwaysSummary(summary);
+        setSavedAlwaysSummary(summary);
       } catch (err) {
         console.error("Failed to fetch AI settings:", err);
       } finally {
@@ -2127,6 +2242,7 @@ function AISettings({ onSettingsChange }: AISettingsProps) {
           aiQps: aiQps || "2",
           aiThinking: aiThinking ? "true" : "false",
           aiThinkingEffort: aiThinkingEffort,
+          alwaysSummary: alwaysSummary ? "true" : "false",
         }),
       });
 
@@ -2144,6 +2260,7 @@ function AISettings({ onSettingsChange }: AISettingsProps) {
       setSavedAiQps(aiQps);
       setSavedAiThinking(aiThinking);
       setSavedAiThinkingEffort(aiThinkingEffort);
+      setSavedAlwaysSummary(alwaysSummary);
 
       setMessage({ type: "success", text: t("ai.settings_saved") });
       onSettingsChange?.();
@@ -2216,7 +2333,8 @@ function AISettings({ onSettingsChange }: AISettingsProps) {
     aiAutoTranslate !== savedAiAutoTranslate ||
     aiQps !== savedAiQps ||
     aiThinking !== savedAiThinking ||
-    aiThinkingEffort !== savedAiThinkingEffort;
+    aiThinkingEffort !== savedAiThinkingEffort ||
+    alwaysSummary !== savedAlwaysSummary;
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -2465,6 +2583,38 @@ function AISettings({ onSettingsChange }: AISettingsProps) {
                 <span
                   className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
                     aiAutoTranslate ? "translate-x-5" : "translate-x-0"
+                  }`}
+                />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Always Summary */}
+        <div className="rounded-xl border border-muted/40 p-4 bg-card transition-all hover:border-muted-foreground/20">
+          <div className="flex items-center justify-between">
+            <div className="space-y-1">
+              <h4 className="font-semibold text-sm">
+                {t("ai.always_summary")}
+              </h4>
+              <p className="text-[11px] text-muted-foreground">
+                {t("ai.always_summary_desc")}
+              </p>
+            </div>
+
+            {!loading && (
+              <button
+                type="button"
+                role="switch"
+                aria-checked={alwaysSummary}
+                onClick={() => setAlwaysSummary(!alwaysSummary)}
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${
+                  alwaysSummary ? "bg-primary" : "bg-muted"
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                    alwaysSummary ? "translate-x-5" : "translate-x-0"
                   }`}
                 />
               </button>

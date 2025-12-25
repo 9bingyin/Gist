@@ -48,6 +48,8 @@ export default function Home() {
   const [autoTranslate, setAutoTranslate] = useState(false);
   const [targetLanguage, setTargetLanguage] = useState("English");
   const [aiEnabled, setAiEnabled] = useState(true);
+  const [alwaysReadability, setAlwaysReadability] = useState(false);
+  const [alwaysSummary, setAlwaysSummary] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [mobileView, setMobileView] = useState<"list" | "detail">("list");
   const [selectedContentType, setSelectedContentType] =
@@ -77,6 +79,8 @@ export default function Home() {
       setAutoTranslate(settings.aiAutoTranslate === "true");
       setTargetLanguage(settings.aiLanguage);
       setAiEnabled(settings.aiEnabled !== "false");
+      setAlwaysReadability(settings.alwaysReadability === "true");
+      setAlwaysSummary(settings.alwaysSummary === "true");
     } catch (err) {
       console.error("Failed to fetch settings:", err);
     }
@@ -702,6 +706,8 @@ export default function Home() {
                 autoTranslate={autoTranslate}
                 targetLanguage={targetLanguage}
                 aiEnabled={aiEnabled}
+                alwaysReadability={alwaysReadability}
+                alwaysSummary={alwaysSummary}
                 onBack={handleBackToList}
               />
             </motion.div>
@@ -767,6 +773,8 @@ export default function Home() {
           autoTranslate={autoTranslate}
           targetLanguage={targetLanguage}
           aiEnabled={aiEnabled}
+          alwaysReadability={alwaysReadability}
+          alwaysSummary={alwaysSummary}
         />
       </ResizablePanel>
     </ResizablePanelGroup>

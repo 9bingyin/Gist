@@ -14,7 +14,8 @@ import { formatAiError } from "@/lib/ai-translate";
 export const maxDuration = 60;
 
 // In-flight request tracking to prevent duplicate AI calls
-const inFlightSummarizeRequests = new Set<string>();
+// Store AbortSignal to check if previous request was aborted
+const inFlightSummarizeRequests = new Map<string, AbortSignal>();
 
 export async function POST(request: NextRequest) {
   let requestKey: string | null = null;
@@ -95,13 +96,16 @@ export async function POST(request: NextRequest) {
     // Check for duplicate in-flight request
     requestKey = articleId ? `${articleId}-${cacheType}-${language}` : null;
     if (requestKey) {
-      if (inFlightSummarizeRequests.has(requestKey)) {
+      const existingSignal = inFlightSummarizeRequests.get(requestKey);
+      // Only reject if there's an existing request that hasn't been aborted
+      if (existingSignal && !existingSignal.aborted) {
         return NextResponse.json(
           { error: "Request already in progress", retry: true },
           { status: 429 },
         );
       }
-      inFlightSummarizeRequests.add(requestKey);
+      // Store the new request's signal (replaces aborted one if exists)
+      inFlightSummarizeRequests.set(requestKey, request.signal);
     }
 
     if (!apiKey) {
@@ -193,13 +197,19 @@ export async function POST(request: NextRequest) {
         },
       }),
       async onFinish({ text }) {
+        // Clean up in-flight tracking first (always)
+        if (requestKey) {
+          inFlightSummarizeRequests.delete(requestKey);
+        }
+
+        // Don't save incomplete cache if request was aborted
+        if (request.signal.aborted) {
+          return;
+        }
+
         // Save to cache after streaming completes
         if (articleId && text) {
           await setAiCache(articleId, cacheType, language, { summary: text });
-        }
-        // Clean up in-flight tracking
-        if (requestKey) {
-          inFlightSummarizeRequests.delete(requestKey);
         }
       },
     });

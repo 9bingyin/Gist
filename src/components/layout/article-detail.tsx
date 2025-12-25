@@ -35,6 +35,8 @@ interface ArticleDetailProps {
   autoTranslate?: boolean;
   targetLanguage?: string;
   aiEnabled?: boolean;
+  alwaysReadability?: boolean;
+  alwaysSummary?: boolean;
   onBack?: () => void;
 }
 
@@ -72,6 +74,8 @@ export function ArticleDetail({
   autoTranslate,
   targetLanguage,
   aiEnabled = true,
+  alwaysReadability = false,
+  alwaysSummary = false,
   onBack,
 }: ArticleDetailProps) {
   const { t, i18n } = useTranslation();
@@ -130,6 +134,10 @@ export function ArticleDetail({
   // AbortController refs for cancellation
   const summaryAbortRef = useRef<AbortController | null>(null);
   const translationAbortRef = useRef<AbortController | null>(null);
+  // Track last article ID for auto-summary to avoid duplicate requests
+  const lastAutoSummaryArticleIdRef = useRef<string | null>(null);
+  // Track if we need to regenerate summary after readability content loads
+  const pendingReadabilitySummaryRef = useRef(false);
 
   // Get translation from global store
   const translation = useArticleTranslation({
@@ -153,7 +161,7 @@ export function ArticleDetail({
     summaryAbortRef.current?.abort();
     translationAbortRef.current?.abort();
 
-    setUseReadability(false);
+    setUseReadability(alwaysReadability);
     setReadabilityError(null);
     setIsLoadingSummary(false);
     setAiSummary(null);
@@ -161,7 +169,10 @@ export function ArticleDetail({
     setIsLoadingTranslation(false);
     setTranslateEnabled(false);
     setTranslationError(null);
-  }, [article?.id]);
+    // Reset tracking refs for new article
+    lastAutoSummaryArticleIdRef.current = null;
+    pendingReadabilitySummaryRef.current = false;
+  }, [article?.id, alwaysReadability]);
 
   // Auto-translate when article changes and autoTranslate is enabled
   useEffect(() => {
@@ -181,6 +192,9 @@ export function ArticleDetail({
   // Perform translation when translateEnabled changes
   useEffect(() => {
     if (!translateEnabled || !article || !targetLanguage) return;
+
+    // If useReadability is enabled but readabilityContent not loaded yet, wait
+    if (useReadability && !article.readabilityContent) return;
 
     // Skip if already have translation in store
     if (translation?.content) {
@@ -241,13 +255,32 @@ export function ArticleDetail({
     return () => {
       abortController.abort();
     };
-  }, [translateEnabled, useReadability, article?.id, targetLanguage, translation?.content]);
+  }, [translateEnabled, useReadability, article?.id, targetLanguage, translation?.content, article?.readabilityContent]);
 
   // Regenerate summary when readability mode changes
   useEffect(() => {
-    if (!aiSummary || isLoadingSummary || !article) return;
+    if (!article) return;
 
+    // Check if we had a summary or were loading one (before any state changes)
+    const hadSummary = aiSummary !== null || isLoadingSummary;
+
+    // If no summary was ever requested, nothing to do
+    if (!hadSummary && !pendingReadabilitySummaryRef.current) return;
+
+    // Always abort current request first when mode changes
     summaryAbortRef.current?.abort();
+
+    // If readability mode is enabled but content not loaded yet, wait for it
+    if (useReadability && !article.readabilityContent) {
+      pendingReadabilitySummaryRef.current = true;
+      setIsLoadingSummary(false);
+      setAiSummary(null);
+      return;
+    }
+
+    // Clear pending flag
+    pendingReadabilitySummaryRef.current = false;
+
     const abortController = new AbortController();
     summaryAbortRef.current = abortController;
 
@@ -277,6 +310,8 @@ export function ArticleDetail({
           signal: abortController.signal,
         });
 
+        if (abortController.signal.aborted) return;
+
         if (!res.ok) {
           let errorMessage = `Summary failed (${res.status})`;
           try {
@@ -292,6 +327,7 @@ export function ArticleDetail({
 
         if (contentType.includes("application/json")) {
           const data = await res.json();
+          if (abortController.signal.aborted) return;
           setAiSummary(data.summary);
         } else {
           const reader = res.body?.getReader();
@@ -309,10 +345,13 @@ export function ArticleDetail({
             if (done) break;
             const chunk = decoder.decode(value, { stream: true });
             fullText += chunk;
-            setAiSummary(fullText);
+            if (!abortController.signal.aborted) {
+              setAiSummary(fullText);
+            }
           }
         }
       } catch (error) {
+        if (abortController.signal.aborted) return;
         if (error instanceof Error && error.name === "AbortError") return;
         const message =
           error instanceof Error ? error.message : "Summary failed";
@@ -330,7 +369,8 @@ export function ArticleDetail({
     return () => {
       abortController.abort();
     };
-  }, [useReadability]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [useReadability, article?.readabilityContent]);
 
   const handleToggleReadability = useCallback(async () => {
     if (!article || isLoadingReadability) return;
@@ -381,6 +421,48 @@ export function ArticleDetail({
       setIsLoadingReadability(false);
     }
   }, [article, isLoadingReadability, useReadability, onArticleUpdate]);
+
+  // Auto-fetch readability content when alwaysReadability is enabled
+  useEffect(() => {
+    if (!alwaysReadability || !article || article.readabilityContent) return;
+    if (isLoadingReadability) return;
+
+    const fetchReadability = async () => {
+      setIsLoadingReadability(true);
+      setReadabilityError(null);
+      try {
+        const res = await fetch(`/api/articles/${article.id}/readability`, {
+          method: "POST",
+        });
+
+        if (!res.ok) {
+          let errorMessage = `Readability failed (${res.status})`;
+          try {
+            const data = await res.json();
+            errorMessage = data.error || errorMessage;
+          } catch {
+            // Ignore
+          }
+          throw new Error(errorMessage);
+        }
+
+        const data = await res.json();
+        if (data.content && onArticleUpdate) {
+          onArticleUpdate({
+            ...article,
+            readabilityContent: data.content,
+          });
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Failed";
+        setReadabilityError(message);
+      } finally {
+        setIsLoadingReadability(false);
+      }
+    };
+
+    fetchReadability();
+  }, [alwaysReadability, article?.id, article?.readabilityContent, onArticleUpdate]);
 
   const handleGenerateSummary = useCallback(async () => {
     if (!article) return;
@@ -472,6 +554,107 @@ export function ArticleDetail({
     }
   }, [article, isLoadingSummary, aiSummary, useReadability]);
 
+  // Auto-generate summary when alwaysSummary is enabled
+  useEffect(() => {
+    if (!alwaysSummary || !aiEnabled || !article) return;
+    // Skip if already requested for this article
+    if (lastAutoSummaryArticleIdRef.current === article.id) return;
+
+    // If useReadability is enabled but readabilityContent not loaded yet, wait
+    if (useReadability && !article.readabilityContent) return;
+
+    const content = useReadability && article.readabilityContent
+      ? article.readabilityContent
+      : article.content || article.summary;
+
+    if (!content) return;
+
+    // Mark as requested for this article
+    lastAutoSummaryArticleIdRef.current = article.id;
+
+    // Abort previous request if any
+    summaryAbortRef.current?.abort();
+    const abortController = new AbortController();
+    summaryAbortRef.current = abortController;
+
+    const generateSummary = async () => {
+      setIsLoadingSummary(true);
+      setSummaryError(null);
+      setAiSummary("");
+      try {
+        const isReadability = useReadability && !!article.readabilityContent;
+
+        const res = await fetch("/api/ai/summarize", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            articleId: article.id,
+            content,
+            title: article.title,
+            isReadability,
+          }),
+          signal: abortController.signal,
+        });
+
+        if (abortController.signal.aborted) return;
+
+        if (!res.ok) {
+          let errorMessage = `Summary failed (${res.status})`;
+          try {
+            const data = await res.json();
+            errorMessage = data.error || errorMessage;
+          } catch {
+            // Ignore
+          }
+          throw new Error(errorMessage);
+        }
+
+        const contentType = res.headers.get("content-type") || "";
+
+        if (contentType.includes("application/json")) {
+          const data = await res.json();
+          if (abortController.signal.aborted) return;
+          setAiSummary(data.summary);
+        } else {
+          const reader = res.body?.getReader();
+          if (!reader) throw new Error("No response body");
+
+          const decoder = new TextDecoder();
+          let fullText = "";
+
+          while (true) {
+            if (abortController.signal.aborted) {
+              reader.cancel();
+              return;
+            }
+            const { done, value } = await reader.read();
+            if (done) break;
+            const chunk = decoder.decode(value, { stream: true });
+            fullText += chunk;
+            if (!abortController.signal.aborted) {
+              setAiSummary(fullText);
+            }
+          }
+        }
+      } catch (error) {
+        if (abortController.signal.aborted) return;
+        if (error instanceof Error && error.name === "AbortError") return;
+        const message = error instanceof Error ? error.message : "Summary failed";
+        setSummaryError(message);
+        setAiSummary(null);
+      } finally {
+        if (!abortController.signal.aborted) {
+          setIsLoadingSummary(false);
+        }
+      }
+    };
+
+    generateSummary();
+
+    return () => {
+      abortController.abort();
+    };
+  }, [alwaysSummary, aiEnabled, article?.id, useReadability, article?.readabilityContent]);
 
   const handleTranslate = useCallback(() => {
     if (!article) return;
