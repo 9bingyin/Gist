@@ -32,6 +32,12 @@ async function translateArticles(
 ): Promise<void> {
   if (articles.length === 0) return;
 
+  // Build a map of article id -> isReadability for store updates
+  const readabilityMap = new Map<string, boolean>();
+  for (const article of articles) {
+    readabilityMap.set(article.id, article.isReadability ?? false);
+  }
+
   const response = await fetch("/api/ai/translate", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -45,11 +51,12 @@ async function translateArticles(
   }
 
   await readNdjsonStream<TranslationResponse>(response, (data) => {
+    const isReadability = readabilityMap.get(data.id) ?? false;
     translationActions.set(data.id, data.language, {
       title: data.title,
       summary: data.summary,
       content: data.content,
-    });
+    }, isReadability);
   });
 }
 

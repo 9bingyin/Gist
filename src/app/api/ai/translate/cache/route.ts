@@ -26,11 +26,12 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Get full translations (translate or translate-readability)
+    // Get full translations (non-readability only, as readability translations
+    // are fetched on-demand when user enables readability mode)
     const fullCaches = await prisma.aiCache.findMany({
       where: {
         articleId: { in: articleIds },
-        type: { in: ["translate", "translate-readability"] },
+        type: "translate",
         language: settings.language,
       },
     });

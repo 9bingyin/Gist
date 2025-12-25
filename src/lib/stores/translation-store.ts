@@ -6,19 +6,27 @@ export interface ArticleTranslation {
   content: string | null;
 }
 
+// Helper to create cache key that includes readability mode
+function getCacheKey(language: string, isReadability: boolean): string {
+  return isReadability ? `${language}:readability` : language;
+}
+
 interface TranslationState {
-  // data[articleId][language] = translation
+  // data[articleId][cacheKey] = translation
+  // cacheKey = language or language:readability
   data: Record<string, Record<string, ArticleTranslation>>;
 
   // Actions
   getTranslation: (
     articleId: string,
-    language: string
+    language: string,
+    isReadability?: boolean
   ) => ArticleTranslation | undefined;
   setTranslation: (
     articleId: string,
     language: string,
-    translation: Partial<ArticleTranslation>
+    translation: Partial<ArticleTranslation>,
+    isReadability?: boolean
   ) => void;
   clearTranslation: (articleId: string) => void;
 }
@@ -26,18 +34,21 @@ interface TranslationState {
 export const useTranslationStore = create<TranslationState>((set, get) => ({
   data: {},
 
-  getTranslation: (articleId: string, language: string) => {
-    return get().data[articleId]?.[language];
+  getTranslation: (articleId: string, language: string, isReadability = false) => {
+    const key = getCacheKey(language, isReadability);
+    return get().data[articleId]?.[key];
   },
 
   setTranslation: (
     articleId: string,
     language: string,
-    translation: Partial<ArticleTranslation>
+    translation: Partial<ArticleTranslation>,
+    isReadability = false
   ) => {
+    const key = getCacheKey(language, isReadability);
     set((state) => {
       const articleData = state.data[articleId] ?? {};
-      const existingTranslation = articleData[language] ?? {
+      const existingTranslation = articleData[key] ?? {
         title: null,
         summary: null,
         content: null,
@@ -48,7 +59,7 @@ export const useTranslationStore = create<TranslationState>((set, get) => ({
           ...state.data,
           [articleId]: {
             ...articleData,
-            [language]: {
+            [key]: {
               ...existingTranslation,
               ...translation,
             },
@@ -66,6 +77,9 @@ export const useTranslationStore = create<TranslationState>((set, get) => ({
     });
   },
 }));
+
+// Helper for external use
+export { getCacheKey };
 
 // Selectors for optimized subscriptions
 export const translationActions = {

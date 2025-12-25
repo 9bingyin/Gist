@@ -3,6 +3,7 @@
 import { useCallback } from "react";
 import {
   useTranslationStore,
+  getCacheKey,
   type ArticleTranslation,
 } from "@/lib/stores/translation-store";
 
@@ -10,6 +11,7 @@ interface UseArticleTranslationOptions {
   articleId: string;
   language: string;
   enabled: boolean;
+  isReadability?: boolean;
 }
 
 /**
@@ -20,11 +22,15 @@ export function useArticleTranslation({
   articleId,
   language,
   enabled,
+  isReadability = false,
 }: UseArticleTranslationOptions): ArticleTranslation | undefined {
   const translation = useTranslationStore(
     useCallback(
-      (state) => state.data[articleId]?.[language],
-      [articleId, language]
+      (state) => {
+        const key = getCacheKey(language, isReadability);
+        return state.data[articleId]?.[key];
+      },
+      [articleId, language, isReadability]
     )
   );
 
@@ -40,21 +46,24 @@ export function useArticleTranslation({
 export function useHasTranslation({
   articleId,
   language,
+  isReadability = false,
 }: {
   articleId: string;
   language: string;
+  isReadability?: boolean;
 }): boolean {
   return useTranslationStore(
     useCallback(
       (state) => {
-        const translation = state.data[articleId]?.[language];
+        const key = getCacheKey(language, isReadability);
+        const translation = state.data[articleId]?.[key];
         return !!(
           translation?.title ||
           translation?.summary ||
           translation?.content
         );
       },
-      [articleId, language]
+      [articleId, language, isReadability]
     )
   );
 }

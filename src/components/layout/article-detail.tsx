@@ -139,11 +139,15 @@ export function ArticleDetail({
   // Track if we need to regenerate summary after readability content loads
   const pendingReadabilitySummaryRef = useRef(false);
 
+  // Determine if we're actually using readability content
+  const isActuallyReadability = useReadability && !!article?.readabilityContent;
+
   // Get translation from global store
   const translation = useArticleTranslation({
     articleId: article?.id ?? "",
     language: targetLanguage ?? "en",
     enabled: translateEnabled && !!article && !article.translationDisabled,
+    isReadability: isActuallyReadability,
   });
 
   // Determine display content
