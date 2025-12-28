@@ -1,0 +1,117 @@
+# Gist 开发规范 (SPEC)
+
+## 0. 工具使用
+
+* 必须使用 bun
+
+* 可以使用 sqlite3 来检查数据库
+
+## 1. 项目愿景与架构概览
+
+本项目旨在构建一个高性能、轻量级、且深度集成 AI 能力的现代化 RSS 阅读器。
+
+* **核心目标**：实现全格式 Feed 支持、沉浸式阅读体验、AI 自动化摘要/翻译。
+* **技术栈核心**：
+* **前端**：React 19.2 + Vite + TypeScript + shadcn/ui + TailwindCSS。
+* **后端**：Go 1.25.5+ + Echo 框架。
+* **解析/存储**：`gofeed` + `modernc.org/sqlite` (纯 Go 驱动)。
+* **AI 层**：OpenAI SDK / Anthropic (支持 BYOK 模式)。
+
+---
+
+## 2. 架构设计准则
+
+### 2.1 无 CGO 依赖
+
+为了实现极致的跨平台编译能力（尤其是跨架构 Docker 构建），必须选用 `modernc.org/sqlite`。在写入性能与可移植性之间，优先选择可移植性。
+
+### 2.2 性能优先的 UI 渲染
+
+针对 RSS 高频的长列表滚动场景，必须实现**虚拟列表 (Virtualization)** 和**异步内容提取**。禁止在主列表加载时同步执行复杂的 Readability 转换。
+
+---
+
+## 3. 技术实现标准
+
+### 3.1 后端解析与抓取 (Parser)
+
+* **宽容解析**：使用 `gofeed` 处理非标准 RSS/Atom/JSON Feed。
+* **高效抓取策略**：必须实现 **Conditional GET**。
+* 数据库需存储每个 Feed 的 `ETag` 和 `Last-Modified`。
+* 请求头必须携带 `If-None-Match` 和 `If-Modified-Since`。
+* 遇到 304 响应时跳过解析逻辑。
+
+### 3.2 数据库模式 (Storage)
+
+* **WAL 模式**：初始化 SQLite 时必须启用 `PRAGMA journal_mode = WAL;` 以提升并发读写。
+* **全文检索 (FTS5)**：建立虚拟表 `entries_fts`，使用 `unicode61` 分词器。
+* **触发器同步**：通过 SQL Trigger 自动保持 `entries` 主表与 FTS 索引同步。
+
+### 3.3 AI 能力集成
+
+* **BYOK 架构**：后端提供统一的 AI Proxy 接口，允许用户前端输入自己的 API Key（存储于本地或加密存储）。
+* **任务队列**：AI 摘要与翻译任务应异步进行，不阻塞 Feed 的常规更新流程。
+
+---
+
+## 4. 前端开发规范
+
+### 4.1 性能工程
+
+* **Vite 优化**：实施 `manualChunks` 策略，将 React 核心库与 UI 组件库拆分打包。
+* **状态管理**：推荐使用 `TanStack Query` (React Query) 处理 Feed 数据的缓存与预加载。
+
+---
+
+# 安全开发守则
+
+## 1. 核心原则
+*   **安全优先 (Security First)**: 所有输入视为不可信，必须进行验证和清洗。
+*   **高内聚低耦合 (High Cohesion, Low Coupling)**: 模块之间仅通过定义良好的接口交互，严禁跨层级直接访问内部实现。
+*   **类型安全**: 无论是后端还是前端，必须利用类型系统消除潜在错误。禁止使用弱类型（如 TS 中的 `any` 或 Go 中的 `interface{}` 作为通用容器，除非绝对必要）。
+
+## 2. 后端开发规范 (Go)
+
+### 模块化与架构
+*   **严格分层**: 遵循 `Handler -> Service -> Repository`。
+    *   `Handler`: 仅处理 HTTP 协议转换（参数解析、状态码、DTO 转换）。**禁止**在此编写业务逻辑。
+    *   `Service`: 纯粹的业务逻辑。必须定义为 `interface`，以便于测试和解耦。
+    *   `Repository`: 纯粹的数据访问。**禁止**包含业务判断。
+*   **依赖注入**: Service 和 Repository 必须通过构造函数注入依赖，**禁止**使用全局变量存储状态（配置除外）。
+*   **包可见性**: 尽量限制变量和函数的可见性。只有必须公开的 API 才首字母大写，私有逻辑严格保持小写。
+
+### 安全开发
+*   **SQL 注入防御**: 
+    *   **强制**使用 GORM 的参数绑定（`?` 占位符）。
+    *   **严禁**使用 `fmt.Sprintf` 或字符串拼接构建 SQL 查询语句。
+*   **输入验证**:
+    *   在 `Handler` 层必须对所有请求参数（Query, Body, Path）进行合法性校验。
+    *   对于文件路径操作，**必须**使用 `filepath.Clean` 并校验是否越权访问目录。
+*   **敏感信息**: 
+    *   **严禁**在代码中硬编码密钥、密码或 Token。必须从环境变量或配置文件读取。
+    *   日志中**严禁**打印用户的敏感数据（如密码哈希、Session Token）。
+
+## 3. 前端开发规范 (TypeScript/React)
+
+### 模块化与组件
+*   **严格类型 (Strict Typing)**:
+    *   **严禁**使用 `any` 类型。如果类型未知，使用 `unknown` 并配合类型守卫（Type Guards）。
+    *   所有 Props 和 API 响应必须定义 Interface/Type。
+*   **Hook 分离**: 
+    *   UI 组件负责渲染，逻辑必须抽离到自定义 Hooks (`use...`) 中。
+    *   例如：不要在组件内直接写 `useEffect` 进行数据获取，应封装为 `useFeedData()`。
+*   **目录结构**: 
+    *   通用组件放在 `src/components/ui`。
+    *   业务特定组件放在 `src/components/{feature}/` (如 `src/components/article/`)。
+
+### 安全开发 (XSS 防御)
+*   **内容渲染**: 
+    *   React 默认转义内容，但在渲染 RSS 正文 HTML 时，**必须**使用 `rehype-sanitize` 进行清洗。
+    *   **严禁**直接使用 `dangerouslySetInnerHTML`，除非数据源经过严格的白名单过滤（本项目通过 `unified` 管道处理）。
+*   **依赖安全**: 定期检查 `bun.lock`，避免引入废弃或有漏洞的依赖包。
+
+## 4. API 与数据交互
+*   **接口契约**: 前后端必须保持 API 契约一致。修改后端 DTO 后，必须同步更新前端的 `src/types/` 定义。
+*   **错误处理**:
+    *   后端：所有错误必须包装并返回标准化的错误响应（包含 `error` 字段）。
+    *   前端：在 `api/index.ts` 中统一拦截非 2xx 响应，抛出结构化错误，UI 层捕获并提示。

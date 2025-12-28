@@ -1,0 +1,4 @@
+[tools]
+bun = "latest"
+go = "latest"
+sqlite = "latest"
