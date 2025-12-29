@@ -30,7 +30,7 @@ func main() {
 	entryRepo := repository.NewEntryRepository(dbConn)
 
 	folderService := service.NewFolderService(folderRepo)
-	feedService := service.NewFeedService(feedRepo, folderRepo, nil)
+	feedService := service.NewFeedService(feedRepo, folderRepo, entryRepo, nil)
 	entryService := service.NewEntryService(entryRepo, feedRepo, folderRepo)
 	opmlService := service.NewOPMLService(dbConn, folderRepo, feedRepo)
 	refreshService := service.NewRefreshService(feedRepo, entryRepo, nil)

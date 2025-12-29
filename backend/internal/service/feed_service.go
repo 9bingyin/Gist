@@ -37,15 +37,16 @@ type FeedPreview struct {
 type feedService struct {
 	feeds      repository.FeedRepository
 	folders    repository.FolderRepository
+	entries    repository.EntryRepository
 	httpClient *http.Client
 }
 
-func NewFeedService(feeds repository.FeedRepository, folders repository.FolderRepository, httpClient *http.Client) FeedService {
+func NewFeedService(feeds repository.FeedRepository, folders repository.FolderRepository, entries repository.EntryRepository, httpClient *http.Client) FeedService {
 	client := httpClient
 	if client == nil {
 		client = &http.Client{Timeout: 20 * time.Second}
 	}
-	return &feedService{feeds: feeds, folders: folders, httpClient: client}
+	return &feedService{feeds: feeds, folders: folders, entries: entries, httpClient: client}
 }
 
 func (s *feedService) Add(ctx context.Context, feedURL string, folderID *int64, titleOverride string) (model.Feed, error) {
@@ -89,7 +90,21 @@ func (s *feedService) Add(ctx context.Context, feedURL string, folderID *int64, 
 		LastModified: optionalString(fetched.lastModified),
 	}
 
-	return s.feeds.Create(ctx, feed)
+	created, err := s.feeds.Create(ctx, feed)
+	if err != nil {
+		return model.Feed{}, err
+	}
+
+	// Save entries from the fetched feed
+	for _, item := range fetched.items {
+		entry := itemToEntry(created.ID, item)
+		if entry.URL == nil || *entry.URL == "" {
+			continue
+		}
+		_ = s.entries.CreateOrUpdate(ctx, entry)
+	}
+
+	return created, nil
 }
 
 func (s *feedService) Preview(ctx context.Context, feedURL string) (FeedPreview, error) {
@@ -162,14 +177,15 @@ func (s *feedService) Delete(ctx context.Context, id int64) error {
 }
 
 type feedFetch struct {
-	title       string
-	description string
-	siteURL     string
-	imageURL    string
-	lastUpdated string
-	itemCount   *int
-	etag        string
+	title        string
+	description  string
+	siteURL      string
+	imageURL     string
+	lastUpdated  string
+	itemCount    *int
+	etag         string
 	lastModified string
+	items        []*gofeed.Item
 }
 
 func (s *feedService) fetchFeed(ctx context.Context, feedURL string) (feedFetch, error) {
@@ -226,7 +242,47 @@ func (s *feedService) fetchFeed(ctx context.Context, feedURL string) (feedFetch,
 		itemCount:    itemCount,
 		etag:         etag,
 		lastModified: lastModified,
+		items:        parsed.Items,
 	}, nil
+}
+
+func itemToEntry(feedID int64, item *gofeed.Item) model.Entry {
+	entry := model.Entry{
+		FeedID: feedID,
+	}
+
+	if item.Title != "" {
+		title := strings.TrimSpace(item.Title)
+		entry.Title = &title
+	}
+
+	if item.Link != "" {
+		url := strings.TrimSpace(item.Link)
+		entry.URL = &url
+	}
+
+	content := item.Content
+	if content == "" {
+		content = item.Description
+	}
+	if content != "" {
+		entry.Content = &content
+	}
+
+	if item.Author != nil && item.Author.Name != "" {
+		author := strings.TrimSpace(item.Author.Name)
+		entry.Author = &author
+	}
+
+	if item.PublishedParsed != nil {
+		t := item.PublishedParsed.UTC()
+		entry.PublishedAt = &t
+	} else if item.UpdatedParsed != nil {
+		t := item.UpdatedParsed.UTC()
+		entry.PublishedAt = &t
+	}
+
+	return entry
 }
 
 func optionalString(value string) *string {
