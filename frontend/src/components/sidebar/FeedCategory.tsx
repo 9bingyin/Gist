@@ -8,6 +8,8 @@ interface FeedCategoryProps {
   unreadCount?: number
   children: ReactNode
   defaultOpen?: boolean
+  isSelected?: boolean
+  onSelect?: () => void
 }
 
 export function FeedCategory({
@@ -15,6 +17,8 @@ export function FeedCategory({
   unreadCount,
   children,
   defaultOpen = false,
+  isSelected = false,
+  onSelect,
 }: FeedCategoryProps) {
   const [open, , toggle] = useCategoryState(name, defaultOpen)
 
@@ -22,9 +26,16 @@ export function FeedCategory({
     <div>
       {/* Category header - clickable to expand/collapse */}
       <div
-        data-active={false}
+        data-active={isSelected}
         className={categoryHeaderStyles}
-        onClick={toggle}
+        onClick={() => {
+          if (onSelect) {
+            onSelect()
+          } else {
+            toggle()
+          }
+        }}
+        onDoubleClick={toggle}
       >
         <button
           type="button"

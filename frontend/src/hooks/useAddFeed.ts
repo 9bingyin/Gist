@@ -1,17 +1,11 @@
 import { useState, useCallback } from 'react'
-
-export interface FeedPreview {
-  url: string
-  title: string
-  description?: string
-  siteUrl?: string
-  imageUrl?: string
-  itemCount?: number
-  lastUpdated?: string
-}
+import { useQueryClient } from '@tanstack/react-query'
+import { createFeed, createFolder, listFolders, previewFeed } from '@/api'
+import { getErrorMessage } from '@/lib/errors'
+import type { FeedPreview, Folder } from '@/types/api'
 
 export interface SubscribeOptions {
-  category?: string
+  folderName?: string
   title?: string
 }
 
@@ -25,10 +19,26 @@ interface UseAddFeedReturn {
   clearError: () => void
 }
 
+async function findOrCreateFolder(
+  folderName: string,
+  existingFolders: Folder[]
+): Promise<number> {
+  const existing = existingFolders.find(
+    (folder) => folder.name.toLowerCase() === folderName.toLowerCase()
+  )
+  if (existing) {
+    return existing.id
+  }
+
+  const created = await createFolder({ name: folderName })
+  return created.id
+}
+
 export function useAddFeed(): UseAddFeedReturn {
   const [feedPreview, setFeedPreview] = useState<FeedPreview | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const queryClient = useQueryClient()
 
   const clearPreview = useCallback(() => {
     setFeedPreview(null)
@@ -44,63 +54,42 @@ export function useAddFeed(): UseAddFeedReturn {
     setFeedPreview(null)
 
     try {
-      // TODO: Replace with actual API call
-      // const response = await fetch(`/api/feeds/preview?url=${encodeURIComponent(url)}`)
-      // if (!response.ok) {
-      //   throw new Error('Failed to fetch feed')
-      // }
-      // const data: FeedPreview = await response.json()
-      // setFeedPreview(data)
-
-      // Mock data for now
-      await new Promise(resolve => setTimeout(resolve, 800))
-
-      let siteUrl: string | undefined
-      try {
-        siteUrl = new URL(url).origin
-      } catch {
-        // Invalid URL, leave siteUrl undefined
-      }
-
-      setFeedPreview({
-        url,
-        title: 'Discovered Feed',
-        description: 'This is a preview of the RSS feed. The actual content will be fetched from the server.',
-        siteUrl,
-        itemCount: 42,
-        lastUpdated: new Date().toISOString(),
-      })
-    } catch {
-      setError('Failed to fetch feed. Please check the URL and try again.')
+      const data = await previewFeed(url)
+      setFeedPreview(data)
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to fetch feed. Please check the URL and try again.'))
     } finally {
       setIsLoading(false)
     }
   }, [])
 
-  const subscribeFeed = useCallback(async (_feedUrl: string, _options: SubscribeOptions): Promise<boolean> => {
+  const subscribeFeed = useCallback(async (feedUrl: string, options: SubscribeOptions): Promise<boolean> => {
     setIsLoading(true)
     setError(null)
 
     try {
-      // TODO: Replace with actual API call
-      // const response = await fetch('/api/feeds/subscribe', {
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify({ url: feedUrl, ...options }),
-      // })
-      // if (!response.ok) {
-      //   throw new Error('Failed to subscribe')
-      // }
+      let folderId: number | undefined
 
-      await new Promise(resolve => setTimeout(resolve, 500))
+      if (options.folderName) {
+        const folders = await listFolders()
+        folderId = await findOrCreateFolder(options.folderName, folders)
+        await queryClient.invalidateQueries({ queryKey: ['folders'] })
+      }
+
+      await createFeed({
+        url: feedUrl,
+        folderId,
+        title: options.title,
+      })
+      await queryClient.invalidateQueries({ queryKey: ['feeds'] })
       return true
-    } catch {
-      setError('Failed to subscribe to feed.')
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to subscribe to feed.'))
       return false
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [queryClient])
 
   return {
     feedPreview,
