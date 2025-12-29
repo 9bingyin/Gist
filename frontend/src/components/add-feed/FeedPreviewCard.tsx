@@ -1,25 +1,66 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { cn } from '@/lib/utils'
 import { isSafeUrl, getSafeHostname } from '@/lib/url'
-import type { FeedPreview } from '@/hooks/useAddFeed'
+import type { FeedPreview, Folder } from '@/types/api'
 
 interface FeedPreviewCardProps {
   feed: FeedPreview
-  onSubscribe: (url: string, options: { category?: string; title?: string }) => void
+  folders: Folder[]
+  onSubscribe: (url: string, options: { folderName?: string; title?: string }) => void
   isLoading?: boolean
 }
 
-export function FeedPreviewCard({ feed, onSubscribe, isLoading = false }: FeedPreviewCardProps) {
+export function FeedPreviewCard({ feed, folders, onSubscribe, isLoading = false }: FeedPreviewCardProps) {
   const [customTitle, setCustomTitle] = useState('')
-  const [selectedCategory, setSelectedCategory] = useState('')
+  const [folderInput, setFolderInput] = useState('')
   const [showOptions, setShowOptions] = useState(false)
+  const [showFolderDropdown, setShowFolderDropdown] = useState(false)
+  const folderInputRef = useRef<HTMLInputElement>(null)
+  const dropdownRef = useRef<HTMLDivElement>(null)
+
+  const filteredFolders = useMemo(() => {
+    if (!folderInput.trim()) {
+      return folders
+    }
+    const lowerInput = folderInput.toLowerCase()
+    return folders.filter((folder) =>
+      folder.name.toLowerCase().includes(lowerInput)
+    )
+  }, [folders, folderInput])
+
+  const isNewFolder = useMemo(() => {
+    if (!folderInput.trim()) return false
+    return !folders.some(
+      (folder) => folder.name.toLowerCase() === folderInput.trim().toLowerCase()
+    )
+  }, [folders, folderInput])
 
   const handleSubscribe = useCallback(() => {
     onSubscribe(feed.url, {
       title: customTitle || undefined,
-      category: selectedCategory || undefined,
+      folderName: folderInput.trim() || undefined,
     })
-  }, [feed.url, customTitle, selectedCategory, onSubscribe])
+  }, [feed.url, customTitle, folderInput, onSubscribe])
+
+  const handleFolderSelect = useCallback((folderName: string) => {
+    setFolderInput(folderName)
+    setShowFolderDropdown(false)
+  }, [])
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node) &&
+        folderInputRef.current &&
+        !folderInputRef.current.contains(event.target as Node)
+      ) {
+        setShowFolderDropdown(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   const displayTitle = customTitle || feed.title
 
@@ -105,25 +146,56 @@ export function FeedPreviewCard({ feed, onSubscribe, isLoading = false }: FeedPr
             />
           </div>
 
-          {/* Category */}
-          <div>
+          {/* Folder */}
+          <div className="relative">
             <label className="block text-xs font-medium text-muted-foreground mb-1.5">
-              Category (optional)
+              Folder (optional)
             </label>
-            <select
-              value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
+            <input
+              ref={folderInputRef}
+              type="text"
+              value={folderInput}
+              onChange={(e) => setFolderInput(e.target.value)}
+              onFocus={() => setShowFolderDropdown(true)}
+              placeholder="Select or create folder"
               className={cn(
                 'w-full rounded-lg border border-border bg-background px-3 py-2 text-sm',
+                'placeholder:text-muted-foreground/60',
                 'focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/20'
               )}
-            >
-              <option value="">No category</option>
-              <option value="tech">Tech</option>
-              <option value="design">Design</option>
-              <option value="news">News</option>
-              <option value="blogs">Blogs</option>
-            </select>
+            />
+            {showFolderDropdown && (filteredFolders.length > 0 || isNewFolder) && (
+              <div
+                ref={dropdownRef}
+                className="absolute z-10 mt-1 w-full rounded-lg border border-border bg-background shadow-lg max-h-48 overflow-auto"
+              >
+                {isNewFolder && (
+                  <button
+                    type="button"
+                    onClick={() => handleFolderSelect(folderInput.trim())}
+                    className={cn(
+                      'w-full px-3 py-2 text-left text-sm hover:bg-accent',
+                      'flex items-center gap-2 text-primary'
+                    )}
+                  >
+                    <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                    Create "{folderInput.trim()}"
+                  </button>
+                )}
+                {filteredFolders.map((folder) => (
+                  <button
+                    key={folder.id}
+                    type="button"
+                    onClick={() => handleFolderSelect(folder.name)}
+                    className="w-full px-3 py-2 text-left text-sm hover:bg-accent"
+                  >
+                    {folder.name}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}

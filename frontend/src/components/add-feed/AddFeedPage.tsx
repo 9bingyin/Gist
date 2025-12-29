@@ -1,6 +1,7 @@
 import { useCallback } from 'react'
 import { cn } from '@/lib/utils'
 import { useAddFeed } from '@/hooks/useAddFeed'
+import { useFolders } from '@/hooks/useFolders'
 import { FeedUrlForm } from './FeedUrlForm'
 import { FeedPreviewCard } from './FeedPreviewCard'
 
@@ -9,7 +10,8 @@ interface AddFeedPageProps {
   onFeedAdded?: (feedUrl: string) => void
 }
 
-export type { FeedPreview, SubscribeOptions } from '@/hooks/useAddFeed'
+export type { FeedPreview } from '@/types/api'
+export type { SubscribeOptions } from '@/hooks/useAddFeed'
 
 export function AddFeedPage({ onClose, onFeedAdded }: AddFeedPageProps) {
   const {
@@ -19,8 +21,9 @@ export function AddFeedPage({ onClose, onFeedAdded }: AddFeedPageProps) {
     discoverFeed,
     subscribeFeed,
   } = useAddFeed()
+  const { data: folders = [] } = useFolders()
 
-  const handleSubscribe = useCallback(async (feedUrl: string, options: { category?: string; title?: string }) => {
+  const handleSubscribe = useCallback(async (feedUrl: string, options: { folderName?: string; title?: string }) => {
     const success = await subscribeFeed(feedUrl, options)
     if (success) {
       onFeedAdded?.(feedUrl)
@@ -83,6 +86,7 @@ export function AddFeedPage({ onClose, onFeedAdded }: AddFeedPageProps) {
             <div className="mt-6">
               <FeedPreviewCard
                 feed={feedPreview}
+                folders={folders}
                 onSubscribe={handleSubscribe}
                 isLoading={isLoading}
               />

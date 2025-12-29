@@ -1,0 +1,183 @@
+package repository
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"fmt"
+	"time"
+
+	"gist-backend/internal/model"
+)
+
+type FeedRepository interface {
+	Create(ctx context.Context, feed model.Feed) (model.Feed, error)
+	GetByID(ctx context.Context, id int64) (model.Feed, error)
+	FindByURL(ctx context.Context, url string) (*model.Feed, error)
+	List(ctx context.Context, folderID *int64) ([]model.Feed, error)
+	Update(ctx context.Context, feed model.Feed) (model.Feed, error)
+	Delete(ctx context.Context, id int64) error
+}
+
+type feedRepository struct {
+	db dbtx
+}
+
+func NewFeedRepository(db dbtx) FeedRepository {
+	return &feedRepository{db: db}
+}
+
+func (r *feedRepository) Create(ctx context.Context, feed model.Feed) (model.Feed, error) {
+	now := time.Now().UTC()
+	result, err := r.db.ExecContext(
+		ctx,
+		`INSERT INTO feeds (folder_id, title, url, site_url, description, etag, last_modified, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		nullableInt64(feed.FolderID),
+		feed.Title,
+		feed.URL,
+		nullableString(feed.SiteURL),
+		nullableString(feed.Description),
+		nullableString(feed.ETag),
+		nullableString(feed.LastModified),
+		formatTime(now),
+		formatTime(now),
+	)
+	if err != nil {
+		return model.Feed{}, fmt.Errorf("create feed: %w", err)
+	}
+	id, err := result.LastInsertId()
+	if err != nil {
+		return model.Feed{}, fmt.Errorf("get feed id: %w", err)
+	}
+	feed.ID = id
+	feed.CreatedAt = now
+	feed.UpdatedAt = now
+	return feed, nil
+}
+
+func (r *feedRepository) GetByID(ctx context.Context, id int64) (model.Feed, error) {
+	row := r.db.QueryRowContext(ctx, `SELECT id, folder_id, title, url, site_url, description, etag, last_modified, created_at, updated_at FROM feeds WHERE id = ?`, id)
+	return scanFeed(row)
+}
+
+func (r *feedRepository) FindByURL(ctx context.Context, url string) (*model.Feed, error) {
+	row := r.db.QueryRowContext(ctx, `SELECT id, folder_id, title, url, site_url, description, etag, last_modified, created_at, updated_at FROM feeds WHERE url = ?`, url)
+	feed, err := scanFeed(row)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("find feed: %w", err)
+	}
+	return &feed, nil
+}
+
+func (r *feedRepository) List(ctx context.Context, folderID *int64) ([]model.Feed, error) {
+	query := `SELECT id, folder_id, title, url, site_url, description, etag, last_modified, created_at, updated_at FROM feeds ORDER BY title`
+	args := []interface{}{}
+	if folderID != nil {
+		query = `SELECT id, folder_id, title, url, site_url, description, etag, last_modified, created_at, updated_at FROM feeds WHERE folder_id = ? ORDER BY title`
+		args = append(args, *folderID)
+	}
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list feeds: %w", err)
+	}
+	defer rows.Close()
+
+	var feeds []model.Feed
+	for rows.Next() {
+		feed, err := scanFeed(rows)
+		if err != nil {
+			return nil, err
+		}
+		feeds = append(feeds, feed)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate feeds: %w", err)
+	}
+
+	return feeds, nil
+}
+
+func (r *feedRepository) Update(ctx context.Context, feed model.Feed) (model.Feed, error) {
+	now := time.Now().UTC()
+	_, err := r.db.ExecContext(
+		ctx,
+		`UPDATE feeds SET folder_id = ?, title = ?, url = ?, site_url = ?, description = ?, etag = ?, last_modified = ?, updated_at = ? WHERE id = ?`,
+		nullableInt64(feed.FolderID),
+		feed.Title,
+		feed.URL,
+		nullableString(feed.SiteURL),
+		nullableString(feed.Description),
+		nullableString(feed.ETag),
+		nullableString(feed.LastModified),
+		formatTime(now),
+		feed.ID,
+	)
+	if err != nil {
+		return model.Feed{}, fmt.Errorf("update feed: %w", err)
+	}
+	feed.UpdatedAt = now
+	return feed, nil
+}
+
+func (r *feedRepository) Delete(ctx context.Context, id int64) error {
+	if _, err := r.db.ExecContext(ctx, `DELETE FROM feeds WHERE id = ?`, id); err != nil {
+		return fmt.Errorf("delete feed: %w", err)
+	}
+	return nil
+}
+
+func scanFeed(scanner interface {
+	Scan(dest ...interface{}) error
+}) (model.Feed, error) {
+	var feed model.Feed
+	var folderID sql.NullInt64
+	var siteURL sql.NullString
+	var description sql.NullString
+	var etag sql.NullString
+	var lastModified sql.NullString
+	var createdAt string
+	var updatedAt string
+	if err := scanner.Scan(
+		&feed.ID,
+		&folderID,
+		&feed.Title,
+		&feed.URL,
+		&siteURL,
+		&description,
+		&etag,
+		&lastModified,
+		&createdAt,
+		&updatedAt,
+	); err != nil {
+		return model.Feed{}, err
+	}
+	if folderID.Valid {
+		feed.FolderID = &folderID.Int64
+	}
+	if siteURL.Valid {
+		feed.SiteURL = &siteURL.String
+	}
+	if description.Valid {
+		feed.Description = &description.String
+	}
+	if etag.Valid {
+		feed.ETag = &etag.String
+	}
+	if lastModified.Valid {
+		feed.LastModified = &lastModified.String
+	}
+	var err error
+	feed.CreatedAt, err = parseTime(createdAt)
+	if err != nil {
+		return model.Feed{}, fmt.Errorf("parse feed created_at: %w", err)
+	}
+	feed.UpdatedAt, err = parseTime(updatedAt)
+	if err != nil {
+		return model.Feed{}, fmt.Errorf("parse feed updated_at: %w", err)
+	}
+	return feed, nil
+}

@@ -1,0 +1,62 @@
+import { cn } from '@/lib/utils'
+import type { Entry } from '@/types/api'
+
+interface EntryListItemProps {
+  entry: Entry
+  isSelected: boolean
+  onClick: () => void
+}
+
+export function EntryListItem({ entry, isSelected, onClick }: EntryListItemProps) {
+  const publishedAt = entry.publishedAt ? formatRelativeTime(entry.publishedAt) : null
+
+  return (
+    <div
+      className={cn(
+        'border-b border-border px-4 py-3 cursor-pointer transition-colors',
+        'hover:bg-accent/30',
+        isSelected && 'bg-accent',
+        !entry.read && 'bg-accent/10'
+      )}
+      onClick={onClick}
+    >
+      <div
+        className={cn(
+          'text-sm line-clamp-1',
+          !entry.read ? 'font-semibold' : 'font-medium text-muted-foreground'
+        )}
+      >
+        {entry.title || 'Untitled'}
+      </div>
+
+      {entry.content && (
+        <div className="mt-1 text-xs text-muted-foreground line-clamp-2">
+          {stripHtml(entry.content).slice(0, 150)}
+        </div>
+      )}
+
+      <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+        {entry.author && <span>{entry.author}</span>}
+        {publishedAt && <span>{publishedAt}</span>}
+      </div>
+    </div>
+  )
+}
+
+function stripHtml(html: string): string {
+  const doc = new DOMParser().parseFromString(html, 'text/html')
+  return doc.body.textContent || ''
+}
+
+function formatRelativeTime(dateString: string): string {
+  const date = new Date(dateString)
+  const now = new Date()
+  const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000)
+
+  if (diffInSeconds < 60) return 'just now'
+  if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`
+  if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`
+  if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)}d ago`
+
+  return date.toLocaleDateString()
+}
