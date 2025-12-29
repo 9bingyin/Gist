@@ -5,9 +5,17 @@ interface EntryListItemProps {
   entry: Entry
   isSelected: boolean
   onClick: () => void
+  style?: React.CSSProperties
+  'data-index'?: number
 }
 
-export function EntryListItem({ entry, isSelected, onClick }: EntryListItemProps) {
+export function EntryListItem({
+  entry,
+  isSelected,
+  onClick,
+  style,
+  'data-index': dataIndex,
+}: EntryListItemProps) {
   const publishedAt = entry.publishedAt ? formatRelativeTime(entry.publishedAt) : null
 
   return (
@@ -18,6 +26,8 @@ export function EntryListItem({ entry, isSelected, onClick }: EntryListItemProps
         isSelected && 'bg-muted',
         !entry.read && !isSelected && 'bg-accent/5'
       )}
+      style={style}
+      data-index={dataIndex}
       onClick={onClick}
     >
       <div

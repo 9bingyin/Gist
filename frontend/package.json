@@ -14,6 +14,7 @@
     "@radix-ui/react-scroll-area": "^1.2.10",
     "@tailwindcss/vite": "^4.1.18",
     "@tanstack/react-query": "^5.83.1",
+    "@tanstack/react-virtual": "^3.13.13",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "dompurify": "^3.3.1",

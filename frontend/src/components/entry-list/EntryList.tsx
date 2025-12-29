@@ -1,4 +1,5 @@
-import { useCallback, useRef } from 'react'
+import { useEffect, useRef } from 'react'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import { useEntriesInfinite } from '@/hooks/useEntries'
 import { selectionToParams, type SelectionType } from '@/hooks/useSelection'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -11,6 +12,8 @@ interface EntryListProps {
   onSelectEntry: (entryId: number) => void
   onMarkAllRead: () => void
 }
+
+const ESTIMATED_ITEM_HEIGHT = 100
 
 export function EntryList({
   selection,
@@ -26,15 +29,24 @@ export function EntryList({
 
   const entries = data?.pages.flatMap((page) => page.entries) ?? []
 
-  const handleScroll = useCallback(() => {
-    const container = containerRef.current
-    if (!container || isFetchingNextPage || !hasNextPage) return
+  const virtualizer = useVirtualizer({
+    count: entries.length,
+    getScrollElement: () => containerRef.current,
+    estimateSize: () => ESTIMATED_ITEM_HEIGHT,
+    overscan: 5,
+    measureElement: (element) => element.getBoundingClientRect().height,
+  })
 
-    const { scrollTop, scrollHeight, clientHeight } = container
-    if (scrollHeight - scrollTop - clientHeight < 200) {
+  const virtualItems = virtualizer.getVirtualItems()
+
+  useEffect(() => {
+    const lastItem = virtualItems.at(-1)
+    if (!lastItem) return
+
+    if (lastItem.index >= entries.length - 5 && hasNextPage && !isFetchingNextPage) {
       fetchNextPage()
     }
-  }, [fetchNextPage, hasNextPage, isFetchingNextPage])
+  }, [virtualItems, entries.length, hasNextPage, isFetchingNextPage, fetchNextPage])
 
   const title = getListTitle(selection)
   const unreadCount = entries.filter((e) => !e.read).length
@@ -47,24 +59,36 @@ export function EntryList({
         onMarkAllRead={onMarkAllRead}
       />
 
-      <ScrollArea
-        ref={containerRef}
-        className="flex-1"
-        onScroll={handleScroll}
-      >
+      <ScrollArea ref={containerRef} className="min-h-0 flex-1">
         {isLoading ? (
           <EntryListSkeleton />
         ) : entries.length === 0 ? (
           <EntryListEmpty />
         ) : (
-          entries.map((entry) => (
-            <EntryListItem
-              key={entry.id}
-              entry={entry}
-              isSelected={entry.id === selectedEntryId}
-              onClick={() => onSelectEntry(entry.id)}
-            />
-          ))
+          <div
+            className="relative w-full"
+            style={{ height: virtualizer.getTotalSize() }}
+          >
+            {virtualItems.map((virtualRow) => {
+              const entry = entries[virtualRow.index]
+              return (
+                <EntryListItem
+                  key={entry.id}
+                  data-index={virtualRow.index}
+                  entry={entry}
+                  isSelected={entry.id === selectedEntryId}
+                  onClick={() => onSelectEntry(entry.id)}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    transform: `translateY(${virtualRow.start}px)`,
+                  }}
+                />
+              )
+            })}
+          </div>
         )}
 
         {isFetchingNextPage && <LoadingMore />}
