@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { useEntry, useMarkAsRead } from '@/hooks/useEntries'
+import { useEntryContentScroll } from '@/hooks/useEntryContentScroll'
 import { EntryContentHeader } from './EntryContentHeader'
 import { EntryContentBody } from './EntryContentBody'
 
@@ -10,6 +11,7 @@ interface EntryContentProps {
 export function EntryContent({ entryId }: EntryContentProps) {
   const { data: entry, isLoading } = useEntry(entryId)
   const { mutate: markAsRead } = useMarkAsRead()
+  const { scrollRef, isAtTop } = useEntryContentScroll(entryId)
 
   useEffect(() => {
     if (entry && !entry.read) {
@@ -30,9 +32,9 @@ export function EntryContent({ entryId }: EntryContentProps) {
   }
 
   return (
-    <div className="flex h-full flex-col">
-      <EntryContentHeader entry={entry} />
-      <EntryContentBody entry={entry} />
+    <div className="relative flex h-full flex-col">
+      <EntryContentHeader entry={entry} isAtTop={isAtTop} />
+      <EntryContentBody entry={entry} scrollRef={scrollRef} />
     </div>
   )
 }
@@ -40,7 +42,7 @@ export function EntryContent({ entryId }: EntryContentProps) {
 function EntryContentEmpty() {
   return (
     <div className="flex h-full flex-col">
-      <div className="flex h-11 items-center border-b border-border px-6" />
+      <div className="flex h-10 items-center border-b border-border px-6" />
       <div className="flex flex-1 items-center justify-center">
         <div className="text-center text-muted-foreground">
           <svg
@@ -65,21 +67,28 @@ function EntryContentEmpty() {
 
 function EntryContentSkeleton() {
   return (
-    <div className="flex h-full flex-col animate-pulse">
-      <div className="border-b border-border px-6 py-4">
-        <div className="h-6 w-3/4 rounded bg-muted" />
-        <div className="mt-2 flex gap-3">
-          <div className="h-4 w-24 rounded bg-muted" />
-          <div className="h-4 w-32 rounded bg-muted" />
-        </div>
+    <div className="relative flex h-full flex-col animate-pulse">
+      {/* Empty header placeholder - matches EntryContentHeader height when isAtTop=true */}
+      <div className="absolute inset-x-0 top-0 z-20">
+        <div className="h-11 border-b border-transparent" />
       </div>
-      <div className="flex-1 px-6 py-8">
-        <div className="mx-auto max-w-2xl space-y-4">
-          <div className="h-4 w-full rounded bg-muted" />
-          <div className="h-4 w-full rounded bg-muted" />
-          <div className="h-4 w-3/4 rounded bg-muted" />
-          <div className="h-4 w-full rounded bg-muted" />
-          <div className="h-4 w-5/6 rounded bg-muted" />
+      <div className="flex-1 overflow-auto">
+        <div className="mx-auto w-full max-w-[720px] px-6 pb-20 pt-16">
+          <div className="mb-10 space-y-5">
+            <div className="h-10 w-3/4 rounded bg-muted" />
+            <div className="flex gap-6">
+              <div className="h-4 w-24 rounded bg-muted" />
+              <div className="h-4 w-32 rounded bg-muted" />
+            </div>
+            <hr className="border-border/60" />
+          </div>
+          <div className="space-y-4">
+            <div className="h-4 w-full rounded bg-muted" />
+            <div className="h-4 w-full rounded bg-muted" />
+            <div className="h-4 w-3/4 rounded bg-muted" />
+            <div className="h-4 w-full rounded bg-muted" />
+            <div className="h-4 w-5/6 rounded bg-muted" />
+          </div>
         </div>
       </div>
     </div>

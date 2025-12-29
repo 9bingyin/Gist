@@ -31,21 +31,19 @@ export function FeedCategory({
         onClick={() => {
           if (onSelect) {
             onSelect()
-          } else {
-            toggle()
           }
+          toggle()
         }}
-        onDoubleClick={toggle}
       >
         <button
           type="button"
-          data-state={open ? 'open' : 'close'}
-          className="flex h-8 items-center [&_svg]:data-[state=open]:rotate-90"
+          data-state={open ? 'open' : 'closed'}
+          className="group flex h-8 items-center"
           tabIndex={-1}
         >
           <div className="mr-2 flex size-4 items-center justify-center">
             <svg
-              className="size-3 transition-transform duration-200"
+              className="size-3 transition-transform duration-200 group-data-[state=open]:rotate-90"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
