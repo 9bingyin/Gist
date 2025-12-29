@@ -16,24 +16,24 @@ export function PanelSplitter({
   tooltip,
 }: PanelSplitterProps) {
   return (
-    <div
-      className={cn(
-        'group relative flex w-1 shrink-0 cursor-ew-resize items-center justify-center z-10',
-        'hover:bg-accent/30 transition-colors duration-200',
-        isDragging && 'bg-accent/50',
-        className
-      )}
-      onMouseDown={onMouseDown}
-      onDoubleClick={onDoubleClick}
-      title={tooltip}
-    >
+    <div className={cn('relative h-full w-0 shrink-0 z-30', className)}>
       <div
         className={cn(
-          'w-0.5 rounded-full bg-border/40 transition-all duration-300 ease-out',
-          'h-6 group-hover:h-10 group-hover:bg-muted-foreground/40',
-          isDragging && 'h-full bg-primary/40 rounded-none w-[1px]'
+          'absolute inset-y-0 -left-1 w-2 cursor-ew-resize flex items-center justify-center transition-colors duration-200 group',
+          isDragging && 'bg-accent/30'
         )}
-      />
+        onMouseDown={onMouseDown}
+        onDoubleClick={onDoubleClick}
+        title={tooltip}
+      >
+        <div
+          className={cn(
+            'w-[1px] h-full bg-transparent transition-colors duration-200',
+            'group-hover:bg-gray-300 group-hover:dark:bg-neutral-600',
+            isDragging && 'bg-primary'
+          )}
+        />
+      </div>
     </div>
   )
 }

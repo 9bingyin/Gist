@@ -42,7 +42,7 @@ export function EntryContent({ entryId }: EntryContentProps) {
 function EntryContentEmpty() {
   return (
     <div className="flex h-full flex-col">
-      <div className="flex h-10 items-center border-b border-border px-6" />
+      <div className="flex h-12 items-center px-6" />
       <div className="flex flex-1 items-center justify-center">
         <div className="text-center text-muted-foreground">
           <svg
@@ -70,7 +70,7 @@ function EntryContentSkeleton() {
     <div className="relative flex h-full flex-col animate-pulse">
       {/* Empty header placeholder - matches EntryContentHeader height when isAtTop=true */}
       <div className="absolute inset-x-0 top-0 z-20">
-        <div className="h-11 border-b border-transparent" />
+        <div className="h-12" />
       </div>
       <div className="flex-1 overflow-auto">
         <div className="mx-auto w-full max-w-[720px] px-6 pb-20 pt-16">

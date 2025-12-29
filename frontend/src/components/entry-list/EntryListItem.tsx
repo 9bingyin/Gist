@@ -11,16 +11,15 @@ export function EntryListItem({ entry, isSelected, onClick }: EntryListItemProps
   const publishedAt = entry.publishedAt ? formatRelativeTime(entry.publishedAt) : null
 
   return (
-    <div className="px-2 py-0.5">
-      <div
-        className={cn(
-          'px-4 py-3 cursor-pointer transition-all rounded-lg',
-          'hover:bg-accent/50',
-          isSelected && 'bg-accent',
-          !entry.read && 'bg-accent/10'
-        )}
-        onClick={onClick}
-      >
+    <div
+      className={cn(
+        'px-4 py-3 cursor-pointer transition-colors',
+        'hover:bg-muted/50',
+        isSelected && 'bg-muted',
+        !entry.read && !isSelected && 'bg-accent/5'
+      )}
+      onClick={onClick}
+    >
       <div
         className={cn(
           'text-sm line-clamp-1',
@@ -41,8 +40,7 @@ export function EntryListItem({ entry, isSelected, onClick }: EntryListItemProps
         {publishedAt && <span>{publishedAt}</span>}
       </div>
     </div>
-  </div>
-)
+  )
 }
 
 function stripHtml(html: string): string {

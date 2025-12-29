@@ -85,9 +85,9 @@ function getListTitle(selection: SelectionType): string {
 
 function EntryListSkeleton() {
   return (
-    <div className="space-y-px px-2 py-0.5">
+    <div className="space-y-px">
       {Array.from({ length: 5 }, (_, i) => (
-        <div key={i} className="px-4 py-3 animate-pulse rounded-lg bg-muted/20 mb-1">
+        <div key={i} className="px-4 py-3 animate-pulse bg-muted/5">
           <div className="h-4 w-3/4 rounded bg-muted" />
           <div className="mt-2 h-3 w-full rounded bg-muted" />
           <div className="mt-1 h-3 w-2/3 rounded bg-muted" />

@@ -12,54 +12,52 @@ export function EntryContentHeader({ entry, isAtTop }: EntryContentHeaderProps) 
 
   return (
     <div className="absolute inset-x-0 top-0 z-20">
+      {/* Background and Border Layer */}
       <div
-        data-hide-in-print="true"
         className={cn(
-          'relative flex min-w-0 items-center justify-between gap-3 overflow-hidden border-b text-lg text-muted-foreground transition-colors duration-200',
-          !isAtTop && entry.title ? 'border-border' : 'border-transparent'
+          'absolute inset-0 transition-opacity duration-300 ease-in-out pointer-events-none border-b border-border bg-background/95 backdrop-blur',
+          isAtTop ? 'opacity-0' : 'opacity-100'
         )}
-      >
-        <nav
-          data-hide-in-print="true"
-          className="relative z-10 flex h-11 w-full items-center justify-between gap-3 bg-background px-4 @container"
-        >
-          <div className="flex min-w-0 flex-1 shrink grow">
-            <div
-              data-visible={!isAtTop}
-              className="flex min-w-0 flex-1 shrink items-end gap-2 truncate leading-tight opacity-0 transition-opacity duration-200 data-[visible=true]:opacity-100"
-            >
-              <span className="shrink truncate text-lg font-bold text-foreground">
-                {entry.title || 'Untitled'}
-              </span>
-            </div>
-          </div>
+      />
 
-          <div className="relative flex shrink-0 items-center justify-end gap-2">
-            {safeUrl && (
-              <a
-                href={safeUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="no-drag-region pointer-events-auto inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                aria-label="在新标签页打开"
-              >
-                <svg
-                  className="size-5"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
-                  />
-                </svg>
-              </a>
+      {/* Content Layer */}
+      <div className="relative flex h-12 items-center justify-between gap-3 px-6">
+        <div className="flex min-w-0 flex-1 items-center overflow-hidden">
+          <div
+            className={cn(
+              'truncate text-lg font-bold text-foreground transition-all duration-300 ease-in-out',
+              isAtTop ? 'translate-y-4 opacity-0 pointer-events-none' : 'translate-y-0 opacity-100'
             )}
+          >
+            {entry.title || 'Untitled'}
           </div>
-        </nav>
+        </div>
+
+        <div className="flex shrink-0 items-center gap-1">
+          {safeUrl && (
+            <a
+              href={safeUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="no-drag-region flex size-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              aria-label="在新标签页打开"
+            >
+              <svg
+                className="size-5"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2}
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                />
+              </svg>
+            </a>
+          )}
+        </div>
       </div>
     </div>
   )
