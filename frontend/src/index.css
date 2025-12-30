@@ -382,7 +382,6 @@ body {
 .entry-content-body :where(img, video) {
   max-width: 100%;
   height: auto;
-  border-radius: 0.75rem;
   display: block;
   margin: 1.4rem auto;
   box-shadow:
@@ -402,7 +401,6 @@ body {
 .entry-content-body :where(img, video) {
   max-width: 100%;
   height: auto;
-  border-radius: 0.75rem;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
   margin: 2rem auto;
   display: block;
