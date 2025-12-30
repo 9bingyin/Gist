@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { cn } from '@/lib/utils'
 import type { Entry } from '@/types/api'
 
@@ -17,6 +18,8 @@ export function EntryListItem({
   'data-index': dataIndex,
 }: EntryListItemProps) {
   const publishedAt = entry.publishedAt ? formatRelativeTime(entry.publishedAt) : null
+  const [thumbnailError, setThumbnailError] = useState(false)
+  const showThumbnail = entry.thumbnailUrl && !thumbnailError
 
   return (
     <div
@@ -30,24 +33,39 @@ export function EntryListItem({
       data-index={dataIndex}
       onClick={onClick}
     >
-      <div
-        className={cn(
-          'text-sm line-clamp-1',
-          !entry.read ? 'font-semibold' : 'font-medium text-muted-foreground'
-        )}
-      >
-        {entry.title || 'Untitled'}
-      </div>
+      <div className="flex gap-3">
+        <div className="min-w-0 flex-1">
+          <div
+            className={cn(
+              'text-sm line-clamp-1',
+              !entry.read ? 'font-semibold' : 'font-medium text-muted-foreground'
+            )}
+          >
+            {entry.title || 'Untitled'}
+          </div>
 
-      {entry.content && (
-        <div className="mt-1 text-xs text-muted-foreground line-clamp-2">
-          {stripHtml(entry.content).slice(0, 150)}
+          {entry.content && (
+            <div className="mt-1 text-xs text-muted-foreground line-clamp-2">
+              {stripHtml(entry.content).slice(0, 150)}
+            </div>
+          )}
+
+          <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+            {entry.author && <span>{entry.author}</span>}
+            {publishedAt && <span>{publishedAt}</span>}
+          </div>
         </div>
-      )}
 
-      <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-        {entry.author && <span>{entry.author}</span>}
-        {publishedAt && <span>{publishedAt}</span>}
+        {showThumbnail && (
+          <div className="shrink-0">
+            <img
+              src={entry.thumbnailUrl}
+              alt=""
+              className="size-16 rounded-md object-cover"
+              onError={() => setThumbnailError(true)}
+            />
+          </div>
+        )}
       </div>
     </div>
   )

@@ -6,8 +6,9 @@ import (
 )
 
 type Config struct {
-	Addr  string
-	DBPath string
+	Addr      string
+	DBPath    string
+	DataDir   string
 	StaticDir string
 }
 
@@ -16,9 +17,13 @@ func Load() Config {
 	if addr == "" {
 		addr = ":8080"
 	}
+	dataDir := os.Getenv("GIST_DATA_DIR")
+	if dataDir == "" {
+		dataDir = "./data"
+	}
 	path := os.Getenv("GIST_DB_PATH")
 	if path == "" {
-		path = "./data/gist.db"
+		path = filepath.Join(dataDir, "gist.db")
 	}
 	staticDir := os.Getenv("GIST_STATIC_DIR")
 	if staticDir == "" {
@@ -26,8 +31,9 @@ func Load() Config {
 	}
 
 	return Config{
-		Addr:  addr,
-		DBPath: filepath.Clean(path),
+		Addr:      addr,
+		DBPath:    filepath.Clean(path),
+		DataDir:   filepath.Clean(dataDir),
 		StaticDir: filepath.Clean(staticDir),
 	}
 }

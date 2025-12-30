@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { cn } from '@/lib/utils'
 import { SidebarHeader } from './SidebarHeader'
 import { StarredItem } from './StarredItem'
 import { FeedCategory } from './FeedCategory'
@@ -6,6 +7,7 @@ import { FeedItem } from './FeedItem'
 import { useFolders } from '@/hooks/useFolders'
 import { useFeeds } from '@/hooks/useFeeds'
 import { useUnreadCounts } from '@/hooks/useEntries'
+import { feedItemStyles, sidebarItemIconStyles } from './styles'
 import type { SelectionType } from '@/hooks/useSelection'
 import type { Folder, Feed } from '@/types/api'
 
@@ -20,6 +22,18 @@ interface SidebarProps {
 interface FolderWithFeeds {
   folder: Folder
   feeds: Feed[]
+}
+
+function ArticlesIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="currentColor"
+    >
+      <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z" />
+    </svg>
+  )
 }
 
 export function Sidebar({
@@ -71,36 +85,23 @@ export function Sidebar({
     selection.type === 'folder' && selection.folderId === folderId
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full flex-col bg-sidebar">
       <SidebarHeader onAddClick={onAddClick} />
 
       <div className="flex-1 overflow-auto px-1">
         {/* All Articles */}
         <div
-          className={`flex h-8 cursor-pointer items-center rounded-md px-2 text-sm transition-colors ${
-            isAllSelected
-              ? 'bg-accent text-accent-foreground'
-              : 'hover:bg-accent/50'
-          }`}
+          data-active={isAllSelected}
+          className={cn(feedItemStyles, 'mt-1 pl-2.5')}
           onClick={onSelectAll}
         >
-          <svg
-            className="mr-2 size-4"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={1.5}
-              d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z"
-            />
-          </svg>
-          <span className="flex-1">All Articles</span>
+          <span className={sidebarItemIconStyles}>
+            <ArticlesIcon className="size-4" />
+          </span>
+          <span className="grow">All Articles</span>
           {totalUnread > 0 && (
-            <span className="text-xs tabular-nums text-muted-foreground">
-              {totalUnread}
+            <span className="text-[0.65rem] tabular-nums text-muted-foreground">
+              {totalUnread > 99 ? '99+' : totalUnread}
             </span>
           )}
         </div>
@@ -109,7 +110,7 @@ export function Sidebar({
         <StarredItem />
 
         {/* Feed categories */}
-        <div className="mt-2 space-y-px">
+        <div className="mt-3 space-y-px">
           {foldersWithFeeds.map(({ folder, feeds: folderFeeds }) => (
             <FeedCategory
               key={folder.id}
@@ -122,9 +123,11 @@ export function Sidebar({
                 <FeedItem
                   key={feed.id}
                   name={feed.title}
+                  iconPath={feed.iconPath}
                   unreadCount={unreadCounts.get(feed.id) || 0}
                   isActive={isFeedSelected(feed.id)}
                   onClick={() => onSelectFeed(feed.id)}
+                  className="pl-6"
                 />
               ))}
             </FeedCategory>
@@ -142,9 +145,11 @@ export function Sidebar({
                 <FeedItem
                   key={feed.id}
                   name={feed.title}
+                  iconPath={feed.iconPath}
                   unreadCount={unreadCounts.get(feed.id) || 0}
                   isActive={isFeedSelected(feed.id)}
                   onClick={() => onSelectFeed(feed.id)}
+                  className="pl-6"
                 />
               ))}
             </FeedCategory>

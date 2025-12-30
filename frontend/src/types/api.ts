@@ -13,6 +13,7 @@ export interface Feed {
   url: string
   siteUrl?: string
   description?: string
+  iconPath?: string
   etag?: string
   lastModified?: string
   createdAt: string
@@ -36,6 +37,7 @@ export interface Entry {
   url?: string
   content?: string
   readableContent?: string
+  thumbnailUrl?: string
   author?: string
   publishedAt?: string
   read: boolean

@@ -24,6 +24,8 @@
   --color-ring: hsl(var(--ring));
   --color-sidebar: hsl(var(--sidebar));
   --color-sidebar-foreground: hsl(var(--sidebar-foreground));
+  --color-item-active: var(--item-active);
+  --color-item-hover: var(--item-hover);
 
   /* Border radius */
   --radius-sm: calc(var(--radius) - 4px);
@@ -55,6 +57,8 @@
   --radius: 0.5rem;
   --sidebar: 240 4.8% 95.9%;
   --sidebar-foreground: 240 5.9% 10%;
+  --item-active: color-mix(in oklch, hsl(var(--foreground)) 12%, transparent);
+  --item-hover: color-mix(in oklch, hsl(var(--foreground)) 8%, transparent);
 }
 
 .dark {
@@ -79,6 +83,8 @@
   --ring: 240 4.9% 83.9%;
   --sidebar: 240 5.9% 10%;
   --sidebar-foreground: 240 4.8% 95.9%;
+  --item-active: color-mix(in oklch, hsl(var(--foreground)) 15%, transparent);
+  --item-hover: color-mix(in oklch, hsl(var(--foreground)) 10%, transparent);
   scrollbar-color: hsl(var(--muted-foreground) / 0.4) transparent;
 }
 

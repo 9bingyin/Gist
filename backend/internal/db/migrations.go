@@ -131,5 +131,33 @@ func runMigrations(db *sql.DB) error {
 		}
 	}
 
+	// Migration 5: Add icon_path column to feeds for cached icon file path
+	err = db.QueryRow(`
+		SELECT COUNT(*) FROM pragma_table_info('feeds') WHERE name = 'icon_path'
+	`).Scan(&count)
+	if err != nil {
+		return fmt.Errorf("check icon_path column: %w", err)
+	}
+
+	if count == 0 {
+		if _, err := db.Exec(`ALTER TABLE feeds ADD COLUMN icon_path TEXT`); err != nil {
+			return fmt.Errorf("add icon_path column: %w", err)
+		}
+	}
+
+	// Migration 6: Add thumbnail_url column to entries for article cover image
+	err = db.QueryRow(`
+		SELECT COUNT(*) FROM pragma_table_info('entries') WHERE name = 'thumbnail_url'
+	`).Scan(&count)
+	if err != nil {
+		return fmt.Errorf("check thumbnail_url column: %w", err)
+	}
+
+	if count == 0 {
+		if _, err := db.Exec(`ALTER TABLE entries ADD COLUMN thumbnail_url TEXT`); err != nil {
+			return fmt.Errorf("add thumbnail_url column: %w", err)
+		}
+	}
+
 	return nil
 }

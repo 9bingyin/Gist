@@ -9,6 +9,7 @@ type Entry struct {
 	URL             *string
 	Content         *string
 	ReadableContent *string
+	ThumbnailURL    *string
 	Author          *string
 	PublishedAt     *time.Time
 	Read            bool

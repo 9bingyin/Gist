@@ -44,7 +44,7 @@ func NewEntryRepository(db dbtx) EntryRepository {
 func (r *entryRepository) GetByID(ctx context.Context, id int64) (model.Entry, error) {
 	row := r.db.QueryRowContext(
 		ctx,
-		`SELECT id, feed_id, title, url, content, readable_content, author, published_at, read, created_at, updated_at
+		`SELECT id, feed_id, title, url, content, readable_content, thumbnail_url, author, published_at, read, created_at, updated_at
 		 FROM entries WHERE id = ?`,
 		id,
 	)
@@ -54,7 +54,7 @@ func (r *entryRepository) GetByID(ctx context.Context, id int64) (model.Entry, e
 func (r *entryRepository) List(ctx context.Context, filter EntryListFilter) ([]model.Entry, error) {
 	var args []interface{}
 	query := `
-		SELECT e.id, e.feed_id, e.title, e.url, e.content, e.readable_content, e.author,
+		SELECT e.id, e.feed_id, e.title, e.url, e.content, e.readable_content, e.thumbnail_url, e.author,
 		       e.published_at, e.read, e.created_at, e.updated_at
 		FROM entries e
 	`
@@ -194,7 +194,7 @@ func scanEntry(row *sql.Row) (model.Entry, error) {
 	var readInt int
 
 	err := row.Scan(
-		&e.ID, &e.FeedID, &e.Title, &e.URL, &e.Content, &e.ReadableContent, &e.Author,
+		&e.ID, &e.FeedID, &e.Title, &e.URL, &e.Content, &e.ReadableContent, &e.ThumbnailURL, &e.Author,
 		&publishedAt, &readInt, &createdAt, &updatedAt,
 	)
 	if err != nil {
@@ -215,7 +215,7 @@ func scanEntryRows(rows *sql.Rows) (model.Entry, error) {
 	var readInt int
 
 	err := rows.Scan(
-		&e.ID, &e.FeedID, &e.Title, &e.URL, &e.Content, &e.ReadableContent, &e.Author,
+		&e.ID, &e.FeedID, &e.Title, &e.URL, &e.Content, &e.ReadableContent, &e.ThumbnailURL, &e.Author,
 		&publishedAt, &readInt, &createdAt, &updatedAt,
 	)
 	if err != nil {
@@ -248,11 +248,12 @@ func (r *entryRepository) CreateOrUpdate(ctx context.Context, entry model.Entry)
 
 	_, err := r.db.ExecContext(
 		ctx,
-		`INSERT INTO entries (feed_id, title, url, content, author, published_at, read, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)
+		`INSERT INTO entries (feed_id, title, url, content, thumbnail_url, author, published_at, read, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
 		 ON CONFLICT(feed_id, url) DO UPDATE SET
 		   title = excluded.title,
 		   content = excluded.content,
+		   thumbnail_url = excluded.thumbnail_url,
 		   author = excluded.author,
 		   published_at = excluded.published_at,
 		   updated_at = excluded.updated_at`,
@@ -260,6 +261,7 @@ func (r *entryRepository) CreateOrUpdate(ctx context.Context, entry model.Entry)
 		entry.Title,
 		entry.URL,
 		entry.Content,
+		entry.ThumbnailURL,
 		entry.Author,
 		publishedAt,
 		now,

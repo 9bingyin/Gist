@@ -36,6 +36,7 @@ type entryResponse struct {
 	URL             *string `json:"url,omitempty"`
 	Content         *string `json:"content,omitempty"`
 	ReadableContent *string `json:"readableContent,omitempty"`
+	ThumbnailURL    *string `json:"thumbnailUrl,omitempty"`
 	Author          *string `json:"author,omitempty"`
 	PublishedAt     *string `json:"publishedAt,omitempty"`
 	Read            bool    `json:"read"`
@@ -267,6 +268,7 @@ func toEntryResponse(e model.Entry) entryResponse {
 		URL:             e.URL,
 		Content:         e.Content,
 		ReadableContent: e.ReadableContent,
+		ThumbnailURL:    e.ThumbnailURL,
 		Author:          e.Author,
 		Read:            e.Read,
 		CreatedAt:       e.CreatedAt.UTC().Format(time.RFC3339),

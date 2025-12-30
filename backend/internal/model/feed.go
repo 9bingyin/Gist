@@ -9,6 +9,7 @@ type Feed struct {
 	URL          string
 	SiteURL      *string
 	Description  *string
+	IconPath     *string
 	ETag         *string
 	LastModified *string
 	CreatedAt    time.Time
