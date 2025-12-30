@@ -5,8 +5,8 @@ import (
 	"database/sql"
 	"errors"
 
-	"gist-backend/internal/model"
-	"gist-backend/internal/repository"
+	"gist/backend/internal/model"
+	"gist/backend/internal/repository"
 )
 
 type EntryListParams struct {

@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"gist-backend/internal/model"
+	"gist/backend/internal/model"
 )
 
 type FolderRepository interface {

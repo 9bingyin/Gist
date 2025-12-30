@@ -7,8 +7,8 @@ import (
 
 	"github.com/labstack/echo/v4"
 
-	"gist-backend/internal/model"
-	"gist-backend/internal/service"
+	"gist/backend/internal/model"
+	"gist/backend/internal/service"
 )
 
 type EntryHandler struct {

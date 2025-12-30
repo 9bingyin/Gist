@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"gist-backend/internal/model"
+	"gist/backend/internal/model"
 )
 
 type EntryListFilter struct {

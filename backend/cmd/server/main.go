@@ -7,13 +7,13 @@ import (
 	"syscall"
 	"time"
 
-	"gist-backend/internal/config"
-	"gist-backend/internal/db"
-	"gist-backend/internal/handler"
-	transport "gist-backend/internal/http"
-	"gist-backend/internal/repository"
-	"gist-backend/internal/scheduler"
-	"gist-backend/internal/service"
+	"gist/backend/internal/config"
+	"gist/backend/internal/db"
+	"gist/backend/internal/handler"
+	transport "gist/backend/internal/http"
+	"gist/backend/internal/repository"
+	"gist/backend/internal/scheduler"
+	"gist/backend/internal/service"
 )
 
 // @title Gist API

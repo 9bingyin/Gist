@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"strings"
 
-	"gist-backend/internal/model"
-	"gist-backend/internal/repository"
+	"gist/backend/internal/model"
+	"gist/backend/internal/repository"
 )
 
 type FolderService interface {

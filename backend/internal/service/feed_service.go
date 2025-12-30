@@ -12,8 +12,8 @@ import (
 
 	"github.com/mmcdole/gofeed"
 
-	"gist-backend/internal/model"
-	"gist-backend/internal/repository"
+	"gist/backend/internal/model"
+	"gist/backend/internal/repository"
 )
 
 type FeedService interface {

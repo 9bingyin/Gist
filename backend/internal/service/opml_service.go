@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"gist-backend/internal/model"
-	"gist-backend/internal/opml"
-	"gist-backend/internal/repository"
+	"gist/backend/internal/model"
+	"gist/backend/internal/opml"
+	"gist/backend/internal/repository"
 )
 
 type OPMLService interface {

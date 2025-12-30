@@ -1,4 +1,4 @@
-module gist-backend
+module gist/backend
 
 go 1.25.5
 

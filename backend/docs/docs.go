@@ -151,6 +151,47 @@ const docTemplate = `{
                 }
             }
         },
+        "/entries/{id}/fetch-readable": {
+            "post": {
+                "description": "Extract readable content from the entry's original URL using readability",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "entries"
+                ],
+                "summary": "Fetch readable content",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Entry ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.readableContentResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.errorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.errorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/entries/{id}/read": {
             "patch": {
                 "description": "Mark an entry as read or unread",
@@ -584,7 +625,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/gist-backend_internal_service.ImportResult"
+                            "$ref": "#/definitions/gist_backend_internal_service.ImportResult"
                         }
                     },
                     "400": {
@@ -624,7 +665,7 @@ const docTemplate = `{
         }
     },
     "definitions": {
-        "gist-backend_internal_service.ImportResult": {
+        "gist_backend_internal_service.ImportResult": {
             "type": "object",
             "properties": {
                 "feedsCreated": {
@@ -692,6 +733,9 @@ const docTemplate = `{
                 },
                 "read": {
                     "type": "boolean"
+                },
+                "readableContent": {
+                    "type": "string"
                 },
                 "title": {
                     "type": "string"
@@ -812,6 +856,14 @@ const docTemplate = `{
                 },
                 "folderId": {
                     "type": "integer"
+                }
+            }
+        },
+        "internal_handler.readableContentResponse": {
+            "type": "object",
+            "properties": {
+                "readableContent": {
+                    "type": "string"
                 }
             }
         },

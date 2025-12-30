@@ -5,8 +5,8 @@ import (
 	"github.com/labstack/echo/v4/middleware"
 	echoSwagger "github.com/swaggo/echo-swagger"
 
-	_ "gist-backend/docs"
-	"gist-backend/internal/handler"
+	_ "gist/backend/docs"
+	"gist/backend/internal/handler"
 )
 
 func NewRouter(

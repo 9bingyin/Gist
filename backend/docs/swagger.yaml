@@ -1,6 +1,6 @@
 basePath: /api
 definitions:
-  gist-backend_internal_service.ImportResult:
+  gist_backend_internal_service.ImportResult:
     properties:
       feedsCreated:
         type: integer
@@ -45,6 +45,8 @@ definitions:
         type: string
       read:
         type: boolean
+      readableContent:
+        type: string
       title:
         type: string
       updatedAt:
@@ -123,6 +125,11 @@ definitions:
         type: integer
       folderId:
         type: integer
+    type: object
+  internal_handler.readableContentResponse:
+    properties:
+      readableContent:
+        type: string
     type: object
   internal_handler.unreadCountsResponse:
     properties:
@@ -212,6 +219,33 @@ paths:
           schema:
             $ref: '#/definitions/internal_handler.errorResponse'
       summary: Get entry
+      tags:
+      - entries
+  /entries/{id}/fetch-readable:
+    post:
+      description: Extract readable content from the entry's original URL using readability
+      parameters:
+      - description: Entry ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handler.readableContentResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_handler.errorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_handler.errorResponse'
+      summary: Fetch readable content
       tags:
       - entries
   /entries/{id}/read:
@@ -523,7 +557,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/gist-backend_internal_service.ImportResult'
+            $ref: '#/definitions/gist_backend_internal_service.ImportResult'
         "400":
           description: Bad Request
           schema:

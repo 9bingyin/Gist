@@ -7,7 +7,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 
-	"gist-backend/internal/service"
+	"gist/backend/internal/service"
 )
 
 const maxOPMLSize = 5 << 20

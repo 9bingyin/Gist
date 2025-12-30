@@ -14,7 +14,7 @@ import (
 	"github.com/microcosm-cc/bluemonday"
 	readability "codeberg.org/readeck/go-readability/v2"
 
-	"gist-backend/internal/repository"
+	"gist/backend/internal/repository"
 )
 
 type ReadabilityService interface {
