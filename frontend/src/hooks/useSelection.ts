@@ -1,4 +1,6 @@
-import { useState, useCallback } from 'react'
+import { useCallback, useMemo } from 'react'
+import { useLocation, useSearch } from 'wouter'
+import { parseRoute, buildPath } from '@/lib/router'
 
 export type SelectionType =
   | { type: 'all' }
@@ -12,38 +14,57 @@ interface UseSelectionReturn {
   selectFolder: (folderId: string) => void
   selectedEntryId: string | null
   selectEntry: (entryId: string | null) => void
+  unreadOnly: boolean
+  toggleUnreadOnly: () => void
 }
 
 export function useSelection(): UseSelectionReturn {
-  const [selection, setSelection] = useState<SelectionType>({ type: 'all' })
-  const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null)
+  const [location, navigate] = useLocation()
+  const search = useSearch()
+
+  const routeState = useMemo(
+    () => parseRoute(location, search),
+    [location, search]
+  )
 
   const selectAll = useCallback(() => {
-    setSelection({ type: 'all' })
-    setSelectedEntryId(null)
-  }, [])
+    navigate(buildPath({ type: 'all' }, null, routeState.unreadOnly))
+  }, [navigate, routeState.unreadOnly])
 
-  const selectFeed = useCallback((feedId: string) => {
-    setSelection({ type: 'feed', feedId })
-    setSelectedEntryId(null)
-  }, [])
+  const selectFeed = useCallback(
+    (feedId: string) => {
+      navigate(buildPath({ type: 'feed', feedId }, null, routeState.unreadOnly))
+    },
+    [navigate, routeState.unreadOnly]
+  )
 
-  const selectFolder = useCallback((folderId: string) => {
-    setSelection({ type: 'folder', folderId })
-    setSelectedEntryId(null)
-  }, [])
+  const selectFolder = useCallback(
+    (folderId: string) => {
+      navigate(buildPath({ type: 'folder', folderId }, null, routeState.unreadOnly))
+    },
+    [navigate, routeState.unreadOnly]
+  )
 
-  const selectEntry = useCallback((entryId: string | null) => {
-    setSelectedEntryId(entryId)
-  }, [])
+  const selectEntry = useCallback(
+    (entryId: string | null) => {
+      navigate(buildPath(routeState.selection, entryId, routeState.unreadOnly))
+    },
+    [navigate, routeState.selection, routeState.unreadOnly]
+  )
+
+  const toggleUnreadOnly = useCallback(() => {
+    navigate(buildPath(routeState.selection, routeState.entryId, !routeState.unreadOnly))
+  }, [navigate, routeState.selection, routeState.entryId, routeState.unreadOnly])
 
   return {
-    selection,
+    selection: routeState.selection,
     selectAll,
     selectFeed,
     selectFolder,
-    selectedEntryId,
+    selectedEntryId: routeState.entryId,
     selectEntry,
+    unreadOnly: routeState.unreadOnly,
+    toggleUnreadOnly,
   }
 }
 

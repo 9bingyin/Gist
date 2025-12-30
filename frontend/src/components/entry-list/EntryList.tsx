@@ -1,4 +1,4 @@
-import { useEffect, useRef, useMemo, useState } from 'react'
+import { useEffect, useRef, useMemo } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useEntriesInfinite } from '@/hooks/useEntries'
 import { useFeeds } from '@/hooks/useFeeds'
@@ -14,6 +14,8 @@ interface EntryListProps {
   selectedEntryId: string | null
   onSelectEntry: (entryId: string) => void
   onMarkAllRead: () => void
+  unreadOnly: boolean
+  onToggleUnreadOnly: () => void
 }
 
 const ESTIMATED_ITEM_HEIGHT = 100
@@ -23,8 +25,9 @@ export function EntryList({
   selectedEntryId,
   onSelectEntry,
   onMarkAllRead,
+  unreadOnly,
+  onToggleUnreadOnly,
 }: EntryListProps) {
-  const [unreadOnly, setUnreadOnly] = useState(false)
   const params = selectionToParams(selection)
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -78,7 +81,7 @@ export function EntryList({
         title={title}
         unreadCount={unreadCount}
         unreadOnly={unreadOnly}
-        onToggleUnreadOnly={() => setUnreadOnly((prev) => !prev)}
+        onToggleUnreadOnly={onToggleUnreadOnly}
         onMarkAllRead={onMarkAllRead}
       />
 

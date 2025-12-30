@@ -40,9 +40,14 @@ export function toAbsoluteUrl(url: string, baseUrl: string | undefined): string 
 
 /**
  * Encode string to Base64 URL-safe format
+ * Handles Unicode characters by encoding to UTF-8 first
  */
 function toBase64Url(str: string): string {
-  return btoa(str)
+  // Convert Unicode string to UTF-8 bytes, then to base64
+  const utf8 = encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, (_, p1) =>
+    String.fromCharCode(parseInt(p1, 16))
+  )
+  return btoa(utf8)
     .replace(/\+/g, '-')
     .replace(/\//g, '_')
 }

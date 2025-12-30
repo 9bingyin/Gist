@@ -1,4 +1,5 @@
-import { useState, useCallback } from 'react'
+import { useCallback } from 'react'
+import { Router, useLocation } from 'wouter'
 import { ThreeColumnLayout } from '@/components/layout/three-column-layout'
 import { Sidebar } from '@/components/sidebar'
 import { AddFeedPage } from '@/components/add-feed'
@@ -6,11 +7,16 @@ import { EntryList } from '@/components/entry-list'
 import { EntryContent } from '@/components/entry-content'
 import { useSelection, selectionToParams } from '@/hooks/useSelection'
 import { useMarkAllAsRead } from '@/hooks/useEntries'
+import { isAddFeedPath } from '@/lib/router'
 
-type PageView = 'feed' | 'add-feed'
+function AppContent() {
+  const [location, navigate] = useLocation()
 
-function App() {
-  const [currentView, setCurrentView] = useState<PageView>('feed')
+  // Redirect root to /all
+  if (location === '/') {
+    navigate('/all', { replace: true })
+    return null
+  }
 
   const {
     selection,
@@ -19,23 +25,25 @@ function App() {
     selectFolder,
     selectedEntryId,
     selectEntry,
+    unreadOnly,
+    toggleUnreadOnly,
   } = useSelection()
 
   const { mutate: markAllAsRead } = useMarkAllAsRead()
 
   const handleAddClick = useCallback(() => {
-    setCurrentView('add-feed')
-  }, [])
+    navigate('/add-feed')
+  }, [navigate])
 
   const handleCloseAddFeed = useCallback(() => {
-    setCurrentView('feed')
-  }, [])
+    navigate('/all')
+  }, [navigate])
 
   const handleMarkAllRead = useCallback(() => {
     markAllAsRead(selectionToParams(selection))
   }, [markAllAsRead, selection])
 
-  if (currentView === 'add-feed') {
+  if (isAddFeedPath(location)) {
     return (
       <ThreeColumnLayout
         sidebar={
@@ -71,10 +79,20 @@ function App() {
           selectedEntryId={selectedEntryId}
           onSelectEntry={selectEntry}
           onMarkAllRead={handleMarkAllRead}
+          unreadOnly={unreadOnly}
+          onToggleUnreadOnly={toggleUnreadOnly}
         />
       }
       content={<EntryContent key={selectedEntryId} entryId={selectedEntryId} />}
     />
+  )
+}
+
+function App() {
+  return (
+    <Router>
+      <AppContent />
+    </Router>
   )
 }
 
