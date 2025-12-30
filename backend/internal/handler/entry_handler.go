@@ -31,8 +31,8 @@ func (h *EntryHandler) RegisterRoutes(g *echo.Group) {
 }
 
 type entryResponse struct {
-	ID              int64   `json:"id"`
-	FeedID          int64   `json:"feedId"`
+	ID              string  `json:"id"`
+	FeedID          string  `json:"feedId"`
 	Title           *string `json:"title,omitempty"`
 	URL             *string `json:"url,omitempty"`
 	Content         *string `json:"content,omitempty"`
@@ -270,8 +270,8 @@ func (h *EntryHandler) GetUnreadCounts(c echo.Context) error {
 
 func toEntryResponse(e model.Entry) entryResponse {
 	resp := entryResponse{
-		ID:              e.ID,
-		FeedID:          e.FeedID,
+		ID:              idToString(e.ID),
+		FeedID:          idToString(e.FeedID),
 		Title:           e.Title,
 		URL:             e.URL,
 		Content:         e.Content,

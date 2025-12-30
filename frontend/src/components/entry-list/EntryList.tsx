@@ -11,8 +11,8 @@ import type { Feed, Folder } from '@/types/api'
 
 interface EntryListProps {
   selection: SelectionType
-  selectedEntryId: number | null
-  onSelectEntry: (entryId: number) => void
+  selectedEntryId: string | null
+  onSelectEntry: (entryId: string) => void
   onMarkAllRead: () => void
 }
 
@@ -34,7 +34,7 @@ export function EntryList({
     useEntriesInfinite({ ...params, unreadOnly })
 
   const feedsMap = useMemo(() => {
-    const map = new Map<number, Feed>()
+    const map = new Map<string, Feed>()
     for (const feed of feeds) {
       map.set(feed.id, feed)
     }
@@ -42,7 +42,7 @@ export function EntryList({
   }, [feeds])
 
   const foldersMap = useMemo(() => {
-    const map = new Map<number, Folder>()
+    const map = new Map<string, Folder>()
     for (const folder of folders) {
       map.set(folder.id, folder)
     }
@@ -56,7 +56,6 @@ export function EntryList({
     getScrollElement: () => containerRef.current,
     estimateSize: () => ESTIMATED_ITEM_HEIGHT,
     overscan: 5,
-    getItemKey: (index) => entries[index].id,
   })
 
   const virtualItems = virtualizer.getVirtualItems()
@@ -125,8 +124,8 @@ export function EntryList({
 
 function getListTitle(
   selection: SelectionType,
-  feedsMap: Map<number, Feed>,
-  foldersMap: Map<number, Folder>
+  feedsMap: Map<string, Feed>,
+  foldersMap: Map<string, Folder>
 ): string {
   switch (selection.type) {
     case 'all':

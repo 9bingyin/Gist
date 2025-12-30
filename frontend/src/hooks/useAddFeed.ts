@@ -22,7 +22,7 @@ interface UseAddFeedReturn {
 async function findOrCreateFolder(
   folderName: string,
   existingFolders: Folder[]
-): Promise<number> {
+): Promise<string> {
   const existing = existingFolders.find(
     (folder) => folder.name.toLowerCase() === folderName.toLowerCase()
   )
@@ -68,7 +68,7 @@ export function useAddFeed(): UseAddFeedReturn {
     setError(null)
 
     try {
-      let folderId: number | undefined
+      let folderId: string | undefined
 
       if (options.folderName) {
         const folders = await listFolders()

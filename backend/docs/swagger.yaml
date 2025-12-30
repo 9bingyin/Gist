@@ -58,9 +58,9 @@ definitions:
       createdAt:
         type: string
       feedId:
-        type: integer
+        type: string
       id:
-        type: integer
+        type: string
       publishedAt:
         type: string
       read:
@@ -107,11 +107,11 @@ definitions:
       etag:
         type: string
       folderId:
-        type: integer
+        type: string
       iconPath:
         type: string
       id:
-        type: integer
+        type: string
       lastModified:
         type: string
       siteUrl:
@@ -135,11 +135,11 @@ definitions:
       createdAt:
         type: string
       id:
-        type: integer
+        type: string
       name:
         type: string
       parentId:
-        type: integer
+        type: string
       updatedAt:
         type: string
     type: object

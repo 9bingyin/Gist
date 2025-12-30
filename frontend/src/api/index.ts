@@ -79,7 +79,7 @@ export async function listFolders(): Promise<Folder[]> {
   return request<Folder[]>('/api/folders')
 }
 
-export async function createFolder(payload: { name: string; parentId?: number }): Promise<Folder> {
+export async function createFolder(payload: { name: string; parentId?: string }): Promise<Folder> {
   return request<Folder>('/api/folders', {
     method: 'POST',
     body: JSON.stringify(payload),
@@ -87,8 +87,8 @@ export async function createFolder(payload: { name: string; parentId?: number })
 }
 
 export async function updateFolder(
-  id: number,
-  payload: { name: string; parentId?: number }
+  id: string,
+  payload: { name: string; parentId?: string }
 ): Promise<Folder> {
   return request<Folder>(`/api/folders/${id}`, {
     method: 'PUT',
@@ -96,20 +96,20 @@ export async function updateFolder(
   })
 }
 
-export async function deleteFolder(id: number): Promise<void> {
+export async function deleteFolder(id: string): Promise<void> {
   return request<void>(`/api/folders/${id}`, {
     method: 'DELETE',
   })
 }
 
-export async function listFeeds(folderId?: number): Promise<Feed[]> {
-  const params = folderId === undefined ? '' : `?folderId=${encodeURIComponent(String(folderId))}`
+export async function listFeeds(folderId?: string): Promise<Feed[]> {
+  const params = folderId === undefined ? '' : `?folderId=${encodeURIComponent(folderId)}`
   return request<Feed[]>(`/api/feeds${params}`)
 }
 
 export async function createFeed(payload: {
   url: string
-  folderId?: number
+  folderId?: string
   title?: string
 }): Promise<Feed> {
   return request<Feed>('/api/feeds', {
@@ -119,8 +119,8 @@ export async function createFeed(payload: {
 }
 
 export async function updateFeed(
-  id: number,
-  payload: { title: string; folderId?: number }
+  id: string,
+  payload: { title: string; folderId?: string }
 ): Promise<Feed> {
   return request<Feed>(`/api/feeds/${id}`, {
     method: 'PUT',
@@ -128,7 +128,7 @@ export async function updateFeed(
   })
 }
 
-export async function deleteFeed(id: number): Promise<void> {
+export async function deleteFeed(id: string): Promise<void> {
   return request<void>(`/api/feeds/${id}`, {
     method: 'DELETE',
   })
@@ -163,18 +163,18 @@ export async function listEntries(params: EntryListParams = {}): Promise<EntryLi
   return request<EntryListResponse>(path)
 }
 
-export async function getEntry(id: number): Promise<Entry> {
+export async function getEntry(id: string): Promise<Entry> {
   return request<Entry>(`/api/entries/${id}`)
 }
 
-export async function updateEntryReadStatus(id: number, read: boolean): Promise<void> {
+export async function updateEntryReadStatus(id: string, read: boolean): Promise<void> {
   return request<void>(`/api/entries/${id}/read`, {
     method: 'PATCH',
     body: JSON.stringify({ read }),
   })
 }
 
-export async function fetchReadableContent(id: number): Promise<string> {
+export async function fetchReadableContent(id: string): Promise<string> {
   const response = await request<{ readableContent: string }>(`/api/entries/${id}/fetch-readable`, {
     method: 'POST',
   })

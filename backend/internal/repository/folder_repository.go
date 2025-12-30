@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"gist/backend/internal/model"
+	"gist/backend/internal/snowflake"
 )
 
 type FolderRepository interface {
@@ -28,10 +29,12 @@ func NewFolderRepository(db dbtx) FolderRepository {
 }
 
 func (r *folderRepository) Create(ctx context.Context, name string, parentID *int64) (model.Folder, error) {
+	id := snowflake.NextID()
 	now := time.Now().UTC()
-	result, err := r.db.ExecContext(
+	_, err := r.db.ExecContext(
 		ctx,
-		`INSERT INTO folders (name, parent_id, created_at, updated_at) VALUES (?, ?, ?, ?)`,
+		`INSERT INTO folders (id, name, parent_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
+		id,
 		name,
 		nullableInt64(parentID),
 		formatTime(now),
@@ -39,10 +42,6 @@ func (r *folderRepository) Create(ctx context.Context, name string, parentID *in
 	)
 	if err != nil {
 		return model.Folder{}, fmt.Errorf("create folder: %w", err)
-	}
-	id, err := result.LastInsertId()
-	if err != nil {
-		return model.Folder{}, fmt.Errorf("get folder id: %w", err)
 	}
 
 	return model.Folder{

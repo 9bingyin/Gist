@@ -28,8 +28,8 @@ type updateFeedRequest struct {
 }
 
 type feedResponse struct {
-	ID           int64   `json:"id"`
-	FolderID     *int64  `json:"folderId,omitempty"`
+	ID           string  `json:"id"`
+	FolderID     *string `json:"folderId,omitempty"`
 	Title        string  `json:"title"`
 	URL          string  `json:"url"`
 	SiteURL      *string `json:"siteUrl,omitempty"`
@@ -185,8 +185,8 @@ func (h *FeedHandler) Delete(c echo.Context) error {
 
 func toFeedResponse(feed model.Feed) feedResponse {
 	return feedResponse{
-		ID:           feed.ID,
-		FolderID:     feed.FolderID,
+		ID:           idToString(feed.ID),
+		FolderID:     idPtrToString(feed.FolderID),
 		Title:        feed.Title,
 		URL:          feed.URL,
 		SiteURL:      feed.SiteURL,

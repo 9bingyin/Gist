@@ -129,6 +129,11 @@ func (s *opmlService) importOutline(
 	total int,
 	onProgress func(ImportProgress),
 ) error {
+	// Check if context is cancelled
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+
 	if isFeedOutline(outline) {
 		return s.importFeed(ctx, outline, parentID, result, current, total, onProgress)
 	}

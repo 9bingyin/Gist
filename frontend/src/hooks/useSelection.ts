@@ -2,38 +2,38 @@ import { useState, useCallback } from 'react'
 
 export type SelectionType =
   | { type: 'all' }
-  | { type: 'feed'; feedId: number }
-  | { type: 'folder'; folderId: number }
+  | { type: 'feed'; feedId: string }
+  | { type: 'folder'; folderId: string }
 
 interface UseSelectionReturn {
   selection: SelectionType
   selectAll: () => void
-  selectFeed: (feedId: number) => void
-  selectFolder: (folderId: number) => void
-  selectedEntryId: number | null
-  selectEntry: (entryId: number | null) => void
+  selectFeed: (feedId: string) => void
+  selectFolder: (folderId: string) => void
+  selectedEntryId: string | null
+  selectEntry: (entryId: string | null) => void
 }
 
 export function useSelection(): UseSelectionReturn {
   const [selection, setSelection] = useState<SelectionType>({ type: 'all' })
-  const [selectedEntryId, setSelectedEntryId] = useState<number | null>(null)
+  const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null)
 
   const selectAll = useCallback(() => {
     setSelection({ type: 'all' })
     setSelectedEntryId(null)
   }, [])
 
-  const selectFeed = useCallback((feedId: number) => {
+  const selectFeed = useCallback((feedId: string) => {
     setSelection({ type: 'feed', feedId })
     setSelectedEntryId(null)
   }, [])
 
-  const selectFolder = useCallback((folderId: number) => {
+  const selectFolder = useCallback((folderId: string) => {
     setSelection({ type: 'folder', folderId })
     setSelectedEntryId(null)
   }, [])
 
-  const selectEntry = useCallback((entryId: number | null) => {
+  const selectEntry = useCallback((entryId: string | null) => {
     setSelectedEntryId(entryId)
   }, [])
 
@@ -47,7 +47,7 @@ export function useSelection(): UseSelectionReturn {
   }
 }
 
-export function selectionToParams(selection: SelectionType): { feedId?: number; folderId?: number } {
+export function selectionToParams(selection: SelectionType): { feedId?: string; folderId?: string } {
   switch (selection.type) {
     case 'all':
       return {}

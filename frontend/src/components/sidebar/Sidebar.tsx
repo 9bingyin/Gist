@@ -16,8 +16,8 @@ interface SidebarProps {
   onAddClick?: () => void
   selection: SelectionType
   onSelectAll: () => void
-  onSelectFeed: (feedId: number) => void
-  onSelectFolder: (folderId: number) => void
+  onSelectFeed: (feedId: string) => void
+  onSelectFolder: (folderId: string) => void
 }
 
 interface FolderWithFeeds {
@@ -51,16 +51,16 @@ export function Sidebar({
   const { data: unreadCountsData } = useUnreadCounts()
 
   const unreadCounts = useMemo(() => {
-    if (!unreadCountsData) return new Map<number, number>()
-    const map = new Map<number, number>()
+    if (!unreadCountsData) return new Map<string, number>()
+    const map = new Map<string, number>()
     for (const [key, value] of Object.entries(unreadCountsData.counts)) {
-      map.set(Number(key), value)
+      map.set(key, value)
     }
     return map
   }, [unreadCountsData])
 
   const folderUnreadCounts = useMemo(() => {
-    const map = new Map<number, number>()
+    const map = new Map<string, number>()
     for (const feed of feeds) {
       if (feed.folderId) {
         const current = map.get(feed.folderId) || 0
@@ -82,9 +82,9 @@ export function Sidebar({
   const { foldersWithFeeds, uncategorizedFeeds } = groupFeedsByFolder(folders, feeds)
 
   const isAllSelected = selection.type === 'all'
-  const isFeedSelected = (feedId: number) =>
+  const isFeedSelected = (feedId: string) =>
     selection.type === 'feed' && selection.feedId === feedId
-  const isFolderSelected = (folderId: number) =>
+  const isFolderSelected = (folderId: string) =>
     selection.type === 'folder' && selection.folderId === folderId
 
   return (
@@ -162,7 +162,7 @@ function groupFeedsByFolder(
   foldersWithFeeds: FolderWithFeeds[]
   uncategorizedFeeds: Feed[]
 } {
-  const folderMap = new Map<number, Feed[]>()
+  const folderMap = new Map<string, Feed[]>()
 
   for (const folder of folders) {
     folderMap.set(folder.id, [])

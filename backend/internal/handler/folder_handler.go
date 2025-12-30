@@ -20,11 +20,11 @@ type folderRequest struct {
 }
 
 type folderResponse struct {
-	ID        int64  `json:"id"`
-	Name      string `json:"name"`
-	ParentID  *int64 `json:"parentId,omitempty"`
-	CreatedAt string `json:"createdAt"`
-	UpdatedAt string `json:"updatedAt"`
+	ID        string  `json:"id"`
+	Name      string  `json:"name"`
+	ParentID  *string `json:"parentId,omitempty"`
+	CreatedAt string  `json:"createdAt"`
+	UpdatedAt string  `json:"updatedAt"`
 }
 
 func NewFolderHandler(service service.FolderService) *FolderHandler {
@@ -129,9 +129,9 @@ func (h *FolderHandler) Delete(c echo.Context) error {
 
 func toFolderResponse(folder model.Folder) folderResponse {
 	return folderResponse{
-		ID:        folder.ID,
+		ID:        idToString(folder.ID),
 		Name:      folder.Name,
-		ParentID:  folder.ParentID,
+		ParentID:  idPtrToString(folder.ParentID),
 		CreatedAt: folder.CreatedAt.UTC().Format(time.RFC3339),
 		UpdatedAt: folder.UpdatedAt.UTC().Format(time.RFC3339),
 	}

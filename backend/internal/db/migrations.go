@@ -5,10 +5,10 @@ import (
 	"fmt"
 )
 
-// Base schema without read column for initial table creation
+// Base schema - uses Snowflake IDs (no AUTOINCREMENT)
 const baseSchema = `
 CREATE TABLE IF NOT EXISTS folders (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id INTEGER PRIMARY KEY,
   name TEXT NOT NULL,
   parent_id INTEGER,
   created_at TEXT NOT NULL,
@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS folders (
 CREATE INDEX IF NOT EXISTS idx_folders_parent_id ON folders(parent_id);
 
 CREATE TABLE IF NOT EXISTS feeds (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id INTEGER PRIMARY KEY,
   folder_id INTEGER,
   title TEXT NOT NULL,
   url TEXT NOT NULL UNIQUE,
@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS feeds (
 CREATE INDEX IF NOT EXISTS idx_feeds_folder_id ON feeds(folder_id);
 
 CREATE TABLE IF NOT EXISTS entries (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id INTEGER PRIMARY KEY,
   feed_id INTEGER NOT NULL,
   title TEXT,
   url TEXT,

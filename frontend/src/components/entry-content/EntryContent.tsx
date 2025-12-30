@@ -6,7 +6,7 @@ import { EntryContentHeader } from './EntryContentHeader'
 import { EntryContentBody } from './EntryContentBody'
 
 interface EntryContentProps {
-  entryId: number | null
+  entryId: string | null
 }
 
 export function EntryContent({ entryId }: EntryContentProps) {

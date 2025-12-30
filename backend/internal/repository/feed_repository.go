@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"gist/backend/internal/model"
+	"gist/backend/internal/snowflake"
 )
 
 type FeedRepository interface {
@@ -30,11 +31,13 @@ func NewFeedRepository(db dbtx) FeedRepository {
 }
 
 func (r *feedRepository) Create(ctx context.Context, feed model.Feed) (model.Feed, error) {
+	feed.ID = snowflake.NextID()
 	now := time.Now().UTC()
-	result, err := r.db.ExecContext(
+	_, err := r.db.ExecContext(
 		ctx,
-		`INSERT INTO feeds (folder_id, title, url, site_url, description, etag, last_modified, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO feeds (id, folder_id, title, url, site_url, description, etag, last_modified, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		feed.ID,
 		nullableInt64(feed.FolderID),
 		feed.Title,
 		feed.URL,
@@ -48,11 +51,6 @@ func (r *feedRepository) Create(ctx context.Context, feed model.Feed) (model.Fee
 	if err != nil {
 		return model.Feed{}, fmt.Errorf("create feed: %w", err)
 	}
-	id, err := result.LastInsertId()
-	if err != nil {
-		return model.Feed{}, fmt.Errorf("get feed id: %w", err)
-	}
-	feed.ID = id
 	feed.CreatedAt = now
 	feed.UpdatedAt = now
 	return feed, nil

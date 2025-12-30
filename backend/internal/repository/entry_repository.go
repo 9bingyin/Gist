@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"gist/backend/internal/model"
+	"gist/backend/internal/snowflake"
 )
 
 type EntryListFilter struct {
@@ -245,6 +246,7 @@ func parseTimePtr(s string) *time.Time {
 }
 
 func (r *entryRepository) CreateOrUpdate(ctx context.Context, entry model.Entry) error {
+	id := snowflake.NextID()
 	now := formatTime(time.Now())
 
 	var publishedAt interface{}
@@ -254,8 +256,8 @@ func (r *entryRepository) CreateOrUpdate(ctx context.Context, entry model.Entry)
 
 	_, err := r.db.ExecContext(
 		ctx,
-		`INSERT INTO entries (feed_id, title, url, content, thumbnail_url, author, published_at, read, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+		`INSERT INTO entries (id, feed_id, title, url, content, thumbnail_url, author, published_at, read, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
 		 ON CONFLICT(feed_id, url) DO UPDATE SET
 		   title = excluded.title,
 		   content = excluded.content,
@@ -263,6 +265,7 @@ func (r *entryRepository) CreateOrUpdate(ctx context.Context, entry model.Entry)
 		   author = excluded.author,
 		   published_at = excluded.published_at,
 		   updated_at = excluded.updated_at`,
+		id,
 		entry.FeedID,
 		entry.Title,
 		entry.URL,

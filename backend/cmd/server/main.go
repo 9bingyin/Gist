@@ -15,6 +15,7 @@ import (
 	"gist/backend/internal/repository"
 	"gist/backend/internal/scheduler"
 	"gist/backend/internal/service"
+	"gist/backend/internal/snowflake"
 )
 
 // @title Gist API
@@ -23,6 +24,10 @@ import (
 // @BasePath /api
 func main() {
 	cfg := config.Load()
+
+	if err := snowflake.Init(1); err != nil {
+		log.Fatalf("init snowflake: %v", err)
+	}
 
 	dbConn, err := db.Open(cfg.DBPath)
 	if err != nil {

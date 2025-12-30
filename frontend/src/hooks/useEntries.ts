@@ -27,7 +27,7 @@ export function useEntriesInfinite(params: Omit<EntryListParams, 'offset'>) {
   })
 }
 
-export function useEntry(id: number | null) {
+export function useEntry(id: string | null) {
   return useQuery({
     queryKey: ['entry', id],
     queryFn: () => getEntry(id!),
@@ -48,7 +48,7 @@ export function useMarkAsRead() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: ({ id, read }: { id: number; read: boolean }) =>
+    mutationFn: ({ id, read }: { id: string; read: boolean }) =>
       updateEntryReadStatus(id, read),
     onSuccess: (_, { id, read }) => {
       queryClient.setQueryData(['entry', id], (old: Entry | undefined) => {

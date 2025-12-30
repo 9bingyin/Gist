@@ -838,10 +838,10 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "feedId": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "id": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "publishedAt": {
                     "type": "string"
@@ -913,13 +913,13 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "folderId": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "iconPath": {
                     "type": "string"
                 },
                 "id": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "lastModified": {
                     "type": "string"
@@ -956,13 +956,13 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "id": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "name": {
                     "type": "string"
                 },
                 "parentId": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "updatedAt": {
                     "type": "string"

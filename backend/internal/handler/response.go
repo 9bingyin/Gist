@@ -3,11 +3,28 @@ package handler
 import (
 	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/labstack/echo/v4"
 
 	"gist/backend/internal/service"
 )
+
+// idToString converts an int64 ID to string for JSON serialization.
+// This is necessary because JavaScript cannot safely handle integers
+// larger than 2^53-1, and Snowflake IDs exceed this limit.
+func idToString(id int64) string {
+	return strconv.FormatInt(id, 10)
+}
+
+// idPtrToString converts a *int64 ID to *string for JSON serialization.
+func idPtrToString(id *int64) *string {
+	if id == nil {
+		return nil
+	}
+	s := strconv.FormatInt(*id, 10)
+	return &s
+}
 
 type errorResponse struct {
 	Error string `json:"error"`

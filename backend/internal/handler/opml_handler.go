@@ -2,7 +2,6 @@ package handler
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -90,19 +89,21 @@ func (h *OPMLHandler) Import(c echo.Context) error {
 func (h *OPMLHandler) runImport(content []byte) {
 	reader := bytes.NewReader(content)
 
-	var ctx context.Context
+	// Pre-count total feeds for progress
+	preReader := bytes.NewReader(content)
+	total := h.countFeedsInOPML(preReader)
+
+	// Start task and get cancellable context
+	_, ctx := h.taskManager.Start(total)
+
 	onProgress := func(p service.ImportProgress) {
-		if p.Status == "started" {
-			_, ctx = h.taskManager.Start(p.Total)
-		} else {
-			h.taskManager.Update(p.Current, p.Feed)
-		}
+		h.taskManager.Update(p.Current, p.Feed)
 	}
 
-	result, err := h.service.Import(context.Background(), reader, onProgress)
+	result, err := h.service.Import(ctx, reader, onProgress)
 	if err != nil {
 		// Check if cancelled
-		if ctx != nil && ctx.Err() != nil {
+		if ctx.Err() != nil {
 			return // Already marked as cancelled
 		}
 		h.taskManager.Fail(err)
@@ -110,10 +111,20 @@ func (h *OPMLHandler) runImport(content []byte) {
 	}
 
 	// Check if cancelled before marking complete
-	if ctx != nil && ctx.Err() != nil {
+	if ctx.Err() != nil {
 		return
 	}
 	h.taskManager.Complete(result)
+}
+
+func (h *OPMLHandler) countFeedsInOPML(reader io.Reader) int {
+	// Simple count by parsing - if fails, return 0
+	content, err := io.ReadAll(reader)
+	if err != nil {
+		return 0
+	}
+	// Count occurrences of xmlUrl attribute (rough estimate)
+	return bytes.Count(bytes.ToLower(content), []byte("xmlurl"))
 }
 
 // CancelImport cancels the current import task.

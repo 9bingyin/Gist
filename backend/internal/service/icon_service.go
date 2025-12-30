@@ -16,10 +16,10 @@ import (
 
 type IconService interface {
 	// FetchAndSaveIcon downloads and saves the icon locally
-	// Returns relative path like "1.png"
-	FetchAndSaveIcon(ctx context.Context, feedID int64, feedImageURL, siteURL string) (string, error)
+	// Returns relative path like "example.com.png" based on domain
+	FetchAndSaveIcon(ctx context.Context, feedImageURL, siteURL string) (string, error)
 	// EnsureIcon checks if the icon file exists, re-downloads if missing
-	EnsureIcon(ctx context.Context, feedID int64, iconPath, siteURL string) error
+	EnsureIcon(ctx context.Context, iconPath, siteURL string) error
 	// EnsureIconByFeedID checks if icon exists, fetches feed's siteURL and re-downloads if missing
 	EnsureIconByFeedID(ctx context.Context, feedID int64, iconPath string) error
 	// BackfillIcons fetches icons for all feeds that don't have one
@@ -44,7 +44,20 @@ func NewIconService(dataDir string, feeds repository.FeedRepository) IconService
 	}
 }
 
-func (s *iconService) FetchAndSaveIcon(ctx context.Context, feedID int64, feedImageURL, siteURL string) (string, error) {
+func (s *iconService) FetchAndSaveIcon(ctx context.Context, feedImageURL, siteURL string) (string, error) {
+	// Generate icon filename from siteURL domain
+	iconPath := iconFilename(siteURL)
+	if iconPath == "" {
+		return "", nil
+	}
+
+	fullPath := filepath.Join(s.dataDir, "icons", iconPath)
+
+	// Check if icon already exists (shared by multiple feeds)
+	if _, err := os.Stat(fullPath); err == nil {
+		return iconPath, nil
+	}
+
 	// Determine icon URL: prefer feed image, fallback to Google Favicon API
 	iconURL := strings.TrimSpace(feedImageURL)
 	if iconURL == "" {
@@ -70,9 +83,6 @@ func (s *iconService) FetchAndSaveIcon(ctx context.Context, feedID int64, feedIm
 	}
 
 	// Save to file
-	iconPath := fmt.Sprintf("%d.png", feedID)
-	fullPath := filepath.Join(s.dataDir, "icons", iconPath)
-
 	if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
 		return "", fmt.Errorf("create icons dir: %w", err)
 	}
@@ -84,7 +94,7 @@ func (s *iconService) FetchAndSaveIcon(ctx context.Context, feedID int64, feedIm
 	return iconPath, nil
 }
 
-func (s *iconService) EnsureIcon(ctx context.Context, feedID int64, iconPath, siteURL string) error {
+func (s *iconService) EnsureIcon(ctx context.Context, iconPath, siteURL string) error {
 	if iconPath == "" {
 		return nil
 	}
@@ -134,7 +144,7 @@ func (s *iconService) EnsureIconByFeedID(ctx context.Context, feedID int64, icon
 		siteURL = *feed.SiteURL
 	}
 
-	return s.EnsureIcon(ctx, feedID, iconPath, siteURL)
+	return s.EnsureIcon(ctx, iconPath, siteURL)
 }
 
 func (s *iconService) GetIconPath(filename string) string {
@@ -156,7 +166,7 @@ func (s *iconService) BackfillIcons(ctx context.Context) error {
 			siteURL = feed.URL
 		}
 
-		iconPath, err := s.FetchAndSaveIcon(ctx, feed.ID, "", siteURL)
+		iconPath, err := s.FetchAndSaveIcon(ctx, "", siteURL)
 		if err != nil {
 			continue // Skip failed feeds
 		}
@@ -186,6 +196,20 @@ func (s *iconService) buildFaviconURL(siteURL string) string {
 	}
 
 	return fmt.Sprintf("https://www.google.com/s2/favicons?domain=%s&sz=128", url.QueryEscape(domain))
+}
+
+// iconFilename generates a filename based on the domain
+func iconFilename(siteURL string) string {
+	if siteURL == "" {
+		return ""
+	}
+
+	parsed, err := url.Parse(siteURL)
+	if err != nil || parsed.Hostname() == "" {
+		return ""
+	}
+
+	return parsed.Hostname() + ".png"
 }
 
 func (s *iconService) downloadIcon(ctx context.Context, iconURL string) ([]byte, error) {

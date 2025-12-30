@@ -1,14 +1,14 @@
 export interface Folder {
-  id: number
+  id: string
   name: string
-  parentId?: number
+  parentId?: string
   createdAt: string
   updatedAt: string
 }
 
 export interface Feed {
-  id: number
-  folderId?: number
+  id: string
+  folderId?: string
   title: string
   url: string
   siteUrl?: string
@@ -31,8 +31,8 @@ export interface FeedPreview {
 }
 
 export interface Entry {
-  id: number
-  feedId: number
+  id: string
+  feedId: string
   title?: string
   url?: string
   content?: string
@@ -51,8 +51,8 @@ export interface EntryListResponse {
 }
 
 export interface EntryListParams {
-  feedId?: number
-  folderId?: number
+  feedId?: string
+  folderId?: string
   unreadOnly?: boolean
   limit?: number
   offset?: number
@@ -63,8 +63,8 @@ export interface UnreadCountsResponse {
 }
 
 export interface MarkAllReadParams {
-  feedId?: number
-  folderId?: number
+  feedId?: string
+  folderId?: string
 }
 
 export interface ApiErrorResponse {

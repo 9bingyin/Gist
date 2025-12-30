@@ -103,7 +103,7 @@ func (s *feedService) Add(ctx context.Context, feedURL string, folderID *int64, 
 		if created.SiteURL != nil {
 			siteURL = *created.SiteURL
 		}
-		if iconPath, err := s.icons.FetchAndSaveIcon(ctx, created.ID, fetched.imageURL, siteURL); err == nil && iconPath != "" {
+		if iconPath, err := s.icons.FetchAndSaveIcon(ctx, fetched.imageURL, siteURL); err == nil && iconPath != "" {
 			_ = s.feeds.UpdateIconPath(ctx, created.ID, iconPath)
 			created.IconPath = &iconPath
 		}

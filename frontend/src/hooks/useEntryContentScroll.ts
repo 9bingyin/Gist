@@ -2,10 +2,10 @@ import { useCallback, useLayoutEffect, useRef, useState } from 'react'
 
 const SCROLL_TOP_THRESHOLD = 48
 
-export function useEntryContentScroll(entryId: number | null) {
+export function useEntryContentScroll(entryId: string | null) {
   const [scrollNode, setScrollNode] = useState<HTMLDivElement | null>(null)
   const [isAtTop, setIsAtTop] = useState(true)
-  const processedEntryIdRef = useRef<number | null>(null)
+  const processedEntryIdRef = useRef<string | null>(null)
 
   // Callback ref - triggers when DOM node is attached/detached
   const scrollRef = useCallback((node: HTMLDivElement | null) => {
