@@ -7,6 +7,7 @@ interface EntryContentHeaderProps {
   isAtTop: boolean
   isReadableActive: boolean
   isLoading: boolean
+  error: string | null
   onToggleReadable: () => void
 }
 
@@ -15,6 +16,7 @@ export function EntryContentHeader({
   isAtTop,
   isReadableActive,
   isLoading,
+  error,
   onToggleReadable,
 }: EntryContentHeaderProps) {
   const safeUrl = entry.url && isSafeUrl(entry.url) ? entry.url : null
@@ -48,12 +50,14 @@ export function EntryContentHeader({
               type="button"
               onClick={onToggleReadable}
               disabled={isLoading}
-              title={isReadableActive ? 'Show original' : 'Show readable'}
+              title={error || (isReadableActive ? 'Show original' : 'Show readable')}
               className={cn(
                 'no-drag-region flex size-9 items-center justify-center rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50',
-                isReadableActive
-                  ? 'bg-muted text-foreground'
-                  : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                error
+                  ? 'text-destructive hover:bg-destructive/10'
+                  : isReadableActive
+                    ? 'bg-muted text-foreground'
+                    : 'text-muted-foreground hover:bg-accent hover:text-foreground'
               )}
             >
               <svg

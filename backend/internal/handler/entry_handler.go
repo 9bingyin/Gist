@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 	"time"
@@ -209,7 +210,14 @@ func (h *EntryHandler) FetchReadable(c echo.Context) error {
 
 	content, err := h.readabilityService.FetchReadableContent(c.Request().Context(), id)
 	if err != nil {
-		return writeServiceError(c, err)
+		if errors.Is(err, service.ErrNotFound) {
+			return c.JSON(http.StatusNotFound, errorResponse{Error: "entry not found"})
+		}
+		if errors.Is(err, service.ErrInvalid) {
+			return c.JSON(http.StatusBadRequest, errorResponse{Error: "no URL or empty content"})
+		}
+		// Return the actual error message
+		return c.JSON(http.StatusBadGateway, errorResponse{Error: err.Error()})
 	}
 
 	return c.JSON(http.StatusOK, readableContentResponse{ReadableContent: content})

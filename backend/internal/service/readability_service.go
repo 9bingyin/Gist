@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -71,17 +72,17 @@ func (s *readabilityService) FetchReadableContent(ctx context.Context, entryID i
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
-		return "", ErrFeedFetch
+		return "", fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", ErrFeedFetch
+		return "", fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status)
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", ErrFeedFetch
+		return "", fmt.Errorf("read body failed: %w", err)
 	}
 
 	// Sanitize HTML to remove scripts and other interfering elements
@@ -91,20 +92,20 @@ func (s *readabilityService) FetchReadableContent(ctx context.Context, entryID i
 	// Parse URL for readability
 	parsedURL, err := url.Parse(*entry.URL)
 	if err != nil {
-		return "", ErrFeedFetch
+		return "", fmt.Errorf("parse URL failed: %w", err)
 	}
 
 	// Parse with readability
 	parser := readability.NewParser()
 	article, err := parser.Parse(strings.NewReader(sanitized), parsedURL)
 	if err != nil {
-		return "", ErrFeedFetch
+		return "", fmt.Errorf("parse content failed: %w", err)
 	}
 
 	// Render HTML content
 	var buf bytes.Buffer
 	if err := article.RenderHTML(&buf); err != nil {
-		return "", ErrFeedFetch
+		return "", fmt.Errorf("render failed: %w", err)
 	}
 
 	content := buf.String()

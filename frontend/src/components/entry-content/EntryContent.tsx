@@ -17,6 +17,7 @@ export function EntryContent({ entryId }: EntryContentProps) {
   const [isReadableLoading, setIsReadableLoading] = useState(false)
   const [localReadableContent, setLocalReadableContent] = useState<string | null>(null)
   const [showReadable, setShowReadable] = useState(false)
+  const [readableError, setReadableError] = useState<string | null>(null)
 
   useEffect(() => {
     if (entry && !entry.read) {
@@ -37,12 +38,14 @@ export function EntryContent({ entryId }: EntryContentProps) {
 
     if (!entry.url || isReadableLoading) return
     setIsReadableLoading(true)
+    setReadableError(null)
     try {
       const content = await fetchReadableContent(entry.id)
       setLocalReadableContent(content)
       setShowReadable(true)
-    } catch {
-      // Silently fail
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to fetch readable content'
+      setReadableError(message)
     } finally {
       setIsReadableLoading(false)
     }
@@ -70,6 +73,7 @@ export function EntryContent({ entryId }: EntryContentProps) {
         isAtTop={isAtTop}
         isReadableActive={isReadableActive}
         isLoading={isReadableLoading}
+        error={readableError}
         onToggleReadable={handleToggleReadable}
       />
       <EntryContentBody entry={entry} scrollRef={scrollRef} displayContent={displayContent} />
