@@ -1,12 +1,13 @@
-import { useEffect, useRef, useMemo } from 'react'
+import { useEffect, useRef, useMemo, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useEntriesInfinite } from '@/hooks/useEntries'
 import { useFeeds } from '@/hooks/useFeeds'
+import { useFolders } from '@/hooks/useFolders'
 import { selectionToParams, type SelectionType } from '@/hooks/useSelection'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { EntryListItem } from './EntryListItem'
 import { EntryListHeader } from './EntryListHeader'
-import type { Feed } from '@/types/api'
+import type { Feed, Folder } from '@/types/api'
 
 interface EntryListProps {
   selection: SelectionType
@@ -23,12 +24,14 @@ export function EntryList({
   onSelectEntry,
   onMarkAllRead,
 }: EntryListProps) {
+  const [unreadOnly, setUnreadOnly] = useState(false)
   const params = selectionToParams(selection)
   const containerRef = useRef<HTMLDivElement>(null)
 
   const { data: feeds = [] } = useFeeds()
+  const { data: folders = [] } = useFolders()
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } =
-    useEntriesInfinite(params)
+    useEntriesInfinite({ ...params, unreadOnly })
 
   const feedsMap = useMemo(() => {
     const map = new Map<number, Feed>()
@@ -37,6 +40,14 @@ export function EntryList({
     }
     return map
   }, [feeds])
+
+  const foldersMap = useMemo(() => {
+    const map = new Map<number, Folder>()
+    for (const folder of folders) {
+      map.set(folder.id, folder)
+    }
+    return map
+  }, [folders])
 
   const entries = data?.pages.flatMap((page) => page.entries) ?? []
 
@@ -58,7 +69,7 @@ export function EntryList({
     }
   }, [virtualItems, entries.length, hasNextPage, isFetchingNextPage, fetchNextPage])
 
-  const title = getListTitle(selection)
+  const title = getListTitle(selection, feedsMap, foldersMap)
   const unreadCount = entries.filter((e) => !e.read).length
 
   return (
@@ -66,6 +77,8 @@ export function EntryList({
       <EntryListHeader
         title={title}
         unreadCount={unreadCount}
+        unreadOnly={unreadOnly}
+        onToggleUnreadOnly={() => setUnreadOnly((prev) => !prev)}
         onMarkAllRead={onMarkAllRead}
       />
 
@@ -109,14 +122,18 @@ export function EntryList({
   )
 }
 
-function getListTitle(selection: SelectionType): string {
+function getListTitle(
+  selection: SelectionType,
+  feedsMap: Map<number, Feed>,
+  foldersMap: Map<number, Folder>
+): string {
   switch (selection.type) {
     case 'all':
       return 'All Articles'
     case 'feed':
-      return 'Feed Articles'
+      return feedsMap.get(selection.feedId)?.title || 'Feed'
     case 'folder':
-      return 'Folder Articles'
+      return foldersMap.get(selection.folderId)?.name || 'Folder'
   }
 }
 
