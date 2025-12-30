@@ -44,6 +44,75 @@
 *   **驱动模式**：初始化 SQLite 时必须启用 `PRAGMA journal_mode = WAL;` 以提升并发性能。
 *   **全文检索**：建立 `entries_fts` 虚拟表（unicode61 分词），通过 Trigger 自动同步主表数据。
 *   **ORM 规范**：使用 GORM 时必须使用参数绑定（`?`），**严禁**字符串拼接 SQL。
+*   **Schema 同步**：修改数据库结构后，**必须**同步更新本文档的 Schema 定义。
+
+#### 4.2.1 数据库 Schema
+
+**folders** - 文件夹表
+| 列名 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| id | INTEGER | PRIMARY KEY | Snowflake ID |
+| name | TEXT | NOT NULL | 文件夹名称 |
+| parent_id | INTEGER | FK -> folders(id) ON DELETE CASCADE | 父文件夹 ID |
+| created_at | TEXT | NOT NULL | 创建时间 (RFC3339) |
+| updated_at | TEXT | NOT NULL | 更新时间 (RFC3339) |
+
+**feeds** - 订阅源表
+| 列名 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| id | INTEGER | PRIMARY KEY | Snowflake ID |
+| folder_id | INTEGER | FK -> folders(id) ON DELETE SET NULL | 所属文件夹 |
+| title | TEXT | NOT NULL | 订阅标题 |
+| url | TEXT | NOT NULL UNIQUE | Feed URL |
+| site_url | TEXT | | 网站首页 URL |
+| description | TEXT | | 订阅描述 |
+| icon_path | TEXT | | 图标文件路径 (如 example.com.png) |
+| etag | TEXT | | HTTP ETag (Conditional GET) |
+| last_modified | TEXT | | HTTP Last-Modified |
+| created_at | TEXT | NOT NULL | 创建时间 |
+| updated_at | TEXT | NOT NULL | 更新时间 |
+
+**entries** - 文章表
+| 列名 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| id | INTEGER | PRIMARY KEY | Snowflake ID |
+| feed_id | INTEGER | NOT NULL, FK -> feeds(id) ON DELETE CASCADE | 所属订阅 |
+| title | TEXT | | 文章标题 |
+| url | TEXT | | 文章链接 |
+| content | TEXT | | 原始内容 (HTML) |
+| readable_content | TEXT | | Readability 提取的正文 |
+| thumbnail_url | TEXT | | 缩略图 URL |
+| author | TEXT | | 作者 |
+| published_at | TEXT | | 发布时间 |
+| read | INTEGER | NOT NULL DEFAULT 0 | 已读状态 (0/1) |
+| created_at | TEXT | NOT NULL | 创建时间 |
+| updated_at | TEXT | NOT NULL | 更新时间 |
+
+**entries_fts** - 全文检索虚拟表 (FTS5)
+| 列名 | 说明 |
+|------|------|
+| title | 文章标题 |
+| content | 文章内容 |
+| author | 作者 |
+| url | 文章链接 |
+
+*Tokenizer*: `unicode61`
+
+#### 4.2.2 索引
+```sql
+idx_folders_parent_id    ON folders(parent_id)
+idx_feeds_folder_id      ON feeds(folder_id)
+idx_entries_feed_id      ON entries(feed_id)
+idx_entries_read         ON entries(read)
+idx_entries_feed_read    ON entries(feed_id, read)
+idx_entries_feed_url     ON entries(feed_id, url) UNIQUE
+```
+
+#### 4.2.3 触发器
+```sql
+entries_ai  -- AFTER INSERT: 同步插入 entries_fts
+entries_ad  -- AFTER DELETE: 同步删除 entries_fts
+```
 
 ### 4.3 网络与解析 (Parser)
 *   **宽容解析**：使用 `gofeed` 处理各类非标准 Feed。
