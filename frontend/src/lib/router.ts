@@ -43,6 +43,15 @@ export function parseRoute(pathname: string, search: string): RouteState {
     }
   }
 
+  // /starred/:entryId?
+  if (segments[0] === 'starred') {
+    return {
+      selection: { type: 'starred' },
+      entryId: segments[1] || null,
+      unreadOnly,
+    }
+  }
+
   // Fallback to all
   return {
     selection: { type: 'all' },
@@ -70,6 +79,9 @@ export function buildPath(
       break
     case 'folder':
       path = entryId ? `/folder/${selection.folderId}/${entryId}` : `/folder/${selection.folderId}`
+      break
+    case 'starred':
+      path = entryId ? `/starred/${entryId}` : '/starred'
       break
   }
 

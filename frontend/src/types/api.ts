@@ -41,6 +41,7 @@ export interface Entry {
   author?: string
   publishedAt?: string
   read: boolean
+  starred: boolean
   createdAt: string
   updatedAt: string
 }
@@ -54,12 +55,17 @@ export interface EntryListParams {
   feedId?: string
   folderId?: string
   unreadOnly?: boolean
+  starredOnly?: boolean
   limit?: number
   offset?: number
 }
 
 export interface UnreadCountsResponse {
   counts: Record<string, number>
+}
+
+export interface StarredCountResponse {
+  count: number
 }
 
 export interface MarkAllReadParams {

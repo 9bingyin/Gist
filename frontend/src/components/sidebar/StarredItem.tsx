@@ -3,6 +3,7 @@ import { feedItemStyles, sidebarItemIconStyles } from './styles'
 
 interface StarredItemProps {
   isActive?: boolean
+  count?: number
   onClick?: () => void
 }
 
@@ -18,7 +19,7 @@ function StarIcon({ className }: { className?: string }) {
   )
 }
 
-export function StarredItem({ isActive = false, onClick }: StarredItemProps) {
+export function StarredItem({ isActive = false, count = 0, onClick }: StarredItemProps) {
   return (
     <div
       data-active={isActive}
@@ -29,6 +30,11 @@ export function StarredItem({ isActive = false, onClick }: StarredItemProps) {
         <StarIcon className="size-4 -translate-y-px text-amber-500" />
       </span>
       <span className="grow">Starred</span>
+      {count > 0 && (
+        <span className="text-[0.65rem] tabular-nums text-muted-foreground">
+          {count > 99 ? '99+' : count}
+        </span>
+      )}
     </div>
   )
 }

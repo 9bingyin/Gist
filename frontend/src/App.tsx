@@ -23,6 +23,7 @@ function AppContent() {
     selectAll,
     selectFeed,
     selectFolder,
+    selectStarred,
     selectedEntryId,
     selectEntry,
     unreadOnly,
@@ -53,6 +54,7 @@ function AppContent() {
             onSelectAll={selectAll}
             onSelectFeed={selectFeed}
             onSelectFolder={selectFolder}
+            onSelectStarred={selectStarred}
           />
         }
         list={null}
@@ -71,6 +73,7 @@ function AppContent() {
           onSelectAll={selectAll}
           onSelectFeed={selectFeed}
           onSelectFolder={selectFolder}
+          onSelectStarred={selectStarred}
         />
       }
       list={

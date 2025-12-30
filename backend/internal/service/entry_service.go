@@ -10,19 +10,22 @@ import (
 )
 
 type EntryListParams struct {
-	FeedID     *int64
-	FolderID   *int64
-	UnreadOnly bool
-	Limit      int
-	Offset     int
+	FeedID      *int64
+	FolderID    *int64
+	UnreadOnly  bool
+	StarredOnly bool
+	Limit       int
+	Offset      int
 }
 
 type EntryService interface {
 	List(ctx context.Context, params EntryListParams) ([]model.Entry, error)
 	GetByID(ctx context.Context, id int64) (model.Entry, error)
 	MarkAsRead(ctx context.Context, id int64, read bool) error
+	MarkAsStarred(ctx context.Context, id int64, starred bool) error
 	MarkAllAsRead(ctx context.Context, feedID *int64, folderID *int64) error
 	GetUnreadCounts(ctx context.Context) (map[int64]int, error)
+	GetStarredCount(ctx context.Context) (int, error)
 }
 
 type entryService struct {
@@ -76,11 +79,12 @@ func (s *entryService) List(ctx context.Context, params EntryListParams) ([]mode
 	}
 
 	filter := repository.EntryListFilter{
-		FeedID:     params.FeedID,
-		FolderID:   params.FolderID,
-		UnreadOnly: params.UnreadOnly,
-		Limit:      limit,
-		Offset:     params.Offset,
+		FeedID:      params.FeedID,
+		FolderID:    params.FolderID,
+		UnreadOnly:  params.UnreadOnly,
+		StarredOnly: params.StarredOnly,
+		Limit:       limit,
+		Offset:      params.Offset,
 	}
 
 	return s.entries.List(ctx, filter)
@@ -148,4 +152,21 @@ func (s *entryService) GetUnreadCounts(ctx context.Context) (map[int64]int, erro
 	}
 
 	return result, nil
+}
+
+func (s *entryService) MarkAsStarred(ctx context.Context, id int64, starred bool) error {
+	// Check entry exists
+	_, err := s.entries.GetByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
+		return err
+	}
+
+	return s.entries.UpdateStarredStatus(ctx, id, starred)
+}
+
+func (s *entryService) GetStarredCount(ctx context.Context) (int, error) {
+	return s.entries.GetStarredCount(ctx)
 }

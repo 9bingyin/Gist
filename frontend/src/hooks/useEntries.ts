@@ -3,8 +3,10 @@ import {
   listEntries,
   getEntry,
   updateEntryReadStatus,
+  updateEntryStarred,
   markAllAsRead,
   getUnreadCounts,
+  getStarredCount,
 } from '@/api'
 import type { Entry, EntryListParams, MarkAllReadParams } from '@/types/api'
 
@@ -69,6 +71,32 @@ export function useMarkAllAsRead() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['entries'] })
       queryClient.invalidateQueries({ queryKey: ['unreadCounts'] })
+    },
+  })
+}
+
+export function useStarredCount() {
+  return useQuery({
+    queryKey: ['starredCount'],
+    queryFn: getStarredCount,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  })
+}
+
+export function useMarkAsStarred() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ id, starred }: { id: string; starred: boolean }) =>
+      updateEntryStarred(id, starred),
+    onSuccess: (_, { id, starred }) => {
+      queryClient.setQueryData(['entry', id], (old: Entry | undefined) => {
+        if (!old) return old
+        return { ...old, starred }
+      })
+      queryClient.invalidateQueries({ queryKey: ['starredCount'] })
+      queryClient.invalidateQueries({ queryKey: ['entries'] })
     },
   })
 }

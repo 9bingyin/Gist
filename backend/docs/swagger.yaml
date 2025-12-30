@@ -67,6 +67,8 @@ definitions:
         type: boolean
       readableContent:
         type: string
+      starred:
+        type: boolean
       thumbnailUrl:
         type: string
       title:
@@ -165,6 +167,11 @@ definitions:
       readableContent:
         type: string
     type: object
+  internal_handler.starredCountResponse:
+    properties:
+      count:
+        type: integer
+    type: object
   internal_handler.unreadCountsResponse:
     properties:
       counts:
@@ -182,6 +189,11 @@ definitions:
   internal_handler.updateReadRequest:
     properties:
       read:
+        type: boolean
+    type: object
+  internal_handler.updateStarredRequest:
+    properties:
+      starred:
         type: boolean
     type: object
 info:
@@ -236,6 +248,10 @@ paths:
       - description: Only return unread entries
         in: query
         name: unreadOnly
+        type: boolean
+      - description: Only return starred entries
+        in: query
+        name: starredOnly
         type: boolean
       - description: Limit the number of entries (default 50)
         in: query
@@ -344,6 +360,39 @@ paths:
           schema:
             $ref: '#/definitions/internal_handler.errorResponse'
       summary: Update read status
+      tags:
+      - entries
+  /entries/{id}/starred:
+    patch:
+      consumes:
+      - application/json
+      description: Mark an entry as starred or unstarred
+      parameters:
+      - description: Entry ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Starred status
+        in: body
+        name: starred
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.updateStarredRequest'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_handler.errorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_handler.errorResponse'
+      summary: Update starred status
       tags:
       - entries
   /entries/mark-read:
@@ -659,6 +708,19 @@ paths:
       summary: Import Status
       tags:
       - opml
+  /starred-count:
+    get:
+      description: Get the total count of starred entries
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handler.starredCountResponse'
+      summary: Get starred count
+      tags:
+      - entries
   /unread-counts:
     get:
       description: Get a map of feed IDs to their respective unread entry counts

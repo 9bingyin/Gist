@@ -7,7 +7,7 @@ import { FeedItem } from './FeedItem'
 import { SettingsModal } from '@/components/settings'
 import { useFolders } from '@/hooks/useFolders'
 import { useFeeds } from '@/hooks/useFeeds'
-import { useUnreadCounts } from '@/hooks/useEntries'
+import { useUnreadCounts, useStarredCount } from '@/hooks/useEntries'
 import { feedItemStyles, sidebarItemIconStyles } from './styles'
 import type { SelectionType } from '@/hooks/useSelection'
 import type { Folder, Feed } from '@/types/api'
@@ -18,6 +18,7 @@ interface SidebarProps {
   onSelectAll: () => void
   onSelectFeed: (feedId: string) => void
   onSelectFolder: (folderId: string) => void
+  onSelectStarred: () => void
 }
 
 interface FolderWithFeeds {
@@ -43,12 +44,14 @@ export function Sidebar({
   onSelectAll,
   onSelectFeed,
   onSelectFolder,
+  onSelectStarred,
 }: SidebarProps) {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
 
   const { data: folders = [] } = useFolders()
   const { data: feeds = [] } = useFeeds()
   const { data: unreadCountsData } = useUnreadCounts()
+  const { data: starredCountData } = useStarredCount()
 
   const unreadCounts = useMemo(() => {
     if (!unreadCountsData) return new Map<string, number>()
@@ -82,6 +85,7 @@ export function Sidebar({
   const { foldersWithFeeds, uncategorizedFeeds } = groupFeedsByFolder(folders, feeds)
 
   const isAllSelected = selection.type === 'all'
+  const isStarredSelected = selection.type === 'starred'
   const isFeedSelected = (feedId: string) =>
     selection.type === 'feed' && selection.feedId === feedId
   const isFolderSelected = (folderId: string) =>
@@ -110,7 +114,11 @@ export function Sidebar({
         </div>
 
         {/* Starred section */}
-        <StarredItem />
+        <StarredItem
+          isActive={isStarredSelected}
+          count={starredCountData?.count ?? 0}
+          onClick={onSelectStarred}
+        />
 
         {/* Feed categories */}
         <div className="mt-3 space-y-px">

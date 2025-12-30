@@ -13,6 +13,7 @@ type Entry struct {
 	Author          *string
 	PublishedAt     *time.Time
 	Read            bool
+	Starred         bool
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
 }

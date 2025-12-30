@@ -9,6 +9,7 @@ interface EntryContentHeaderProps {
   isLoading: boolean
   error: string | null
   onToggleReadable: () => void
+  onToggleStarred: () => void
 }
 
 export function EntryContentHeader({
@@ -18,6 +19,7 @@ export function EntryContentHeader({
   isLoading,
   error,
   onToggleReadable,
+  onToggleStarred,
 }: EntryContentHeaderProps) {
   const safeUrl = entry.url && isSafeUrl(entry.url) ? entry.url : null
 
@@ -45,6 +47,32 @@ export function EntryContentHeader({
         </div>
 
         <div className="flex shrink-0 items-center gap-1">
+          <button
+            type="button"
+            onClick={onToggleStarred}
+            title={entry.starred ? 'Remove from starred' : 'Add to starred'}
+            className={cn(
+              'no-drag-region flex size-9 items-center justify-center rounded-lg transition-colors',
+              entry.starred
+                ? 'text-amber-500 hover:bg-amber-500/10'
+                : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+            )}
+          >
+            <svg
+              className="size-5"
+              viewBox="0 0 24 24"
+              fill={entry.starred ? 'currentColor' : 'none'}
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"
+              />
+            </svg>
+          </button>
+
           {entry.url && (
             <button
               type="button"

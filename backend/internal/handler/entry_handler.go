@@ -25,9 +25,11 @@ func (h *EntryHandler) RegisterRoutes(g *echo.Group) {
 	g.GET("/entries", h.List)
 	g.GET("/entries/:id", h.GetByID)
 	g.PATCH("/entries/:id/read", h.UpdateReadStatus)
+	g.PATCH("/entries/:id/starred", h.UpdateStarredStatus)
 	g.POST("/entries/:id/fetch-readable", h.FetchReadable)
 	g.POST("/entries/mark-read", h.MarkAllAsRead)
 	g.GET("/unread-counts", h.GetUnreadCounts)
+	g.GET("/starred-count", h.GetStarredCount)
 }
 
 type entryResponse struct {
@@ -41,6 +43,7 @@ type entryResponse struct {
 	Author          *string `json:"author,omitempty"`
 	PublishedAt     *string `json:"publishedAt,omitempty"`
 	Read            bool    `json:"read"`
+	Starred         bool    `json:"starred"`
 	CreatedAt       string  `json:"createdAt"`
 	UpdatedAt       string  `json:"updatedAt"`
 }
@@ -56,6 +59,14 @@ type entryListResponse struct {
 
 type updateReadRequest struct {
 	Read bool `json:"read"`
+}
+
+type updateStarredRequest struct {
+	Starred bool `json:"starred"`
+}
+
+type starredCountResponse struct {
+	Count int `json:"count"`
 }
 
 type markAllReadRequest struct {
@@ -75,6 +86,7 @@ type unreadCountsResponse struct {
 // @Param feedId query int false "Filter by feed ID"
 // @Param folderId query int false "Filter by folder ID"
 // @Param unreadOnly query bool false "Only return unread entries"
+// @Param starredOnly query bool false "Only return starred entries"
 // @Param limit query int false "Limit the number of entries (default 50)"
 // @Param offset query int false "Offset for pagination"
 // @Success 200 {object} entryListResponse
@@ -104,6 +116,10 @@ func (h *EntryHandler) List(c echo.Context) error {
 
 	if c.QueryParam("unreadOnly") == "true" {
 		params.UnreadOnly = true
+	}
+
+	if c.QueryParam("starredOnly") == "true" {
+		params.StarredOnly = true
 	}
 
 	if raw := c.QueryParam("limit"); raw != "" {
@@ -268,6 +284,52 @@ func (h *EntryHandler) GetUnreadCounts(c echo.Context) error {
 	return c.JSON(http.StatusOK, unreadCountsResponse{Counts: stringCounts})
 }
 
+// UpdateStarredStatus updates the starred status of an entry.
+// @Summary Update starred status
+// @Description Mark an entry as starred or unstarred
+// @Tags entries
+// @Accept json
+// @Produce json
+// @Param id path int true "Entry ID"
+// @Param starred body updateStarredRequest true "Starred status"
+// @Success 204 "No Content"
+// @Failure 400 {object} errorResponse
+// @Failure 404 {object} errorResponse
+// @Router /entries/{id}/starred [patch]
+func (h *EntryHandler) UpdateStarredStatus(c echo.Context) error {
+	id, err := parseIDParam(c, "id")
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, errorResponse{Error: "invalid id"})
+	}
+
+	var req updateStarredRequest
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, errorResponse{Error: "invalid request"})
+	}
+
+	if err := h.service.MarkAsStarred(c.Request().Context(), id, req.Starred); err != nil {
+		return writeServiceError(c, err)
+	}
+
+	return c.NoContent(http.StatusNoContent)
+}
+
+// GetStarredCount returns the count of starred entries.
+// @Summary Get starred count
+// @Description Get the total count of starred entries
+// @Tags entries
+// @Produce json
+// @Success 200 {object} starredCountResponse
+// @Router /starred-count [get]
+func (h *EntryHandler) GetStarredCount(c echo.Context) error {
+	count, err := h.service.GetStarredCount(c.Request().Context())
+	if err != nil {
+		return writeServiceError(c, err)
+	}
+
+	return c.JSON(http.StatusOK, starredCountResponse{Count: count})
+}
+
 func toEntryResponse(e model.Entry) entryResponse {
 	resp := entryResponse{
 		ID:              idToString(e.ID),
@@ -279,6 +341,7 @@ func toEntryResponse(e model.Entry) entryResponse {
 		ThumbnailURL:    e.ThumbnailURL,
 		Author:          e.Author,
 		Read:            e.Read,
+		Starred:         e.Starred,
 		CreatedAt:       e.CreatedAt.UTC().Format(time.RFC3339),
 		UpdatedAt:       e.UpdatedAt.UTC().Format(time.RFC3339),
 	}

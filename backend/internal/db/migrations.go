@@ -159,5 +159,23 @@ func runMigrations(db *sql.DB) error {
 		}
 	}
 
+	// Migration 7: Add starred column to entries for bookmarking
+	err = db.QueryRow(`
+		SELECT COUNT(*) FROM pragma_table_info('entries') WHERE name = 'starred'
+	`).Scan(&count)
+	if err != nil {
+		return fmt.Errorf("check starred column: %w", err)
+	}
+
+	if count == 0 {
+		if _, err := db.Exec(`ALTER TABLE entries ADD COLUMN starred INTEGER NOT NULL DEFAULT 0`); err != nil {
+			return fmt.Errorf("add starred column: %w", err)
+		}
+	}
+
+	if _, err := db.Exec(`CREATE INDEX IF NOT EXISTS idx_entries_starred ON entries(starred)`); err != nil {
+		return fmt.Errorf("create idx_entries_starred: %w", err)
+	}
+
 	return nil
 }

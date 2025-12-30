@@ -137,6 +137,8 @@ function getListTitle(
       return feedsMap.get(selection.feedId)?.title || 'Feed'
     case 'folder':
       return foldersMap.get(selection.folderId)?.name || 'Folder'
+    case 'starred':
+      return 'Starred'
   }
 }
 

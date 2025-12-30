@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { useEntry, useMarkAsRead } from '@/hooks/useEntries'
+import { useEntry, useMarkAsRead, useMarkAsStarred } from '@/hooks/useEntries'
 import { useEntryContentScroll } from '@/hooks/useEntryContentScroll'
 import { fetchReadableContent } from '@/api'
 import { EntryContentHeader } from './EntryContentHeader'
@@ -12,6 +12,7 @@ interface EntryContentProps {
 export function EntryContent({ entryId }: EntryContentProps) {
   const { data: entry, isLoading } = useEntry(entryId)
   const { mutate: markAsRead } = useMarkAsRead()
+  const { mutate: markAsStarred } = useMarkAsStarred()
   const { scrollRef, isAtTop } = useEntryContentScroll(entryId)
 
   const [isReadableLoading, setIsReadableLoading] = useState(false)
@@ -54,6 +55,12 @@ export function EntryContent({ entryId }: EntryContentProps) {
   const displayContent = hasReadableContent && showReadable ? readableContent : entry?.content
   const isReadableActive = hasReadableContent && showReadable
 
+  const handleToggleStarred = useCallback(() => {
+    if (entry) {
+      markAsStarred({ id: entry.id, starred: !entry.starred })
+    }
+  }, [entry, markAsStarred])
+
   if (entryId === null) {
     return <EntryContentEmpty />
   }
@@ -75,6 +82,7 @@ export function EntryContent({ entryId }: EntryContentProps) {
         isLoading={isReadableLoading}
         error={readableError}
         onToggleReadable={handleToggleReadable}
+        onToggleStarred={handleToggleStarred}
       />
       <EntryContentBody entry={entry} scrollRef={scrollRef} displayContent={displayContent} />
     </div>

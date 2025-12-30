@@ -92,6 +92,12 @@ const docTemplate = `{
                         "in": "query"
                     },
                     {
+                        "type": "boolean",
+                        "description": "Only return starred entries",
+                        "name": "starredOnly",
+                        "in": "query"
+                    },
+                    {
                         "type": "integer",
                         "description": "Limit the number of entries (default 50)",
                         "name": "limit",
@@ -267,6 +273,56 @@ const docTemplate = `{
                         "required": true,
                         "schema": {
                             "$ref": "#/definitions/internal_handler.updateReadRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.errorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.errorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/entries/{id}/starred": {
+            "patch": {
+                "description": "Mark an entry as starred or unstarred",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "entries"
+                ],
+                "summary": "Update starred status",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Entry ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Starred status",
+                        "name": "starred",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.updateStarredRequest"
                         }
                     }
                 ],
@@ -728,6 +784,26 @@ const docTemplate = `{
                 }
             }
         },
+        "/starred-count": {
+            "get": {
+                "description": "Get the total count of starred entries",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "entries"
+                ],
+                "summary": "Get starred count",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.starredCountResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/unread-counts": {
             "get": {
                 "description": "Get a map of feed IDs to their respective unread entry counts",
@@ -851,6 +927,9 @@ const docTemplate = `{
                 },
                 "readableContent": {
                     "type": "string"
+                },
+                "starred": {
+                    "type": "boolean"
                 },
                 "thumbnailUrl": {
                     "type": "string"
@@ -1004,6 +1083,14 @@ const docTemplate = `{
                 }
             }
         },
+        "internal_handler.starredCountResponse": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer"
+                }
+            }
+        },
         "internal_handler.unreadCountsResponse": {
             "type": "object",
             "properties": {
@@ -1030,6 +1117,14 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "read": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "internal_handler.updateStarredRequest": {
+            "type": "object",
+            "properties": {
+                "starred": {
                     "type": "boolean"
                 }
             }

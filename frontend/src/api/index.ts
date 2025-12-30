@@ -8,6 +8,7 @@ import type {
   Folder,
   ImportTask,
   MarkAllReadParams,
+  StarredCountResponse,
   UnreadCountsResponse,
 } from '@/types/api'
 
@@ -151,6 +152,9 @@ export async function listEntries(params: EntryListParams = {}): Promise<EntryLi
   if (params.unreadOnly) {
     searchParams.set('unreadOnly', 'true')
   }
+  if (params.starredOnly) {
+    searchParams.set('starredOnly', 'true')
+  }
   if (params.limit !== undefined) {
     searchParams.set('limit', String(params.limit))
   }
@@ -190,6 +194,17 @@ export async function markAllAsRead(params: MarkAllReadParams): Promise<void> {
 
 export async function getUnreadCounts(): Promise<UnreadCountsResponse> {
   return request<UnreadCountsResponse>('/api/unread-counts')
+}
+
+export async function updateEntryStarred(id: string, starred: boolean): Promise<void> {
+  return request<void>(`/api/entries/${id}/starred`, {
+    method: 'PATCH',
+    body: JSON.stringify({ starred }),
+  })
+}
+
+export async function getStarredCount(): Promise<StarredCountResponse> {
+  return request<StarredCountResponse>('/api/starred-count')
 }
 
 export async function startImportOPML(file: File): Promise<void> {

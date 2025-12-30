@@ -6,12 +6,14 @@ export type SelectionType =
   | { type: 'all' }
   | { type: 'feed'; feedId: string }
   | { type: 'folder'; folderId: string }
+  | { type: 'starred' }
 
 interface UseSelectionReturn {
   selection: SelectionType
   selectAll: () => void
   selectFeed: (feedId: string) => void
   selectFolder: (folderId: string) => void
+  selectStarred: () => void
   selectedEntryId: string | null
   selectEntry: (entryId: string | null) => void
   unreadOnly: boolean
@@ -45,6 +47,10 @@ export function useSelection(): UseSelectionReturn {
     [navigate, routeState.unreadOnly]
   )
 
+  const selectStarred = useCallback(() => {
+    navigate(buildPath({ type: 'starred' }, null, routeState.unreadOnly))
+  }, [navigate, routeState.unreadOnly])
+
   const selectEntry = useCallback(
     (entryId: string | null) => {
       navigate(buildPath(routeState.selection, entryId, routeState.unreadOnly))
@@ -61,6 +67,7 @@ export function useSelection(): UseSelectionReturn {
     selectAll,
     selectFeed,
     selectFolder,
+    selectStarred,
     selectedEntryId: routeState.entryId,
     selectEntry,
     unreadOnly: routeState.unreadOnly,
@@ -68,7 +75,9 @@ export function useSelection(): UseSelectionReturn {
   }
 }
 
-export function selectionToParams(selection: SelectionType): { feedId?: string; folderId?: string } {
+export function selectionToParams(
+  selection: SelectionType
+): { feedId?: string; folderId?: string; starredOnly?: boolean } {
   switch (selection.type) {
     case 'all':
       return {}
@@ -76,5 +85,7 @@ export function selectionToParams(selection: SelectionType): { feedId?: string; 
       return { feedId: selection.feedId }
     case 'folder':
       return { folderId: selection.folderId }
+    case 'starred':
+      return { starredOnly: true }
   }
 }
