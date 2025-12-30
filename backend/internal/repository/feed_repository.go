@@ -15,7 +15,9 @@ type FeedRepository interface {
 	GetByID(ctx context.Context, id int64) (model.Feed, error)
 	FindByURL(ctx context.Context, url string) (*model.Feed, error)
 	List(ctx context.Context, folderID *int64) ([]model.Feed, error)
+	ListWithoutIcon(ctx context.Context) ([]model.Feed, error)
 	Update(ctx context.Context, feed model.Feed) (model.Feed, error)
+	UpdateIconPath(ctx context.Context, id int64, iconPath string) error
 	Delete(ctx context.Context, id int64) error
 }
 
@@ -57,12 +59,12 @@ func (r *feedRepository) Create(ctx context.Context, feed model.Feed) (model.Fee
 }
 
 func (r *feedRepository) GetByID(ctx context.Context, id int64) (model.Feed, error) {
-	row := r.db.QueryRowContext(ctx, `SELECT id, folder_id, title, url, site_url, description, etag, last_modified, created_at, updated_at FROM feeds WHERE id = ?`, id)
+	row := r.db.QueryRowContext(ctx, `SELECT id, folder_id, title, url, site_url, description, icon_path, etag, last_modified, created_at, updated_at FROM feeds WHERE id = ?`, id)
 	return scanFeed(row)
 }
 
 func (r *feedRepository) FindByURL(ctx context.Context, url string) (*model.Feed, error) {
-	row := r.db.QueryRowContext(ctx, `SELECT id, folder_id, title, url, site_url, description, etag, last_modified, created_at, updated_at FROM feeds WHERE url = ?`, url)
+	row := r.db.QueryRowContext(ctx, `SELECT id, folder_id, title, url, site_url, description, icon_path, etag, last_modified, created_at, updated_at FROM feeds WHERE url = ?`, url)
 	feed, err := scanFeed(row)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -74,15 +76,37 @@ func (r *feedRepository) FindByURL(ctx context.Context, url string) (*model.Feed
 }
 
 func (r *feedRepository) List(ctx context.Context, folderID *int64) ([]model.Feed, error) {
-	query := `SELECT id, folder_id, title, url, site_url, description, etag, last_modified, created_at, updated_at FROM feeds ORDER BY title`
+	query := `SELECT id, folder_id, title, url, site_url, description, icon_path, etag, last_modified, created_at, updated_at FROM feeds ORDER BY title`
 	args := []interface{}{}
 	if folderID != nil {
-		query = `SELECT id, folder_id, title, url, site_url, description, etag, last_modified, created_at, updated_at FROM feeds WHERE folder_id = ? ORDER BY title`
+		query = `SELECT id, folder_id, title, url, site_url, description, icon_path, etag, last_modified, created_at, updated_at FROM feeds WHERE folder_id = ? ORDER BY title`
 		args = append(args, *folderID)
 	}
 	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("list feeds: %w", err)
+	}
+	defer rows.Close()
+
+	var feeds []model.Feed
+	for rows.Next() {
+		feed, err := scanFeed(rows)
+		if err != nil {
+			return nil, err
+		}
+		feeds = append(feeds, feed)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate feeds: %w", err)
+	}
+
+	return feeds, nil
+}
+
+func (r *feedRepository) ListWithoutIcon(ctx context.Context) ([]model.Feed, error) {
+	rows, err := r.db.QueryContext(ctx, `SELECT id, folder_id, title, url, site_url, description, icon_path, etag, last_modified, created_at, updated_at FROM feeds WHERE icon_path IS NULL OR icon_path = ''`)
+	if err != nil {
+		return nil, fmt.Errorf("list feeds without icon: %w", err)
 	}
 	defer rows.Close()
 
@@ -123,6 +147,17 @@ func (r *feedRepository) Update(ctx context.Context, feed model.Feed) (model.Fee
 	return feed, nil
 }
 
+func (r *feedRepository) UpdateIconPath(ctx context.Context, id int64, iconPath string) error {
+	_, err := r.db.ExecContext(
+		ctx,
+		`UPDATE feeds SET icon_path = ?, updated_at = ? WHERE id = ?`,
+		iconPath,
+		formatTime(time.Now()),
+		id,
+	)
+	return err
+}
+
 func (r *feedRepository) Delete(ctx context.Context, id int64) error {
 	if _, err := r.db.ExecContext(ctx, `DELETE FROM feeds WHERE id = ?`, id); err != nil {
 		return fmt.Errorf("delete feed: %w", err)
@@ -137,6 +172,7 @@ func scanFeed(scanner interface {
 	var folderID sql.NullInt64
 	var siteURL sql.NullString
 	var description sql.NullString
+	var iconPath sql.NullString
 	var etag sql.NullString
 	var lastModified sql.NullString
 	var createdAt string
@@ -148,6 +184,7 @@ func scanFeed(scanner interface {
 		&feed.URL,
 		&siteURL,
 		&description,
+		&iconPath,
 		&etag,
 		&lastModified,
 		&createdAt,
@@ -163,6 +200,9 @@ func scanFeed(scanner interface {
 	}
 	if description.Valid {
 		feed.Description = &description.String
+	}
+	if iconPath.Valid {
+		feed.IconPath = &iconPath.String
 	}
 	if etag.Valid {
 		feed.ETag = &etag.String

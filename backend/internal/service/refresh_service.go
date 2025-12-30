@@ -109,8 +109,9 @@ func (s *refreshService) refreshFeedInternal(ctx context.Context, feed model.Fee
 		}
 	}
 
-	// Save entries
-	savedCount := 0
+	// Save entries (CreateOrUpdate handles duplicates via ON CONFLICT)
+	newCount := 0
+	updatedCount := 0
 	for _, item := range parsed.Items {
 		entry := itemToEntry(feed.ID, item)
 		if entry.URL == nil || *entry.URL == "" {
@@ -123,18 +124,22 @@ func (s *refreshService) refreshFeedInternal(ctx context.Context, feed model.Fee
 			log.Printf("check entry exists: %v", err)
 			continue
 		}
-		if exists {
-			continue
-		}
 
 		if err := s.entries.CreateOrUpdate(ctx, entry); err != nil {
 			log.Printf("save entry: %v", err)
 			continue
 		}
-		savedCount++
+
+		if exists {
+			updatedCount++
+		} else {
+			newCount++
+		}
 	}
 
-	log.Printf("feed %d (%s): saved %d new entries", feed.ID, feed.Title, savedCount)
+	if newCount > 0 || updatedCount > 0 {
+		log.Printf("feed %d (%s): %d new, %d updated", feed.ID, feed.Title, newCount, updatedCount)
+	}
 	return nil
 }
 

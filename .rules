@@ -58,7 +58,7 @@
     *   **异步处理**：摘要/翻译任务必须进队列异步执行，不阻塞 Feed 更新。
 *   **API 文档 (Swagger)**：
     *   **注解驱动**：在 Handler 中使用 `swag` 注解定义规范。
-    *   **自动化**：运行 `swag init -g cmd/server/main.go --parseDependency --parseInternal` 更新。
+    *   **自动化**：API 更新后必须运行 `swag init -g cmd/server/main.go --parseDependency --parseInternal` 重新生成文档。
     *   **UI**：集成 `echo-swagger` 暴露 `/swagger/index.html`。
 
 ### 4.5 安全防御

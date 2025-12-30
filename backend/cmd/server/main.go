@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"os"
 	"os/signal"
@@ -33,8 +34,17 @@ func main() {
 	feedRepo := repository.NewFeedRepository(dbConn)
 	entryRepo := repository.NewEntryRepository(dbConn)
 
+	iconService := service.NewIconService(cfg.DataDir, feedRepo)
+
+	// Backfill icons for existing feeds (run in background)
+	go func() {
+		if err := iconService.BackfillIcons(context.Background()); err != nil {
+			log.Printf("backfill icons: %v", err)
+		}
+	}()
+
 	folderService := service.NewFolderService(folderRepo)
-	feedService := service.NewFeedService(feedRepo, folderRepo, entryRepo, nil)
+	feedService := service.NewFeedService(feedRepo, folderRepo, entryRepo, iconService, nil)
 	entryService := service.NewEntryService(entryRepo, feedRepo, folderRepo)
 	readabilityService := service.NewReadabilityService(entryRepo)
 	opmlService := service.NewOPMLService(dbConn, folderRepo, feedRepo)
@@ -44,8 +54,9 @@ func main() {
 	feedHandler := handler.NewFeedHandler(feedService)
 	entryHandler := handler.NewEntryHandler(entryService, readabilityService)
 	opmlHandler := handler.NewOPMLHandler(opmlService)
+	iconHandler := handler.NewIconHandler(cfg.DataDir, iconService, feedRepo)
 
-	router := transport.NewRouter(folderHandler, feedHandler, entryHandler, opmlHandler, cfg.StaticDir)
+	router := transport.NewRouter(folderHandler, feedHandler, entryHandler, opmlHandler, iconHandler, cfg.StaticDir)
 
 	// Start background scheduler (15 minutes interval)
 	sched := scheduler.New(refreshService, 15*time.Minute)

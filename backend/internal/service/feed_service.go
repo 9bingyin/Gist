@@ -38,15 +38,16 @@ type feedService struct {
 	feeds      repository.FeedRepository
 	folders    repository.FolderRepository
 	entries    repository.EntryRepository
+	icons      IconService
 	httpClient *http.Client
 }
 
-func NewFeedService(feeds repository.FeedRepository, folders repository.FolderRepository, entries repository.EntryRepository, httpClient *http.Client) FeedService {
+func NewFeedService(feeds repository.FeedRepository, folders repository.FolderRepository, entries repository.EntryRepository, icons IconService, httpClient *http.Client) FeedService {
 	client := httpClient
 	if client == nil {
 		client = &http.Client{Timeout: 20 * time.Second}
 	}
-	return &feedService{feeds: feeds, folders: folders, entries: entries, httpClient: client}
+	return &feedService{feeds: feeds, folders: folders, entries: entries, icons: icons, httpClient: client}
 }
 
 func (s *feedService) Add(ctx context.Context, feedURL string, folderID *int64, titleOverride string) (model.Feed, error) {
@@ -93,6 +94,18 @@ func (s *feedService) Add(ctx context.Context, feedURL string, folderID *int64, 
 	created, err := s.feeds.Create(ctx, feed)
 	if err != nil {
 		return model.Feed{}, err
+	}
+
+	// Download and save icon
+	if s.icons != nil {
+		siteURL := ""
+		if created.SiteURL != nil {
+			siteURL = *created.SiteURL
+		}
+		if iconPath, err := s.icons.FetchAndSaveIcon(ctx, created.ID, fetched.imageURL, siteURL); err == nil && iconPath != "" {
+			_ = s.feeds.UpdateIconPath(ctx, created.ID, iconPath)
+			created.IconPath = &iconPath
+		}
 	}
 
 	// Save entries from the fetched feed
@@ -269,6 +282,9 @@ func itemToEntry(feedID int64, item *gofeed.Item) model.Entry {
 		entry.Content = &content
 	}
 
+	// Extract thumbnail from media tags
+	entry.ThumbnailURL = extractThumbnail(item)
+
 	if item.Author != nil && item.Author.Name != "" {
 		author := strings.TrimSpace(item.Author.Name)
 		entry.Author = &author
@@ -283,6 +299,56 @@ func itemToEntry(feedID int64, item *gofeed.Item) model.Entry {
 	}
 
 	return entry
+}
+
+func extractThumbnail(item *gofeed.Item) *string {
+	// 1. Check item.Image
+	if item.Image != nil && item.Image.URL != "" {
+		url := strings.TrimSpace(item.Image.URL)
+		return &url
+	}
+
+	// 2. Check enclosures for image type
+	for _, enc := range item.Enclosures {
+		if strings.HasPrefix(enc.Type, "image/") {
+			url := strings.TrimSpace(enc.URL)
+			if url != "" {
+				return &url
+			}
+		}
+	}
+
+	// 3. Check media:content and media:thumbnail
+	if media, ok := item.Extensions["media"]; ok {
+		// Check media:content
+		if content, ok := media["content"]; ok {
+			for _, c := range content {
+				url := strings.TrimSpace(c.Attrs["url"])
+				if url == "" {
+					continue
+				}
+				// Check type attribute
+				if typ := c.Attrs["type"]; strings.HasPrefix(typ, "image/") {
+					return &url
+				}
+				// Check medium attribute
+				if medium := c.Attrs["medium"]; medium == "image" {
+					return &url
+				}
+			}
+		}
+		// Check media:thumbnail
+		if thumb, ok := media["thumbnail"]; ok {
+			for _, t := range thumb {
+				url := strings.TrimSpace(t.Attrs["url"])
+				if url != "" {
+					return &url
+				}
+			}
+		}
+	}
+
+	return nil
 }
 
 func optionalString(value string) *string {

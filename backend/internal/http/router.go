@@ -14,6 +14,7 @@ func NewRouter(
 	feedHandler *handler.FeedHandler,
 	entryHandler *handler.EntryHandler,
 	opmlHandler *handler.OPMLHandler,
+	iconHandler *handler.IconHandler,
 	staticDir string,
 ) *echo.Echo {
 	e := echo.New()
@@ -28,6 +29,9 @@ func NewRouter(
 	feedHandler.RegisterRoutes(api)
 	entryHandler.RegisterRoutes(api)
 	opmlHandler.RegisterRoutes(api)
+
+	// Icon routes with cache recovery
+	iconHandler.RegisterRoutes(e)
 
 	registerStatic(e, staticDir)
 
