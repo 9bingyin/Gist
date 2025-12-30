@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -109,8 +110,9 @@ func (s *feedService) Add(ctx context.Context, feedURL string, folderID *int64, 
 	}
 
 	// Save entries from the fetched feed
+	dynamicTime := hasDynamicTime(fetched.items)
 	for _, item := range fetched.items {
-		entry := itemToEntry(created.ID, item)
+		entry := itemToEntry(created.ID, item, dynamicTime)
 		if entry.URL == nil || *entry.URL == "" {
 			continue
 		}
@@ -259,7 +261,25 @@ func (s *feedService) fetchFeed(ctx context.Context, feedURL string) (feedFetch,
 	}, nil
 }
 
-func itemToEntry(feedID int64, item *gofeed.Item) model.Entry {
+// hasDynamicTime checks if all items have the same updated time (dynamic generation)
+func hasDynamicTime(items []*gofeed.Item) bool {
+	if len(items) < 2 {
+		return false
+	}
+	var firstTime *time.Time
+	for _, item := range items {
+		if item.UpdatedParsed != nil {
+			if firstTime == nil {
+				firstTime = item.UpdatedParsed
+			} else if !firstTime.Equal(*item.UpdatedParsed) {
+				return false
+			}
+		}
+	}
+	return firstTime != nil
+}
+
+func itemToEntry(feedID int64, item *gofeed.Item, ignoreDynamicTime bool) model.Entry {
 	entry := model.Entry{
 		FeedID: feedID,
 	}
@@ -290,15 +310,46 @@ func itemToEntry(feedID int64, item *gofeed.Item) model.Entry {
 		entry.Author = &author
 	}
 
-	if item.PublishedParsed != nil {
-		t := item.PublishedParsed.UTC()
-		entry.PublishedAt = &t
-	} else if item.UpdatedParsed != nil {
-		t := item.UpdatedParsed.UTC()
-		entry.PublishedAt = &t
-	}
+	entry.PublishedAt = extractPublishedAt(item, ignoreDynamicTime)
 
 	return entry
+}
+
+func extractPublishedAt(item *gofeed.Item, ignoreDynamicTime bool) *time.Time {
+	now := time.Now()
+
+	// 1. Try to extract from summary (SEC RSS: "Filed: 2025-12-17")
+	if t := extractDateFromSummary(item.Description); t != nil {
+		return t
+	}
+
+	// 2. Try standard fields, reject future dates
+	if item.PublishedParsed != nil && !item.PublishedParsed.After(now) {
+		t := item.PublishedParsed.UTC()
+		return &t
+	}
+	if !ignoreDynamicTime && item.UpdatedParsed != nil && !item.UpdatedParsed.After(now) {
+		t := item.UpdatedParsed.UTC()
+		return &t
+	}
+
+	return nil
+}
+
+var filedDateRegex = regexp.MustCompile(`Filed:.*?(\d{4}-\d{2}-\d{2})`)
+
+func extractDateFromSummary(summary string) *time.Time {
+	if summary == "" {
+		return nil
+	}
+	matches := filedDateRegex.FindStringSubmatch(summary)
+	if len(matches) >= 2 {
+		if t, err := time.Parse("2006-01-02", matches[1]); err == nil {
+			utc := t.UTC()
+			return &utc
+		}
+	}
+	return nil
 }
 
 func extractThumbnail(item *gofeed.Item) *string {

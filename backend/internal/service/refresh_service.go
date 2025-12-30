@@ -112,8 +112,9 @@ func (s *refreshService) refreshFeedInternal(ctx context.Context, feed model.Fee
 	// Save entries (CreateOrUpdate handles duplicates via ON CONFLICT)
 	newCount := 0
 	updatedCount := 0
+	dynamicTime := hasDynamicTime(parsed.Items)
 	for _, item := range parsed.Items {
-		entry := itemToEntry(feed.ID, item)
+		entry := itemToEntry(feed.ID, item, dynamicTime)
 		if entry.URL == nil || *entry.URL == "" {
 			continue
 		}

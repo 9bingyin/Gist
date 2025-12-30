@@ -190,7 +190,8 @@ func (r *entryRepository) GetAllUnreadCounts(ctx context.Context) ([]UnreadCount
 
 func scanEntry(row *sql.Row) (model.Entry, error) {
 	var e model.Entry
-	var publishedAt, createdAt, updatedAt string
+	var publishedAt sql.NullString
+	var createdAt, updatedAt string
 	var readInt int
 
 	err := row.Scan(
@@ -202,7 +203,9 @@ func scanEntry(row *sql.Row) (model.Entry, error) {
 	}
 
 	e.Read = readInt == 1
-	e.PublishedAt = parseTimePtr(publishedAt)
+	if publishedAt.Valid {
+		e.PublishedAt = parseTimePtr(publishedAt.String)
+	}
 	e.CreatedAt, _ = parseTime(createdAt)
 	e.UpdatedAt, _ = parseTime(updatedAt)
 
@@ -211,7 +214,8 @@ func scanEntry(row *sql.Row) (model.Entry, error) {
 
 func scanEntryRows(rows *sql.Rows) (model.Entry, error) {
 	var e model.Entry
-	var publishedAt, createdAt, updatedAt string
+	var publishedAt sql.NullString
+	var createdAt, updatedAt string
 	var readInt int
 
 	err := rows.Scan(
@@ -223,7 +227,9 @@ func scanEntryRows(rows *sql.Rows) (model.Entry, error) {
 	}
 
 	e.Read = readInt == 1
-	e.PublishedAt = parseTimePtr(publishedAt)
+	if publishedAt.Valid {
+		e.PublishedAt = parseTimePtr(publishedAt.String)
+	}
 	e.CreatedAt, _ = parseTime(createdAt)
 	e.UpdatedAt, _ = parseTime(updatedAt)
 
