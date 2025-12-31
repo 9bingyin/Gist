@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -29,12 +30,25 @@ type summarizeResponse struct {
 	Cached  bool   `json:"cached"`
 }
 
+type translateRequest struct {
+	EntryID       string `json:"entryId"`
+	Content       string `json:"content"`
+	Title         string `json:"title"`
+	IsReadability bool   `json:"isReadability"`
+}
+
+type translateResponse struct {
+	Content string `json:"content"`
+	Cached  bool   `json:"cached"`
+}
+
 func NewAIHandler(service service.AIService) *AIHandler {
 	return &AIHandler{service: service}
 }
 
 func (h *AIHandler) RegisterRoutes(g *echo.Group) {
 	g.POST("/ai/summarize", h.Summarize)
+	g.POST("/ai/translate", h.Translate)
 }
 
 // Summarize generates an AI summary of the content.
@@ -128,6 +142,136 @@ func (h *AIHandler) Summarize(c echo.Context) error {
 				return nil
 			}
 			c.Response().Flush()
+
+		case <-ctx.Done():
+			return nil
+		}
+	}
+}
+
+// translateInitEvent represents the initial event with all original blocks.
+type translateInitEvent struct {
+	Blocks []translateBlockData `json:"blocks"`
+}
+
+type translateBlockData struct {
+	Index         int    `json:"index"`
+	HTML          string `json:"html"`
+	NeedTranslate bool   `json:"needTranslate"`
+}
+
+// translateBlockEvent represents an SSE event for translated block.
+type translateBlockEvent struct {
+	Index int    `json:"index"`
+	HTML  string `json:"html"`
+}
+
+// translateDoneEvent represents the completion of translation.
+type translateDoneEvent struct {
+	Done bool `json:"done"`
+}
+
+// translateErrorEvent represents an error during translation.
+type translateErrorEvent struct {
+	Error string `json:"error"`
+}
+
+// Translate generates an AI translation of the content.
+// @Summary Generate AI translation
+// @Description Translate article content. Returns cached result if available, otherwise streams block translations via SSE.
+// @Tags ai
+// @Accept json
+// @Produce json
+// @Produce text/event-stream
+// @Param request body translateRequest true "Translate request"
+// @Success 200 {object} translateResponse
+// @Failure 400 {object} errorResponse
+// @Failure 500 {object} errorResponse
+// @Router /ai/translate [post]
+func (h *AIHandler) Translate(c echo.Context) error {
+	var req translateRequest
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, errorResponse{Error: "invalid request"})
+	}
+
+	if req.Content == "" {
+		return c.JSON(http.StatusBadRequest, errorResponse{Error: "content is required"})
+	}
+
+	// Parse entry ID
+	entryID, err := strconv.ParseInt(req.EntryID, 10, 64)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, errorResponse{Error: "invalid entry ID"})
+	}
+
+	ctx := c.Request().Context()
+
+	// Check cache first
+	cached, err := h.service.GetCachedTranslation(ctx, entryID, req.IsReadability)
+	if err != nil {
+		c.Logger().Errorf("get cached translation: %v", err)
+	}
+	if cached != nil {
+		return c.JSON(http.StatusOK, translateResponse{
+			Content: cached.Content,
+			Cached:  true,
+		})
+	}
+
+	// Start block translation
+	blockInfos, resultCh, errCh, err := h.service.TranslateBlocks(ctx, entryID, req.Content, req.Title, req.IsReadability)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, errorResponse{Error: err.Error()})
+	}
+
+	// Set headers for SSE
+	c.Response().Header().Set("Content-Type", "text/event-stream")
+	c.Response().Header().Set("Cache-Control", "no-cache")
+	c.Response().Header().Set("Connection", "keep-alive")
+	c.Response().WriteHeader(http.StatusOK)
+
+	// Send init event with all original blocks
+	initBlocks := make([]translateBlockData, len(blockInfos))
+	for i, b := range blockInfos {
+		initBlocks[i] = translateBlockData{
+			Index:         b.Index,
+			HTML:          b.HTML,
+			NeedTranslate: b.NeedTranslate,
+		}
+	}
+	initEvent := translateInitEvent{Blocks: initBlocks}
+	initData, _ := json.Marshal(initEvent)
+	fmt.Fprintf(c.Response(), "data: %s\n\n", initData)
+	c.Response().Flush()
+
+	// Stream the translation results
+	for {
+		select {
+		case result, ok := <-resultCh:
+			if !ok {
+				// Channel closed, send done event
+				doneEvent := translateDoneEvent{Done: true}
+				data, _ := json.Marshal(doneEvent)
+				fmt.Fprintf(c.Response(), "data: %s\n\n", data)
+				c.Response().Flush()
+				return nil
+			}
+
+			// Send translated block result
+			event := translateBlockEvent{Index: result.Index, HTML: result.HTML}
+			data, _ := json.Marshal(event)
+			fmt.Fprintf(c.Response(), "data: %s\n\n", data)
+			c.Response().Flush()
+
+		case err := <-errCh:
+			if err != nil {
+				c.Logger().Errorf("translate error: %v", err)
+				errorEvent := translateErrorEvent{Error: err.Error()}
+				data, _ := json.Marshal(errorEvent)
+				fmt.Fprintf(c.Response(), "data: %s\n\n", data)
+				c.Response().Flush()
+				// Continue to receive remaining results
+			}
 
 		case <-ctx.Done():
 			return nil
