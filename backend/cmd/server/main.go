@@ -58,7 +58,7 @@ func main() {
 	proxyService := service.NewProxyService()
 
 	folderHandler := handler.NewFolderHandler(folderService)
-	feedHandler := handler.NewFeedHandler(feedService)
+	feedHandler := handler.NewFeedHandler(feedService, refreshService)
 	entryHandler := handler.NewEntryHandler(entryService, readabilityService)
 	importTaskService := service.NewImportTaskService()
 	opmlHandler := handler.NewOPMLHandler(opmlService, importTaskService)

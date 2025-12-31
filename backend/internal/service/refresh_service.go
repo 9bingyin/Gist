@@ -2,9 +2,11 @@ package service
 
 import (
 	"context"
+	"errors"
 	"log"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/mmcdole/gofeed"
@@ -13,15 +15,20 @@ import (
 	"gist/backend/internal/repository"
 )
 
+var ErrAlreadyRefreshing = errors.New("refresh already in progress")
+
 type RefreshService interface {
 	RefreshAll(ctx context.Context) error
 	RefreshFeed(ctx context.Context, feedID int64) error
+	IsRefreshing() bool
 }
 
 type refreshService struct {
-	feeds      repository.FeedRepository
-	entries    repository.EntryRepository
-	httpClient *http.Client
+	feeds        repository.FeedRepository
+	entries      repository.EntryRepository
+	httpClient   *http.Client
+	mu           sync.Mutex
+	isRefreshing bool
 }
 
 func NewRefreshService(feeds repository.FeedRepository, entries repository.EntryRepository, httpClient *http.Client) RefreshService {
@@ -37,6 +44,20 @@ func NewRefreshService(feeds repository.FeedRepository, entries repository.Entry
 }
 
 func (s *refreshService) RefreshAll(ctx context.Context) error {
+	s.mu.Lock()
+	if s.isRefreshing {
+		s.mu.Unlock()
+		return ErrAlreadyRefreshing
+	}
+	s.isRefreshing = true
+	s.mu.Unlock()
+
+	defer func() {
+		s.mu.Lock()
+		s.isRefreshing = false
+		s.mu.Unlock()
+	}()
+
 	feeds, err := s.feeds.List(ctx, nil)
 	if err != nil {
 		return err
@@ -50,6 +71,12 @@ func (s *refreshService) RefreshAll(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func (s *refreshService) IsRefreshing() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.isRefreshing
 }
 
 func (s *refreshService) RefreshFeed(ctx context.Context, feedID int64) error {

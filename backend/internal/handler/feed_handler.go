@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -13,7 +14,8 @@ import (
 )
 
 type FeedHandler struct {
-	service service.FeedService
+	service        service.FeedService
+	refreshService service.RefreshService
 }
 
 type createFeedRequest struct {
@@ -25,6 +27,10 @@ type createFeedRequest struct {
 type updateFeedRequest struct {
 	Title    string `json:"title"`
 	FolderID *int64 `json:"folderId"`
+}
+
+type deleteFeedsRequest struct {
+	IDs []int64 `json:"ids"`
 }
 
 type feedResponse struct {
@@ -51,16 +57,18 @@ type feedPreviewResponse struct {
 	LastUpdated *string `json:"lastUpdated,omitempty"`
 }
 
-func NewFeedHandler(service service.FeedService) *FeedHandler {
-	return &FeedHandler{service: service}
+func NewFeedHandler(service service.FeedService, refreshService service.RefreshService) *FeedHandler {
+	return &FeedHandler{service: service, refreshService: refreshService}
 }
 
 func (h *FeedHandler) RegisterRoutes(g *echo.Group) {
 	g.POST("/feeds", h.Create)
+	g.POST("/feeds/refresh", h.RefreshAll)
 	g.GET("/feeds/preview", h.Preview)
 	g.GET("/feeds", h.List)
 	g.PUT("/feeds/:id", h.Update)
 	g.DELETE("/feeds/:id", h.Delete)
+	g.DELETE("/feeds", h.DeleteBatch)
 }
 
 // Create creates a new feed.
@@ -178,6 +186,50 @@ func (h *FeedHandler) Delete(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, errorResponse{Error: "invalid request"})
 	}
 	if err := h.service.Delete(c.Request().Context(), id); err != nil {
+		return writeServiceError(c, err)
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
+// DeleteBatch deletes multiple feeds.
+// @Summary Delete multiple feeds
+// @Description Unsubscribe from multiple feeds at once
+// @Tags feeds
+// @Accept json
+// @Param request body deleteFeedsRequest true "Feed IDs to delete"
+// @Success 204 "No Content"
+// @Failure 400 {object} errorResponse
+// @Router /feeds [delete]
+func (h *FeedHandler) DeleteBatch(c echo.Context) error {
+	var req deleteFeedsRequest
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, errorResponse{Error: "invalid request"})
+	}
+	if len(req.IDs) == 0 {
+		return c.JSON(http.StatusBadRequest, errorResponse{Error: "no feed IDs provided"})
+	}
+
+	for _, id := range req.IDs {
+		if err := h.service.Delete(c.Request().Context(), id); err != nil {
+			return writeServiceError(c, err)
+		}
+	}
+
+	return c.NoContent(http.StatusNoContent)
+}
+
+// RefreshAll triggers a refresh of all feeds.
+// @Summary Refresh all feeds
+// @Description Trigger an immediate refresh of all subscribed feeds
+// @Tags feeds
+// @Success 204 "No Content"
+// @Failure 409 {object} errorResponse "Refresh already in progress"
+// @Router /feeds/refresh [post]
+func (h *FeedHandler) RefreshAll(c echo.Context) error {
+	if err := h.refreshService.RefreshAll(c.Request().Context()); err != nil {
+		if errors.Is(err, service.ErrAlreadyRefreshing) {
+			return c.JSON(http.StatusConflict, errorResponse{Error: "refresh already in progress"})
+		}
 		return writeServiceError(c, err)
 	}
 	return c.NoContent(http.StatusNoContent)

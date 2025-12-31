@@ -135,6 +135,19 @@ export async function deleteFeed(id: string): Promise<void> {
   })
 }
 
+export async function deleteFeeds(ids: string[]): Promise<void> {
+  return request<void>('/api/feeds', {
+    method: 'DELETE',
+    body: JSON.stringify({ ids: ids.map((id) => Number(id)) }),
+  })
+}
+
+export async function refreshAllFeeds(): Promise<void> {
+  return request<void>('/api/feeds/refresh', {
+    method: 'POST',
+  })
+}
+
 export async function previewFeed(url: string): Promise<FeedPreview> {
   const params = new URLSearchParams({ url })
   return request<FeedPreview>(`/api/feeds/preview?${params.toString()}`)

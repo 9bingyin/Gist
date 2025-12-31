@@ -34,6 +34,20 @@ const navItems: NavItem[] = [
     ),
   },
   {
+    id: 'feeds',
+    label: '订阅源',
+    icon: (
+      <svg className="size-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={1.5}
+          d="M6 5c7.18 0 13 5.82 13 13M6 11a7 7 0 017 7m-6 0a1 1 0 11-2 0 1 1 0 012 0z"
+        />
+      </svg>
+    ),
+  },
+  {
     id: 'data',
     label: '数据控制',
     icon: (

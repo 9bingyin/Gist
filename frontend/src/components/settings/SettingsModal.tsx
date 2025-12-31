@@ -7,9 +7,10 @@ import {
 import { SettingsSidebar } from './SettingsSidebar'
 import { GeneralSettings } from './tabs/GeneralSettings'
 import { DataControl } from './tabs/DataControl'
+import { FeedsSettings } from './tabs/FeedsSettings'
 import { cn } from '@/lib/utils'
 
-export type SettingsTab = 'general' | 'data'
+export type SettingsTab = 'general' | 'feeds' | 'data'
 
 interface SettingsModalProps {
   open: boolean
@@ -23,6 +24,8 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
     switch (activeTab) {
       case 'general':
         return <GeneralSettings />
+      case 'feeds':
+        return <FeedsSettings />
       case 'data':
         return <DataControl />
       default:
@@ -34,6 +37,8 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
     switch (activeTab) {
       case 'general':
         return '通用'
+      case 'feeds':
+        return '订阅源'
       case 'data':
         return '数据控制'
       default:
@@ -60,6 +65,17 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
             />
           </svg>
         )
+      case 'feeds':
+        return (
+          <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={1.5}
+              d="M6 5c7.18 0 13 5.82 13 13M6 11a7 7 0 017 7m-6 0a1 1 0 11-2 0 1 1 0 012 0z"
+            />
+          </svg>
+        )
       case 'data':
         return (
           <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -78,7 +94,7 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[800px] h-[600px] max-h-[85vh] p-0 overflow-hidden gap-0">
+      <DialogContent className="w-[950px] h-[800px] max-w-[95vw] max-h-[90vh] p-0 overflow-hidden gap-0">
         <div className="flex h-full">
           <SettingsSidebar activeTab={activeTab} onTabChange={setActiveTab} />
 
