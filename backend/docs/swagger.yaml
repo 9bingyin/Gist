@@ -44,7 +44,14 @@ definitions:
     properties:
       ids:
         items:
-          type: integer
+          type: string
+        type: array
+    type: object
+  internal_handler.deleteFoldersRequest:
+    properties:
+      ids:
+        items:
+          type: string
         type: array
     type: object
   internal_handler.entryListResponse:
@@ -586,6 +593,27 @@ paths:
       tags:
       - feeds
   /folders:
+    delete:
+      consumes:
+      - application/json
+      description: Delete multiple folders at once (also deletes feeds in them)
+      parameters:
+      - description: Folder IDs to delete
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.deleteFoldersRequest'
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_handler.errorResponse'
+      summary: Delete multiple folders
+      tags:
+      - folders
     get:
       description: Get a list of all folders
       produces:

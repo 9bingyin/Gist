@@ -646,6 +646,38 @@ const docTemplate = `{
                         }
                     }
                 }
+            },
+            "delete": {
+                "description": "Delete multiple folders at once (also deletes feeds in them)",
+                "consumes": [
+                    "application/json"
+                ],
+                "tags": [
+                    "folders"
+                ],
+                "summary": "Delete multiple folders",
+                "parameters": [
+                    {
+                        "description": "Folder IDs to delete",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.deleteFoldersRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.errorResponse"
+                        }
+                    }
+                }
             }
         },
         "/folders/{id}": {
@@ -945,7 +977,18 @@ const docTemplate = `{
                 "ids": {
                     "type": "array",
                     "items": {
-                        "type": "integer"
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "internal_handler.deleteFoldersRequest": {
+            "type": "object",
+            "properties": {
+                "ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
                     }
                 }
             }

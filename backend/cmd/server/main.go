@@ -48,7 +48,7 @@ func main() {
 		}
 	}()
 
-	folderService := service.NewFolderService(folderRepo)
+	folderService := service.NewFolderService(folderRepo, feedRepo)
 	feedService := service.NewFeedService(feedRepo, folderRepo, entryRepo, iconService, nil)
 	entryService := service.NewEntryService(entryRepo, feedRepo, folderRepo)
 	readabilityService := service.NewReadabilityService(entryRepo)

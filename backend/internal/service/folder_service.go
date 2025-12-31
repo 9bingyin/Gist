@@ -20,10 +20,11 @@ type FolderService interface {
 
 type folderService struct {
 	folders repository.FolderRepository
+	feeds   repository.FeedRepository
 }
 
-func NewFolderService(folders repository.FolderRepository) FolderService {
-	return &folderService{folders: folders}
+func NewFolderService(folders repository.FolderRepository, feeds repository.FeedRepository) FolderService {
+	return &folderService{folders: folders, feeds: feeds}
 }
 
 func (s *folderService) Create(ctx context.Context, name string, parentID *int64) (model.Folder, error) {
@@ -90,5 +91,17 @@ func (s *folderService) Delete(ctx context.Context, id int64) error {
 		}
 		return fmt.Errorf("get folder: %w", err)
 	}
+
+	// Delete all feeds in this folder (entries will be cascade deleted by DB)
+	feeds, err := s.feeds.List(ctx, &id)
+	if err != nil {
+		return fmt.Errorf("list feeds in folder: %w", err)
+	}
+	for _, feed := range feeds {
+		if err := s.feeds.Delete(ctx, feed.ID); err != nil {
+			return fmt.Errorf("delete feed %d: %w", feed.ID, err)
+		}
+	}
+
 	return s.folders.Delete(ctx, id)
 }

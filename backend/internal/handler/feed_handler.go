@@ -30,7 +30,7 @@ type updateFeedRequest struct {
 }
 
 type deleteFeedsRequest struct {
-	IDs []int64 `json:"ids"`
+	IDs []string `json:"ids"`
 }
 
 type feedResponse struct {
@@ -209,7 +209,11 @@ func (h *FeedHandler) DeleteBatch(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, errorResponse{Error: "no feed IDs provided"})
 	}
 
-	for _, id := range req.IDs {
+	for _, idStr := range req.IDs {
+		id, err := strconv.ParseInt(idStr, 10, 64)
+		if err != nil {
+			return c.JSON(http.StatusBadRequest, errorResponse{Error: "invalid feed ID"})
+		}
 		if err := h.service.Delete(c.Request().Context(), id); err != nil {
 			return writeServiceError(c, err)
 		}

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -17,6 +18,10 @@ type FolderHandler struct {
 type folderRequest struct {
 	Name     string `json:"name"`
 	ParentID *int64 `json:"parentId"`
+}
+
+type deleteFoldersRequest struct {
+	IDs []string `json:"ids"`
 }
 
 type folderResponse struct {
@@ -36,6 +41,7 @@ func (h *FolderHandler) RegisterRoutes(g *echo.Group) {
 	g.GET("/folders", h.List)
 	g.PUT("/folders/:id", h.Update)
 	g.DELETE("/folders/:id", h.Delete)
+	g.DELETE("/folders", h.DeleteBatch)
 }
 
 // Create creates a new folder.
@@ -124,6 +130,37 @@ func (h *FolderHandler) Delete(c echo.Context) error {
 	if err := h.service.Delete(c.Request().Context(), id); err != nil {
 		return writeServiceError(c, err)
 	}
+	return c.NoContent(http.StatusNoContent)
+}
+
+// DeleteBatch deletes multiple folders.
+// @Summary Delete multiple folders
+// @Description Delete multiple folders at once (also deletes feeds in them)
+// @Tags folders
+// @Accept json
+// @Param request body deleteFoldersRequest true "Folder IDs to delete"
+// @Success 204 "No Content"
+// @Failure 400 {object} errorResponse
+// @Router /folders [delete]
+func (h *FolderHandler) DeleteBatch(c echo.Context) error {
+	var req deleteFoldersRequest
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, errorResponse{Error: "invalid request"})
+	}
+	if len(req.IDs) == 0 {
+		return c.JSON(http.StatusBadRequest, errorResponse{Error: "no folder IDs provided"})
+	}
+
+	for _, idStr := range req.IDs {
+		id, err := strconv.ParseInt(idStr, 10, 64)
+		if err != nil {
+			return c.JSON(http.StatusBadRequest, errorResponse{Error: "invalid folder ID"})
+		}
+		if err := h.service.Delete(c.Request().Context(), id); err != nil {
+			return writeServiceError(c, err)
+		}
+	}
+
 	return c.NoContent(http.StatusNoContent)
 }
 

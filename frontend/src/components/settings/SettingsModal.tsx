@@ -8,9 +8,10 @@ import { SettingsSidebar } from './SettingsSidebar'
 import { GeneralSettings } from './tabs/GeneralSettings'
 import { DataControl } from './tabs/DataControl'
 import { FeedsSettings } from './tabs/FeedsSettings'
+import { FoldersSettings } from './tabs/FoldersSettings'
 import { cn } from '@/lib/utils'
 
-export type SettingsTab = 'general' | 'feeds' | 'data'
+export type SettingsTab = 'general' | 'feeds' | 'folders' | 'data'
 
 interface SettingsModalProps {
   open: boolean
@@ -26,6 +27,8 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
         return <GeneralSettings />
       case 'feeds':
         return <FeedsSettings />
+      case 'folders':
+        return <FoldersSettings />
       case 'data':
         return <DataControl />
       default:
@@ -39,6 +42,8 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
         return '通用'
       case 'feeds':
         return '订阅源'
+      case 'folders':
+        return '文件夹'
       case 'data':
         return '数据控制'
       default:
@@ -73,6 +78,17 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
               strokeLinejoin="round"
               strokeWidth={1.5}
               d="M6 5c7.18 0 13 5.82 13 13M6 11a7 7 0 017 7m-6 0a1 1 0 11-2 0 1 1 0 012 0z"
+            />
+          </svg>
+        )
+      case 'folders':
+        return (
+          <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={1.5}
+              d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
             />
           </svg>
         )

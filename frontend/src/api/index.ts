@@ -103,6 +103,13 @@ export async function deleteFolder(id: string): Promise<void> {
   })
 }
 
+export async function deleteFolders(ids: string[]): Promise<void> {
+  return request<void>('/api/folders', {
+    method: 'DELETE',
+    body: JSON.stringify({ ids }),
+  })
+}
+
 export async function listFeeds(folderId?: string): Promise<Feed[]> {
   const params = folderId === undefined ? '' : `?folderId=${encodeURIComponent(folderId)}`
   return request<Feed[]>(`/api/feeds${params}`)
@@ -138,7 +145,7 @@ export async function deleteFeed(id: string): Promise<void> {
 export async function deleteFeeds(ids: string[]): Promise<void> {
   return request<void>('/api/feeds', {
     method: 'DELETE',
-    body: JSON.stringify({ ids: ids.map((id) => Number(id)) }),
+    body: JSON.stringify({ ids }),
   })
 }
 
