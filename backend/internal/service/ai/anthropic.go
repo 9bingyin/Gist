@@ -97,11 +97,13 @@ func (p *AnthropicProvider) SummarizeStream(ctx context.Context, systemPrompt, c
 		}
 
 		// Configure extended thinking
+		// Max output tokens: Claude 3.5 Sonnet supports 8192, Claude 4 models may support more
+		// Using 64000 as a safe upper limit that works with most models
 		if p.thinking && p.thinkingBudget > 0 {
-			params.MaxTokens = int64(p.thinkingBudget + 4096)
+			params.MaxTokens = int64(p.thinkingBudget + 64000)
 			params.Thinking = anthropic.ThinkingConfigParamOfEnabled(int64(p.thinkingBudget))
 		} else {
-			params.MaxTokens = 4096
+			params.MaxTokens = 64000
 			disabled := anthropic.NewThinkingConfigDisabledParam()
 			params.Thinking = anthropic.ThinkingConfigParamUnion{
 				OfDisabled: &disabled,

@@ -1,7 +1,16 @@
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { useEntry, useMarkAsRead, useMarkAsStarred } from '@/hooks/useEntries'
 import { useEntryContentScroll } from '@/hooks/useEntryContentScroll'
-import { fetchReadableContent, streamSummary } from '@/api'
+import {
+  fetchReadableContent,
+  streamSummary,
+  streamTranslateBlocks,
+  isTranslateInit,
+  isTranslateBlockResult,
+  isTranslateDone,
+  isTranslateError,
+  type TranslateBlockData,
+} from '@/api'
 import { EntryContentHeader } from './EntryContentHeader'
 import { EntryContentBody } from './EntryContentBody'
 
@@ -28,13 +37,23 @@ export function EntryContent({ entryId }: EntryContentProps) {
   const summaryRequestedRef = useRef(false)
   const prevReadableActiveRef = useRef(false)
 
+  // AI Translation state
+  const [translatedContent, setTranslatedContent] = useState<string | null>(null)
+  const [originalBlocks, setOriginalBlocks] = useState<TranslateBlockData[]>([])
+  const [translatedBlocks, setTranslatedBlocks] = useState<Map<number, string>>(new Map())
+  const [isTranslating, setIsTranslating] = useState(false)
+  const [_translationError, setTranslationError] = useState<string | null>(null)
+  const translateAbortRef = useRef<AbortController | null>(null)
+  const translateRequestedRef = useRef(false)
+  const prevTranslateReadableRef = useRef(false)
+
   useEffect(() => {
     if (entry && !entry.read) {
       markAsRead({ id: entry.id, read: true })
     }
   }, [entry, markAsRead])
 
-  // Reset AI summary when entry changes
+  // Reset AI summary and translation when entry changes
   useEffect(() => {
     setAiSummary(null)
     setSummaryError(null)
@@ -47,6 +66,19 @@ export function EntryContent({ entryId }: EntryContentProps) {
     // Reset tracking refs
     summaryRequestedRef.current = false
     prevReadableActiveRef.current = false
+
+    // Reset translation state
+    setTranslatedContent(null)
+    setOriginalBlocks([])
+    setTranslatedBlocks(new Map())
+    setTranslationError(null)
+    setIsTranslating(false)
+    if (translateAbortRef.current) {
+      translateAbortRef.current.abort()
+      translateAbortRef.current = null
+    }
+    translateRequestedRef.current = false
+    prevTranslateReadableRef.current = false
   }, [entryId])
 
   const readableContent = localReadableContent || entry?.readableContent
@@ -75,7 +107,7 @@ export function EntryContent({ entryId }: EntryContentProps) {
     }
   }, [entry, hasReadableContent, isReadableLoading])
 
-  const displayContent = hasReadableContent && showReadable ? readableContent : entry?.content
+  const baseContent = hasReadableContent && showReadable ? readableContent : entry?.content
   const isReadableActive = hasReadableContent && showReadable
 
   const handleToggleStarred = useCallback(() => {
@@ -178,6 +210,148 @@ export function EntryContent({ entryId }: EntryContentProps) {
     }
   }, [isReadableActive, aiSummary, isLoadingSummary, generateSummary])
 
+  // Core function to generate translation
+  const generateTranslation = useCallback(async (forReadability: boolean) => {
+    if (!entry) return
+
+    // Cancel any ongoing request first
+    if (translateAbortRef.current) {
+      translateAbortRef.current.abort()
+    }
+
+    // Get the content to translate
+    const content = forReadability ? readableContent : entry.content
+    if (!content) {
+      setTranslationError('No content to translate')
+      return
+    }
+
+    setIsTranslating(true)
+    setTranslationError(null)
+    setTranslatedContent(null)
+    setOriginalBlocks([])
+    setTranslatedBlocks(new Map())
+    translateRequestedRef.current = true
+
+    const abortController = new AbortController()
+    translateAbortRef.current = abortController
+
+    try {
+      const stream = streamTranslateBlocks(
+        {
+          entryId: entry.id,
+          content,
+          title: entry.title ?? undefined,
+          isReadability: forReadability,
+        },
+        abortController.signal
+      )
+
+      for await (const event of stream) {
+        // Cached response
+        if ('cached' in event) {
+          setTranslatedContent(event.content)
+          break
+        }
+
+        // SSE events
+        const sseEvent = event
+
+        // Init event with all original blocks
+        if (isTranslateInit(sseEvent)) {
+          setOriginalBlocks(sseEvent.blocks)
+          continue
+        }
+
+        // Block result (translated)
+        if (isTranslateBlockResult(sseEvent)) {
+          setTranslatedBlocks(prev => {
+            const newMap = new Map(prev)
+            newMap.set(sseEvent.index, sseEvent.html)
+            return newMap
+          })
+        }
+
+        // Done event
+        if (isTranslateDone(sseEvent)) {
+          // Translation complete
+        }
+
+        // Error event
+        if (isTranslateError(sseEvent)) {
+          setTranslationError(sseEvent.error)
+        }
+      }
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        // Request was cancelled, don't update state
+        return
+      }
+      const message = err instanceof Error ? err.message : 'Failed to translate'
+      setTranslationError(message)
+      setIsTranslating(false)
+      translateAbortRef.current = null
+      return
+    }
+
+    setIsTranslating(false)
+    translateAbortRef.current = null
+  }, [entry, readableContent])
+
+  const handleToggleTranslation = useCallback(async () => {
+    if (!entry) return
+
+    // If already showing translation (either full content or blocks), hide it
+    const hasTranslation = translatedContent || originalBlocks.length > 0
+    if (hasTranslation && !isTranslating) {
+      setTranslatedContent(null)
+      setOriginalBlocks([])
+      setTranslatedBlocks(new Map())
+      translateRequestedRef.current = false
+      return
+    }
+
+    // If translating, cancel the request
+    if (isTranslating && translateAbortRef.current) {
+      translateAbortRef.current.abort()
+      translateAbortRef.current = null
+      setIsTranslating(false)
+      setOriginalBlocks([])
+      setTranslatedBlocks(new Map())
+      translateRequestedRef.current = false
+      return
+    }
+
+    await generateTranslation(isReadableActive)
+  }, [entry, translatedContent, originalBlocks.length, isTranslating, isReadableActive, generateTranslation])
+
+  // Auto-regenerate translation when readability mode changes
+  useEffect(() => {
+    if (prevTranslateReadableRef.current !== isReadableActive) {
+      prevTranslateReadableRef.current = isReadableActive
+      // If user had requested a translation, regenerate for new mode
+      const hasTranslation = translatedContent || originalBlocks.length > 0
+      if (translateRequestedRef.current && (hasTranslation || isTranslating)) {
+        generateTranslation(isReadableActive)
+      }
+    }
+  }, [isReadableActive, translatedContent, originalBlocks.length, isTranslating, generateTranslation])
+
+  // Combine blocks into display content
+  // Use translated content if cached, otherwise combine original + translated blocks
+  const combinedTranslatedContent = useMemo(() => {
+    if (translatedContent) {
+      return translatedContent // Cached full content
+    }
+    if (originalBlocks.length === 0) {
+      return null
+    }
+    // Combine blocks: use translated version if available, otherwise original
+    return originalBlocks
+      .map(block => translatedBlocks.get(block.index) ?? block.html)
+      .join('')
+  }, [translatedContent, originalBlocks, translatedBlocks])
+
   if (entryId === null) {
     return <EntryContentEmpty />
   }
@@ -203,11 +377,14 @@ export function EntryContent({ entryId }: EntryContentProps) {
         isLoadingSummary={isLoadingSummary}
         hasSummary={!!aiSummary}
         onToggleSummary={handleToggleSummary}
+        isTranslating={isTranslating}
+        hasTranslation={!!(translatedContent || originalBlocks.length > 0)}
+        onToggleTranslation={handleToggleTranslation}
       />
       <EntryContentBody
         entry={entry}
         scrollRef={scrollRef}
-        displayContent={displayContent}
+        displayContent={combinedTranslatedContent ?? baseContent}
         aiSummary={aiSummary}
         isLoadingSummary={isLoadingSummary}
         summaryError={summaryError}

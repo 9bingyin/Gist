@@ -390,3 +390,136 @@ export async function* streamSummary(
     reader.releaseLock()
   }
 }
+
+export interface TranslateRequest {
+  entryId: string
+  content: string
+  title?: string
+  isReadability?: boolean
+}
+
+export interface TranslateResponse {
+  content: string
+  cached: boolean
+}
+
+export interface TranslateBlockData {
+  index: number
+  html: string
+  needTranslate: boolean
+}
+
+export interface TranslateInit {
+  blocks: TranslateBlockData[]
+}
+
+export interface TranslateBlockResult {
+  index: number
+  html: string
+}
+
+export interface TranslateDone {
+  done: true
+}
+
+export interface TranslateError {
+  error: string
+}
+
+export type TranslateEvent = TranslateInit | TranslateBlockResult | TranslateDone | TranslateError
+
+function isTranslateInit(event: TranslateEvent): event is TranslateInit {
+  return 'blocks' in event && Array.isArray(event.blocks)
+}
+
+function isTranslateBlockResult(event: TranslateEvent): event is TranslateBlockResult {
+  return 'index' in event && 'html' in event && !('blocks' in event)
+}
+
+function isTranslateDone(event: TranslateEvent): event is TranslateDone {
+  return 'done' in event && event.done === true
+}
+
+function isTranslateError(event: TranslateEvent): event is TranslateError {
+  return 'error' in event
+}
+
+export async function* streamTranslateBlocks(
+  req: TranslateRequest,
+  signal?: AbortSignal
+): AsyncGenerator<TranslateEvent | { cached: true; content: string }> {
+  const url = `${API_BASE_URL}/api/ai/translate`
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(req),
+    signal,
+  })
+
+  if (!response.ok) {
+    const data = await parseResponse(response)
+    const message = isErrorResponse(data)
+      ? data.error
+      : typeof data === 'string'
+        ? data
+        : response.statusText
+    throw new ApiError(message || 'Request failed', response.status)
+  }
+
+  const contentType = response.headers.get('Content-Type') ?? ''
+
+  // Cached response returns JSON
+  if (contentType.includes('application/json')) {
+    const data = (await response.json()) as TranslateResponse
+    yield { cached: true, content: data.content }
+    return
+  }
+
+  // SSE stream
+  if (!response.body) {
+    throw new ApiError('No response body', 500)
+  }
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            const data = JSON.parse(line.slice(6)) as TranslateEvent
+            yield data
+          } catch {
+            // Ignore parse errors
+          }
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock()
+  }
+}
+
+// Re-export type guards for use in components
+export { isTranslateInit, isTranslateBlockResult, isTranslateDone, isTranslateError }
+
+// Keep the old function for backwards compatibility (returns full content)
+export async function translateContent(
+  req: TranslateRequest,
+  signal?: AbortSignal
+): Promise<TranslateResponse> {
+  return request<TranslateResponse>('/api/ai/translate', {
+    method: 'POST',
+    body: JSON.stringify(req),
+    signal,
+  })
+}

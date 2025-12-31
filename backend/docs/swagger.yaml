@@ -270,6 +270,24 @@ definitions:
       summary:
         type: string
     type: object
+  internal_handler.translateRequest:
+    properties:
+      content:
+        type: string
+      entryId:
+        type: string
+      isReadability:
+        type: boolean
+      title:
+        type: string
+    type: object
+  internal_handler.translateResponse:
+    properties:
+      cached:
+        type: boolean
+      content:
+        type: string
+    type: object
   internal_handler.unreadCountsResponse:
     properties:
       counts:
@@ -330,6 +348,38 @@ paths:
           schema:
             $ref: '#/definitions/internal_handler.errorResponse'
       summary: Generate AI summary
+      tags:
+      - ai
+  /ai/translate:
+    post:
+      consumes:
+      - application/json
+      description: Translate article content. Returns cached result if available,
+        otherwise streams block translations via SSE.
+      parameters:
+      - description: Translate request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.translateRequest'
+      produces:
+      - application/json
+      - text/event-stream
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handler.translateResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_handler.errorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_handler.errorResponse'
+      summary: Generate AI translation
       tags:
       - ai
   /api/proxy/image/{encoded}:

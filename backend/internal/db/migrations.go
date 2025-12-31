@@ -221,5 +221,24 @@ func runMigrations(db *sql.DB) error {
 		return fmt.Errorf("create idx_ai_summaries_entry_mode: %w", err)
 	}
 
+	// Migration 11: Create ai_translations table for AI translation cache
+	if _, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS ai_translations (
+			id INTEGER PRIMARY KEY,
+			entry_id INTEGER NOT NULL,
+			is_readability INTEGER NOT NULL DEFAULT 0,
+			language TEXT NOT NULL,
+			content TEXT NOT NULL,
+			created_at TEXT NOT NULL,
+			FOREIGN KEY (entry_id) REFERENCES entries(id) ON DELETE CASCADE
+		)
+	`); err != nil {
+		return fmt.Errorf("create ai_translations table: %w", err)
+	}
+
+	if _, err := db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_ai_translations_entry_mode ON ai_translations(entry_id, is_readability, language)`); err != nil {
+		return fmt.Errorf("create idx_ai_translations_entry_mode: %w", err)
+	}
+
 	return nil
 }

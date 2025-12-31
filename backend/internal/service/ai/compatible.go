@@ -114,11 +114,8 @@ func (p *CompatibleProvider) SummarizeStream(ctx context.Context, systemPrompt, 
 			}
 			if len(reasoning) > 0 {
 				opts = append(opts, option.WithJSONSet("reasoning", reasoning))
-			} else {
-				params.MaxTokens = openai.Int(4096)
 			}
 		} else {
-			params.MaxTokens = openai.Int(4096)
 			opts = append(opts, option.WithJSONSet("reasoning", map[string]interface{}{
 				"enabled": false,
 			}))

@@ -100,8 +100,6 @@ func (p *OpenAIProvider) SummarizeStream(ctx context.Context, systemPrompt, cont
 		// For reasoning models (o1, o3, gpt-5), use reasoning_effort
 		if p.thinking && p.isReasoningModel() && p.reasoningEffort != "" {
 			params.ReasoningEffort = shared.ReasoningEffort(p.reasoningEffort)
-		} else {
-			params.MaxTokens = openai.Int(4096)
 		}
 
 		stream := p.client.Chat.Completions.NewStreaming(ctx, params)
