@@ -19,6 +19,7 @@ type FeedRepository interface {
 	ListWithoutIcon(ctx context.Context) ([]model.Feed, error)
 	Update(ctx context.Context, feed model.Feed) (model.Feed, error)
 	UpdateIconPath(ctx context.Context, id int64, iconPath string) error
+	UpdateErrorMessage(ctx context.Context, id int64, errorMessage *string) error
 	Delete(ctx context.Context, id int64) error
 }
 
@@ -35,8 +36,8 @@ func (r *feedRepository) Create(ctx context.Context, feed model.Feed) (model.Fee
 	now := time.Now().UTC()
 	_, err := r.db.ExecContext(
 		ctx,
-		`INSERT INTO feeds (id, folder_id, title, url, site_url, description, etag, last_modified, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO feeds (id, folder_id, title, url, site_url, description, etag, last_modified, error_message, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		feed.ID,
 		nullableInt64(feed.FolderID),
 		feed.Title,
@@ -45,6 +46,7 @@ func (r *feedRepository) Create(ctx context.Context, feed model.Feed) (model.Fee
 		nullableString(feed.Description),
 		nullableString(feed.ETag),
 		nullableString(feed.LastModified),
+		nullableString(feed.ErrorMessage),
 		formatTime(now),
 		formatTime(now),
 	)
@@ -57,12 +59,12 @@ func (r *feedRepository) Create(ctx context.Context, feed model.Feed) (model.Fee
 }
 
 func (r *feedRepository) GetByID(ctx context.Context, id int64) (model.Feed, error) {
-	row := r.db.QueryRowContext(ctx, `SELECT id, folder_id, title, url, site_url, description, icon_path, etag, last_modified, created_at, updated_at FROM feeds WHERE id = ?`, id)
+	row := r.db.QueryRowContext(ctx, `SELECT id, folder_id, title, url, site_url, description, icon_path, etag, last_modified, error_message, created_at, updated_at FROM feeds WHERE id = ?`, id)
 	return scanFeed(row)
 }
 
 func (r *feedRepository) FindByURL(ctx context.Context, url string) (*model.Feed, error) {
-	row := r.db.QueryRowContext(ctx, `SELECT id, folder_id, title, url, site_url, description, icon_path, etag, last_modified, created_at, updated_at FROM feeds WHERE url = ?`, url)
+	row := r.db.QueryRowContext(ctx, `SELECT id, folder_id, title, url, site_url, description, icon_path, etag, last_modified, error_message, created_at, updated_at FROM feeds WHERE url = ?`, url)
 	feed, err := scanFeed(row)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -74,10 +76,10 @@ func (r *feedRepository) FindByURL(ctx context.Context, url string) (*model.Feed
 }
 
 func (r *feedRepository) List(ctx context.Context, folderID *int64) ([]model.Feed, error) {
-	query := `SELECT id, folder_id, title, url, site_url, description, icon_path, etag, last_modified, created_at, updated_at FROM feeds ORDER BY title`
+	query := `SELECT id, folder_id, title, url, site_url, description, icon_path, etag, last_modified, error_message, created_at, updated_at FROM feeds ORDER BY title`
 	args := []interface{}{}
 	if folderID != nil {
-		query = `SELECT id, folder_id, title, url, site_url, description, icon_path, etag, last_modified, created_at, updated_at FROM feeds WHERE folder_id = ? ORDER BY title`
+		query = `SELECT id, folder_id, title, url, site_url, description, icon_path, etag, last_modified, error_message, created_at, updated_at FROM feeds WHERE folder_id = ? ORDER BY title`
 		args = append(args, *folderID)
 	}
 	rows, err := r.db.QueryContext(ctx, query, args...)
@@ -102,7 +104,7 @@ func (r *feedRepository) List(ctx context.Context, folderID *int64) ([]model.Fee
 }
 
 func (r *feedRepository) ListWithoutIcon(ctx context.Context) ([]model.Feed, error) {
-	rows, err := r.db.QueryContext(ctx, `SELECT id, folder_id, title, url, site_url, description, icon_path, etag, last_modified, created_at, updated_at FROM feeds WHERE icon_path IS NULL OR icon_path = ''`)
+	rows, err := r.db.QueryContext(ctx, `SELECT id, folder_id, title, url, site_url, description, icon_path, etag, last_modified, error_message, created_at, updated_at FROM feeds WHERE icon_path IS NULL OR icon_path = ''`)
 	if err != nil {
 		return nil, fmt.Errorf("list feeds without icon: %w", err)
 	}
@@ -127,7 +129,7 @@ func (r *feedRepository) Update(ctx context.Context, feed model.Feed) (model.Fee
 	now := time.Now().UTC()
 	_, err := r.db.ExecContext(
 		ctx,
-		`UPDATE feeds SET folder_id = ?, title = ?, url = ?, site_url = ?, description = ?, etag = ?, last_modified = ?, updated_at = ? WHERE id = ?`,
+		`UPDATE feeds SET folder_id = ?, title = ?, url = ?, site_url = ?, description = ?, etag = ?, last_modified = ?, error_message = ?, updated_at = ? WHERE id = ?`,
 		nullableInt64(feed.FolderID),
 		feed.Title,
 		feed.URL,
@@ -135,6 +137,7 @@ func (r *feedRepository) Update(ctx context.Context, feed model.Feed) (model.Fee
 		nullableString(feed.Description),
 		nullableString(feed.ETag),
 		nullableString(feed.LastModified),
+		nullableString(feed.ErrorMessage),
 		formatTime(now),
 		feed.ID,
 	)
@@ -150,6 +153,17 @@ func (r *feedRepository) UpdateIconPath(ctx context.Context, id int64, iconPath 
 		ctx,
 		`UPDATE feeds SET icon_path = ?, updated_at = ? WHERE id = ?`,
 		iconPath,
+		formatTime(time.Now()),
+		id,
+	)
+	return err
+}
+
+func (r *feedRepository) UpdateErrorMessage(ctx context.Context, id int64, errorMessage *string) error {
+	_, err := r.db.ExecContext(
+		ctx,
+		`UPDATE feeds SET error_message = ?, updated_at = ? WHERE id = ?`,
+		nullableString(errorMessage),
 		formatTime(time.Now()),
 		id,
 	)
@@ -173,6 +187,7 @@ func scanFeed(scanner interface {
 	var iconPath sql.NullString
 	var etag sql.NullString
 	var lastModified sql.NullString
+	var errorMessage sql.NullString
 	var createdAt string
 	var updatedAt string
 	if err := scanner.Scan(
@@ -185,6 +200,7 @@ func scanFeed(scanner interface {
 		&iconPath,
 		&etag,
 		&lastModified,
+		&errorMessage,
 		&createdAt,
 		&updatedAt,
 	); err != nil {
@@ -207,6 +223,9 @@ func scanFeed(scanner interface {
 	}
 	if lastModified.Valid {
 		feed.LastModified = &lastModified.String
+	}
+	if errorMessage.Valid {
+		feed.ErrorMessage = &errorMessage.String
 	}
 	var err error
 	feed.CreatedAt, err = parseTime(createdAt)

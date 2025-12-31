@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -90,6 +91,8 @@ func (s *refreshService) RefreshFeed(ctx context.Context, feedID int64) error {
 func (s *refreshService) refreshFeedInternal(ctx context.Context, feed model.Feed) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, feed.URL, nil)
 	if err != nil {
+		errMsg := err.Error()
+		_ = s.feeds.UpdateErrorMessage(ctx, feed.ID, &errMsg)
 		return err
 	}
 	req.Header.Set("User-Agent", "Gist/1.0")
@@ -104,25 +107,39 @@ func (s *refreshService) refreshFeedInternal(ctx context.Context, feed model.Fee
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
+		errMsg := err.Error()
+		_ = s.feeds.UpdateErrorMessage(ctx, feed.ID, &errMsg)
 		return err
 	}
 	defer resp.Body.Close()
 
-	// Not modified, skip parsing
+	// Not modified, skip parsing but clear error if any
 	if resp.StatusCode == http.StatusNotModified {
 		log.Printf("feed %d (%s): not modified", feed.ID, feed.Title)
+		if feed.ErrorMessage != nil {
+			_ = s.feeds.UpdateErrorMessage(ctx, feed.ID, nil)
+		}
 		return nil
 	}
 
 	if resp.StatusCode >= http.StatusBadRequest {
 		log.Printf("feed %d (%s): HTTP %d", feed.ID, feed.Title, resp.StatusCode)
+		errMsg := fmt.Sprintf("HTTP %d", resp.StatusCode)
+		_ = s.feeds.UpdateErrorMessage(ctx, feed.ID, &errMsg)
 		return nil
 	}
 
 	parser := gofeed.NewParser()
 	parsed, err := parser.Parse(resp.Body)
 	if err != nil {
+		errMsg := err.Error()
+		_ = s.feeds.UpdateErrorMessage(ctx, feed.ID, &errMsg)
 		return err
+	}
+
+	// Clear error message on successful refresh
+	if feed.ErrorMessage != nil {
+		_ = s.feeds.UpdateErrorMessage(ctx, feed.ID, nil)
 	}
 
 	// Update feed ETag and LastModified

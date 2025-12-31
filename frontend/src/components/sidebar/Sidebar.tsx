@@ -137,6 +137,7 @@ export function Sidebar({
                   iconPath={feed.iconPath}
                   unreadCount={unreadCounts.get(feed.id) || 0}
                   isActive={isFeedSelected(feed.id)}
+                  errorMessage={feed.errorMessage}
                   onClick={() => onSelectFeed(feed.id)}
                   className="pl-6"
                 />
@@ -151,6 +152,7 @@ export function Sidebar({
               iconPath={feed.iconPath}
               unreadCount={unreadCounts.get(feed.id) || 0}
               isActive={isFeedSelected(feed.id)}
+              errorMessage={feed.errorMessage}
               onClick={() => onSelectFeed(feed.id)}
               className="pl-2.5"
             />

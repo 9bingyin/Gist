@@ -43,6 +43,7 @@ type feedResponse struct {
 	IconPath     *string `json:"iconPath,omitempty"`
 	ETag         *string `json:"etag,omitempty"`
 	LastModified *string `json:"lastModified,omitempty"`
+	ErrorMessage *string `json:"errorMessage,omitempty"`
 	CreatedAt    string  `json:"createdAt"`
 	UpdatedAt    string  `json:"updatedAt"`
 }
@@ -266,6 +267,7 @@ func toFeedResponse(feed model.Feed) feedResponse {
 		IconPath:     feed.IconPath,
 		ETag:         feed.ETag,
 		LastModified: feed.LastModified,
+		ErrorMessage: feed.ErrorMessage,
 		CreatedAt:    feed.CreatedAt.UTC().Format(time.RFC3339),
 		UpdatedAt:    feed.UpdatedAt.UTC().Format(time.RFC3339),
 	}

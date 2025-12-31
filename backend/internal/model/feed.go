@@ -12,6 +12,7 @@ type Feed struct {
 	IconPath     *string
 	ETag         *string
 	LastModified *string
+	ErrorMessage *string
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 }

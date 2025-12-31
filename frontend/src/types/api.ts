@@ -16,6 +16,7 @@ export interface Feed {
   iconPath?: string
   etag?: string
   lastModified?: string
+  errorMessage?: string
   createdAt: string
   updatedAt: string
 }

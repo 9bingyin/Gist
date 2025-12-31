@@ -70,10 +70,23 @@ func (s *feedService) Add(ctx context.Context, feedURL string, folderID *int64, 
 		}
 	}
 
-	fetched, err := s.fetchFeed(ctx, trimmedURL)
-	if err != nil {
-		return model.Feed{}, err
+	fetched, fetchErr := s.fetchFeed(ctx, trimmedURL)
+	if fetchErr != nil {
+		// Fetch failed, create feed with error message
+		finalTitle := strings.TrimSpace(titleOverride)
+		if finalTitle == "" {
+			finalTitle = trimmedURL
+		}
+		errMsg := fetchErr.Error()
+		feed := model.Feed{
+			FolderID:     folderID,
+			Title:        finalTitle,
+			URL:          trimmedURL,
+			ErrorMessage: &errMsg,
+		}
+		return s.feeds.Create(ctx, feed)
 	}
+
 	finalTitle := strings.TrimSpace(titleOverride)
 	if finalTitle == "" {
 		finalTitle = strings.TrimSpace(fetched.title)

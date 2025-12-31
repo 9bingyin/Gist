@@ -216,15 +216,11 @@ func (s *opmlService) importFeed(
 	}
 
 	// Use FeedService.Add to create feed (will fetch and refresh automatically)
+	// If fetch fails, Add will still create the feed with error message
 	_, err := s.feedService.Add(ctx, feedURL, folderID, title)
 	if err != nil {
 		if errors.Is(err, ErrConflict) {
 			// Feed already exists
-			result.FeedsSkipped++
-			return nil
-		}
-		if errors.Is(err, ErrFeedFetch) {
-			// Feed fetch failed, skip but don't fail the whole import
 			result.FeedsSkipped++
 			return nil
 		}

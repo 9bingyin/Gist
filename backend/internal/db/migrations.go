@@ -177,5 +177,19 @@ func runMigrations(db *sql.DB) error {
 		return fmt.Errorf("create idx_entries_starred: %w", err)
 	}
 
+	// Migration 8: Add error_message column to feeds for tracking fetch/refresh errors
+	err = db.QueryRow(`
+		SELECT COUNT(*) FROM pragma_table_info('feeds') WHERE name = 'error_message'
+	`).Scan(&count)
+	if err != nil {
+		return fmt.Errorf("check error_message column: %w", err)
+	}
+
+	if count == 0 {
+		if _, err := db.Exec(`ALTER TABLE feeds ADD COLUMN error_message TEXT`); err != nil {
+			return fmt.Errorf("add error_message column: %w", err)
+		}
+	}
+
 	return nil
 }

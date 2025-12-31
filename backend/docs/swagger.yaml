@@ -120,6 +120,8 @@ definitions:
         type: string
       description:
         type: string
+      errorMessage:
+        type: string
       etag:
         type: string
       folderId:

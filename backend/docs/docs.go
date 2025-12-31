@@ -1094,6 +1094,9 @@ const docTemplate = `{
                 "description": {
                     "type": "string"
                 },
+                "errorMessage": {
+                    "type": "string"
+                },
                 "etag": {
                     "type": "string"
                 },
