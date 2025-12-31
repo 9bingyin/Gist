@@ -127,6 +127,16 @@
 | summary | TEXT | NOT NULL | 摘要内容 |
 | created_at | TEXT | NOT NULL | 创建时间 (RFC3339) |
 
+**ai_translations** - AI 翻译缓存表
+| 列名 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| id | INTEGER | PRIMARY KEY | Snowflake ID |
+| entry_id | INTEGER | NOT NULL, FK -> entries(id) ON DELETE CASCADE | 关联文章 |
+| is_readability | INTEGER | NOT NULL DEFAULT 0 | 是否为 Readability 内容 (0/1) |
+| language | TEXT | NOT NULL | 目标语言 |
+| content | TEXT | NOT NULL | 翻译后内容 (HTML) |
+| created_at | TEXT | NOT NULL | 创建时间 (RFC3339) |
+
 #### 4.2.2 索引
 ```sql
 idx_folders_parent_id    ON folders(parent_id)
@@ -137,6 +147,7 @@ idx_entries_starred      ON entries(starred)
 idx_entries_feed_read    ON entries(feed_id, read)
 idx_entries_feed_url     ON entries(feed_id, url) UNIQUE
 idx_ai_summaries_entry_mode ON ai_summaries(entry_id, is_readability, language) UNIQUE
+idx_ai_translations_entry_mode ON ai_translations(entry_id, is_readability, language) UNIQUE
 ```
 
 #### 4.2.3 触发器

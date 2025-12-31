@@ -39,8 +39,6 @@ type AIService interface {
 
 	// GetCachedTranslation returns a cached translation if available.
 	GetCachedTranslation(ctx context.Context, entryID int64, isReadability bool) (*model.AITranslation, error)
-	// TranslateSync generates a translation and returns the full result.
-	TranslateSync(ctx context.Context, entryID int64, content, title string, isReadability bool) (string, error)
 	// TranslateBlocks parses HTML into blocks and translates them in parallel.
 	// Returns block info, a channel of results (in completion order), and an error channel.
 	TranslateBlocks(ctx context.Context, entryID int64, content, title string, isReadability bool) ([]TranslateBlockInfo, <-chan TranslateBlockResult, <-chan error, error)
@@ -159,54 +157,6 @@ func (s *aiService) getAIConfig(ctx context.Context) (ai.Config, error) {
 func (s *aiService) GetCachedTranslation(ctx context.Context, entryID int64, isReadability bool) (*model.AITranslation, error) {
 	language := s.GetSummaryLanguage(ctx)
 	return s.translationRepo.Get(ctx, entryID, isReadability, language)
-}
-
-func (s *aiService) TranslateSync(ctx context.Context, entryID int64, content, title string, isReadability bool) (string, error) {
-	// Get AI configuration
-	cfg, err := s.getAIConfig(ctx)
-	if err != nil {
-		return "", err
-	}
-
-	// Create provider
-	provider, err := ai.NewProvider(cfg)
-	if err != nil {
-		return "", fmt.Errorf("create provider: %w", err)
-	}
-
-	// Get language setting
-	language := s.GetSummaryLanguage(ctx)
-
-	// Build system prompt
-	systemPrompt := ai.GetTranslatePrompt(title, language)
-
-	// Stream and collect all chunks
-	textCh, errCh := provider.SummarizeStream(ctx, systemPrompt, content)
-
-	var result string
-	for {
-		select {
-		case text, ok := <-textCh:
-			if !ok {
-				// Channel closed, check for errors
-				select {
-				case err := <-errCh:
-					if err != nil {
-						return "", err
-					}
-				default:
-				}
-				return result, nil
-			}
-			result += text
-		case err := <-errCh:
-			if err != nil {
-				return "", err
-			}
-		case <-ctx.Done():
-			return "", ctx.Err()
-		}
-	}
 }
 
 func (s *aiService) SaveTranslation(ctx context.Context, entryID int64, isReadability bool, content string) error {
