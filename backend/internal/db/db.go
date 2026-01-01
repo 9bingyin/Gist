@@ -3,6 +3,7 @@ package db
 import (
 	"database/sql"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 
@@ -17,15 +18,14 @@ func Open(path string) (*sql.DB, error) {
 		}
 	}
 
-	db, err := sql.Open("sqlite", path)
+	// Build DSN with pragmas to ensure all connections in the pool have them
+	dsn := buildDSN(path)
+
+	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open db: %w", err)
 	}
 
-	if err := applyPragmas(db); err != nil {
-		_ = db.Close()
-		return nil, err
-	}
 	if err := Migrate(db); err != nil {
 		_ = db.Close()
 		return nil, err
@@ -34,17 +34,13 @@ func Open(path string) (*sql.DB, error) {
 	return db, nil
 }
 
-func applyPragmas(db *sql.DB) error {
-	pragmas := []string{
-		"PRAGMA journal_mode = WAL;",
-		"PRAGMA foreign_keys = ON;",
-		"PRAGMA busy_timeout = 30000;",
-		"PRAGMA synchronous = NORMAL;",
-	}
-	for _, stmt := range pragmas {
-		if _, err := db.Exec(stmt); err != nil {
-			return fmt.Errorf("apply pragma %q: %w", stmt, err)
-		}
-	}
-	return nil
+// buildDSN constructs a SQLite DSN with pragmas embedded.
+// This ensures all connections in the pool have the same settings.
+func buildDSN(path string) string {
+	params := url.Values{}
+	params.Add("_pragma", "journal_mode(WAL)")
+	params.Add("_pragma", "foreign_keys(ON)")
+	params.Add("_pragma", "busy_timeout(30000)")
+	params.Add("_pragma", "synchronous(NORMAL)")
+	return fmt.Sprintf("file:%s?%s", path, params.Encode())
 }
