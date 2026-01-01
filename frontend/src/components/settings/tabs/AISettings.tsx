@@ -382,6 +382,23 @@ export function AISettings() {
         Automatically translate articles that are not in your target language
       </p>
 
+      {/* Auto Summary */}
+      <div className="flex items-center gap-2">
+        <input
+          type="checkbox"
+          id="autoSummary"
+          checked={settings.autoSummary}
+          onChange={(e) => handleChange('autoSummary', e.target.checked)}
+          className="size-4 rounded border-border"
+        />
+        <label htmlFor="autoSummary" className="text-sm font-medium">
+          Auto Summary
+        </label>
+      </div>
+      <p className="text-xs text-muted-foreground -mt-4 ml-6">
+        Automatically generate AI summary when viewing articles
+      </p>
+
       {/* Test & Save Buttons */}
       <div className="flex items-center gap-3 pt-2">
         <button

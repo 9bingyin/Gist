@@ -24,6 +24,7 @@ type aiSettingsResponse struct {
 	ReasoningEffort string `json:"reasoningEffort"`
 	SummaryLanguage string `json:"summaryLanguage"`
 	AutoTranslate   bool   `json:"autoTranslate"`
+	AutoSummary     bool   `json:"autoSummary"`
 }
 
 type aiSettingsRequest struct {
@@ -36,6 +37,7 @@ type aiSettingsRequest struct {
 	ReasoningEffort string `json:"reasoningEffort"`
 	SummaryLanguage string `json:"summaryLanguage"`
 	AutoTranslate   bool   `json:"autoTranslate"`
+	AutoSummary     bool   `json:"autoSummary"`
 }
 
 type aiTestRequest struct {
@@ -89,6 +91,7 @@ func (h *SettingsHandler) GetAISettings(c echo.Context) error {
 		ReasoningEffort: settings.ReasoningEffort,
 		SummaryLanguage: settings.SummaryLanguage,
 		AutoTranslate:   settings.AutoTranslate,
+		AutoSummary:     settings.AutoSummary,
 	})
 }
 
@@ -119,6 +122,7 @@ func (h *SettingsHandler) UpdateAISettings(c echo.Context) error {
 		ReasoningEffort: req.ReasoningEffort,
 		SummaryLanguage: req.SummaryLanguage,
 		AutoTranslate:   req.AutoTranslate,
+		AutoSummary:     req.AutoSummary,
 	}
 
 	if err := h.service.SetAISettings(c.Request().Context(), settings); err != nil {

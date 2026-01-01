@@ -117,6 +117,7 @@
 - `ai.reasoning_effort` - 推理强度 (OpenAI/Compatible: none/minimal/low/medium/high/xhigh)
 - `ai.summary_language` - AI 摘要/翻译输出语言 (zh-CN/en-US/ja 等)
 - `ai.auto_translate` - 自动翻译非目标语言文章 (true/false)
+- `ai.auto_summary` - 自动生成 AI 摘要 (true/false)
 
 **ai_summaries** - AI 摘要缓存表
 | 列名 | 类型 | 约束 | 说明 |

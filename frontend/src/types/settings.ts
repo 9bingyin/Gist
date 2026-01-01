@@ -12,6 +12,7 @@ export interface AISettings {
   reasoningEffort: ReasoningEffort;
   summaryLanguage: string;
   autoTranslate: boolean;
+  autoSummary: boolean;
 }
 
 export interface AITestRequest {

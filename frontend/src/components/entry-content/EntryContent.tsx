@@ -44,6 +44,7 @@ export function EntryContent({ entryId }: EntryContentProps) {
   const summaryAbortRef = useRef<AbortController | null>(null)
   const summaryRequestedRef = useRef(false)
   const prevReadableActiveRef = useRef(false)
+  const summaryManuallyDisabledRef = useRef(false)
 
   // AI Translation state
   const [translatedContent, setTranslatedContent] = useState<string | null>(null)
@@ -75,6 +76,7 @@ export function EntryContent({ entryId }: EntryContentProps) {
     // Reset tracking refs
     summaryRequestedRef.current = false
     prevReadableActiveRef.current = false
+    summaryManuallyDisabledRef.current = false
 
     // Reset translation state
     setTranslatedContent(null)
@@ -194,6 +196,7 @@ export function EntryContent({ entryId }: EntryContentProps) {
     if (aiSummary && !isLoadingSummary) {
       setAiSummary(null)
       summaryRequestedRef.current = false
+      summaryManuallyDisabledRef.current = true
       return
     }
 
@@ -203,9 +206,12 @@ export function EntryContent({ entryId }: EntryContentProps) {
       summaryAbortRef.current = null
       setIsLoadingSummary(false)
       summaryRequestedRef.current = false
+      summaryManuallyDisabledRef.current = true
       return
     }
 
+    // User manually requesting summary, clear the disabled flag
+    summaryManuallyDisabledRef.current = false
     await generateSummary(isReadableActive)
   }, [entry, aiSummary, isLoadingSummary, isReadableActive, generateSummary])
 
@@ -219,6 +225,18 @@ export function EntryContent({ entryId }: EntryContentProps) {
       }
     }
   }, [isReadableActive, aiSummary, isLoadingSummary, generateSummary])
+
+  // Auto-generate summary when entry is selected
+  const autoSummary = aiSettings?.autoSummary ?? false
+  useEffect(() => {
+    if (!autoSummary || !entry || isLoadingSummary) return
+    // Skip if user manually disabled summary for this entry
+    if (summaryManuallyDisabledRef.current) return
+    // Skip if already has summary or requested
+    if (aiSummary || summaryRequestedRef.current) return
+
+    generateSummary(isReadableActive)
+  }, [autoSummary, entry, isReadableActive, isLoadingSummary, aiSummary, generateSummary])
 
   // Core function to generate translation
   const generateTranslation = useCallback(async (forReadability: boolean) => {
