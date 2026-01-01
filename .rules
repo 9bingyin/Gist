@@ -41,7 +41,7 @@
 *   **可见性控制**：仅公开必要的 API（首字母大写），私有逻辑严格保持小写。
 
 ### 4.2 数据存储 (Storage)
-*   **驱动模式**：初始化 SQLite 时必须启用 `PRAGMA journal_mode = WAL;` 以提升并发性能。
+*   **驱动模式**：SQLite 通过 DSN pragma 参数配置 (`_pragma=journal_mode(WAL)&_pragma=busy_timeout(30000)`)，确保连接池所有连接生效。
 *   **全文检索**：建立 `entries_fts` 虚拟表（unicode61 分词），通过 Trigger 自动同步主表数据。
 *   **ORM 规范**：使用 GORM 时必须使用参数绑定（`?`），**严禁**字符串拼接 SQL。
 *   **Schema 同步**：修改数据库结构后，**必须**同步更新本文档的 Schema 定义。
