@@ -1,4 +1,5 @@
 import { useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { useAddFeed } from '@/hooks/useAddFeed'
 import { useFolders } from '@/hooks/useFolders'
@@ -16,6 +17,7 @@ export type { FeedPreview } from '@/types/api'
 export type { SubscribeOptions } from '@/hooks/useAddFeed'
 
 export function AddFeedPage({ onClose, onFeedAdded, contentType = 'article' }: AddFeedPageProps) {
+  const { t } = useTranslation()
   const {
     feedPreview,
     isLoading,
@@ -51,7 +53,7 @@ export function AddFeedPage({ onClose, onFeedAdded, contentType = 'article' }: A
         <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
         </svg>
-        <span>Back</span>
+        <span>{t('add_feed.back')}</span>
       </button>
 
       {/* Content */}
@@ -64,9 +66,9 @@ export function AddFeedPage({ onClose, onFeedAdded, contentType = 'article' }: A
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 5c7.18 0 13 5.82 13 13M6 11a7 7 0 017 7m-6 0a1 1 0 11-2 0 1 1 0 012 0z" />
               </svg>
             </div>
-            <h2 className="text-xl font-semibold">Add RSS Feed</h2>
+            <h2 className="text-xl font-semibold">{t('add_feed.add_rss_feed')}</h2>
             <p className="mt-2 text-sm text-muted-foreground">
-              Enter the URL of an RSS feed or website to subscribe
+              {t('add_feed.feed_description')}
             </p>
           </div>
 

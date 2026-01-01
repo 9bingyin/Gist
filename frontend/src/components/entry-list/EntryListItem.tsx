@@ -1,4 +1,5 @@
 import { forwardRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { useTranslationStore } from '@/stores/translation-store'
 import type { Entry, Feed } from '@/types/api'
@@ -28,7 +29,8 @@ export const EntryListItem = forwardRef<HTMLDivElement, EntryListItemProps>(
     },
     ref
   ) {
-    const publishedAt = entry.publishedAt ? formatRelativeTime(entry.publishedAt) : null
+    const { t } = useTranslation()
+    const publishedAt = entry.publishedAt ? formatRelativeTime(entry.publishedAt, t) : null
     const [iconError, setIconError] = useState(false)
     const showIcon = feed?.iconPath && !iconError
 
@@ -111,15 +113,24 @@ function stripHtml(html: string): string {
   return doc.body.textContent || ''
 }
 
-function formatRelativeTime(dateString: string): string {
+function formatRelativeTime(dateString: string, t: (key: string, options?: any) => string): string {
   const date = new Date(dateString)
   const now = new Date()
   const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000)
 
-  if (diffInSeconds < 60) return 'just now'
-  if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`
-  if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`
-  if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)}d ago`
+  if (diffInSeconds < 60) return t('add_feed.just_now')
+  if (diffInSeconds < 3600) {
+    const minutes = Math.floor(diffInSeconds / 60)
+    return t('add_feed.minutes_ago', { count: minutes })
+  }
+  if (diffInSeconds < 86400) {
+    const hours = Math.floor(diffInSeconds / 3600)
+    return t('add_feed.hours_ago', { count: hours })
+  }
+  if (diffInSeconds < 604800) {
+    const days = Math.floor(diffInSeconds / 86400)
+    return t('add_feed.days_ago', { count: days })
+  }
 
   return date.toLocaleDateString()
 }

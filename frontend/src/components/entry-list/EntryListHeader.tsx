@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next'
+
 interface EntryListHeaderProps {
   title: string
   unreadCount: number
@@ -38,12 +40,14 @@ export function EntryListHeader({
   onToggleUnreadOnly,
   onMarkAllRead,
 }: EntryListHeaderProps) {
+  const { t } = useTranslation()
+
   return (
     <div className="flex h-14 items-center justify-between gap-4 px-6">
       <div className="flex min-w-0 flex-1 items-center gap-2">
         <h2 className="truncate text-lg font-bold">{title}</h2>
         {unreadCount > 0 && (
-          <span className="shrink-0 text-xs text-muted-foreground">{unreadCount} unread</span>
+          <span className="shrink-0 text-xs text-muted-foreground">{t('entry.unread_count', { count: unreadCount })}</span>
         )}
       </div>
 
@@ -51,7 +55,7 @@ export function EntryListHeader({
         <button
           type="button"
           onClick={onToggleUnreadOnly}
-          title={unreadOnly ? 'Show all' : 'Show unread only'}
+          title={unreadOnly ? t('entry.show_all') : t('entry.show_unread_only')}
           className="flex size-8 items-center justify-center rounded-md transition-colors hover:bg-item-hover"
         >
           {unreadOnly ? (
@@ -63,7 +67,7 @@ export function EntryListHeader({
         <button
           type="button"
           onClick={onMarkAllRead}
-          title="Mark all as read"
+          title={t('entry.mark_all_read')}
           className="flex size-8 items-center justify-center rounded-md transition-colors hover:bg-item-hover"
         >
           <CheckCircleIcon className="size-4" />

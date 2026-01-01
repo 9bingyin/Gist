@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import {
   DropdownMenu,
@@ -134,6 +135,7 @@ export function ProfileButton({
   onSettingsClick,
   onLogoutClick,
 }: ProfileButtonProps) {
+  const { t } = useTranslation()
   const [isOpen, setIsOpen] = React.useState(false)
   const iconStyles =
     'size-4 text-muted-foreground transition-colors group-data-[highlighted]:text-foreground'
@@ -183,7 +185,7 @@ export function ProfileButton({
                 {userName}
               </div>
               <div className="mt-0.5 flex items-center justify-center gap-1 text-xs font-medium text-muted-foreground/80">
-                  <span>Free Plan</span>
+                  <span>{t('user.free_plan')}</span>
               </div>
             </div>
         </DropdownMenuLabel>
@@ -195,7 +197,7 @@ export function ProfileButton({
           <span className="inline-flex size-4 items-center justify-center">
              <i className="size-4 rounded-full border border-current opacity-50" />
           </span>
-          <span>Profile</span>
+          <span>{t('user.profile')}</span>
         </DropdownMenuItem>
 
         <DropdownMenuSeparator className="bg-border/50" />
@@ -208,7 +210,7 @@ export function ProfileButton({
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
             </svg>
           </span>
-          <span>Settings</span>
+          <span>{t('settings.title')}</span>
           <DropdownMenuShortcut>Ctrl+,</DropdownMenuShortcut>
         </DropdownMenuItem>
 
@@ -221,7 +223,7 @@ export function ProfileButton({
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
             </svg>
           </span>
-          <span>Logout</span>
+          <span>{t('user.logout')}</span>
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

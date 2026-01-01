@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { isSafeUrl } from '@/lib/url'
 import { cn } from '@/lib/utils'
 import type { Entry } from '@/types/api'
@@ -35,8 +36,9 @@ export function EntryContentHeader({
   hasTranslation,
   onToggleTranslation,
 }: EntryContentHeaderProps) {
+  const { t } = useTranslation()
   const safeUrl = entry.url && isSafeUrl(entry.url) ? entry.url : null
-  const title = displayTitle ?? entry.title ?? 'Untitled'
+  const title = displayTitle ?? entry.title ?? t('entry.untitled')
 
   return (
     <div className="absolute inset-x-0 top-0 z-20">
@@ -65,7 +67,7 @@ export function EntryContentHeader({
           <button
             type="button"
             onClick={onToggleStarred}
-            title={entry.starred ? 'Remove from starred' : 'Add to starred'}
+            title={entry.starred ? t('entry.remove_from_starred') : t('entry.add_to_starred')}
             className={cn(
               'no-drag-region flex size-9 items-center justify-center rounded-lg transition-colors',
               entry.starred
@@ -94,10 +96,10 @@ export function EntryContentHeader({
               onClick={onToggleSummary}
               title={
                 isLoadingSummary
-                  ? 'Cancel summary'
+                  ? t('entry.cancel_summary')
                   : hasSummary
-                    ? 'Hide summary'
-                    : 'Generate AI summary'
+                    ? t('entry.hide_summary')
+                    : t('entry.generate_summary')
               }
               className={cn(
                 'no-drag-region flex size-9 items-center justify-center rounded-lg transition-colors',
@@ -132,10 +134,10 @@ export function EntryContentHeader({
               onClick={onToggleTranslation}
               title={
                 isTranslating
-                  ? 'Cancel translation'
+                  ? t('entry.cancel_translation')
                   : hasTranslation
-                    ? 'Show original'
-                    : 'Translate article'
+                    ? t('entry.show_original')
+                    : t('entry.translate_article')
               }
               className={cn(
                 'no-drag-region flex size-9 items-center justify-center rounded-lg transition-colors',
@@ -169,7 +171,7 @@ export function EntryContentHeader({
               type="button"
               onClick={onToggleReadable}
               disabled={isLoading}
-              title={error || (isReadableActive ? 'Show original' : 'Show readable')}
+              title={error || (isReadableActive ? t('entry.show_original') : t('entry.show_readable'))}
               className={cn(
                 'no-drag-region flex size-9 items-center justify-center rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50',
                 error
@@ -209,7 +211,7 @@ export function EntryContentHeader({
               target="_blank"
               rel="noopener noreferrer"
               className="no-drag-region flex size-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-              aria-label="Open original"
+              aria-label={t('entry.open_original')}
             >
               <svg
                 className="size-5"

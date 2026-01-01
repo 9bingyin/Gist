@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   Dialog,
   DialogContent,
@@ -20,6 +21,7 @@ interface SettingsModalProps {
 }
 
 export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
+  const { t } = useTranslation()
   const [activeTab, setActiveTab] = useState<SettingsTab>('general')
 
   const renderContent = () => {
@@ -42,17 +44,17 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
   const getTitle = () => {
     switch (activeTab) {
       case 'general':
-        return '通用'
+        return t('settings.general')
       case 'feeds':
-        return '订阅源'
+        return t('settings.subscriptions')
       case 'folders':
-        return '文件夹'
+        return t('settings.folders')
       case 'data':
-        return '数据控制'
+        return t('settings.data')
       case 'ai':
-        return 'AI'
+        return t('settings.ai')
       default:
-        return '设置'
+        return t('settings.title')
     }
   }
 
@@ -150,7 +152,7 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
                 'text-muted-foreground hover:text-foreground hover:bg-accent',
                 'transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring'
               )}
-              aria-label="Close"
+              aria-label={t('entry.close')}
             >
               <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

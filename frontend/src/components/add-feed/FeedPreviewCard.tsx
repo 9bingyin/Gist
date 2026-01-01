@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { isSafeUrl, getSafeHostname } from '@/lib/url'
 import type { FeedPreview, Folder } from '@/types/api'
@@ -11,6 +12,7 @@ interface FeedPreviewCardProps {
 }
 
 export function FeedPreviewCard({ feed, folders, onSubscribe, isLoading = false }: FeedPreviewCardProps) {
+  const { t } = useTranslation()
   const [customTitle, setCustomTitle] = useState('')
   const [folderInput, setFolderInput] = useState('')
   const [showOptions, setShowOptions] = useState(false)
@@ -110,7 +112,7 @@ export function FeedPreviewCard({ feed, folders, onSubscribe, isLoading = false 
                 <svg className="size-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
-                {feed.itemCount} items
+                {feed.itemCount} {t('add_feed.items')}
               </span>
             )}
             {feed.lastUpdated && (
@@ -118,7 +120,7 @@ export function FeedPreviewCard({ feed, folders, onSubscribe, isLoading = false 
                 <svg className="size-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                {formatRelativeTime(feed.lastUpdated)}
+                {formatRelativeTime(feed.lastUpdated, t)}
               </span>
             )}
           </div>
@@ -131,7 +133,7 @@ export function FeedPreviewCard({ feed, folders, onSubscribe, isLoading = false 
           {/* Custom Title */}
           <div>
             <label className="block text-xs font-medium text-muted-foreground mb-1.5">
-              Custom Title (optional)
+              {t('add_feed.custom_title')}
             </label>
             <input
               type="text"
@@ -149,7 +151,7 @@ export function FeedPreviewCard({ feed, folders, onSubscribe, isLoading = false 
           {/* Folder */}
           <div className="relative">
             <label className="block text-xs font-medium text-muted-foreground mb-1.5">
-              Folder (optional)
+              {t('add_feed.folder')}
             </label>
             <input
               ref={folderInputRef}
@@ -157,7 +159,7 @@ export function FeedPreviewCard({ feed, folders, onSubscribe, isLoading = false 
               value={folderInput}
               onChange={(e) => setFolderInput(e.target.value)}
               onFocus={() => setShowFolderDropdown(true)}
-              placeholder="Select or create folder"
+              placeholder={t('add_feed.select_or_create_folder')}
               className={cn(
                 'w-full rounded-lg border border-border bg-background px-3 py-2 text-sm',
                 'placeholder:text-muted-foreground/60',
@@ -181,7 +183,7 @@ export function FeedPreviewCard({ feed, folders, onSubscribe, isLoading = false 
                     <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                     </svg>
-                    Create "{folderInput.trim()}"
+                    {t('add_feed.create_folder', { name: folderInput.trim() })}
                   </button>
                 )}
                 {filteredFolders.map((folder) => (
@@ -219,7 +221,7 @@ export function FeedPreviewCard({ feed, folders, onSubscribe, isLoading = false 
           >
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
           </svg>
-          {showOptions ? 'Hide options' : 'More options'}
+          {showOptions ? t('add_feed.hide_options') : t('add_feed.more_options')}
         </button>
 
         <button
@@ -240,14 +242,14 @@ export function FeedPreviewCard({ feed, folders, onSubscribe, isLoading = false 
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
               </svg>
-              <span>Subscribing...</span>
+              <span>{t('add_feed.subscribing')}</span>
             </>
           ) : (
             <>
               <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
-              <span>Subscribe</span>
+              <span>{t('add_feed.subscribe')}</span>
             </>
           )}
         </button>
@@ -256,15 +258,26 @@ export function FeedPreviewCard({ feed, folders, onSubscribe, isLoading = false 
   )
 }
 
-function formatRelativeTime(dateString: string): string {
+function formatRelativeTime(dateString: string, t: (key: string, options?: any) => string): string {
   const date = new Date(dateString)
   const now = new Date()
   const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000)
 
-  if (diffInSeconds < 60) return 'just now'
-  if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`
-  if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`
-  if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)}d ago`
+  if (diffInSeconds < 60) {
+    return t('add_feed.just_now')
+  }
+  if (diffInSeconds < 3600) {
+    const minutes = Math.floor(diffInSeconds / 60)
+    return t('add_feed.minutes_ago', { count: minutes })
+  }
+  if (diffInSeconds < 86400) {
+    const hours = Math.floor(diffInSeconds / 3600)
+    return t('add_feed.hours_ago', { count: hours })
+  }
+  if (diffInSeconds < 604800) {
+    const days = Math.floor(diffInSeconds / 86400)
+    return t('add_feed.days_ago', { count: days })
+  }
 
   return date.toLocaleDateString()
 }

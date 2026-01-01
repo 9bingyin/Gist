@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { listFolders, deleteFolders } from '@/api'
 import { cn } from '@/lib/utils'
@@ -28,6 +29,7 @@ function formatDateTime(dateString: string): string {
 }
 
 export function FoldersSettings() {
+  const { t } = useTranslation()
   const { data: folders = [], isLoading, refetch } = useQuery({
     queryKey: ['folders'],
     queryFn: listFolders,
@@ -109,7 +111,7 @@ export function FoldersSettings() {
       queryClient.invalidateQueries({ queryKey: ['feeds'] })
       queryClient.invalidateQueries({ queryKey: ['unreadCounts'] })
     } catch {
-      setError('删除失败')
+      setError(t('folders.delete_failed'))
     } finally {
       setIsDeleting(false)
     }
@@ -131,7 +133,7 @@ export function FoldersSettings() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold text-muted-foreground">
-          文件夹 ({folders.length})
+          {t('folders.title', { count: folders.length })}
         </h3>
         <div className="flex items-center gap-2">
           <button
@@ -152,14 +154,14 @@ export function FoldersSettings() {
                 d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
               />
             </svg>
-            <span>{isDeleting ? '删除中...' : `删除 (${selectedIds.size})`}</span>
+            <span>{isDeleting ? t('folders.deleting') : t('folders.delete_count', { count: selectedIds.size })}</span>
           </button>
         </div>
       </div>
 
       {/* Warning */}
       <div className="rounded-md bg-amber-500/10 px-3 py-2 text-sm text-amber-600 dark:text-amber-400">
-        删除文件夹会同时删除其中的所有订阅源及文章
+        {t('folders.delete_warning')}
       </div>
 
       {/* Error message */}
@@ -172,7 +174,7 @@ export function FoldersSettings() {
       {/* Table */}
       {folders.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border bg-muted/20 p-8 text-center">
-          <p className="text-sm text-muted-foreground">暂无文件夹</p>
+          <p className="text-sm text-muted-foreground">{t('folders.no_folders')}</p>
         </div>
       ) : (
         <div className="overflow-hidden rounded-lg border border-border">
@@ -210,7 +212,7 @@ export function FoldersSettings() {
                     onClick={() => handleSort('name')}
                     className="flex items-center hover:text-foreground transition-colors"
                   >
-                    名称
+                    {t('folders.name')}
                     <SortIcon field="name" />
                   </button>
                 </th>
@@ -220,7 +222,7 @@ export function FoldersSettings() {
                     onClick={() => handleSort('createdAt')}
                     className="flex items-center hover:text-foreground transition-colors"
                   >
-                    创建日期
+                    {t('folders.create_date')}
                     <SortIcon field="createdAt" />
                   </button>
                 </th>
@@ -230,7 +232,7 @@ export function FoldersSettings() {
                     onClick={() => handleSort('updatedAt')}
                     className="flex items-center hover:text-foreground transition-colors"
                   >
-                    最后更新
+                    {t('folders.last_update')}
                     <SortIcon field="updatedAt" />
                   </button>
                 </th>

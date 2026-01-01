@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 
 interface AiSummaryBoxProps {
@@ -7,6 +8,8 @@ interface AiSummaryBoxProps {
 }
 
 export function AiSummaryBox({ content, isLoading, error }: AiSummaryBoxProps) {
+  const { t } = useTranslation()
+
   if (!content && !isLoading && !error) return null
 
   return (
@@ -33,7 +36,7 @@ export function AiSummaryBox({ content, isLoading, error }: AiSummaryBoxProps) {
           />
         </svg>
         <h3 className={cn('text-sm font-semibold', error ? 'text-destructive' : 'text-primary')}>
-          AI Summary
+          {t('entry.ai_summary')}
         </h3>
         {isLoading && (
           <div className="size-3 animate-spin rounded-full border-2 border-primary border-t-transparent" />

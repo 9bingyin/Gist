@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useQueryClient } from '@tanstack/react-query'
 import { startImportOPML, watchImportStatus, cancelImportOPML, exportOPML } from '@/api'
 import { cn } from '@/lib/utils'
 import type { ImportResult, ImportTask } from '@/types/api'
 
 export function DataControl() {
+  const { t } = useTranslation()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const queryClient = useQueryClient()
 
@@ -86,13 +88,13 @@ export function DataControl() {
     <div className="space-y-6">
       {/* Import Section */}
       <section>
-        <h3 className="mb-4 text-sm font-semibold text-muted-foreground">导入数据</h3>
+        <h3 className="mb-4 text-sm font-semibold text-muted-foreground">{t('data_control.import_data')}</h3>
 
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-sm font-medium">导入订阅源</div>
-              <div className="text-xs text-muted-foreground">从 OPML 文件导入订阅源和文件夹</div>
+              <div className="text-sm font-medium">{t('data_control.import_feeds')}</div>
+              <div className="text-xs text-muted-foreground">{t('data_control.import_description')}</div>
             </div>
 
             <input
@@ -129,7 +131,7 @@ export function DataControl() {
                       d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                     />
                   </svg>
-                  <span>导入中...</span>
+                  <span>{t('data_control.importing')}</span>
                 </>
               ) : (
                 <>
@@ -141,7 +143,7 @@ export function DataControl() {
                       d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
                     />
                   </svg>
-                  <span>选择文件</span>
+                  <span>{t('data_control.select_file')}</span>
                 </>
               )}
             </button>
@@ -162,7 +164,7 @@ export function DataControl() {
                   onClick={handleCancel}
                   className="text-xs text-muted-foreground hover:text-foreground"
                 >
-                  停止
+                  {t('data_control.stop')}
                 </button>
               </div>
               <div className="text-xs text-muted-foreground">
@@ -176,9 +178,9 @@ export function DataControl() {
           {/* Import Cancelled */}
           {task && task.status === 'cancelled' && (
             <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-3 text-sm dark:border-yellow-900 dark:bg-yellow-950">
-              <div className="font-medium text-yellow-800 dark:text-yellow-200">导入已停止</div>
+              <div className="font-medium text-yellow-800 dark:text-yellow-200">{t('data_control.import_stopped')}</div>
               <div className="mt-1 text-yellow-700 dark:text-yellow-300">
-                已导入 {task.current}/{task.total} 个订阅源
+                {t('data_control.imported_progress', { current: task.current, total: task.total })}
               </div>
             </div>
           )}
@@ -186,13 +188,13 @@ export function DataControl() {
           {/* Import Result */}
           {importResult && (
             <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm dark:border-green-900 dark:bg-green-950">
-              <div className="font-medium text-green-800 dark:text-green-200">导入成功</div>
+              <div className="font-medium text-green-800 dark:text-green-200">{t('data_control.import_success')}</div>
               <ul className="mt-1 space-y-0.5 text-green-700 dark:text-green-300">
-                <li>创建了 {importResult.foldersCreated} 个文件夹</li>
-                <li>创建了 {importResult.feedsCreated} 个订阅源</li>
+                <li>{t('data_control.folders_created', { count: importResult.foldersCreated })}</li>
+                <li>{t('data_control.feeds_created', { count: importResult.feedsCreated })}</li>
                 {(importResult.foldersSkipped > 0 || importResult.feedsSkipped > 0) && (
                   <li className="text-green-600 dark:text-green-400">
-                    跳过了 {importResult.foldersSkipped} 个已存在的文件夹和 {importResult.feedsSkipped} 个已存在的订阅源
+                    {t('data_control.skipped_items', { foldersSkipped: importResult.foldersSkipped, feedsSkipped: importResult.feedsSkipped })}
                   </li>
                 )}
               </ul>
@@ -202,7 +204,7 @@ export function DataControl() {
           {/* Import Error */}
           {importError && (
             <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm dark:border-red-900 dark:bg-red-950">
-              <div className="font-medium text-red-800 dark:text-red-200">导入失败</div>
+              <div className="font-medium text-red-800 dark:text-red-200">{t('data_control.import_failed')}</div>
               <div className="mt-1 text-red-700 dark:text-red-300">{importError}</div>
             </div>
           )}
@@ -211,13 +213,13 @@ export function DataControl() {
 
       {/* Export Section */}
       <section>
-        <h3 className="mb-4 text-sm font-semibold text-muted-foreground">导出数据</h3>
+        <h3 className="mb-4 text-sm font-semibold text-muted-foreground">{t('data_control.export_data')}</h3>
 
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-sm font-medium">导出订阅源</div>
-              <div className="text-xs text-muted-foreground">将所有订阅源和文件夹导出为 OPML 文件</div>
+              <div className="text-sm font-medium">{t('data_control.export_feeds')}</div>
+              <div className="text-xs text-muted-foreground">{t('data_control.export_description')}</div>
             </div>
 
             <button
@@ -236,7 +238,7 @@ export function DataControl() {
                   d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
                 />
               </svg>
-              <span>导出</span>
+              <span>{t('data_control.export')}</span>
             </button>
           </div>
         </div>

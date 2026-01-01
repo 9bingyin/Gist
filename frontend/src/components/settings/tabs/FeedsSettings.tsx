@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useQueryClient } from '@tanstack/react-query'
 import { useFeeds } from '@/hooks/useFeeds'
 import { deleteFeeds, refreshAllFeeds, ApiError } from '@/api'
@@ -29,6 +30,7 @@ function formatDateTime(dateString: string): string {
 }
 
 export function FeedsSettings() {
+  const { t } = useTranslation()
   const { data: feeds = [], isLoading, refetch } = useFeeds()
   const queryClient = useQueryClient()
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -103,9 +105,9 @@ export function FeedsSettings() {
       await refreshAllFeeds()
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
-        setError('正在刷新中，请稍后再试')
+        setError(t('feeds.refresh_in_progress'))
       } else {
-        setError('刷新失败')
+        setError(t('feeds.refresh_failed'))
       }
     } finally {
       setIsRefreshing(false)
@@ -124,7 +126,7 @@ export function FeedsSettings() {
       queryClient.invalidateQueries({ queryKey: ['folders'] })
       queryClient.invalidateQueries({ queryKey: ['unreadCounts'] })
     } catch {
-      setError('删除失败')
+      setError(t('feeds.delete_failed'))
     } finally {
       setIsDeleting(false)
     }
@@ -146,7 +148,7 @@ export function FeedsSettings() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold text-muted-foreground">
-          已订阅的订阅源 ({feeds.length})
+          {t('feeds.subscribed_feeds', { count: feeds.length })}
         </h3>
         <div className="flex items-center gap-2">
           <button
@@ -172,7 +174,7 @@ export function FeedsSettings() {
                 d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
               />
             </svg>
-            <span>{isRefreshing ? '刷新中...' : '全部更新'}</span>
+            <span>{isRefreshing ? t('feeds.refreshing') : t('feeds.refresh_all')}</span>
           </button>
           <button
             type="button"
@@ -192,7 +194,7 @@ export function FeedsSettings() {
                 d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
               />
             </svg>
-            <span>{isDeleting ? '删除中...' : `删除 (${selectedIds.size})`}</span>
+            <span>{isDeleting ? t('feeds.deleting') : t('feeds.delete_count', { count: selectedIds.size })}</span>
           </button>
         </div>
       </div>
@@ -207,7 +209,7 @@ export function FeedsSettings() {
       {/* Table */}
       {feeds.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border bg-muted/20 p-8 text-center">
-          <p className="text-sm text-muted-foreground">暂无订阅源</p>
+          <p className="text-sm text-muted-foreground">{t('feeds.no_feeds')}</p>
         </div>
       ) : (
         <div className="overflow-hidden rounded-lg border border-border">
@@ -245,7 +247,7 @@ export function FeedsSettings() {
                     onClick={() => handleSort('title')}
                     className="flex items-center hover:text-foreground transition-colors"
                   >
-                    名称
+                    {t('feeds.name')}
                     <SortIcon field="title" />
                   </button>
                 </th>
@@ -255,7 +257,7 @@ export function FeedsSettings() {
                     onClick={() => handleSort('createdAt')}
                     className="flex items-center hover:text-foreground transition-colors"
                   >
-                    订阅日期
+                    {t('feeds.subscribe_date')}
                     <SortIcon field="createdAt" />
                   </button>
                 </th>
@@ -265,7 +267,7 @@ export function FeedsSettings() {
                     onClick={() => handleSort('updatedAt')}
                     className="flex items-center hover:text-foreground transition-colors"
                   >
-                    最后更新
+                    {t('feeds.last_update')}
                     <SortIcon field="updatedAt" />
                   </button>
                 </th>

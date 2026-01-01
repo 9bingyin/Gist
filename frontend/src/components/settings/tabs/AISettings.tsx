@@ -1,47 +1,61 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { getAISettings, updateAISettings, testAIConnection, ApiError } from '@/api'
 import { cn } from '@/lib/utils'
 import type { AIProvider, AISettings as AISettingsType, ReasoningEffort } from '@/types/settings'
 
-const PROVIDERS: { value: AIProvider; label: string }[] = [
-  { value: 'openai', label: 'OpenAI' },
-  { value: 'anthropic', label: 'Anthropic' },
-  { value: 'compatible', label: 'OpenAI Compatible' },
-]
-
-// OpenAI reasoning effort options (full range)
-const OPENAI_EFFORT_OPTIONS: { value: ReasoningEffort; label: string }[] = [
-  { value: 'xhigh', label: 'Extra High' },
-  { value: 'high', label: 'High' },
-  { value: 'medium', label: 'Medium' },
-  { value: 'low', label: 'Low' },
-  { value: 'minimal', label: 'Minimal' },
-  { value: 'none', label: 'None (gpt-5.1 only)' },
-]
-
-// Compatible (OpenRouter) effort options (full range)
-const COMPATIBLE_EFFORT_OPTIONS: { value: ReasoningEffort; label: string }[] = [
-  { value: 'xhigh', label: 'Extra High (95%)' },
-  { value: 'high', label: 'High (80%)' },
-  { value: 'medium', label: 'Medium (50%)' },
-  { value: 'low', label: 'Low (20%)' },
-  { value: 'minimal', label: 'Minimal (10%)' },
-  { value: 'none', label: 'None' },
-]
-
-// Summary language options
-const SUMMARY_LANGUAGE_OPTIONS: { value: string; label: string }[] = [
-  { value: 'zh-CN', label: 'Chinese (Simplified)' },
-  { value: 'zh-TW', label: 'Chinese (Traditional)' },
-  { value: 'en-US', label: 'English' },
-  { value: 'ja', label: 'Japanese' },
-  { value: 'ko', label: 'Korean' },
-  { value: 'es', label: 'Spanish' },
-  { value: 'fr', label: 'French' },
-  { value: 'de', label: 'German' },
-]
-
 export function AISettings() {
+  const { t } = useTranslation()
+
+  const PROVIDERS: { value: AIProvider; label: string }[] = useMemo(
+    () => [
+      { value: 'openai', label: t('ai_settings.provider_openai') },
+      { value: 'anthropic', label: t('ai_settings.provider_anthropic') },
+      { value: 'compatible', label: t('ai_settings.provider_compatible') },
+    ],
+    [t]
+  )
+
+  // OpenAI reasoning effort options (full range)
+  const OPENAI_EFFORT_OPTIONS: { value: ReasoningEffort; label: string }[] = useMemo(
+    () => [
+      { value: 'xhigh', label: t('ai_settings.effort_xhigh') },
+      { value: 'high', label: t('ai_settings.effort_high') },
+      { value: 'medium', label: t('ai_settings.effort_medium') },
+      { value: 'low', label: t('ai_settings.effort_low') },
+      { value: 'minimal', label: t('ai_settings.effort_minimal') },
+      { value: 'none', label: t('ai_settings.effort_none_gpt5') },
+    ],
+    [t]
+  )
+
+  // Compatible (OpenRouter) effort options (full range)
+  const COMPATIBLE_EFFORT_OPTIONS: { value: ReasoningEffort; label: string }[] = useMemo(
+    () => [
+      { value: 'xhigh', label: t('ai_settings.effort_xhigh_percent') },
+      { value: 'high', label: t('ai_settings.effort_high_percent') },
+      { value: 'medium', label: t('ai_settings.effort_medium_percent') },
+      { value: 'low', label: t('ai_settings.effort_low_percent') },
+      { value: 'minimal', label: t('ai_settings.effort_minimal_percent') },
+      { value: 'none', label: t('ai_settings.effort_none') },
+    ],
+    [t]
+  )
+
+  // Summary language options
+  const SUMMARY_LANGUAGE_OPTIONS: { value: string; label: string }[] = useMemo(
+    () => [
+      { value: 'zh-CN', label: t('ai_settings.lang_zh_cn') },
+      { value: 'zh-TW', label: t('ai_settings.lang_zh_tw') },
+      { value: 'en-US', label: t('ai_settings.lang_en') },
+      { value: 'ja', label: t('ai_settings.lang_ja') },
+      { value: 'ko', label: t('ai_settings.lang_ko') },
+      { value: 'es', label: t('ai_settings.lang_es') },
+      { value: 'fr', label: t('ai_settings.lang_fr') },
+      { value: 'de', label: t('ai_settings.lang_de') },
+    ],
+    [t]
+  )
   const [settings, setSettings] = useState<AISettingsType | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
@@ -64,7 +78,7 @@ export function AISettings() {
       if (err instanceof ApiError) {
         setError(err.message)
       } else {
-        setError('Failed to load settings')
+        setError(t('ai_settings.failed_to_load'))
       }
     } finally {
       setIsLoading(false)
@@ -121,12 +135,12 @@ export function AISettings() {
 
     try {
       await updateAISettings(settings)
-      setSuccessMessage('Settings saved successfully')
+      setSuccessMessage(t('ai_settings.settings_saved'))
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.message)
       } else {
-        setError('Failed to save settings')
+        setError(t('ai_settings.failed_to_save'))
       }
     } finally {
       setIsSaving(false)
@@ -144,7 +158,7 @@ export function AISettings() {
   if (!settings) {
     return (
       <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
-        {error || 'Failed to load settings'}
+        {error || t('ai_settings.failed_to_load')}
       </div>
     )
   }
@@ -153,7 +167,7 @@ export function AISettings() {
     <div className="space-y-6 max-w-xl">
       {/* Provider */}
       <div>
-        <label className="block text-sm font-medium mb-2">Provider</label>
+        <label className="block text-sm font-medium mb-2">{t('ai_settings.provider')}</label>
         <select
           value={settings.provider}
           onChange={(e) => handleChange('provider', e.target.value)}
@@ -169,7 +183,7 @@ export function AISettings() {
 
       {/* API Key */}
       <div>
-        <label className="block text-sm font-medium mb-2">API Key</label>
+        <label className="block text-sm font-medium mb-2">{t('ai_settings.api_key')}</label>
         <input
           type="password"
           value={settings.apiKey}
@@ -179,7 +193,7 @@ export function AISettings() {
               ? 'sk-...'
               : settings.provider === 'anthropic'
                 ? 'sk-ant-...'
-                : 'Enter API Key'
+                : t('ai_settings.enter_api_key')
           }
           className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none"
         />
@@ -188,12 +202,12 @@ export function AISettings() {
       {/* Base URL */}
       <div>
         <label className="block text-sm font-medium mb-2">
-          Base URL
+          {t('ai_settings.base_url')}
           {settings.provider === 'compatible' && (
-            <span className="text-destructive ml-1">*</span>
+            <span className="text-destructive ml-1">{t('ai_settings.required')}</span>
           )}
           {settings.provider !== 'compatible' && (
-            <span className="text-muted-foreground font-normal ml-2">(Optional)</span>
+            <span className="text-muted-foreground font-normal ml-2">{t('ai_settings.optional')}</span>
           )}
         </label>
         <input
@@ -203,7 +217,7 @@ export function AISettings() {
           placeholder={
             settings.provider === 'compatible'
               ? 'https://openrouter.ai/api/v1'
-              : 'Leave empty for default'
+              : t('ai_settings.leave_empty_for_default')
           }
           className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none"
         />
@@ -211,7 +225,7 @@ export function AISettings() {
 
       {/* Model */}
       <div>
-        <label className="block text-sm font-medium mb-2">Model</label>
+        <label className="block text-sm font-medium mb-2">{t('ai_settings.model')}</label>
         <input
           type="text"
           value={settings.model}
@@ -221,7 +235,7 @@ export function AISettings() {
               ? 'gpt-4o'
               : settings.provider === 'anthropic'
                 ? 'claude-sonnet-4-20250514'
-                : 'e.g. anthropic/claude-3.5-sonnet'
+                : t('ai_settings.model_example', { example: 'anthropic/claude-3.5-sonnet' })
           }
           className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none"
         />
@@ -238,17 +252,17 @@ export function AISettings() {
             className="size-4 rounded border-border"
           />
           <label htmlFor="thinking" className="text-sm font-medium">
-            {settings.provider === 'anthropic' ? 'Extended Thinking' : 'Enable Reasoning'}
+            {settings.provider === 'anthropic' ? t('ai_settings.extended_thinking') : t('ai_settings.enable_reasoning')}
           </label>
           {settings.provider === 'openai' && (
-            <span className="text-xs text-muted-foreground">(o1/o3/o4/gpt-5 series)</span>
+            <span className="text-xs text-muted-foreground">{t('ai_settings.o1_series')}</span>
           )}
         </div>
 
         {/* OpenAI: Reasoning Effort dropdown */}
         {settings.thinking && settings.provider === 'openai' && (
           <div className="ml-6">
-            <label className="block text-sm font-medium mb-2">Reasoning Effort</label>
+            <label className="block text-sm font-medium mb-2">{t('ai_settings.reasoning_effort_label')}</label>
             <select
               value={settings.reasoningEffort}
               onChange={(e) => handleChange('reasoningEffort', e.target.value)}
@@ -266,7 +280,7 @@ export function AISettings() {
         {/* Anthropic: Thinking Budget input */}
         {settings.thinking && settings.provider === 'anthropic' && (
           <div className="ml-6">
-            <label className="block text-sm font-medium mb-2">Thinking Budget (tokens)</label>
+            <label className="block text-sm font-medium mb-2">{t('ai_settings.thinking_budget_label')}</label>
             <input
               type="number"
               value={settings.thinkingBudget}
@@ -276,7 +290,7 @@ export function AISettings() {
               placeholder="10000"
               className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none"
             />
-            <p className="text-xs text-muted-foreground mt-1">Range: 1024 - 128000 tokens</p>
+            <p className="text-xs text-muted-foreground mt-1">{t('ai_settings.thinking_budget_hint')}</p>
           </div>
         )}
 
@@ -348,7 +362,7 @@ export function AISettings() {
 
       {/* Summary Language */}
       <div>
-        <label className="block text-sm font-medium mb-2">Summary Language</label>
+        <label className="block text-sm font-medium mb-2">{t('ai_settings.summary_language')}</label>
         <select
           value={settings.summaryLanguage}
           onChange={(e) => handleChange('summaryLanguage', e.target.value)}
@@ -361,7 +375,7 @@ export function AISettings() {
           ))}
         </select>
         <p className="text-xs text-muted-foreground mt-1">
-          The language used for AI-generated summaries and translations
+          {t('ai_settings.summary_language_hint')}
         </p>
       </div>
 
@@ -375,11 +389,11 @@ export function AISettings() {
           className="size-4 rounded border-border"
         />
         <label htmlFor="autoTranslate" className="text-sm font-medium">
-          Auto Translate
+          {t('ai_settings.auto_translate')}
         </label>
       </div>
       <p className="text-xs text-muted-foreground -mt-4 ml-6">
-        Automatically translate articles that are not in your target language
+        {t('ai_settings.auto_translate_hint')}
       </p>
 
       {/* Auto Summary */}
@@ -392,17 +406,17 @@ export function AISettings() {
           className="size-4 rounded border-border"
         />
         <label htmlFor="autoSummary" className="text-sm font-medium">
-          Auto Summary
+          {t('ai_settings.auto_summary')}
         </label>
       </div>
       <p className="text-xs text-muted-foreground -mt-4 ml-6">
-        Automatically generate AI summary when viewing articles
+        {t('ai_settings.auto_summary_hint')}
       </p>
 
       {/* Rate Limit */}
       <div>
         <label className="block text-sm font-medium mb-2">
-          Rate Limit (QPS)
+          {t('ai_settings.rate_limit_label')}
         </label>
         <input
           type="number"
@@ -413,7 +427,7 @@ export function AISettings() {
           className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none"
         />
         <p className="text-xs text-muted-foreground mt-1">
-          Maximum API requests per second (1-100, default: 10)
+          {t('ai_settings.rate_limit_hint')}
         </p>
       </div>
 
@@ -432,7 +446,7 @@ export function AISettings() {
           {isTesting ? (
             <>
               <div className="size-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-              <span>Testing...</span>
+              <span>{t('ai_settings.testing')}</span>
             </>
           ) : (
             <>
@@ -444,7 +458,7 @@ export function AISettings() {
                   d="M13 10V3L4 14h7v7l9-11h-7z"
                 />
               </svg>
-              <span>Test</span>
+              <span>{t('ai_settings.test')}</span>
             </>
           )}
         </button>
@@ -462,10 +476,10 @@ export function AISettings() {
           {isSaving ? (
             <>
               <div className="size-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-              <span>Saving...</span>
+              <span>{t('ai_settings.saving')}</span>
             </>
           ) : (
-            <span>Save</span>
+            <span>{t('ai_settings.save')}</span>
           )}
         </button>
 
@@ -476,7 +490,7 @@ export function AISettings() {
               testResult.success ? 'text-green-600 dark:text-green-400' : 'text-destructive'
             )}
           >
-            {testResult.success ? 'Connection successful!' : testResult.error}
+            {testResult.success ? t('ai_settings.test_success') + '!' : testResult.error}
           </span>
         )}
       </div>

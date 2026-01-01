@@ -1,5 +1,6 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import {
   DropdownMenu,
@@ -103,6 +104,7 @@ export function Sidebar({
   onSelectFolder,
   onSelectStarred,
 }: SidebarProps) {
+  const { t } = useTranslation()
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [sortBy, setSortBy] = useState<SortBy>('name')
   const [contentType, setContentType] = useState<ContentType>('article')
@@ -255,7 +257,7 @@ export function Sidebar({
                 ? 'text-lime-600 dark:text-lime-500'
                 : 'text-muted-foreground hover:text-foreground'
             )}
-            title="Articles"
+            title={t('content_type.article')}
           >
             <FileTextIcon className="size-[1.375rem]" />
             <div className="text-[0.625rem] font-medium leading-none">
@@ -270,7 +272,7 @@ export function Sidebar({
                 ? 'text-lime-600 dark:text-lime-500'
                 : 'text-muted-foreground hover:text-foreground'
             )}
-            title="Pictures"
+            title={t('content_type.picture')}
           >
             <ImageIcon className="size-[1.375rem]" />
             <div className="text-[0.625rem] font-medium leading-none">
@@ -285,7 +287,7 @@ export function Sidebar({
                 ? 'text-lime-600 dark:text-lime-500'
                 : 'text-muted-foreground hover:text-foreground'
             )}
-            title="Notifications"
+            title={t('content_type.notification')}
           >
             <BellIcon className="size-[1.375rem]" />
             <div className="text-[0.625rem] font-medium leading-none">
@@ -316,7 +318,7 @@ export function Sidebar({
             {/* Feed categories header with sort */}
             <div className="mt-3 flex items-center justify-between px-2.5">
               <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
-                Feeds
+                {t('sidebar.feeds')}
               </span>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -327,11 +329,11 @@ export function Sidebar({
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem onClick={() => setSortBy('name')} className={cn(sortBy === 'name' && 'bg-accent')}>
                     <ArrowDownAZIcon className="mr-2 size-4" />
-                    Sort by Name
+                    {t('sidebar.sort_name')}
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => setSortBy('date')} className={cn(sortBy === 'date' && 'bg-accent')}>
                     <CalendarIcon className="mr-2 size-4" />
-                    Sort by Date
+                    {t('sidebar.sort_date')}
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>

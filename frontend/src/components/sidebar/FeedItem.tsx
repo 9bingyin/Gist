@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import {
   DropdownMenu,
@@ -80,6 +81,7 @@ export function FeedItem({
   onMoveToFolder,
   onChangeType,
 }: FeedItemProps) {
+  const { t } = useTranslation()
   const [iconError, setIconError] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const hasError = !!errorMessage
@@ -131,15 +133,15 @@ export function FeedItem({
         <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
           {onRefresh && (
             <DropdownMenuItem onClick={() => onRefresh(feedId)}>
-              Refresh
+              {t('actions.refresh')}
             </DropdownMenuItem>
           )}
           {onMoveToFolder && (
             <DropdownMenuSub>
-              <DropdownMenuSubTrigger>Move to Folder</DropdownMenuSubTrigger>
+              <DropdownMenuSubTrigger>{t('actions.move_to_folder')}</DropdownMenuSubTrigger>
               <DropdownMenuSubContent>
                 <DropdownMenuItem onClick={() => onMoveToFolder(feedId, null)}>
-                  No Folder
+                  {t('actions.no_folder')}
                 </DropdownMenuItem>
                 {folders.map((folder) => (
                   <DropdownMenuItem key={folder.id} onClick={() => onMoveToFolder(feedId, folder.id)}>
@@ -151,16 +153,16 @@ export function FeedItem({
           )}
           {onChangeType && (
             <DropdownMenuSub>
-              <DropdownMenuSubTrigger>Change Type</DropdownMenuSubTrigger>
+              <DropdownMenuSubTrigger>{t('actions.change_type')}</DropdownMenuSubTrigger>
               <DropdownMenuSubContent>
                 <DropdownMenuItem onClick={() => onChangeType(feedId, 'article')}>
-                  Article
+                  {t('content_type.article')}
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => onChangeType(feedId, 'picture')}>
-                  Picture
+                  {t('content_type.picture')}
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => onChangeType(feedId, 'notification')}>
-                  Notification
+                  {t('content_type.notification')}
                 </DropdownMenuItem>
               </DropdownMenuSubContent>
             </DropdownMenuSub>
@@ -170,7 +172,7 @@ export function FeedItem({
               className="text-destructive focus:text-destructive"
               onClick={() => onDelete(feedId)}
             >
-              Delete
+              {t('actions.delete')}
             </DropdownMenuItem>
           )}
         </DropdownMenuContent>

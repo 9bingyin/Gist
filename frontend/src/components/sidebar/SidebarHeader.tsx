@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { ProfileButton } from './ProfileButton'
 
@@ -53,6 +54,8 @@ export function SidebarHeader({
   onSettingsClick,
   onLogoutClick,
 }: SidebarHeaderProps) {
+  const { t } = useTranslation()
+
   return (
     <div className="flex items-center justify-between px-3 pt-2.5 pb-2">
       {/* Logo and title */}
@@ -68,7 +71,7 @@ export function SidebarHeader({
           type="button"
           className={actionButtonStyles}
           onClick={onAddClick}
-          aria-label="Add feed"
+          aria-label={t('actions.add_feed')}
         >
           <AddIcon className="size-5 text-muted-foreground" />
         </button>
