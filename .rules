@@ -39,12 +39,17 @@
 *   **Repository (Data Layer)**：纯粹数据访问，**禁止**包含业务判断。
 *   **依赖注入**：通过构造函数注入依赖，配置对象除外，**禁止**使用全局状态变量。
 *   **可见性控制**：仅公开必要的 API（首字母大写），私有逻辑严格保持小写。
+*   **并发安全**：goroutine 间共享状态必须使用同步机制（`sync/atomic`、`sync.Mutex` 或 channel），**禁止**裸写共享变量。
 
 ### 4.2 数据存储 (Storage)
 *   **驱动模式**：SQLite 通过 DSN pragma 参数配置 (`_pragma=journal_mode(WAL)&_pragma=busy_timeout(30000)`)，确保连接池所有连接生效。
 *   **全文检索**：建立 `entries_fts` 虚拟表（unicode61 分词），通过 Trigger 自动同步主表数据。
 *   **ORM 规范**：使用 GORM 时必须使用参数绑定（`?`），**严禁**字符串拼接 SQL。
 *   **Schema 同步**：修改数据库结构后，**必须**同步更新本文档的 Schema 定义。
+*   **数据完整性**：
+    *   更新字段时必须检查新值有效性，空值/零值不应覆盖已有有效值。
+    *   层级结构（如文件夹树）修改父子关系时必须检测循环引用。
+    *   批量操作应使用单条 SQL（`DELETE ... WHERE id IN (?)`），**禁止**循环逐条执行。
 
 #### 4.2.1 数据库 Schema
 
@@ -194,6 +199,10 @@ entries_ad  -- AFTER DELETE: 同步删除 entries_fts
 *   **路径安全**：文件操作必须使用 `filepath.Clean` 防御路径穿越。
 *   **敏感数据**：严禁硬编码密钥，严禁在日志中打印 Token 或密码哈希。
 
+### 4.6 服务器生命周期
+*   **优雅关闭**：必须监听 `SIGINT/SIGTERM` 信号，调用 `server.Shutdown()` 等待请求完成，**禁止**直接 `os.Exit()`。
+*   **资源清理**：数据库连接、定时任务等资源必须在关闭流程中正确释放。
+
 ---
 
 ## 5. 前端开发规范 (TypeScript/React)
@@ -209,6 +218,7 @@ entries_ad  -- AFTER DELETE: 同步删除 entries_fts
 *   **构建优化**：Vite 开启 `manualChunks` 拆分 React 核心与 UI 库。
 *   **状态管理**：使用 `TanStack Query` 处理 Feed 数据缓存与预加载。
 *   **渲染优化**：列表页禁止同步执行复杂的 Readability 转换，使用虚拟滚动。
+*   **分页边界**：`hasMore` 判断应请求 `limit+1` 条数据，通过实际返回数量判断是否有下一页。
 
 ### 5.3 安全与渲染 (XSS 防御)
 *   **危险操作**：除非数据源经过 `unified` 管道清洗，否则**严禁**使用 `dangerouslySetInnerHTML`。
@@ -223,6 +233,11 @@ entries_ad  -- AFTER DELETE: 同步删除 entries_fts
 *   `i18next` + `react-i18next`，文件位于 `public/locales/{zh,en}/common.json`。
 *   嵌套 JSON 按模块组织（`sidebar.*`, `settings.*`），支持插值 `{{variable}}`。
 *   添加翻译键时**必须**同时更新中英文文件。
+
+### 5.6 资源与状态管理
+*   **长连接清理**：SSE/WebSocket 连接必须在 `useEffect` 返回的清理函数中关闭，防止连接泄漏。
+*   **异步任务取消**：启动新批量任务前必须先取消旧任务，再过滤/处理数据，避免状态不一致。
+*   **避免全局状态**：**禁止**使用模块级变量传递请求上下文，应通过函数参数或闭包传递。
 
 ---
 

@@ -49,22 +49,8 @@ export function DataControl() {
 
     try {
       await startImportOPML(file)
-      // After starting, connect to SSE to watch progress
-      const cancel = watchImportStatus((t) => {
-        setTask(t)
-
-        if (t.status === 'done' && t.result) {
-          setImportResult(t.result)
-          queryClient.invalidateQueries({ queryKey: ['folders'] })
-          queryClient.invalidateQueries({ queryKey: ['feeds'] })
-          queryClient.invalidateQueries({ queryKey: ['unreadCounts'] })
-        } else if (t.status === 'error') {
-          setImportError(t.error || 'Import failed')
-        }
-      })
-
-      // Store cancel function for cleanup if needed
-      return () => cancel()
+      // SSE connection is already established in useEffect on mount
+      // No need to create another one here - it will receive the updates
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Import failed'
       setImportError(message)

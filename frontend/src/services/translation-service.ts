@@ -111,20 +111,22 @@ export async function translateArticlesBatch(
   articles: Array<{ id: string; title: string; summary: string | null }>,
   targetLanguage: string
 ): Promise<void> {
-  // Filter out articles already being translated
+  // Cancel any existing batch translation first
+  if (batchAbortController) {
+    batchAbortController.abort()
+    batchAbortController = null
+  }
+  // Clear old in-flight batch articles so they can be re-translated
+  inFlightBatchArticles.clear()
+
+  // Filter out articles already being translated (only check content translations)
   const articlesToTranslate = articles.filter(
     (a) =>
       !inFlightRequests.has(`${a.id}-normal`) &&
-      !inFlightRequests.has(`${a.id}-readability`) &&
-      !inFlightBatchArticles.has(a.id)
+      !inFlightRequests.has(`${a.id}-readability`)
   )
 
   if (articlesToTranslate.length === 0) return
-
-  // Cancel any existing batch translation
-  if (batchAbortController) {
-    batchAbortController.abort()
-  }
 
   // Create new AbortController for this batch
   batchAbortController = new AbortController()

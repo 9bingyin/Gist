@@ -25,6 +25,7 @@ type FeedService interface {
 	Update(ctx context.Context, id int64, title string, folderID *int64) (model.Feed, error)
 	UpdateType(ctx context.Context, id int64, feedType string) error
 	Delete(ctx context.Context, id int64) error
+	DeleteBatch(ctx context.Context, ids []int64) error
 }
 
 type FeedPreview struct {
@@ -217,6 +218,21 @@ func (s *feedService) UpdateType(ctx context.Context, id int64, feedType string)
 		return fmt.Errorf("get feed: %w", err)
 	}
 	return s.feeds.UpdateType(ctx, id, feedType)
+}
+
+func (s *feedService) DeleteBatch(ctx context.Context, ids []int64) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	// Delete and check affected rows to detect missing IDs
+	affected, err := s.feeds.DeleteBatch(ctx, ids)
+	if err != nil {
+		return err
+	}
+	if affected != int64(len(ids)) {
+		return ErrNotFound
+	}
+	return nil
 }
 
 type feedFetch struct {

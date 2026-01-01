@@ -28,6 +28,34 @@ func NewFolderService(folders repository.FolderRepository, feeds repository.Feed
 	return &folderService{folders: folders, feeds: feeds}
 }
 
+// detectCycle checks if setting newParentID as parent of id would create a cycle.
+func (s *folderService) detectCycle(ctx context.Context, id int64, newParentID *int64) (bool, error) {
+	if newParentID == nil {
+		return false, nil
+	}
+	// Direct self-reference
+	if *newParentID == id {
+		return true, nil
+	}
+	// Walk up the parent chain to detect indirect cycles
+	visited := make(map[int64]bool)
+	visited[id] = true
+
+	currentID := newParentID
+	for currentID != nil {
+		if visited[*currentID] {
+			return true, nil // Cycle detected
+		}
+		visited[*currentID] = true
+		folder, err := s.folders.GetByID(ctx, *currentID)
+		if err != nil {
+			return false, err
+		}
+		currentID = folder.ParentID
+	}
+	return false, nil
+}
+
 func (s *folderService) Create(ctx context.Context, name string, parentID *int64, folderType string) (model.Folder, error) {
 	trimmed := strings.TrimSpace(name)
 	if trimmed == "" {
@@ -62,7 +90,13 @@ func (s *folderService) Update(ctx context.Context, id int64, name string, paren
 	if trimmed == "" {
 		return model.Folder{}, ErrInvalid
 	}
-	if parentID != nil && *parentID == id {
+	// Check for cycles (both direct and indirect)
+	if hasCycle, err := s.detectCycle(ctx, id, parentID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return model.Folder{}, ErrNotFound
+		}
+		return model.Folder{}, fmt.Errorf("check cycle: %w", err)
+	} else if hasCycle {
 		return model.Folder{}, ErrInvalid
 	}
 	if parentID != nil {

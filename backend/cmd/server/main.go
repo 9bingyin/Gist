@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -99,11 +101,22 @@ func main() {
 		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 		<-sigCh
 		log.Println("shutting down...")
+
+		// Create a deadline for shutdown
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
 		sched.Stop()
-		os.Exit(0)
+
+		// Gracefully shutdown the HTTP server
+		if err := router.Shutdown(ctx); err != nil {
+			log.Printf("server shutdown error: %v", err)
+		}
 	}()
 
-	if err := router.Start(cfg.Addr); err != nil {
+	if err := router.Start(cfg.Addr); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatalf("start server: %v", err)
 	}
+
+	log.Println("server stopped")
 }

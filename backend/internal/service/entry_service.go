@@ -71,12 +71,13 @@ func (s *entryService) List(ctx context.Context, params EntryListParams) ([]mode
 	}
 
 	// Set default limit
+	// Allow up to 101 for internal hasMore check (handler requests limit+1)
 	limit := params.Limit
 	if limit <= 0 {
 		limit = 50
 	}
-	if limit > 100 {
-		limit = 100
+	if limit > 101 {
+		limit = 101
 	}
 
 	filter := repository.EntryListFilter{

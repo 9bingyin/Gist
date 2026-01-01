@@ -113,11 +113,11 @@ const ALLOWED_ATTR = [
 ]
 
 let hooksBound = false
-let currentArticleUrl: string | undefined
 
-function ensurePurifyHooks() {
+function ensureBasePurifyHooks() {
   if (hooksBound) return
 
+  // Only set up hooks that don't require articleUrl context
   DOMPurify.addHook('afterSanitizeAttributes', (node) => {
     if (node instanceof HTMLAnchorElement) {
       node.setAttribute('target', '_blank')
@@ -127,28 +127,75 @@ function ensurePurifyHooks() {
     if (node instanceof HTMLImageElement) {
       node.setAttribute('loading', 'lazy')
       node.setAttribute('decoding', 'async')
-
-      // Proxy image URL
-      const src = node.getAttribute('src')
-      if (src) {
-        const proxiedUrl = getProxiedImageUrl(src, currentArticleUrl)
-        node.setAttribute('src', proxiedUrl)
-      }
     }
   })
 
   hooksBound = true
 }
 
+function proxySrcset(srcset: string, articleUrl?: string): string {
+  return srcset
+    .split(',')
+    .map((entry) => {
+      const parts = entry.trim().split(/\s+/)
+      if (parts.length >= 1 && parts[0]) {
+        parts[0] = getProxiedImageUrl(parts[0], articleUrl)
+      }
+      return parts.join(' ')
+    })
+    .join(', ')
+}
+
+function proxyImageUrls(fragment: DocumentFragment, articleUrl?: string): void {
+  // Proxy img src and srcset
+  fragment.querySelectorAll('img').forEach((img) => {
+    const src = img.getAttribute('src')
+    if (src) {
+      img.setAttribute('src', getProxiedImageUrl(src, articleUrl))
+    }
+    const srcset = img.getAttribute('srcset')
+    if (srcset) {
+      img.setAttribute('srcset', proxySrcset(srcset, articleUrl))
+    }
+  })
+
+  // Proxy source elements only inside <picture> (responsive images)
+  // Do NOT proxy source inside <video> or <audio> to avoid high bandwidth usage
+  fragment.querySelectorAll('picture > source').forEach((source) => {
+    const srcset = source.getAttribute('srcset')
+    if (srcset) {
+      source.setAttribute('srcset', proxySrcset(srcset, articleUrl))
+    }
+  })
+
+  // Proxy video poster (cover image only, not the video itself)
+  fragment.querySelectorAll('video').forEach((video) => {
+    const poster = video.getAttribute('poster')
+    if (poster) {
+      video.setAttribute('poster', getProxiedImageUrl(poster, articleUrl))
+    }
+  })
+}
+
 function sanitizeContent(content: string, articleUrl?: string): string {
-  ensurePurifyHooks()
-  currentArticleUrl = articleUrl
-  return DOMPurify.sanitize(content, {
+  ensureBasePurifyHooks()
+
+  // Get DOM fragment instead of string for post-processing
+  const fragment = DOMPurify.sanitize(content, {
     ALLOWED_TAGS,
     ALLOWED_ATTR,
     ADD_ATTR: ['target', 'rel', 'loading', 'decoding'],
     ALLOW_DATA_ATTR: false,
+    RETURN_DOM_FRAGMENT: true,
   })
+
+  // Proxy image URLs with articleUrl passed directly (no global state)
+  proxyImageUrls(fragment, articleUrl)
+
+  // Serialize back to string
+  const div = document.createElement('div')
+  div.appendChild(fragment)
+  return div.innerHTML
 }
 
 // Memoized component to prevent re-rendering when parent state changes

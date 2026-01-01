@@ -145,12 +145,20 @@ func (h *EntryHandler) List(c echo.Context) error {
 		}
 	}
 
-	entries, err := h.service.List(c.Request().Context(), params)
+	// Request one extra to determine if there are more results
+	queryParams := params
+	queryParams.Limit = params.Limit + 1
+
+	entries, err := h.service.List(c.Request().Context(), queryParams)
 	if err != nil {
 		return writeServiceError(c, err)
 	}
 
-	hasMore := len(entries) == params.Limit
+	// Determine hasMore by checking if we got more than requested
+	hasMore := len(entries) > params.Limit
+	if hasMore {
+		entries = entries[:params.Limit] // Trim to requested limit
+	}
 
 	response := entryListResponse{
 		Entries: make([]entryResponse, len(entries)),

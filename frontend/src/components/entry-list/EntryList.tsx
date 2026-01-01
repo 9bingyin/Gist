@@ -1,7 +1,7 @@
 import { useEffect, useRef, useMemo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { useEntriesInfinite } from '@/hooks/useEntries'
+import { useEntriesInfinite, useUnreadCounts } from '@/hooks/useEntries'
 import { useFeeds } from '@/hooks/useFeeds'
 import { useFolders } from '@/hooks/useFolders'
 import { useAISettings } from '@/hooks/useAISettings'
@@ -46,6 +46,7 @@ export function EntryList({
   const { data: feeds = [] } = useFeeds()
   const { data: folders = [] } = useFolders()
   const { data: aiSettings } = useAISettings()
+  const { data: unreadCounts } = useUnreadCounts()
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } =
     useEntriesInfinite({ ...params, unreadOnly })
 
@@ -193,7 +194,28 @@ export function EntryList({
         return t('entry_list.starred')
     }
   }, [selection, contentType, feedsMap, foldersMap, t])
-  const unreadCount = entries.filter((e) => !e.read).length
+
+  // Calculate unread count from API data (not from loaded entries)
+  const unreadCount = useMemo(() => {
+    if (!unreadCounts) return 0
+    const counts = unreadCounts.counts
+    switch (selection.type) {
+      case 'all':
+        // Sum all feeds' unread counts, filtered by contentType
+        return feeds
+          .filter((f) => f.type === contentType)
+          .reduce((sum, f) => sum + (counts[f.id] ?? 0), 0)
+      case 'feed':
+        return counts[selection.feedId] ?? 0
+      case 'folder':
+        // Sum unread counts for feeds in this folder with matching contentType
+        return feeds
+          .filter((f) => f.folderId === selection.folderId && f.type === contentType)
+          .reduce((sum, f) => sum + (counts[f.id] ?? 0), 0)
+      case 'starred':
+        return 0 // Starred view doesn't show unread count
+    }
+  }, [unreadCounts, selection, feeds, contentType])
 
   return (
     <div className="flex h-full flex-col">

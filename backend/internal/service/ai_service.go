@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"gist/backend/internal/model"
 	"gist/backend/internal/repository"
@@ -244,7 +245,7 @@ func (s *aiService) TranslateBlocks(ctx context.Context, entryID int64, content,
 		// Collect results for caching
 		var results []TranslateBlockResult
 		var resultsMu sync.Mutex
-		var hasError bool
+		var hasError atomic.Bool
 
 	blockLoop:
 		for _, block := range blocks {
@@ -283,7 +284,7 @@ func (s *aiService) TranslateBlocks(ctx context.Context, entryID int64, content,
 				if err := s.rateLimiter.Wait(ctx); err != nil {
 					select {
 					case errCh <- fmt.Errorf("rate limit: %w", err):
-						hasError = true
+						hasError.Store(true)
 					default:
 					}
 					return
@@ -294,7 +295,7 @@ func (s *aiService) TranslateBlocks(ctx context.Context, entryID int64, content,
 				if err != nil {
 					select {
 					case errCh <- fmt.Errorf("create provider: %w", err):
-						hasError = true
+						hasError.Store(true)
 					default:
 					}
 					return
@@ -306,7 +307,7 @@ func (s *aiService) TranslateBlocks(ctx context.Context, entryID int64, content,
 				if err != nil {
 					select {
 					case errCh <- fmt.Errorf("translate block %d: %w", b.Index, err):
-						hasError = true
+						hasError.Store(true)
 					default:
 					}
 					return
@@ -332,7 +333,7 @@ func (s *aiService) TranslateBlocks(ctx context.Context, entryID int64, content,
 		wg.Wait()
 
 		// Cache complete result if no errors and not cancelled
-		if !hasError && len(results) > 0 && ctx.Err() == nil {
+		if !hasError.Load() && len(results) > 0 && ctx.Err() == nil {
 			// Sort by index
 			sort.Slice(results, func(i, j int) bool {
 				return results[i].Index < results[j].Index

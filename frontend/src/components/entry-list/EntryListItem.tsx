@@ -1,4 +1,4 @@
-import { forwardRef, useState } from 'react'
+import { forwardRef, useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { useTranslationStore } from '@/stores/translation-store'
@@ -41,9 +41,15 @@ export const EntryListItem = forwardRef<HTMLDivElement, EntryListItemProps>(
         : undefined
     )
 
+    // Cache stripped HTML to avoid DOMParser on every render
+    const strippedContent = useMemo(
+      () => (entry.content ? stripHtml(entry.content).slice(0, 150) : null),
+      [entry.content]
+    )
+
     // Use translated content if available
     const displayTitle = translation?.title ?? entry.title
-    const displaySummary = translation?.summary ?? (entry.content ? stripHtml(entry.content).slice(0, 150) : null)
+    const displaySummary = translation?.summary ?? strippedContent
 
     return (
       <div

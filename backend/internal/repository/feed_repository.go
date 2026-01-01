@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"gist/backend/internal/model"
@@ -22,6 +23,7 @@ type FeedRepository interface {
 	UpdateErrorMessage(ctx context.Context, id int64, errorMessage *string) error
 	UpdateType(ctx context.Context, id int64, feedType string) error
 	Delete(ctx context.Context, id int64) error
+	DeleteBatch(ctx context.Context, ids []int64) (int64, error)
 }
 
 type feedRepository struct {
@@ -191,6 +193,23 @@ func (r *feedRepository) Delete(ctx context.Context, id int64) error {
 		return fmt.Errorf("delete feed: %w", err)
 	}
 	return nil
+}
+
+func (r *feedRepository) DeleteBatch(ctx context.Context, ids []int64) (int64, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	// Build placeholder string: ?,?,?...
+	placeholders := strings.Repeat("?,", len(ids)-1) + "?"
+	args := make([]interface{}, len(ids))
+	for i, id := range ids {
+		args[i] = id
+	}
+	result, err := r.db.ExecContext(ctx, `DELETE FROM feeds WHERE id IN (`+placeholders+`)`, args...)
+	if err != nil {
+		return 0, fmt.Errorf("delete feeds batch: %w", err)
+	}
+	return result.RowsAffected()
 }
 
 func scanFeed(scanner interface {

@@ -230,12 +230,19 @@ func (s *refreshService) refreshFeedWithUA(ctx context.Context, feed model.Feed,
 		_ = s.feeds.UpdateErrorMessage(ctx, feed.ID, nil)
 	}
 
-	// Update feed ETag and LastModified
+	// Update feed ETag and LastModified (only update non-empty values to preserve existing ones)
 	newETag := strings.TrimSpace(resp.Header.Get("ETag"))
 	newLastModified := strings.TrimSpace(resp.Header.Get("Last-Modified"))
-	if newETag != "" || newLastModified != "" {
-		feed.ETag = optionalString(newETag)
-		feed.LastModified = optionalString(newLastModified)
+	needsUpdate := false
+	if newETag != "" {
+		feed.ETag = &newETag
+		needsUpdate = true
+	}
+	if newLastModified != "" {
+		feed.LastModified = &newLastModified
+		needsUpdate = true
+	}
+	if needsUpdate {
 		if _, err := s.feeds.Update(ctx, feed); err != nil {
 			log.Printf("update feed %d etag: %v", feed.ID, err)
 		}
