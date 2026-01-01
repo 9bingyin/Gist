@@ -25,6 +25,7 @@ type aiSettingsResponse struct {
 	SummaryLanguage string `json:"summaryLanguage"`
 	AutoTranslate   bool   `json:"autoTranslate"`
 	AutoSummary     bool   `json:"autoSummary"`
+	RateLimit       int    `json:"rateLimit"`
 }
 
 type aiSettingsRequest struct {
@@ -38,6 +39,7 @@ type aiSettingsRequest struct {
 	SummaryLanguage string `json:"summaryLanguage"`
 	AutoTranslate   bool   `json:"autoTranslate"`
 	AutoSummary     bool   `json:"autoSummary"`
+	RateLimit       int    `json:"rateLimit"`
 }
 
 type aiTestRequest struct {
@@ -92,6 +94,7 @@ func (h *SettingsHandler) GetAISettings(c echo.Context) error {
 		SummaryLanguage: settings.SummaryLanguage,
 		AutoTranslate:   settings.AutoTranslate,
 		AutoSummary:     settings.AutoSummary,
+		RateLimit:       settings.RateLimit,
 	})
 }
 
@@ -123,6 +126,7 @@ func (h *SettingsHandler) UpdateAISettings(c echo.Context) error {
 		SummaryLanguage: req.SummaryLanguage,
 		AutoTranslate:   req.AutoTranslate,
 		AutoSummary:     req.AutoSummary,
+		RateLimit:       req.RateLimit,
 	}
 
 	if err := h.service.SetAISettings(c.Request().Context(), settings); err != nil {

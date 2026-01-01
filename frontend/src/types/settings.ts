@@ -13,6 +13,7 @@ export interface AISettings {
   summaryLanguage: string;
   autoTranslate: boolean;
   autoSummary: boolean;
+  rateLimit: number;
 }
 
 export interface AITestRequest {

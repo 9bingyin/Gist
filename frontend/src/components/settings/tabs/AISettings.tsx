@@ -399,6 +399,24 @@ export function AISettings() {
         Automatically generate AI summary when viewing articles
       </p>
 
+      {/* Rate Limit */}
+      <div>
+        <label className="block text-sm font-medium mb-2">
+          Rate Limit (QPS)
+        </label>
+        <input
+          type="number"
+          value={settings.rateLimit}
+          onChange={(e) => handleChange('rateLimit', parseInt(e.target.value) || 10)}
+          min={1}
+          max={100}
+          className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none"
+        />
+        <p className="text-xs text-muted-foreground mt-1">
+          Maximum API requests per second (1-100, default: 10)
+        </p>
+      </div>
+
       {/* Test & Save Buttons */}
       <div className="flex items-center gap-3 pt-2">
         <button

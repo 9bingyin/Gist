@@ -69,6 +69,7 @@ type aiService struct {
 	translationRepo     repository.AITranslationRepository
 	listTranslationRepo repository.AIListTranslationRepository
 	settingsRepo        repository.SettingsRepository
+	rateLimiter         *ai.RateLimiter
 }
 
 // NewAIService creates a new AI service.
@@ -77,12 +78,14 @@ func NewAIService(
 	translationRepo repository.AITranslationRepository,
 	listTranslationRepo repository.AIListTranslationRepository,
 	settingsRepo repository.SettingsRepository,
+	rateLimiter *ai.RateLimiter,
 ) AIService {
 	return &aiService{
 		summaryRepo:         summaryRepo,
 		translationRepo:     translationRepo,
 		listTranslationRepo: listTranslationRepo,
 		settingsRepo:        settingsRepo,
+		rateLimiter:         rateLimiter,
 	}
 }
 
@@ -102,6 +105,11 @@ func (s *aiService) Summarize(ctx context.Context, entryID int64, content, title
 	provider, err := ai.NewProvider(cfg)
 	if err != nil {
 		return nil, nil, fmt.Errorf("create provider: %w", err)
+	}
+
+	// Wait for rate limiter
+	if err := s.rateLimiter.Wait(ctx); err != nil {
+		return nil, nil, fmt.Errorf("rate limit: %w", err)
 	}
 
 	// Get language setting
@@ -270,6 +278,16 @@ func (s *aiService) TranslateBlocks(ctx context.Context, entryID int64, content,
 			go func(b ai.Block) {
 				defer wg.Done()
 				defer func() { <-sem }() // Release semaphore
+
+				// Wait for rate limiter
+				if err := s.rateLimiter.Wait(ctx); err != nil {
+					select {
+					case errCh <- fmt.Errorf("rate limit: %w", err):
+						hasError = true
+					default:
+					}
+					return
+				}
 
 				// Create provider for this goroutine
 				provider, err := ai.NewProvider(cfg)
@@ -443,6 +461,14 @@ func (s *aiService) TranslateBatch(ctx context.Context, articles []BatchArticleI
 				var translatedTitle *string
 				titleStr := ""
 				if a.Title != "" {
+					// Wait for rate limiter
+					if err := s.rateLimiter.Wait(ctx); err != nil {
+						select {
+						case errCh <- fmt.Errorf("rate limit: %w", err):
+						default:
+						}
+						return
+					}
 					titlePrompt := ai.GetTranslateTextPrompt("title", language)
 					translated, err := provider.Complete(ctx, titlePrompt, a.Title)
 					if err != nil {
@@ -460,6 +486,14 @@ func (s *aiService) TranslateBatch(ctx context.Context, articles []BatchArticleI
 				var translatedSummary *string
 				summaryStr := ""
 				if a.Summary != "" {
+					// Wait for rate limiter
+					if err := s.rateLimiter.Wait(ctx); err != nil {
+						select {
+						case errCh <- fmt.Errorf("rate limit: %w", err):
+						default:
+						}
+						return
+					}
 					summaryPrompt := ai.GetTranslateTextPrompt("summary", language)
 					translated, err := provider.Complete(ctx, summaryPrompt, a.Summary)
 					if err != nil {

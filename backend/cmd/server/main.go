@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -15,6 +16,7 @@ import (
 	"gist/backend/internal/repository"
 	"gist/backend/internal/scheduler"
 	"gist/backend/internal/service"
+	"gist/backend/internal/service/ai"
 	"gist/backend/internal/snowflake"
 )
 
@@ -60,8 +62,20 @@ func main() {
 	refreshService := service.NewRefreshService(feedRepo, entryRepo, nil)
 
 	proxyService := service.NewProxyService()
-	settingsService := service.NewSettingsService(settingsRepo)
-	aiService := service.NewAIService(aiSummaryRepo, aiTranslationRepo, aiListTranslationRepo, settingsRepo)
+
+	// Initialize rate limiter with stored setting
+	initialRateLimit := ai.DefaultRateLimit
+	if setting, err := settingsRepo.Get(context.Background(), "ai.rate_limit"); err == nil && setting != nil {
+		var val int
+		fmt.Sscanf(setting.Value, "%d", &val)
+		if val > 0 {
+			initialRateLimit = val
+		}
+	}
+	rateLimiter := ai.NewRateLimiter(initialRateLimit)
+
+	settingsService := service.NewSettingsService(settingsRepo, rateLimiter)
+	aiService := service.NewAIService(aiSummaryRepo, aiTranslationRepo, aiListTranslationRepo, settingsRepo, rateLimiter)
 
 	folderHandler := handler.NewFolderHandler(folderService)
 	feedHandler := handler.NewFeedHandler(feedService, refreshService)

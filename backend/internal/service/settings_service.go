@@ -20,6 +20,7 @@ type AISettings struct {
 	SummaryLanguage string `json:"summaryLanguage"`
 	AutoTranslate   bool   `json:"autoTranslate"`
 	AutoSummary     bool   `json:"autoSummary"`
+	RateLimit       int    `json:"rateLimit"`
 }
 
 // Setting keys
@@ -34,6 +35,7 @@ const (
 	keyAISummaryLanguage = "ai.summary_language"
 	keyAIAutoTranslate   = "ai.auto_translate"
 	keyAIAutoSummary     = "ai.auto_summary"
+	keyAIRateLimit       = "ai.rate_limit"
 )
 
 // SettingsService provides settings management.
@@ -48,12 +50,13 @@ type SettingsService interface {
 }
 
 type settingsService struct {
-	repo repository.SettingsRepository
+	repo        repository.SettingsRepository
+	rateLimiter *ai.RateLimiter
 }
 
 // NewSettingsService creates a new settings service.
-func NewSettingsService(repo repository.SettingsRepository) SettingsService {
-	return &settingsService{repo: repo}
+func NewSettingsService(repo repository.SettingsRepository, rateLimiter *ai.RateLimiter) SettingsService {
+	return &settingsService{repo: repo, rateLimiter: rateLimiter}
 }
 
 // GetAISettings returns the AI configuration with masked API keys.
@@ -95,6 +98,11 @@ func (s *settingsService) GetAISettings(ctx context.Context) (*AISettings, error
 	}
 	if val, err := s.getString(ctx, keyAIAutoSummary); err == nil && val == "true" {
 		settings.AutoSummary = true
+	}
+	if val, err := s.getInt(ctx, keyAIRateLimit); err == nil && val > 0 {
+		settings.RateLimit = val
+	} else {
+		settings.RateLimit = ai.DefaultRateLimit
 	}
 
 	return settings, nil
@@ -145,6 +153,17 @@ func (s *settingsService) SetAISettings(ctx context.Context, settings *AISetting
 	}
 	if err := s.repo.Set(ctx, keyAIAutoSummary, autoSummaryVal); err != nil {
 		return fmt.Errorf("set auto summary: %w", err)
+	}
+	// Set rate limit and update limiter
+	rateLimit := settings.RateLimit
+	if rateLimit <= 0 {
+		rateLimit = ai.DefaultRateLimit
+	}
+	if err := s.repo.Set(ctx, keyAIRateLimit, fmt.Sprintf("%d", rateLimit)); err != nil {
+		return fmt.Errorf("set rate limit: %w", err)
+	}
+	if s.rateLimiter != nil {
+		s.rateLimiter.SetLimit(rateLimit)
 	}
 	return nil
 }
