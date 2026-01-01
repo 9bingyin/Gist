@@ -54,6 +54,7 @@
 | id | INTEGER | PRIMARY KEY | Snowflake ID |
 | name | TEXT | NOT NULL | 文件夹名称 |
 | parent_id | INTEGER | FK -> folders(id) ON DELETE CASCADE | 父文件夹 ID |
+| type | TEXT | NOT NULL DEFAULT 'article' | 内容类型 (article/picture/notification) |
 | created_at | TEXT | NOT NULL | 创建时间 (RFC3339) |
 | updated_at | TEXT | NOT NULL | 更新时间 (RFC3339) |
 
@@ -67,6 +68,7 @@
 | site_url | TEXT | | 网站首页 URL |
 | description | TEXT | | 订阅描述 |
 | icon_path | TEXT | | 图标文件路径 (如 example.com.png) |
+| type | TEXT | NOT NULL DEFAULT 'article' | 内容类型 (article/picture/notification) |
 | etag | TEXT | | HTTP ETag (Conditional GET) |
 | last_modified | TEXT | | HTTP Last-Modified |
 | error_message | TEXT | | 获取/刷新错误信息 |

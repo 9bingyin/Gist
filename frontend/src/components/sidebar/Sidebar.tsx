@@ -1,6 +1,6 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,7 +15,6 @@ import { SettingsModal } from '@/components/settings'
 import { useFolders, useDeleteFolder, useUpdateFolderType } from '@/hooks/useFolders'
 import { useFeeds, useDeleteFeed, useUpdateFeed, useUpdateFeedType } from '@/hooks/useFeeds'
 import { useUnreadCounts, useStarredCount } from '@/hooks/useEntries'
-import { feedItemStyles, sidebarItemIconStyles } from './styles'
 import type { SelectionType } from '@/hooks/useSelection'
 import type { Folder, Feed, ContentType } from '@/types/api'
 
@@ -56,7 +55,6 @@ function CalendarIcon({ className }: { className?: string }) {
 interface SidebarProps {
   onAddClick?: (contentType: ContentType) => void
   selection: SelectionType
-  onSelectAll: () => void
   onSelectFeed: (feedId: string) => void
   onSelectFolder: (folderId: string) => void
   onSelectStarred: () => void
@@ -65,18 +63,6 @@ interface SidebarProps {
 interface FolderWithFeeds {
   folder: Folder
   feeds: Feed[]
-}
-
-function ArticlesIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      fill="currentColor"
-    >
-      <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z" />
-    </svg>
-  )
 }
 
 function FileTextIcon({ className }: { className?: string }) {
@@ -113,7 +99,6 @@ function BellIcon({ className }: { className?: string }) {
 export function Sidebar({
   onAddClick,
   selection,
-  onSelectAll,
   onSelectFeed,
   onSelectFolder,
   onSelectStarred,
@@ -121,6 +106,25 @@ export function Sidebar({
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [sortBy, setSortBy] = useState<SortBy>('name')
   const [contentType, setContentType] = useState<ContentType>('article')
+
+  // Animation direction tracking
+  const contentTypeList: ContentType[] = ['article', 'picture', 'notification']
+  const orderIndex = contentTypeList.indexOf(contentType)
+  const prevOrderIndexRef = useRef(-1)
+  const [isReady, setIsReady] = useState(false)
+  const [direction, setDirection] = useState<'left' | 'right'>('right')
+  const [currentAnimatedType, setCurrentAnimatedType] = useState(contentType)
+
+  useLayoutEffect(() => {
+    const prevOrderIndex = prevOrderIndexRef.current
+    if (prevOrderIndex !== orderIndex) {
+      if (prevOrderIndex < orderIndex) setDirection('right')
+      else setDirection('left')
+    }
+    setTimeout(() => setCurrentAnimatedType(contentType), 0)
+    if (prevOrderIndexRef.current !== -1) setIsReady(true)
+    prevOrderIndexRef.current = orderIndex
+  }, [orderIndex, contentType])
 
   const { data: allFolders = [] } = useFolders()
   const { data: allFeeds = [] } = useFeeds()
@@ -130,15 +134,16 @@ export function Sidebar({
   const { mutate: updateFeedType } = useUpdateFeedType()
   const { mutate: updateFolderType } = useUpdateFolderType()
 
-  // Filter by content type
+  // Filter by content type (use currentAnimatedType for animation consistency)
   const folders = useMemo(
-    () => allFolders.filter((f) => f.type === contentType),
-    [allFolders, contentType]
+    () => allFolders.filter((f) => f.type === currentAnimatedType),
+    [allFolders, currentAnimatedType]
   )
   const feeds = useMemo(
-    () => allFeeds.filter((f) => f.type === contentType),
-    [allFeeds, contentType]
+    () => allFeeds.filter((f) => f.type === currentAnimatedType),
+    [allFeeds, currentAnimatedType]
   )
+
   const { data: unreadCountsData } = useUnreadCounts()
   const { data: starredCountData } = useStarredCount()
 
@@ -175,6 +180,15 @@ export function Sidebar({
     return map
   }, [unreadCountsData])
 
+  // Calculate unread count for each content type
+  const contentTypeCounts = useMemo(() => {
+    const counts = { article: 0, picture: 0, notification: 0 }
+    for (const feed of allFeeds) {
+      counts[feed.type] += unreadCounts.get(feed.id) || 0
+    }
+    return counts
+  }, [allFeeds, unreadCounts])
+
   const folderUnreadCounts = useMemo(() => {
     const map = new Map<string, number>()
     for (const feed of feeds) {
@@ -185,15 +199,6 @@ export function Sidebar({
       }
     }
     return map
-  }, [feeds, unreadCounts])
-
-  const totalUnread = useMemo(() => {
-    let total = 0
-    // Only count unread for feeds of current content type
-    for (const feed of feeds) {
-      total += unreadCounts.get(feed.id) || 0
-    }
-    return total
   }, [feeds, unreadCounts])
 
   const { foldersWithFeeds, uncategorizedFeeds } = groupFeedsByFolder(folders, feeds)
@@ -229,7 +234,6 @@ export function Sidebar({
   // Sorted uncategorized feeds
   const sortedUncategorizedFeeds = useMemo(() => sortFeeds(uncategorizedFeeds), [uncategorizedFeeds, sortFeeds])
 
-  const isAllSelected = selection.type === 'all'
   const isStarredSelected = selection.type === 'starred'
   const isFeedSelected = (feedId: string) =>
     selection.type === 'feed' && selection.feedId === feedId
@@ -241,108 +245,132 @@ export function Sidebar({
       <SidebarHeader onAddClick={() => onAddClick?.(contentType)} onSettingsClick={() => setIsSettingsOpen(true)} />
 
       {/* Content Type Switcher */}
-      <div className="flex items-center justify-center gap-1 border-b px-3 py-2">
-        <button
-          onClick={() => setContentType('article')}
-          className={cn(
-            'flex size-8 items-center justify-center rounded-md transition-colors',
-            contentType === 'article'
-              ? 'bg-primary text-primary-foreground'
-              : 'text-muted-foreground hover:bg-accent hover:text-foreground'
-          )}
-          title="Articles"
-        >
-          <FileTextIcon className="size-4" />
-        </button>
-        <button
-          onClick={() => setContentType('picture')}
-          className={cn(
-            'flex size-8 items-center justify-center rounded-md transition-colors',
-            contentType === 'picture'
-              ? 'bg-primary text-primary-foreground'
-              : 'text-muted-foreground hover:bg-accent hover:text-foreground'
-          )}
-          title="Pictures"
-        >
-          <ImageIcon className="size-4" />
-        </button>
-        <button
-          onClick={() => setContentType('notification')}
-          className={cn(
-            'flex size-8 items-center justify-center rounded-md transition-colors',
-            contentType === 'notification'
-              ? 'bg-primary text-primary-foreground'
-              : 'text-muted-foreground hover:bg-accent hover:text-foreground'
-          )}
-          title="Notifications"
-        >
-          <BellIcon className="size-4" />
-        </button>
+      <div className="relative mb-2 mt-3">
+        <div className="flex h-11 items-center px-1 text-xl text-muted-foreground">
+          <button
+            onClick={() => setContentType('article')}
+            className={cn(
+              'flex h-11 w-8 shrink-0 grow flex-col items-center justify-center gap-1 rounded-md transition-colors',
+              contentType === 'article'
+                ? 'text-lime-600 dark:text-lime-500'
+                : 'text-muted-foreground hover:text-foreground'
+            )}
+            title="Articles"
+          >
+            <FileTextIcon className="size-[1.375rem]" />
+            <div className="text-[0.625rem] font-medium leading-none">
+              {contentTypeCounts.article}
+            </div>
+          </button>
+          <button
+            onClick={() => setContentType('picture')}
+            className={cn(
+              'flex h-11 w-8 shrink-0 grow flex-col items-center justify-center gap-1 rounded-md transition-colors',
+              contentType === 'picture'
+                ? 'text-lime-600 dark:text-lime-500'
+                : 'text-muted-foreground hover:text-foreground'
+            )}
+            title="Pictures"
+          >
+            <ImageIcon className="size-[1.375rem]" />
+            <div className="text-[0.625rem] font-medium leading-none">
+              {contentTypeCounts.picture}
+            </div>
+          </button>
+          <button
+            onClick={() => setContentType('notification')}
+            className={cn(
+              'flex h-11 w-8 shrink-0 grow flex-col items-center justify-center gap-1 rounded-md transition-colors',
+              contentType === 'notification'
+                ? 'text-lime-600 dark:text-lime-500'
+                : 'text-muted-foreground hover:text-foreground'
+            )}
+            title="Notifications"
+          >
+            <BellIcon className="size-[1.375rem]" />
+            <div className="text-[0.625rem] font-medium leading-none">
+              {contentTypeCounts.notification}
+            </div>
+          </button>
+        </div>
       </div>
 
-      <ScrollArea className="min-w-0 flex-1" viewportClassName="px-1 [&>div]:!block">
-        {/* All Articles */}
-        <div
-          data-active={isAllSelected}
-          className={cn(feedItemStyles, 'mt-1 pl-2.5')}
-          onClick={onSelectAll}
-        >
-          <span className={sidebarItemIconStyles}>
-            <ArticlesIcon className="size-4" />
-          </span>
-          <span className="grow">All Articles</span>
-          {totalUnread > 0 && (
-            <span className="text-[0.65rem] tabular-nums text-muted-foreground">
-              {totalUnread > 99 ? '99+' : totalUnread}
-            </span>
-          )}
-        </div>
+      {/* Content */}
+      <div className="relative flex-1 overflow-hidden">
+        <AnimatePresence mode="popLayout">
+          <motion.div
+            key={currentAnimatedType}
+            initial={isReady ? { x: direction === 'right' ? '100%' : '-100%' } : false}
+            animate={{ x: 0 }}
+            exit={{ x: direction === 'right' ? '-100%' : '100%' }}
+            transition={{ type: 'spring', duration: 0.4, bounce: 0.15 }}
+            className="absolute inset-0 overflow-y-auto px-1 py-2 space-y-1"
+          >
+            {/* Starred section */}
+            <StarredItem
+              isActive={isStarredSelected}
+              count={starredCountData?.count ?? 0}
+              onClick={onSelectStarred}
+            />
 
-        {/* Starred section */}
-        <StarredItem
-          isActive={isStarredSelected}
-          count={starredCountData?.count ?? 0}
-          onClick={onSelectStarred}
-        />
+            {/* Feed categories header with sort */}
+            <div className="mt-3 flex items-center justify-between px-2.5">
+              <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
+                Feeds
+              </span>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent/50 hover:text-foreground">
+                    {sortBy === 'name' ? <ArrowDownAZIcon className="size-3.5" /> : <CalendarIcon className="size-3.5" />}
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => setSortBy('name')} className={cn(sortBy === 'name' && 'bg-accent')}>
+                    <ArrowDownAZIcon className="mr-2 size-4" />
+                    Sort by Name
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSortBy('date')} className={cn(sortBy === 'date' && 'bg-accent')}>
+                    <CalendarIcon className="mr-2 size-4" />
+                    Sort by Date
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
 
-        {/* Feed categories header with sort */}
-        <div className="mt-3 flex items-center justify-between px-2.5">
-          <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
-            Feeds
-          </span>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button className="flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent/50 hover:text-foreground">
-                {sortBy === 'name' ? <ArrowDownAZIcon className="size-3.5" /> : <CalendarIcon className="size-3.5" />}
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => setSortBy('name')} className={cn(sortBy === 'name' && 'bg-accent')}>
-                <ArrowDownAZIcon className="mr-2 size-4" />
-                Sort by Name
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setSortBy('date')} className={cn(sortBy === 'date' && 'bg-accent')}>
-                <CalendarIcon className="mr-2 size-4" />
-                Sort by Date
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+            {/* Feed categories */}
+            <div className="space-y-px">
+              {sortedFoldersWithFeeds.map(({ folder, feeds: folderFeeds }) => (
+                <FeedCategory
+                  key={folder.id}
+                  folderId={folder.id}
+                  name={folder.name}
+                  unreadCount={folderUnreadCounts.get(folder.id) || 0}
+                  isSelected={isFolderSelected(folder.id)}
+                  onSelect={() => onSelectFolder(folder.id)}
+                  onDelete={handleDeleteFolder}
+                  onChangeType={handleChangeFolderType}
+                >
+                  {folderFeeds.map((feed) => (
+                    <FeedItem
+                      key={feed.id}
+                      feedId={feed.id}
+                      name={feed.title}
+                      iconPath={feed.iconPath}
+                      unreadCount={unreadCounts.get(feed.id) || 0}
+                      isActive={isFeedSelected(feed.id)}
+                      errorMessage={feed.errorMessage}
+                      onClick={() => onSelectFeed(feed.id)}
+                      className="pl-6"
+                      folders={folders}
+                      onDelete={handleDeleteFeed}
+                      onMoveToFolder={handleMoveToFolder}
+                      onChangeType={handleChangeFeedType}
+                    />
+                  ))}
+                </FeedCategory>
+              ))}
 
-        {/* Feed categories */}
-        <div className="space-y-px">
-          {sortedFoldersWithFeeds.map(({ folder, feeds: folderFeeds }) => (
-            <FeedCategory
-              key={folder.id}
-              folderId={folder.id}
-              name={folder.name}
-              unreadCount={folderUnreadCounts.get(folder.id) || 0}
-              isSelected={isFolderSelected(folder.id)}
-              onSelect={() => onSelectFolder(folder.id)}
-              onDelete={handleDeleteFolder}
-              onChangeType={handleChangeFolderType}
-            >
-              {folderFeeds.map((feed) => (
+              {sortedUncategorizedFeeds.map((feed) => (
                 <FeedItem
                   key={feed.id}
                   feedId={feed.id}
@@ -352,35 +380,17 @@ export function Sidebar({
                   isActive={isFeedSelected(feed.id)}
                   errorMessage={feed.errorMessage}
                   onClick={() => onSelectFeed(feed.id)}
-                  className="pl-6"
+                  className="pl-2.5"
                   folders={folders}
                   onDelete={handleDeleteFeed}
                   onMoveToFolder={handleMoveToFolder}
                   onChangeType={handleChangeFeedType}
                 />
               ))}
-            </FeedCategory>
-          ))}
-
-          {sortedUncategorizedFeeds.map((feed) => (
-            <FeedItem
-              key={feed.id}
-              feedId={feed.id}
-              name={feed.title}
-              iconPath={feed.iconPath}
-              unreadCount={unreadCounts.get(feed.id) || 0}
-              isActive={isFeedSelected(feed.id)}
-              errorMessage={feed.errorMessage}
-              onClick={() => onSelectFeed(feed.id)}
-              className="pl-2.5"
-              folders={folders}
-              onDelete={handleDeleteFeed}
-              onMoveToFolder={handleMoveToFolder}
-              onChangeType={handleChangeFeedType}
-            />
-          ))}
-        </div>
-      </ScrollArea>
+            </div>
+          </motion.div>
+        </AnimatePresence>
+      </div>
 
       <SettingsModal open={isSettingsOpen} onOpenChange={setIsSettingsOpen} />
     </div>

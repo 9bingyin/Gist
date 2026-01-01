@@ -14,6 +14,7 @@
         "class-variance-authority": "^0.7.1",
         "clsx": "^2.1.1",
         "dompurify": "^3.3.1",
+        "framer-motion": "^12.23.26",
         "franc-min": "^6.2.0",
         "highlight.js": "^11.11.1",
         "motion": "^12.23.26",

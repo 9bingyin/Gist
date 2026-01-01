@@ -21,7 +21,6 @@ function AppContent() {
 
   const {
     selection,
-    selectAll,
     selectFeed,
     selectFolder,
     selectStarred,
@@ -54,7 +53,6 @@ function AppContent() {
           <Sidebar
             onAddClick={handleAddClick}
             selection={selection}
-            onSelectAll={selectAll}
             onSelectFeed={selectFeed}
             onSelectFolder={selectFolder}
             onSelectStarred={selectStarred}
@@ -73,7 +71,6 @@ function AppContent() {
         <Sidebar
           onAddClick={handleAddClick}
           selection={selection}
-          onSelectAll={selectAll}
           onSelectFeed={selectFeed}
           onSelectFolder={selectFolder}
           onSelectStarred={selectStarred}
