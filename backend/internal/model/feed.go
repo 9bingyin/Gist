@@ -10,6 +10,7 @@ type Feed struct {
 	SiteURL      *string
 	Description  *string
 	IconPath     *string
+	Type         string // article, picture, notification
 	ETag         *string
 	LastModified *string
 	ErrorMessage *string

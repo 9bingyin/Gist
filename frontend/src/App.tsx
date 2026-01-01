@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useState } from 'react'
 import { Router, useLocation } from 'wouter'
 import { ThreeColumnLayout } from '@/components/layout/three-column-layout'
 import { Sidebar } from '@/components/sidebar'
@@ -8,6 +8,7 @@ import { EntryContent } from '@/components/entry-content'
 import { useSelection, selectionToParams } from '@/hooks/useSelection'
 import { useMarkAllAsRead } from '@/hooks/useEntries'
 import { isAddFeedPath } from '@/lib/router'
+import type { ContentType } from '@/types/api'
 
 function AppContent() {
   const [location, navigate] = useLocation()
@@ -31,8 +32,10 @@ function AppContent() {
   } = useSelection()
 
   const { mutate: markAllAsRead } = useMarkAllAsRead()
+  const [addFeedContentType, setAddFeedContentType] = useState<ContentType>('article')
 
-  const handleAddClick = useCallback(() => {
+  const handleAddClick = useCallback((contentType: ContentType) => {
+    setAddFeedContentType(contentType)
     navigate('/add-feed')
   }, [navigate])
 
@@ -58,7 +61,7 @@ function AppContent() {
           />
         }
         list={null}
-        content={<AddFeedPage onClose={handleCloseAddFeed} />}
+        content={<AddFeedPage onClose={handleCloseAddFeed} contentType={addFeedContentType} />}
         hideList
       />
     )

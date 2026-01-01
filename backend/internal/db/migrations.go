@@ -259,5 +259,33 @@ func runMigrations(db *sql.DB) error {
 		return fmt.Errorf("create idx_ai_list_translations_entry_lang: %w", err)
 	}
 
+	// Migration 13: Add type column to feeds for content type (article/picture/notification)
+	err = db.QueryRow(`
+		SELECT COUNT(*) FROM pragma_table_info('feeds') WHERE name = 'type'
+	`).Scan(&count)
+	if err != nil {
+		return fmt.Errorf("check feeds type column: %w", err)
+	}
+
+	if count == 0 {
+		if _, err := db.Exec(`ALTER TABLE feeds ADD COLUMN type TEXT NOT NULL DEFAULT 'article'`); err != nil {
+			return fmt.Errorf("add feeds type column: %w", err)
+		}
+	}
+
+	// Migration 14: Add type column to folders for content type (article/picture/notification)
+	err = db.QueryRow(`
+		SELECT COUNT(*) FROM pragma_table_info('folders') WHERE name = 'type'
+	`).Scan(&count)
+	if err != nil {
+		return fmt.Errorf("check folders type column: %w", err)
+	}
+
+	if count == 0 {
+		if _, err := db.Exec(`ALTER TABLE folders ADD COLUMN type TEXT NOT NULL DEFAULT 'article'`); err != nil {
+			return fmt.Errorf("add folders type column: %w", err)
+		}
+	}
+
 	return nil
 }

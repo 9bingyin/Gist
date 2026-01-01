@@ -1,5 +1,6 @@
 import type {
   ApiErrorResponse,
+  ContentType,
   Entry,
   EntryListParams,
   EntryListResponse,
@@ -81,7 +82,11 @@ export async function listFolders(): Promise<Folder[]> {
   return request<Folder[]>('/api/folders')
 }
 
-export async function createFolder(payload: { name: string; parentId?: string }): Promise<Folder> {
+export async function createFolder(payload: {
+  name: string
+  parentId?: string
+  type?: ContentType
+}): Promise<Folder> {
   return request<Folder>('/api/folders', {
     method: 'POST',
     body: JSON.stringify(payload),
@@ -104,6 +109,13 @@ export async function deleteFolder(id: string): Promise<void> {
   })
 }
 
+export async function updateFolderType(id: string, type: ContentType): Promise<void> {
+  return request<void>(`/api/folders/${id}/type`, {
+    method: 'PATCH',
+    body: JSON.stringify({ type }),
+  })
+}
+
 export async function deleteFolders(ids: string[]): Promise<void> {
   return request<void>('/api/folders', {
     method: 'DELETE',
@@ -120,6 +132,7 @@ export async function createFeed(payload: {
   url: string
   folderId?: string
   title?: string
+  type?: ContentType
 }): Promise<Feed> {
   return request<Feed>('/api/feeds', {
     method: 'POST',
@@ -140,6 +153,13 @@ export async function updateFeed(
 export async function deleteFeed(id: string): Promise<void> {
   return request<void>(`/api/feeds/${id}`, {
     method: 'DELETE',
+  })
+}
+
+export async function updateFeedType(id: string, type: ContentType): Promise<void> {
+  return request<void>(`/api/feeds/${id}/type`, {
+    method: 'PATCH',
+    body: JSON.stringify({ type }),
   })
 }
 

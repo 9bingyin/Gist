@@ -18,6 +18,11 @@ type FolderHandler struct {
 type folderRequest struct {
 	Name     string  `json:"name"`
 	ParentID *string `json:"parentId"`
+	Type     string  `json:"type"`
+}
+
+type updateFolderTypeRequest struct {
+	Type string `json:"type"`
 }
 
 type deleteFoldersRequest struct {
@@ -28,6 +33,7 @@ type folderResponse struct {
 	ID        string  `json:"id"`
 	Name      string  `json:"name"`
 	ParentID  *string `json:"parentId,omitempty"`
+	Type      string  `json:"type"`
 	CreatedAt string  `json:"createdAt"`
 	UpdatedAt string  `json:"updatedAt"`
 }
@@ -40,6 +46,7 @@ func (h *FolderHandler) RegisterRoutes(g *echo.Group) {
 	g.POST("/folders", h.Create)
 	g.GET("/folders", h.List)
 	g.PUT("/folders/:id", h.Update)
+	g.PATCH("/folders/:id/type", h.UpdateType)
 	g.DELETE("/folders/:id", h.Delete)
 	g.DELETE("/folders", h.DeleteBatch)
 }
@@ -67,7 +74,13 @@ func (h *FolderHandler) Create(c echo.Context) error {
 		}
 		parentID = &id
 	}
-	folder, err := h.service.Create(c.Request().Context(), req.Name, parentID)
+	folderType := req.Type
+	if folderType == "" {
+		folderType = "article"
+	} else if !isValidContentType(folderType) {
+		return c.JSON(http.StatusBadRequest, errorResponse{Error: "type must be article, picture, or notification"})
+	}
+	folder, err := h.service.Create(c.Request().Context(), req.Name, parentID, folderType)
 	if err != nil {
 		return writeServiceError(c, err)
 	}
@@ -129,6 +142,35 @@ func (h *FolderHandler) Update(c echo.Context) error {
 	return c.JSON(http.StatusOK, toFolderResponse(folder))
 }
 
+// UpdateType updates the content type of a folder.
+// @Summary Update folder type
+// @Description Change the content type of a folder (article/picture/notification)
+// @Tags folders
+// @Accept json
+// @Param id path int true "Folder ID"
+// @Param request body updateFolderTypeRequest true "Type update request"
+// @Success 204 "No Content"
+// @Failure 400 {object} errorResponse
+// @Failure 404 {object} errorResponse
+// @Router /folders/{id}/type [patch]
+func (h *FolderHandler) UpdateType(c echo.Context) error {
+	id, err := parseIDParam(c, "id")
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, errorResponse{Error: "invalid request"})
+	}
+	var req updateFolderTypeRequest
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, errorResponse{Error: "invalid request"})
+	}
+	if !isValidContentType(req.Type) {
+		return c.JSON(http.StatusBadRequest, errorResponse{Error: "type must be article, picture, or notification"})
+	}
+	if err := h.service.UpdateType(c.Request().Context(), id, req.Type); err != nil {
+		return writeServiceError(c, err)
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
 // Delete deletes a folder.
 // @Summary Delete a folder
 // @Description Delete an existing folder
@@ -185,6 +227,7 @@ func toFolderResponse(folder model.Folder) folderResponse {
 		ID:        idToString(folder.ID),
 		Name:      folder.Name,
 		ParentID:  idPtrToString(folder.ParentID),
+		Type:      folder.Type,
 		CreatedAt: folder.CreatedAt.UTC().Format(time.RFC3339),
 		UpdatedAt: folder.UpdatedAt.UTC().Format(time.RFC3339),
 	}

@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { createFeed, createFolder, listFolders, previewFeed } from '@/api'
 import { getErrorMessage } from '@/lib/errors'
-import type { FeedPreview, Folder } from '@/types/api'
+import type { ContentType, FeedPreview, Folder } from '@/types/api'
 
 export interface SubscribeOptions {
   folderName?: string
@@ -21,7 +21,8 @@ interface UseAddFeedReturn {
 
 async function findOrCreateFolder(
   folderName: string,
-  existingFolders: Folder[]
+  existingFolders: Folder[],
+  contentType: ContentType
 ): Promise<string> {
   const existing = existingFolders.find(
     (folder) => folder.name.toLowerCase() === folderName.toLowerCase()
@@ -30,11 +31,11 @@ async function findOrCreateFolder(
     return existing.id
   }
 
-  const created = await createFolder({ name: folderName })
+  const created = await createFolder({ name: folderName, type: contentType })
   return created.id
 }
 
-export function useAddFeed(): UseAddFeedReturn {
+export function useAddFeed(contentType: ContentType = 'article'): UseAddFeedReturn {
   const [feedPreview, setFeedPreview] = useState<FeedPreview | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -72,7 +73,7 @@ export function useAddFeed(): UseAddFeedReturn {
 
       if (options.folderName) {
         const folders = await listFolders()
-        folderId = await findOrCreateFolder(options.folderName, folders)
+        folderId = await findOrCreateFolder(options.folderName, folders, contentType)
         await queryClient.invalidateQueries({ queryKey: ['folders'] })
       }
 
@@ -80,6 +81,7 @@ export function useAddFeed(): UseAddFeedReturn {
         url: feedUrl,
         folderId,
         title: options.title,
+        type: contentType,
       })
       await queryClient.invalidateQueries({ queryKey: ['feeds'] })
       return true
@@ -89,7 +91,7 @@ export function useAddFeed(): UseAddFeedReturn {
     } finally {
       setIsLoading(false)
     }
-  }, [queryClient])
+  }, [queryClient, contentType])
 
   return {
     feedPreview,

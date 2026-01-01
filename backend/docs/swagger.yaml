@@ -46,6 +46,8 @@ definitions:
     properties:
       apiKey:
         type: string
+      autoSummary:
+        type: boolean
       autoTranslate:
         type: boolean
       baseUrl:
@@ -54,6 +56,8 @@ definitions:
         type: string
       provider:
         type: string
+      rateLimit:
+        type: integer
       reasoningEffort:
         type: string
       summaryLanguage:
@@ -67,6 +71,8 @@ definitions:
     properties:
       apiKey:
         type: string
+      autoSummary:
+        type: boolean
       autoTranslate:
         type: boolean
       baseUrl:
@@ -75,6 +81,8 @@ definitions:
         type: string
       provider:
         type: string
+      rateLimit:
+        type: integer
       reasoningEffort:
         type: string
       summaryLanguage:
@@ -129,6 +137,8 @@ definitions:
       folderId:
         type: string
       title:
+        type: string
+      type:
         type: string
       url:
         type: string
@@ -229,6 +239,8 @@ definitions:
         type: string
       title:
         type: string
+      type:
+        type: string
       updatedAt:
         type: string
       url:
@@ -240,6 +252,8 @@ definitions:
         type: string
       parentId:
         type: string
+      type:
+        type: string
     type: object
   internal_handler.folderResponse:
     properties:
@@ -250,6 +264,8 @@ definitions:
       name:
         type: string
       parentId:
+        type: string
+      type:
         type: string
       updatedAt:
         type: string
@@ -331,6 +347,11 @@ definitions:
       title:
         type: string
     type: object
+  internal_handler.updateFolderTypeRequest:
+    properties:
+      type:
+        type: string
+    type: object
   internal_handler.updateReadRequest:
     properties:
       read:
@@ -340,6 +361,11 @@ definitions:
     properties:
       starred:
         type: boolean
+    type: object
+  internal_handler.updateTypeRequest:
+    properties:
+      type:
+        type: string
     type: object
 info:
   contact: {}
@@ -782,6 +808,37 @@ paths:
       summary: Update a feed
       tags:
       - feeds
+  /feeds/{id}/type:
+    patch:
+      consumes:
+      - application/json
+      description: Change the content type of a feed (article/picture/notification)
+      parameters:
+      - description: Feed ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Type update request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.updateTypeRequest'
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_handler.errorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_handler.errorResponse'
+      summary: Update feed type
+      tags:
+      - feeds
   /feeds/preview:
     get:
       description: Fetch information about a feed from its URL
@@ -934,6 +991,37 @@ paths:
           schema:
             $ref: '#/definitions/internal_handler.errorResponse'
       summary: Update a folder
+      tags:
+      - folders
+  /folders/{id}/type:
+    patch:
+      consumes:
+      - application/json
+      description: Change the content type of a folder (article/picture/notification)
+      parameters:
+      - description: Folder ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Type update request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.updateFolderTypeRequest'
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_handler.errorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_handler.errorResponse'
+      summary: Update folder type
       tags:
       - folders
   /opml/export:

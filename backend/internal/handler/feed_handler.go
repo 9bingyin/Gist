@@ -22,6 +22,11 @@ type createFeedRequest struct {
 	URL      string  `json:"url"`
 	FolderID *string `json:"folderId"`
 	Title    string  `json:"title"`
+	Type     string  `json:"type"`
+}
+
+type updateTypeRequest struct {
+	Type string `json:"type"`
 }
 
 type updateFeedRequest struct {
@@ -41,6 +46,7 @@ type feedResponse struct {
 	SiteURL      *string `json:"siteUrl,omitempty"`
 	Description  *string `json:"description,omitempty"`
 	IconPath     *string `json:"iconPath,omitempty"`
+	Type         string  `json:"type"`
 	ETag         *string `json:"etag,omitempty"`
 	LastModified *string `json:"lastModified,omitempty"`
 	ErrorMessage *string `json:"errorMessage,omitempty"`
@@ -68,6 +74,7 @@ func (h *FeedHandler) RegisterRoutes(g *echo.Group) {
 	g.GET("/feeds/preview", h.Preview)
 	g.GET("/feeds", h.List)
 	g.PUT("/feeds/:id", h.Update)
+	g.PATCH("/feeds/:id/type", h.UpdateType)
 	g.DELETE("/feeds/:id", h.Delete)
 	g.DELETE("/feeds", h.DeleteBatch)
 }
@@ -95,7 +102,13 @@ func (h *FeedHandler) Create(c echo.Context) error {
 		}
 		folderID = &id
 	}
-	feed, err := h.service.Add(c.Request().Context(), req.URL, folderID, req.Title)
+	feedType := req.Type
+	if feedType == "" {
+		feedType = "article"
+	} else if !isValidContentType(feedType) {
+		return c.JSON(http.StatusBadRequest, errorResponse{Error: "type must be article, picture, or notification"})
+	}
+	feed, err := h.service.Add(c.Request().Context(), req.URL, folderID, req.Title, feedType)
 	if err != nil {
 		return writeServiceError(c, err)
 	}
@@ -188,6 +201,35 @@ func (h *FeedHandler) Update(c echo.Context) error {
 	return c.JSON(http.StatusOK, toFeedResponse(feed))
 }
 
+// UpdateType updates the content type of a feed.
+// @Summary Update feed type
+// @Description Change the content type of a feed (article/picture/notification)
+// @Tags feeds
+// @Accept json
+// @Param id path int true "Feed ID"
+// @Param request body updateTypeRequest true "Type update request"
+// @Success 204 "No Content"
+// @Failure 400 {object} errorResponse
+// @Failure 404 {object} errorResponse
+// @Router /feeds/{id}/type [patch]
+func (h *FeedHandler) UpdateType(c echo.Context) error {
+	id, err := parseIDParam(c, "id")
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, errorResponse{Error: "invalid request"})
+	}
+	var req updateTypeRequest
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, errorResponse{Error: "invalid request"})
+	}
+	if !isValidContentType(req.Type) {
+		return c.JSON(http.StatusBadRequest, errorResponse{Error: "type must be article, picture, or notification"})
+	}
+	if err := h.service.UpdateType(c.Request().Context(), id, req.Type); err != nil {
+		return writeServiceError(c, err)
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
 // Delete deletes a feed.
 // @Summary Delete a feed
 // @Description Unsubscribe from a feed
@@ -265,6 +307,7 @@ func toFeedResponse(feed model.Feed) feedResponse {
 		SiteURL:      feed.SiteURL,
 		Description:  feed.Description,
 		IconPath:     feed.IconPath,
+		Type:         feed.Type,
 		ETag:         feed.ETag,
 		LastModified: feed.LastModified,
 		ErrorMessage: feed.ErrorMessage,

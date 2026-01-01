@@ -18,10 +18,11 @@ import (
 )
 
 type FeedService interface {
-	Add(ctx context.Context, feedURL string, folderID *int64, titleOverride string) (model.Feed, error)
+	Add(ctx context.Context, feedURL string, folderID *int64, titleOverride string, feedType string) (model.Feed, error)
 	Preview(ctx context.Context, feedURL string) (FeedPreview, error)
 	List(ctx context.Context, folderID *int64) ([]model.Feed, error)
 	Update(ctx context.Context, id int64, title string, folderID *int64) (model.Feed, error)
+	UpdateType(ctx context.Context, id int64, feedType string) error
 	Delete(ctx context.Context, id int64) error
 }
 
@@ -51,7 +52,7 @@ func NewFeedService(feeds repository.FeedRepository, folders repository.FolderRe
 	return &feedService{feeds: feeds, folders: folders, entries: entries, icons: icons, httpClient: client}
 }
 
-func (s *feedService) Add(ctx context.Context, feedURL string, folderID *int64, titleOverride string) (model.Feed, error) {
+func (s *feedService) Add(ctx context.Context, feedURL string, folderID *int64, titleOverride string, feedType string) (model.Feed, error) {
 	trimmedURL := strings.TrimSpace(feedURL)
 	if !isValidURL(trimmedURL) {
 		return model.Feed{}, ErrInvalid
@@ -82,6 +83,7 @@ func (s *feedService) Add(ctx context.Context, feedURL string, folderID *int64, 
 			FolderID:     folderID,
 			Title:        finalTitle,
 			URL:          trimmedURL,
+			Type:         feedType,
 			ErrorMessage: &errMsg,
 		}
 		return s.feeds.Create(ctx, feed)
@@ -101,6 +103,7 @@ func (s *feedService) Add(ctx context.Context, feedURL string, folderID *int64, 
 		URL:          trimmedURL,
 		SiteURL:      optionalString(fetched.siteURL),
 		Description:  optionalString(fetched.description),
+		Type:         feedType,
 		ETag:         optionalString(fetched.etag),
 		LastModified: optionalString(fetched.lastModified),
 	}
@@ -202,6 +205,16 @@ func (s *feedService) Delete(ctx context.Context, id int64) error {
 		return fmt.Errorf("get feed: %w", err)
 	}
 	return s.feeds.Delete(ctx, id)
+}
+
+func (s *feedService) UpdateType(ctx context.Context, id int64, feedType string) error {
+	if _, err := s.feeds.GetByID(ctx, id); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
+		return fmt.Errorf("get feed: %w", err)
+	}
+	return s.feeds.UpdateType(ctx, id, feedType)
 }
 
 type feedFetch struct {

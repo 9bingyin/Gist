@@ -727,6 +727,53 @@ const docTemplate = `{
                 }
             }
         },
+        "/feeds/{id}/type": {
+            "patch": {
+                "description": "Change the content type of a feed (article/picture/notification)",
+                "consumes": [
+                    "application/json"
+                ],
+                "tags": [
+                    "feeds"
+                ],
+                "summary": "Update feed type",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Feed ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Type update request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.updateTypeRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.errorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.errorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/folders": {
             "get": {
                 "description": "Get a list of all folders",
@@ -885,6 +932,53 @@ const docTemplate = `{
                         "name": "id",
                         "in": "path",
                         "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.errorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.errorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/folders/{id}/type": {
+            "patch": {
+                "description": "Change the content type of a folder (article/picture/notification)",
+                "consumes": [
+                    "application/json"
+                ],
+                "tags": [
+                    "folders"
+                ],
+                "summary": "Update folder type",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Folder ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Type update request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.updateFolderTypeRequest"
+                        }
                     }
                 ],
                 "responses": {
@@ -1230,6 +1324,9 @@ const docTemplate = `{
                 "apiKey": {
                     "type": "string"
                 },
+                "autoSummary": {
+                    "type": "boolean"
+                },
                 "autoTranslate": {
                     "type": "boolean"
                 },
@@ -1241,6 +1338,9 @@ const docTemplate = `{
                 },
                 "provider": {
                     "type": "string"
+                },
+                "rateLimit": {
+                    "type": "integer"
                 },
                 "reasoningEffort": {
                     "type": "string"
@@ -1262,6 +1362,9 @@ const docTemplate = `{
                 "apiKey": {
                     "type": "string"
                 },
+                "autoSummary": {
+                    "type": "boolean"
+                },
                 "autoTranslate": {
                     "type": "boolean"
                 },
@@ -1273,6 +1376,9 @@ const docTemplate = `{
                 },
                 "provider": {
                     "type": "string"
+                },
+                "rateLimit": {
+                    "type": "integer"
                 },
                 "reasoningEffort": {
                     "type": "string"
@@ -1357,6 +1463,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "title": {
+                    "type": "string"
+                },
+                "type": {
                     "type": "string"
                 },
                 "url": {
@@ -1511,6 +1620,9 @@ const docTemplate = `{
                 "title": {
                     "type": "string"
                 },
+                "type": {
+                    "type": "string"
+                },
                 "updatedAt": {
                     "type": "string"
                 },
@@ -1526,6 +1638,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "parentId": {
+                    "type": "string"
+                },
+                "type": {
                     "type": "string"
                 }
             }
@@ -1543,6 +1658,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "parentId": {
+                    "type": "string"
+                },
+                "type": {
                     "type": "string"
                 },
                 "updatedAt": {
@@ -1671,6 +1789,14 @@ const docTemplate = `{
                 }
             }
         },
+        "internal_handler.updateFolderTypeRequest": {
+            "type": "object",
+            "properties": {
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
         "internal_handler.updateReadRequest": {
             "type": "object",
             "properties": {
@@ -1684,6 +1810,14 @@ const docTemplate = `{
             "properties": {
                 "starred": {
                     "type": "boolean"
+                }
+            }
+        },
+        "internal_handler.updateTypeRequest": {
+            "type": "object",
+            "properties": {
+                "type": {
+                    "type": "string"
                 }
             }
         }

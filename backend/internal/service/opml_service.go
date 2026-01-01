@@ -71,7 +71,7 @@ func (s *opmlService) Import(ctx context.Context, reader io.Reader, onProgress f
 	result := ImportResult{}
 	current := 0
 	for _, outline := range doc.Body.Outlines {
-		if err := s.importOutline(ctx, outline, nil, &result, &current, total, onProgress); err != nil {
+		if err := s.importOutline(ctx, outline, nil, "article", &result, &current, total, onProgress); err != nil {
 			return result, err
 		}
 	}
@@ -124,6 +124,7 @@ func (s *opmlService) importOutline(
 	ctx context.Context,
 	outline opml.Outline,
 	parentID *int64,
+	folderType string,
 	result *ImportResult,
 	current *int,
 	total int,
@@ -135,7 +136,7 @@ func (s *opmlService) importOutline(
 	}
 
 	if isFeedOutline(outline) {
-		return s.importFeed(ctx, outline, parentID, result, current, total, onProgress)
+		return s.importFeed(ctx, outline, parentID, folderType, result, current, total, onProgress)
 	}
 
 	folderName := pickOutlineTitle(outline)
@@ -150,7 +151,8 @@ func (s *opmlService) importOutline(
 	}
 
 	for _, child := range outline.Outlines {
-		if err := s.importOutline(ctx, child, &folder.ID, result, current, total, onProgress); err != nil {
+		// Use the folder's actual type (may differ from parent if folder already existed)
+		if err := s.importOutline(ctx, child, &folder.ID, folder.Type, result, current, total, onProgress); err != nil {
 			return err
 		}
 	}
@@ -171,7 +173,7 @@ func (s *opmlService) ensureFolder(ctx context.Context, name string, parentID *i
 	}
 
 	// Create new folder using FolderService
-	folder, err := s.folderService.Create(ctx, name, parentID)
+	folder, err := s.folderService.Create(ctx, name, parentID, "article")
 	if err != nil {
 		if errors.Is(err, ErrConflict) {
 			// Race condition: folder was created between check and create
@@ -188,6 +190,7 @@ func (s *opmlService) importFeed(
 	ctx context.Context,
 	outline opml.Outline,
 	folderID *int64,
+	folderType string,
 	result *ImportResult,
 	current *int,
 	total int,
@@ -216,8 +219,8 @@ func (s *opmlService) importFeed(
 	}
 
 	// Use FeedService.Add to create feed (will fetch and refresh automatically)
-	// If fetch fails, Add will still create the feed with error message
-	_, err := s.feedService.Add(ctx, feedURL, folderID, title)
+	// Feed inherits type from its parent folder
+	_, err := s.feedService.Add(ctx, feedURL, folderID, title, folderType)
 	if err != nil {
 		if errors.Is(err, ErrConflict) {
 			// Feed already exists

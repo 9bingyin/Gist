@@ -12,9 +12,10 @@ import (
 )
 
 type FolderService interface {
-	Create(ctx context.Context, name string, parentID *int64) (model.Folder, error)
+	Create(ctx context.Context, name string, parentID *int64, folderType string) (model.Folder, error)
 	List(ctx context.Context) ([]model.Folder, error)
 	Update(ctx context.Context, id int64, name string, parentID *int64) (model.Folder, error)
+	UpdateType(ctx context.Context, id int64, folderType string) error
 	Delete(ctx context.Context, id int64) error
 }
 
@@ -27,10 +28,13 @@ func NewFolderService(folders repository.FolderRepository, feeds repository.Feed
 	return &folderService{folders: folders, feeds: feeds}
 }
 
-func (s *folderService) Create(ctx context.Context, name string, parentID *int64) (model.Folder, error) {
+func (s *folderService) Create(ctx context.Context, name string, parentID *int64, folderType string) (model.Folder, error) {
 	trimmed := strings.TrimSpace(name)
 	if trimmed == "" {
 		return model.Folder{}, ErrInvalid
+	}
+	if folderType == "" {
+		folderType = "article"
 	}
 	if parentID != nil {
 		if _, err := s.folders.GetByID(ctx, *parentID); err != nil {
@@ -46,7 +50,7 @@ func (s *folderService) Create(ctx context.Context, name string, parentID *int64
 		return model.Folder{}, ErrConflict
 	}
 
-	return s.folders.Create(ctx, trimmed, parentID)
+	return s.folders.Create(ctx, trimmed, parentID, folderType)
 }
 
 func (s *folderService) List(ctx context.Context) ([]model.Folder, error) {
@@ -82,6 +86,33 @@ func (s *folderService) Update(ctx context.Context, id int64, name string, paren
 	}
 
 	return s.folders.Update(ctx, id, trimmed, parentID)
+}
+
+func (s *folderService) UpdateType(ctx context.Context, id int64, folderType string) error {
+	if _, err := s.folders.GetByID(ctx, id); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
+		return fmt.Errorf("get folder: %w", err)
+	}
+
+	// Update folder type
+	if err := s.folders.UpdateType(ctx, id, folderType); err != nil {
+		return err
+	}
+
+	// Update all feeds in this folder to the same type
+	feeds, err := s.feeds.List(ctx, &id)
+	if err != nil {
+		return fmt.Errorf("list feeds in folder: %w", err)
+	}
+	for _, feed := range feeds {
+		if err := s.feeds.UpdateType(ctx, feed.ID, folderType); err != nil {
+			return fmt.Errorf("update feed %d type: %w", feed.ID, err)
+		}
+	}
+
+	return nil
 }
 
 func (s *folderService) Delete(ctx context.Context, id int64) error {

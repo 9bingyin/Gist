@@ -1,7 +1,10 @@
+export type ContentType = 'article' | 'picture' | 'notification'
+
 export interface Folder {
   id: string
   name: string
   parentId?: string
+  type: ContentType
   createdAt: string
   updatedAt: string
 }
@@ -14,6 +17,7 @@ export interface Feed {
   siteUrl?: string
   description?: string
   iconPath?: string
+  type: ContentType
   etag?: string
   lastModified?: string
   errorMessage?: string

@@ -4,23 +4,25 @@ import { useAddFeed } from '@/hooks/useAddFeed'
 import { useFolders } from '@/hooks/useFolders'
 import { FeedUrlForm } from './FeedUrlForm'
 import { FeedPreviewCard } from './FeedPreviewCard'
+import type { ContentType } from '@/types/api'
 
 interface AddFeedPageProps {
   onClose: () => void
   onFeedAdded?: (feedUrl: string) => void
+  contentType?: ContentType
 }
 
 export type { FeedPreview } from '@/types/api'
 export type { SubscribeOptions } from '@/hooks/useAddFeed'
 
-export function AddFeedPage({ onClose, onFeedAdded }: AddFeedPageProps) {
+export function AddFeedPage({ onClose, onFeedAdded, contentType = 'article' }: AddFeedPageProps) {
   const {
     feedPreview,
     isLoading,
     error,
     discoverFeed,
     subscribeFeed,
-  } = useAddFeed()
+  } = useAddFeed(contentType)
   const { data: folders = [] } = useFolders()
 
   const handleSubscribe = useCallback(async (feedUrl: string, options: { folderName?: string; title?: string }) => {
