@@ -90,7 +90,7 @@ export function FeedItem({
       className={cn(feedItemStyles, 'group relative py-0.5', className)}
       onClick={onClick}
     >
-      <div className={cn('flex min-w-0 flex-1 items-center gap-2', hasError && 'text-red-500')}>
+      <div className={cn('flex min-w-0 flex-1 items-center gap-2', hasError && 'text-red-500 dark:text-red-400')}>
         <span className={sidebarItemIconStyles}>
           {iconPath && !iconError ? (
             <img

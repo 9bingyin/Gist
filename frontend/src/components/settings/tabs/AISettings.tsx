@@ -473,7 +473,7 @@ export function AISettings() {
           <span
             className={cn(
               'text-sm',
-              testResult.success ? 'text-green-600' : 'text-destructive'
+              testResult.success ? 'text-green-600 dark:text-green-400' : 'text-destructive'
             )}
           >
             {testResult.success ? 'Connection successful!' : testResult.error}
@@ -486,7 +486,7 @@ export function AISettings() {
         <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</div>
       )}
       {successMessage && (
-        <div className="rounded-md bg-green-500/10 px-3 py-2 text-sm text-green-600">
+        <div className="rounded-md bg-green-500/10 dark:bg-green-500/20 px-3 py-2 text-sm text-green-600 dark:text-green-400">
           {successMessage}
         </div>
       )}
