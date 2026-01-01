@@ -12,6 +12,7 @@ import (
 type EntryListParams struct {
 	FeedID      *int64
 	FolderID    *int64
+	ContentType *string
 	UnreadOnly  bool
 	StarredOnly bool
 	Limit       int
@@ -81,6 +82,7 @@ func (s *entryService) List(ctx context.Context, params EntryListParams) ([]mode
 	filter := repository.EntryListFilter{
 		FeedID:      params.FeedID,
 		FolderID:    params.FolderID,
+		ContentType: params.ContentType,
 		UnreadOnly:  params.UnreadOnly,
 		StarredOnly: params.StarredOnly,
 		Limit:       limit,

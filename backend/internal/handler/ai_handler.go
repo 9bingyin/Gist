@@ -311,8 +311,8 @@ func (h *AIHandler) TranslateBatch(c echo.Context) error {
 	}
 
 	// Limit batch size
-	if len(req.Articles) > 20 {
-		return c.JSON(http.StatusBadRequest, errorResponse{Error: "maximum 20 articles per batch"})
+	if len(req.Articles) > 100 {
+		return c.JSON(http.StatusBadRequest, errorResponse{Error: "maximum 100 articles per batch"})
 	}
 
 	ctx := c.Request().Context()

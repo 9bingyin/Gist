@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   Dialog,
@@ -20,9 +20,26 @@ interface SettingsModalProps {
   onOpenChange: (open: boolean) => void
 }
 
+const MOBILE_BREAKPOINT = 768
+
+function useMobileDetect() {
+  const [isMobile, setIsMobile] = useState(
+    typeof window !== 'undefined' ? window.innerWidth < MOBILE_BREAKPOINT : false
+  )
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < MOBILE_BREAKPOINT)
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
+
+  return isMobile
+}
+
 export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
   const { t } = useTranslation()
   const [activeTab, setActiveTab] = useState<SettingsTab>('general')
+  const isMobile = useMobileDetect()
 
   const renderContent = () => {
     switch (activeTab) {
@@ -58,74 +75,69 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
     }
   }
 
-  const getIcon = () => {
-    switch (activeTab) {
-      case 'general':
-        return (
-          <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={1.5}
-              d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-            />
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={1.5}
-              d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-            />
-          </svg>
-        )
-      case 'feeds':
-        return (
-          <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={1.5}
-              d="M6 5c7.18 0 13 5.82 13 13M6 11a7 7 0 017 7m-6 0a1 1 0 11-2 0 1 1 0 012 0z"
-            />
-          </svg>
-        )
-      case 'folders':
-        return (
-          <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={1.5}
-              d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
-            />
-          </svg>
-        )
-      case 'data':
-        return (
-          <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={1.5}
-              d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"
-            />
-          </svg>
-        )
-      case 'ai':
-        return (
-          <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={1.5}
-              d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23.693L5 14.5m14.8.8l1.402 1.402c1.232 1.232.65 3.318-1.067 3.611l-.628.105a9 9 0 01-2.507 0l-.628-.105c-1.717-.293-2.3-2.379-1.067-3.61L16.8 15.3m-7.6 0c-1.232 1.232-.65 3.318 1.067 3.611l.628.105a9 9 0 002.507 0l.628-.105c1.717-.293 2.3-2.379 1.067-3.61"
-            />
-          </svg>
-        )
-      default:
-        return null
-    }
+  const tabs: { id: SettingsTab; label: string }[] = [
+    { id: 'general', label: t('settings.general') },
+    { id: 'feeds', label: t('settings.subscriptions') },
+    { id: 'folders', label: t('settings.folders') },
+    { id: 'data', label: t('settings.data') },
+    { id: 'ai', label: t('settings.ai') },
+  ]
+
+  // Mobile layout
+  if (isMobile) {
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="w-screen h-screen max-w-none max-h-none p-0 overflow-hidden gap-0 rounded-none">
+          <div className="flex h-full flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
+              <DialogTitle className="text-lg font-bold">{getTitle()}</DialogTitle>
+              <button
+                onClick={() => onOpenChange(false)}
+                className={cn(
+                  'rounded-md p-1.5',
+                  'text-muted-foreground hover:text-foreground hover:bg-accent',
+                  'transition-colors focus:outline-none'
+                )}
+                aria-label={t('entry.close')}
+              >
+                <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Tab bar */}
+            <div className="flex border-b border-border overflow-x-auto shrink-0 bg-muted/30">
+              {tabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveTab(tab.id)}
+                  className={cn(
+                    'px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-colors',
+                    'border-b-2 -mb-px',
+                    activeTab === tab.id
+                      ? 'border-primary text-primary'
+                      : 'border-transparent text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-auto px-4 py-4">
+              {renderContent()}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    )
   }
 
+  // Desktop layout
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[950px] h-[800px] max-w-[95vw] max-h-[90vh] p-0 overflow-hidden gap-0">
@@ -135,7 +147,6 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
           <div className="relative flex h-full min-w-0 flex-1 flex-col bg-background">
             {/* Header */}
             <div className="flex items-center gap-2 px-6 py-4 border-b border-border">
-              <span className="text-muted-foreground">{getIcon()}</span>
               <DialogTitle className="text-xl font-bold">{getTitle()}</DialogTitle>
             </div>
 

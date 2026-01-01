@@ -190,6 +190,9 @@ export async function listEntries(params: EntryListParams = {}): Promise<EntryLi
   if (params.folderId !== undefined) {
     searchParams.set('folderId', String(params.folderId))
   }
+  if (params.contentType !== undefined) {
+    searchParams.set('contentType', params.contentType)
+  }
   if (params.unreadOnly) {
     searchParams.set('unreadOnly', 'true')
   }

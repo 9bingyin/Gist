@@ -85,6 +85,7 @@ type unreadCountsResponse struct {
 // @Produce json
 // @Param feedId query int false "Filter by feed ID"
 // @Param folderId query int false "Filter by folder ID"
+// @Param contentType query string false "Filter by content type (article, picture, notification)"
 // @Param unreadOnly query bool false "Only return unread entries"
 // @Param starredOnly query bool false "Only return starred entries"
 // @Param limit query int false "Limit the number of entries (default 50)"
@@ -112,6 +113,13 @@ func (h *EntryHandler) List(c echo.Context) error {
 			return c.JSON(http.StatusBadRequest, errorResponse{Error: "invalid folderId"})
 		}
 		params.FolderID = &id
+	}
+
+	if raw := c.QueryParam("contentType"); raw != "" {
+		if raw != "article" && raw != "picture" && raw != "notification" {
+			return c.JSON(http.StatusBadRequest, errorResponse{Error: "invalid contentType"})
+		}
+		params.ContentType = &raw
 	}
 
 	if c.QueryParam("unreadOnly") == "true" {

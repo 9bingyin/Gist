@@ -5,6 +5,8 @@ import { translationActions } from '@/stores/translation-store'
 const inFlightRequests = new Map<string, Promise<void>>()
 // Track articles currently being translated in batch
 const inFlightBatchArticles = new Set<string>()
+// Track AbortController for batch translations
+let batchAbortController: AbortController | null = null
 
 interface TranslateArticleParams {
   articleId: string
@@ -89,13 +91,25 @@ export function isArticleTranslating(articleId: string): boolean {
 }
 
 /**
+ * Cancel all pending batch translations.
+ * Call this when switching lists to prevent stale requests.
+ */
+export function cancelAllBatchTranslations(): void {
+  if (batchAbortController) {
+    batchAbortController.abort()
+    batchAbortController = null
+  }
+  // Clear all in-flight batch articles
+  inFlightBatchArticles.clear()
+}
+
+/**
  * Translate multiple articles' titles and summaries (for list view).
  * Uses NDJSON streaming - updates store as each translation completes.
  */
 export async function translateArticlesBatch(
   articles: Array<{ id: string; title: string; summary: string | null }>,
-  targetLanguage: string,
-  signal?: AbortSignal
+  targetLanguage: string
 ): Promise<void> {
   // Filter out articles already being translated
   const articlesToTranslate = articles.filter(
@@ -106,6 +120,15 @@ export async function translateArticlesBatch(
   )
 
   if (articlesToTranslate.length === 0) return
+
+  // Cancel any existing batch translation
+  if (batchAbortController) {
+    batchAbortController.abort()
+  }
+
+  // Create new AbortController for this batch
+  batchAbortController = new AbortController()
+  const signal = batchAbortController.signal
 
   // Mark articles as being translated in batch
   for (const article of articlesToTranslate) {
@@ -127,6 +150,12 @@ export async function translateArticlesBatch(
         summary: result.summary,
       })
     }
+  } catch (error) {
+    // Ignore abort errors
+    if (error instanceof Error && error.name === 'AbortError') {
+      return
+    }
+    throw error
   } finally {
     // Clean up batch tracking
     for (const article of articlesToTranslate) {

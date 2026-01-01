@@ -511,6 +511,10 @@ paths:
         in: query
         name: folderId
         type: integer
+      - description: Filter by content type (article, picture, notification)
+        in: query
+        name: contentType
+        type: string
       - description: Only return unread entries
         in: query
         name: unreadOnly

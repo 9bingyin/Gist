@@ -1,4 +1,5 @@
 import { useEffect, useRef, useMemo, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useEntriesInfinite } from '@/hooks/useEntries'
 import { useFeeds } from '@/hooks/useFeeds'
@@ -9,9 +10,9 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { EntryListItem } from './EntryListItem'
 import { EntryListHeader } from './EntryListHeader'
 import { needsTranslation } from '@/lib/language-detect'
-import { translateArticlesBatch } from '@/services/translation-service'
+import { translateArticlesBatch, cancelAllBatchTranslations } from '@/services/translation-service'
 import { translationActions } from '@/stores/translation-store'
-import type { Entry, Feed, Folder } from '@/types/api'
+import type { Entry, Feed, Folder, ContentType } from '@/types/api'
 
 interface EntryListProps {
   selection: SelectionType
@@ -20,6 +21,9 @@ interface EntryListProps {
   onMarkAllRead: () => void
   unreadOnly: boolean
   onToggleUnreadOnly: () => void
+  contentType: ContentType
+  isMobile?: boolean
+  onMenuClick?: () => void
 }
 
 const ESTIMATED_ITEM_HEIGHT = 100
@@ -31,8 +35,12 @@ export function EntryList({
   onMarkAllRead,
   unreadOnly,
   onToggleUnreadOnly,
+  contentType,
+  isMobile,
+  onMenuClick,
 }: EntryListProps) {
-  const params = selectionToParams(selection)
+  const { t } = useTranslation()
+  const params = selectionToParams(selection, contentType)
   const containerRef = useRef<HTMLDivElement>(null)
 
   const { data: feeds = [] } = useFeeds()
@@ -48,6 +56,19 @@ export function EntryList({
 
   const autoTranslate = aiSettings?.autoTranslate ?? false
   const targetLanguage = aiSettings?.summaryLanguage ?? 'zh-CN'
+
+  // Cancel pending translations and reset state when list changes
+  useEffect(() => {
+    // Cancel any in-flight batch translations
+    cancelAllBatchTranslations()
+    // Clear translation tracking for new list
+    translatedEntries.current.clear()
+    pendingTranslation.current.clear()
+    if (debounceTimer.current) {
+      clearTimeout(debounceTimer.current)
+      debounceTimer.current = null
+    }
+  }, [selection, contentType])
 
   const feedsMap = useMemo(() => {
     const map = new Map<string, Feed>()
@@ -153,7 +174,25 @@ export function EntryList({
     }
   }, [virtualItems, entries, autoTranslate, scheduleTranslation])
 
-  const title = getListTitle(selection, feedsMap, foldersMap)
+  const title = useMemo(() => {
+    switch (selection.type) {
+      case 'all':
+        switch (contentType) {
+          case 'picture':
+            return t('entry_list.all_pictures')
+          case 'notification':
+            return t('entry_list.all_notifications')
+          default:
+            return t('entry_list.all_articles')
+        }
+      case 'feed':
+        return feedsMap.get(selection.feedId)?.title || t('entry_list.feed')
+      case 'folder':
+        return foldersMap.get(selection.folderId)?.name || t('entry_list.folder')
+      case 'starred':
+        return t('entry_list.starred')
+    }
+  }, [selection, contentType, feedsMap, foldersMap, t])
   const unreadCount = entries.filter((e) => !e.read).length
 
   return (
@@ -164,6 +203,8 @@ export function EntryList({
         unreadOnly={unreadOnly}
         onToggleUnreadOnly={onToggleUnreadOnly}
         onMarkAllRead={onMarkAllRead}
+        isMobile={isMobile}
+        onMenuClick={onMenuClick}
       />
 
       <ScrollArea ref={containerRef} className="min-h-0 flex-1">
@@ -208,23 +249,6 @@ export function EntryList({
   )
 }
 
-function getListTitle(
-  selection: SelectionType,
-  feedsMap: Map<string, Feed>,
-  foldersMap: Map<string, Folder>
-): string {
-  switch (selection.type) {
-    case 'all':
-      return 'All Articles'
-    case 'feed':
-      return feedsMap.get(selection.feedId)?.title || 'Feed'
-    case 'folder':
-      return foldersMap.get(selection.folderId)?.name || 'Folder'
-    case 'starred':
-      return 'Starred'
-  }
-}
-
 function EntryListSkeleton() {
   return (
     <div className="space-y-px">
@@ -248,9 +272,10 @@ function EntryListSkeleton() {
 }
 
 function EntryListEmpty() {
+  const { t } = useTranslation()
   return (
     <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-      No articles
+      {t('entry_list.no_articles')}
     </div>
   )
 }

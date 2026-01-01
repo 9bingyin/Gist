@@ -20,9 +20,11 @@ import { EntryContentBody } from './EntryContentBody'
 
 interface EntryContentProps {
   entryId: string | null
+  isMobile?: boolean
+  onBack?: () => void
 }
 
-export function EntryContent({ entryId }: EntryContentProps) {
+export function EntryContent({ entryId, isMobile, onBack }: EntryContentProps) {
   const { data: entry, isLoading } = useEntry(entryId)
   const { data: aiSettings } = useAISettings()
   const { mutate: markAsRead } = useMarkAsRead()
@@ -499,6 +501,8 @@ export function EntryContent({ entryId }: EntryContentProps) {
         isTranslating={isTranslating}
         hasTranslation={!!(translatedContent || originalBlocks.length > 0)}
         onToggleTranslation={handleToggleTranslation}
+        isMobile={isMobile}
+        onBack={onBack}
       />
       <EntryContentBody
         entry={entry}

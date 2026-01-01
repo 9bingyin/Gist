@@ -13,6 +13,7 @@ import (
 type EntryListFilter struct {
 	FeedID      *int64
 	FolderID    *int64
+	ContentType *string
 	UnreadOnly  bool
 	StarredOnly bool
 	Limit       int
@@ -64,11 +65,20 @@ func (r *entryRepository) List(ctx context.Context, filter EntryListFilter) ([]m
 	`
 
 	var conditions []string
+	needFeedsJoin := filter.FolderID != nil || filter.ContentType != nil
+
+	if needFeedsJoin {
+		query += " INNER JOIN feeds f ON e.feed_id = f.id"
+	}
 
 	if filter.FolderID != nil {
-		query += " INNER JOIN feeds f ON e.feed_id = f.id"
 		conditions = append(conditions, "f.folder_id = ?")
 		args = append(args, *filter.FolderID)
+	}
+
+	if filter.ContentType != nil {
+		conditions = append(conditions, "f.type = ?")
+		args = append(args, *filter.ContentType)
 	}
 
 	if filter.FeedID != nil {

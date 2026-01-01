@@ -59,6 +59,7 @@ export interface EntryListResponse {
 export interface EntryListParams {
   feedId?: string
   folderId?: string
+  contentType?: ContentType
   unreadOnly?: boolean
   starredOnly?: boolean
   limit?: number

@@ -228,5 +228,14 @@
     "name": "Name",
     "subscribe_date": "Subscribe Date",
     "last_update": "Last Update"
+  },
+  "entry_list": {
+    "all_articles": "All Articles",
+    "all_pictures": "All Pictures",
+    "all_notifications": "All Notifications",
+    "starred": "Starred",
+    "feed": "Feed",
+    "folder": "Folder",
+    "no_articles": "No articles"
   }
 }

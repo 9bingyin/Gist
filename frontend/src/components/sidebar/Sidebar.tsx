@@ -59,6 +59,9 @@ interface SidebarProps {
   onSelectFeed: (feedId: string) => void
   onSelectFolder: (folderId: string) => void
   onSelectStarred: () => void
+  onSelectAll?: (contentType?: ContentType) => void
+  contentType: ContentType
+  onContentTypeChange: (contentType: ContentType) => void
 }
 
 interface FolderWithFeeds {
@@ -103,11 +106,13 @@ export function Sidebar({
   onSelectFeed,
   onSelectFolder,
   onSelectStarred,
+  onSelectAll,
+  contentType,
+  onContentTypeChange,
 }: SidebarProps) {
   const { t } = useTranslation()
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [sortBy, setSortBy] = useState<SortBy>('name')
-  const [contentType, setContentType] = useState<ContentType>('article')
 
   // Animation direction tracking
   const contentTypeList: ContentType[] = ['article', 'picture', 'notification']
@@ -250,7 +255,10 @@ export function Sidebar({
       <div className="relative mb-2 mt-3">
         <div className="flex h-11 items-center px-1 text-xl text-muted-foreground">
           <button
-            onClick={() => setContentType('article')}
+            onClick={() => {
+              onContentTypeChange('article')
+              onSelectAll?.('article')
+            }}
             className={cn(
               'flex h-11 w-8 shrink-0 grow flex-col items-center justify-center gap-1 rounded-md transition-colors',
               contentType === 'article'
@@ -265,7 +273,10 @@ export function Sidebar({
             </div>
           </button>
           <button
-            onClick={() => setContentType('picture')}
+            onClick={() => {
+              onContentTypeChange('picture')
+              onSelectAll?.('picture')
+            }}
             className={cn(
               'flex h-11 w-8 shrink-0 grow flex-col items-center justify-center gap-1 rounded-md transition-colors',
               contentType === 'picture'
@@ -280,7 +291,10 @@ export function Sidebar({
             </div>
           </button>
           <button
-            onClick={() => setContentType('notification')}
+            onClick={() => {
+              onContentTypeChange('notification')
+              onSelectAll?.('notification')
+            }}
             className={cn(
               'flex h-11 w-8 shrink-0 grow flex-col items-center justify-center gap-1 rounded-md transition-colors',
               contentType === 'notification'

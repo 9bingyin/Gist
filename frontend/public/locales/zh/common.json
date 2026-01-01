@@ -227,5 +227,14 @@
     "name": "名称",
     "subscribe_date": "订阅日期",
     "last_update": "最后更新"
+  },
+  "entry_list": {
+    "all_articles": "全部文章",
+    "all_pictures": "全部图片",
+    "all_notifications": "全部通知",
+    "starred": "已加星标",
+    "feed": "订阅源",
+    "folder": "文件夹",
+    "no_articles": "暂无文章"
   }
 }

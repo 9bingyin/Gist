@@ -1,9 +1,18 @@
 import type { SelectionType } from '@/hooks/useSelection'
+import type { ContentType } from '@/types/api'
 
 export interface RouteState {
   selection: SelectionType
   entryId: string | null
   unreadOnly: boolean
+  contentType: ContentType
+}
+
+function parseContentType(value: string | null): ContentType {
+  if (value === 'picture' || value === 'notification') {
+    return value
+  }
+  return 'article'
 }
 
 /**
@@ -12,6 +21,7 @@ export interface RouteState {
 export function parseRoute(pathname: string, search: string): RouteState {
   const params = new URLSearchParams(search)
   const unreadOnly = params.get('unread') === 'true'
+  const contentType = parseContentType(params.get('type'))
 
   // Remove leading slash and split
   const segments = pathname.replace(/^\//, '').split('/').filter(Boolean)
@@ -22,6 +32,7 @@ export function parseRoute(pathname: string, search: string): RouteState {
       selection: { type: 'all' },
       entryId: segments[1] || null,
       unreadOnly,
+      contentType,
     }
   }
 
@@ -31,6 +42,7 @@ export function parseRoute(pathname: string, search: string): RouteState {
       selection: { type: 'feed', feedId: segments[1] },
       entryId: segments[2] || null,
       unreadOnly,
+      contentType,
     }
   }
 
@@ -40,6 +52,7 @@ export function parseRoute(pathname: string, search: string): RouteState {
       selection: { type: 'folder', folderId: segments[1] },
       entryId: segments[2] || null,
       unreadOnly,
+      contentType,
     }
   }
 
@@ -49,6 +62,7 @@ export function parseRoute(pathname: string, search: string): RouteState {
       selection: { type: 'starred' },
       entryId: segments[1] || null,
       unreadOnly,
+      contentType,
     }
   }
 
@@ -57,6 +71,7 @@ export function parseRoute(pathname: string, search: string): RouteState {
     selection: { type: 'all' },
     entryId: null,
     unreadOnly,
+    contentType,
   }
 }
 
@@ -66,7 +81,8 @@ export function parseRoute(pathname: string, search: string): RouteState {
 export function buildPath(
   selection: SelectionType,
   entryId?: string | null,
-  unreadOnly?: boolean
+  unreadOnly?: boolean,
+  contentType?: ContentType
 ): string {
   let path: string
 
@@ -85,8 +101,17 @@ export function buildPath(
       break
   }
 
+  const params = new URLSearchParams()
   if (unreadOnly) {
-    path += '?unread=true'
+    params.set('unread', 'true')
+  }
+  // Always include contentType in URL for 'all' selection
+  if (contentType && selection.type === 'all') {
+    params.set('type', contentType)
+  }
+  const queryString = params.toString()
+  if (queryString) {
+    path += '?' + queryString
   }
 
   return path

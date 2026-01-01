@@ -226,6 +226,12 @@ const docTemplate = `{
                         "in": "query"
                     },
                     {
+                        "type": "string",
+                        "description": "Filter by content type (article, picture, notification)",
+                        "name": "contentType",
+                        "in": "query"
+                    },
+                    {
                         "type": "boolean",
                         "description": "Only return unread entries",
                         "name": "unreadOnly",

@@ -18,6 +18,16 @@ interface EntryContentHeaderProps {
   isTranslating?: boolean
   hasTranslation?: boolean
   onToggleTranslation?: () => void
+  isMobile?: boolean
+  onBack?: () => void
+}
+
+function BackIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+    </svg>
+  )
 }
 
 export function EntryContentHeader({
@@ -35,6 +45,8 @@ export function EntryContentHeader({
   isTranslating,
   hasTranslation,
   onToggleTranslation,
+  isMobile,
+  onBack,
 }: EntryContentHeaderProps) {
   const { t } = useTranslation()
   const safeUrl = entry.url && isSafeUrl(entry.url) ? entry.url : null
@@ -51,8 +63,17 @@ export function EntryContentHeader({
       />
 
       {/* Content Layer */}
-      <div className="relative flex h-12 items-center justify-between gap-3 px-6">
-        <div className="flex min-w-0 flex-1 items-center overflow-hidden">
+      <div className="relative flex h-12 items-center justify-between gap-3 px-4">
+        <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
+          {isMobile && onBack && (
+            <button
+              type="button"
+              onClick={onBack}
+              className="no-drag-region flex size-8 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-item-hover"
+            >
+              <BackIcon className="size-5" />
+            </button>
+          )}
           <div
             className={cn(
               'truncate text-lg font-bold text-foreground transition-all duration-300 ease-in-out',
