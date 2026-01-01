@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react'
-import { Router, useLocation } from 'wouter'
+import { Router, useLocation, Redirect } from 'wouter'
 import { ThreeColumnLayout } from '@/components/layout/three-column-layout'
 import { Sheet } from '@/components/ui/sheet'
 import { Sidebar } from '@/components/sidebar'
@@ -24,12 +24,6 @@ function AppContent() {
     closeSidebar,
   } = useMobileLayout()
 
-  // Redirect root to /all
-  if (location === '/') {
-    navigate('/all', { replace: true })
-    return null
-  }
-
   const {
     selection,
     selectAll,
@@ -47,7 +41,7 @@ function AppContent() {
   const { mutate: markAllAsRead } = useMarkAllAsRead()
   const [addFeedContentType, setAddFeedContentType] = useState<ContentType>('article')
 
-  // Mobile-aware selection handlers
+  // Mobile-aware selection handlers (all hooks must be before any conditional returns)
   const handleSelectFeed = useCallback((feedId: string) => {
     selectFeed(feedId)
     closeSidebar()
@@ -85,6 +79,11 @@ function AppContent() {
   const handleOpenSidebar = useCallback(() => {
     setSidebarOpen(true)
   }, [setSidebarOpen])
+
+  // Redirect root to /all (must be after ALL hooks including useCallback)
+  if (location === '/') {
+    return <Redirect to="/all" replace />
+  }
 
   // Sidebar component (shared between mobile and desktop)
   const sidebarContent = (
