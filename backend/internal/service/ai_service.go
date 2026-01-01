@@ -302,7 +302,7 @@ func (s *aiService) TranslateBlocks(ctx context.Context, entryID int64, content,
 				}
 
 				// Translate single block using non-streaming Complete
-				systemPrompt := ai.GetTranslateBlockPrompt(language)
+				systemPrompt := ai.GetTranslateBlockPrompt(title, language)
 				translatedHTML, err := provider.Complete(ctx, systemPrompt, b.HTML)
 				if err != nil {
 					select {
