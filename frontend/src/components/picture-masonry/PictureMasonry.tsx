@@ -1,4 +1,4 @@
-import { useMemo, useCallback, useRef } from 'react'
+import { useMemo, useCallback, useRef, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { MasonryInfiniteGrid } from '@egjs/react-infinitegrid'
 import { useEntriesInfinite, useUnreadCounts } from '@/hooks/useEntries'
@@ -39,6 +39,58 @@ export function PictureMasonry({
     GUTTER,
     isMobile
   )
+
+  // Track scroll reset state with user interaction detection
+  const scrollResetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const scrollResetActiveRef = useRef(false)
+  const userHasScrolledRef = useRef(false)
+
+  // Mark that we need to reset scroll when selection or filter changes
+  useEffect(() => {
+    const container = scrollContainerRef.current
+
+    // Clear any existing timeout
+    if (scrollResetTimeoutRef.current) {
+      clearTimeout(scrollResetTimeoutRef.current)
+    }
+
+    // Reset state
+    scrollResetActiveRef.current = true
+    userHasScrolledRef.current = false
+
+    // Immediately reset scroll to top
+    if (container) {
+      container.scrollTop = 0
+    }
+
+    // Detect user scroll interaction
+    const handleUserScroll = () => {
+      // Only count as user scroll if we've scrolled past a threshold
+      if (container && container.scrollTop > 50) {
+        userHasScrolledRef.current = true
+      }
+    }
+    container?.addEventListener('scroll', handleUserScroll)
+
+    // Disable scroll reset mode after 5 seconds
+    scrollResetTimeoutRef.current = setTimeout(() => {
+      scrollResetActiveRef.current = false
+    }, 5000)
+
+    return () => {
+      if (scrollResetTimeoutRef.current) {
+        clearTimeout(scrollResetTimeoutRef.current)
+      }
+      container?.removeEventListener('scroll', handleUserScroll)
+    }
+  }, [selection, unreadOnly])
+
+  // Reset scroll on every render complete while scroll reset is active and user hasn't scrolled
+  const handleRenderComplete = useCallback(() => {
+    if (scrollResetActiveRef.current && !userHasScrolledRef.current && scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = 0
+    }
+  }, [])
 
   const { data: feeds = [] } = useFeeds()
   const { data: folders = [] } = useFolders()
@@ -149,10 +201,12 @@ export function PictureMasonry({
           <EmptyState />
         ) : isReady ? (
           <MasonryInfiniteGrid
+            key={`${selection.type}-${'feedId' in selection ? selection.feedId : 'folderId' in selection ? selection.folderId : ''}-${unreadOnly}`}
             gap={GUTTER}
             column={currentColumn}
             threshold={300}
             onRequestAppend={handleRequestAppend}
+            onRenderComplete={handleRenderComplete}
             scrollContainer={scrollContainerRef.current}
             useResizeObserver
             observeChildren
