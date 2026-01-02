@@ -15,7 +15,7 @@ export function AiSummaryBox({ content, isLoading, error }: AiSummaryBoxProps) {
   return (
     <div
       className={cn(
-        'rounded-lg border p-5 mb-6',
+        'rounded-lg border p-4 sm:p-5 mb-6 overflow-hidden break-words',
         error
           ? 'border-destructive/30 bg-destructive/5'
           : 'border-primary/20 bg-primary/5'
