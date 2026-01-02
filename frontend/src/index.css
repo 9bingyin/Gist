@@ -158,6 +158,30 @@ body {
   }
 }
 
+/* AI Summary Box Animation */
+@keyframes summary-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes summary-expand {
+  from { grid-template-rows: 0fr; }
+  to { grid-template-rows: 1fr; }
+}
+
+.ai-summary-box {
+  animation: summary-fade 0.15s ease-out both;
+}
+
+.ai-summary-box .ai-summary-grid {
+  display: grid;
+  animation: summary-expand 0.4s cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+.ai-summary-box .ai-summary-content {
+  overflow: hidden;
+}
+
 .dropdown-surface {
   background-image: linear-gradient(
     to bottom right,
