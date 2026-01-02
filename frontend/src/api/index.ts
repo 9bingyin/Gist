@@ -199,6 +199,9 @@ export async function listEntries(params: EntryListParams = {}): Promise<EntryLi
   if (params.starredOnly) {
     searchParams.set('starredOnly', 'true')
   }
+  if (params.hasThumbnail) {
+    searchParams.set('hasThumbnail', 'true')
+  }
   if (params.limit !== undefined) {
     searchParams.set('limit', String(params.limit))
   }

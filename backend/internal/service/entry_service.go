@@ -10,13 +10,14 @@ import (
 )
 
 type EntryListParams struct {
-	FeedID      *int64
-	FolderID    *int64
-	ContentType *string
-	UnreadOnly  bool
-	StarredOnly bool
-	Limit       int
-	Offset      int
+	FeedID       *int64
+	FolderID     *int64
+	ContentType  *string
+	UnreadOnly   bool
+	StarredOnly  bool
+	HasThumbnail bool
+	Limit        int
+	Offset       int
 }
 
 type EntryService interface {
@@ -81,13 +82,14 @@ func (s *entryService) List(ctx context.Context, params EntryListParams) ([]mode
 	}
 
 	filter := repository.EntryListFilter{
-		FeedID:      params.FeedID,
-		FolderID:    params.FolderID,
-		ContentType: params.ContentType,
-		UnreadOnly:  params.UnreadOnly,
-		StarredOnly: params.StarredOnly,
-		Limit:       limit,
-		Offset:      params.Offset,
+		FeedID:       params.FeedID,
+		FolderID:     params.FolderID,
+		ContentType:  params.ContentType,
+		UnreadOnly:   params.UnreadOnly,
+		StarredOnly:  params.StarredOnly,
+		HasThumbnail: params.HasThumbnail,
+		Limit:        limit,
+		Offset:       params.Offset,
 	}
 
 	return s.entries.List(ctx, filter)

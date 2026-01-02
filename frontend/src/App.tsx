@@ -6,6 +6,7 @@ import { Sidebar } from '@/components/sidebar'
 import { AddFeedPage } from '@/components/add-feed'
 import { EntryList } from '@/components/entry-list'
 import { EntryContent } from '@/components/entry-content'
+import { PictureMasonry, Lightbox } from '@/components/picture-masonry'
 import { useSelection, selectionToParams } from '@/hooks/useSelection'
 import { useMarkAllAsRead } from '@/hooks/useEntries'
 import { useMobileLayout } from '@/hooks/useMobileLayout'
@@ -114,6 +115,29 @@ function AppContent() {
       )
     }
 
+    // Mobile picture mode - use masonry
+    if (contentType === 'picture') {
+      return (
+        <>
+          <div className="h-screen flex flex-col overflow-hidden">
+            <PictureMasonry
+              selection={selection}
+              contentType={contentType}
+              unreadOnly={unreadOnly}
+              onToggleUnreadOnly={toggleUnreadOnly}
+              onMarkAllRead={handleMarkAllRead}
+              isMobile
+              onMenuClick={handleOpenSidebar}
+            />
+          </div>
+          <Lightbox />
+          <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
+            {sidebarContent}
+          </Sheet>
+        </>
+      )
+    }
+
     return (
       <>
         <div className="h-screen flex flex-col overflow-hidden">
@@ -154,6 +178,29 @@ function AppContent() {
         content={<AddFeedPage onClose={handleCloseAddFeed} contentType={addFeedContentType} />}
         hideList
       />
+    )
+  }
+
+  // Desktop picture mode - two column layout
+  if (contentType === 'picture') {
+    return (
+      <>
+        <ThreeColumnLayout
+          sidebar={sidebarContent}
+          list={null}
+          content={
+            <PictureMasonry
+              selection={selection}
+              contentType={contentType}
+              unreadOnly={unreadOnly}
+              onToggleUnreadOnly={toggleUnreadOnly}
+              onMarkAllRead={handleMarkAllRead}
+            />
+          }
+          hideList
+        />
+        <Lightbox />
+      </>
     )
   }
 

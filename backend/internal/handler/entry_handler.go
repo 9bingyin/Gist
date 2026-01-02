@@ -131,6 +131,10 @@ func (h *EntryHandler) List(c echo.Context) error {
 		params.StarredOnly = true
 	}
 
+	if c.QueryParam("hasThumbnail") == "true" {
+		params.HasThumbnail = true
+	}
+
 	if raw := c.QueryParam("limit"); raw != "" {
 		limit, err := strconv.Atoi(raw)
 		if err == nil && limit > 0 && limit <= 100 {

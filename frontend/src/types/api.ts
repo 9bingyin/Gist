@@ -62,6 +62,7 @@ export interface EntryListParams {
   contentType?: ContentType
   unreadOnly?: boolean
   starredOnly?: boolean
+  hasThumbnail?: boolean
   limit?: number
   offset?: number
 }
