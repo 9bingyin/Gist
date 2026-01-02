@@ -11,13 +11,14 @@ import (
 )
 
 type EntryListFilter struct {
-	FeedID      *int64
-	FolderID    *int64
-	ContentType *string
-	UnreadOnly  bool
-	StarredOnly bool
-	Limit       int
-	Offset      int
+	FeedID       *int64
+	FolderID     *int64
+	ContentType  *string
+	UnreadOnly   bool
+	StarredOnly  bool
+	HasThumbnail bool
+	Limit        int
+	Offset       int
 }
 
 type UnreadCount struct {
@@ -92,6 +93,10 @@ func (r *entryRepository) List(ctx context.Context, filter EntryListFilter) ([]m
 
 	if filter.StarredOnly {
 		conditions = append(conditions, "e.starred = 1")
+	}
+
+	if filter.HasThumbnail {
+		conditions = append(conditions, "e.thumbnail_url IS NOT NULL AND e.thumbnail_url != ''")
 	}
 
 	if len(conditions) > 0 {
