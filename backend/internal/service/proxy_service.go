@@ -3,10 +3,11 @@ package service
 import (
 	"context"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"time"
+
+	"github.com/Noooste/azuretls-client"
 
 	"gist/backend/internal/config"
 	"gist/backend/internal/service/anubis"
@@ -27,28 +28,37 @@ type ProxyResult struct {
 }
 
 type ProxyService interface {
-	FetchImage(ctx context.Context, imageURL string) (*ProxyResult, error)
+	FetchImage(ctx context.Context, imageURL, refererURL string) (*ProxyResult, error)
+	Close()
 }
 
 type proxyService struct {
-	httpClient *http.Client
-	anubis     *anubis.Solver
+	session *azuretls.Session
+	anubis  *anubis.Solver
 }
 
 func NewProxyService(anubisSolver *anubis.Solver) ProxyService {
+	session := azuretls.NewSession()
+	session.Browser = azuretls.Chrome
+	session.SetTimeout(proxyTimeout)
+
 	return &proxyService{
-		httpClient: &http.Client{
-			Timeout: proxyTimeout,
-		},
-		anubis: anubisSolver,
+		session: session,
+		anubis:  anubisSolver,
 	}
 }
 
-func (s *proxyService) FetchImage(ctx context.Context, imageURL string) (*ProxyResult, error) {
-	return s.fetchImageWithCookie(ctx, imageURL, "")
+func (s *proxyService) Close() {
+	if s.session != nil {
+		s.session.Close()
+	}
 }
 
-func (s *proxyService) fetchImageWithCookie(ctx context.Context, imageURL string, cookie string) (*ProxyResult, error) {
+func (s *proxyService) FetchImage(ctx context.Context, imageURL, refererURL string) (*ProxyResult, error) {
+	return s.fetchImageWithCookie(ctx, imageURL, refererURL, "")
+}
+
+func (s *proxyService) fetchImageWithCookie(ctx context.Context, imageURL, refererURL, cookie string) (*ProxyResult, error) {
 	// Validate URL
 	parsedURL, err := url.Parse(imageURL)
 	if err != nil {
@@ -60,55 +70,67 @@ func (s *proxyService) fetchImageWithCookie(ctx context.Context, imageURL string
 		return nil, ErrInvalidProtocol
 	}
 
-	// Create request with context
-	ctx, cancel := context.WithTimeout(ctx, proxyTimeout)
-	defer cancel()
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, imageURL, nil)
-	if err != nil {
-		return nil, ErrFetchFailed
+	// Build Referer: prefer article URL (for CDN anti-hotlinking), fallback to image URL host
+	var referer string
+	if refererURL != "" {
+		if parsed, err := url.Parse(refererURL); err == nil {
+			referer = parsed.Scheme + "://" + parsed.Host + "/"
+		}
+	}
+	if referer == "" {
+		referer = parsedURL.Scheme + "://" + parsedURL.Host + "/"
 	}
 
-	// Set headers to mimic browser
-	req.Header.Set("User-Agent", config.ChromeUserAgent)
-	req.Header.Set("Accept", "image/*,*/*;q=0.8")
-	req.Header.Set("Referer", parsedURL.Scheme+"://"+parsedURL.Host+"/")
+	// Build ordered headers matching Chrome
+	headers := azuretls.OrderedHeaders{
+		{"accept", "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"},
+		{"accept-language", "zh-CN,zh;q=0.9"},
+		{"referer", referer},
+		{"sec-ch-ua", `"Google Chrome";v="135", "Chromium";v="135", "Not-A.Brand";v="8"`},
+		{"sec-ch-ua-mobile", "?0"},
+		{"sec-ch-ua-platform", `"Windows"`},
+		{"sec-fetch-dest", "image"},
+		{"sec-fetch-mode", "no-cors"},
+		{"sec-fetch-site", "cross-site"},
+		{"user-agent", config.ChromeUserAgent},
+	}
 
 	// Add cookie (either provided or from cache)
 	if cookie != "" {
-		req.Header.Set("Cookie", cookie)
+		headers = append(headers, []string{"cookie", cookie})
 	} else if s.anubis != nil {
 		if cachedCookie := s.anubis.GetCachedCookie(ctx, parsedURL.Host); cachedCookie != "" {
-			req.Header.Set("Cookie", cachedCookie)
+			headers = append(headers, []string{"cookie", cachedCookie})
 		}
 	}
 
-	resp, err := s.httpClient.Do(req)
+	resp, err := s.session.Do(&azuretls.Request{
+		Method:         http.MethodGet,
+		Url:            imageURL,
+		OrderedHeaders: headers,
+	})
 	if err != nil {
-		if ctx.Err() == context.DeadlineExceeded {
-			return nil, ErrRequestTimeout
-		}
-		return nil, ErrFetchFailed
+		return nil, fmt.Errorf("%w: %v", ErrFetchFailed, err)
 	}
-	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("%w: %d", ErrFetchFailed, resp.StatusCode)
 	}
 
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, ErrFetchFailed
-	}
+	data := resp.Body
 
 	// Check if response is Anubis challenge (HTML instead of image)
 	if s.anubis != nil && cookie == "" && anubis.IsAnubisChallenge(data) {
-		newCookie, solveErr := s.anubis.SolveFromBody(ctx, data, imageURL, resp.Cookies())
+		var initialCookies []*http.Cookie
+		for name, value := range resp.Cookies {
+			initialCookies = append(initialCookies, &http.Cookie{Name: name, Value: value})
+		}
+		newCookie, solveErr := s.anubis.SolveFromBody(ctx, data, imageURL, initialCookies)
 		if solveErr != nil {
 			return nil, ErrFetchFailed
 		}
 		// Retry with the new cookie
-		return s.fetchImageWithCookie(ctx, imageURL, newCookie)
+		return s.fetchImageWithCookie(ctx, imageURL, refererURL, newCookie)
 	}
 
 	contentType := resp.Header.Get("Content-Type")

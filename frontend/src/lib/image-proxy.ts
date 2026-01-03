@@ -64,5 +64,10 @@ export function getProxiedImageUrl(src: string, articleUrl?: string): string {
     return absoluteUrl
   }
 
-  return `/api/proxy/image/${toBase64Url(absoluteUrl)}`
+  let url = `/api/proxy/image/${toBase64Url(absoluteUrl)}`
+  // Pass article URL as referer for CDN anti-hotlinking
+  if (articleUrl) {
+    url += `?ref=${toBase64Url(articleUrl)}`
+  }
+  return url
 }

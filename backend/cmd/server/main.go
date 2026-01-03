@@ -113,6 +113,7 @@ func main() {
 
 		sched.Stop()
 		readabilityService.Close()
+		proxyService.Close()
 
 		// Gracefully shutdown the HTTP server
 		if err := router.Shutdown(ctx); err != nil {

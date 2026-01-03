@@ -198,6 +198,12 @@ const docTemplate = `{
                         "name": "encoded",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Base64 URL-safe encoded article URL (used as Referer for CDN anti-hotlinking)",
+                        "name": "ref",
+                        "in": "query"
                     }
                 ],
                 "responses": {

@@ -33,6 +33,7 @@ func (h *ProxyHandler) RegisterRoutes(g *echo.Group) {
 // @Tags proxy
 // @Produce octet-stream
 // @Param encoded path string true "Base64 URL-safe encoded image URL"
+// @Param ref query string false "Base64 URL-safe encoded article URL (used as Referer for CDN anti-hotlinking)"
 // @Success 200 {file} binary
 // @Failure 400 {object} errorResponse
 // @Failure 500 {object} errorResponse
@@ -51,7 +52,15 @@ func (h *ProxyHandler) ProxyImage(c echo.Context) error {
 	}
 	imageURL := string(decoded)
 
-	result, err := h.proxyService.FetchImage(c.Request().Context(), imageURL)
+	// Decode referer URL if provided (for CDN anti-hotlinking)
+	var refererURL string
+	if refEncoded := c.QueryParam("ref"); refEncoded != "" {
+		if refDecoded, err := base64.URLEncoding.DecodeString(refEncoded); err == nil {
+			refererURL = string(refDecoded)
+		}
+	}
+
+	result, err := h.proxyService.FetchImage(c.Request().Context(), imageURL, refererURL)
 	if err != nil {
 		return h.handleServiceError(c, err)
 	}
