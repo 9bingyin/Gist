@@ -266,3 +266,71 @@ func hasOnlyImageContent(n *html.Node) bool {
 func isWhitespaceOnly(s string) bool {
 	return strings.TrimSpace(s) == ""
 }
+
+// HTMLToText converts HTML content to plain text.
+// It extracts text content while preserving paragraph structure.
+func HTMLToText(content string) string {
+	doc, err := html.Parse(strings.NewReader(content))
+	if err != nil {
+		// Fallback: return content as-is if parsing fails
+		return content
+	}
+
+	var buf strings.Builder
+	extractText(doc, &buf)
+
+	// Clean up excessive whitespace while preserving paragraph breaks
+	result := buf.String()
+	result = strings.TrimSpace(result)
+
+	return result
+}
+
+// extractText recursively extracts text from HTML nodes.
+func extractText(n *html.Node, buf *strings.Builder) {
+	if n == nil {
+		return
+	}
+
+	// Skip non-content elements
+	if n.Type == html.ElementNode {
+		switch n.Data {
+		case "script", "style", "noscript", "head", "meta", "link":
+			return
+		case "br":
+			buf.WriteString("\n")
+			return
+		case "p", "div", "h1", "h2", "h3", "h4", "h5", "h6",
+			"li", "tr", "blockquote", "section", "article":
+			// Add newline before block elements if buffer is not empty
+			if buf.Len() > 0 {
+				buf.WriteString("\n")
+			}
+		}
+	}
+
+	// Extract text content
+	if n.Type == html.TextNode {
+		text := strings.TrimSpace(n.Data)
+		if text != "" {
+			if buf.Len() > 0 && !strings.HasSuffix(buf.String(), "\n") {
+				buf.WriteString(" ")
+			}
+			buf.WriteString(text)
+		}
+	}
+
+	// Process children
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		extractText(c, buf)
+	}
+
+	// Add newline after block elements
+	if n.Type == html.ElementNode {
+		switch n.Data {
+		case "p", "div", "h1", "h2", "h3", "h4", "h5", "h6",
+			"li", "tr", "blockquote", "section", "article":
+			buf.WriteString("\n")
+		}
+	}
+}

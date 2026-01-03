@@ -122,8 +122,11 @@ func (s *aiService) Summarize(ctx context.Context, entryID int64, content, title
 	// Build system prompt
 	systemPrompt := ai.GetSummarizePrompt(title, language)
 
+	// Convert HTML to plain text to save tokens
+	plainText := ai.HTMLToText(content)
+
 	// Start streaming
-	textCh, errCh := provider.SummarizeStream(ctx, systemPrompt, content)
+	textCh, errCh := provider.SummarizeStream(ctx, systemPrompt, plainText)
 
 	return textCh, errCh, nil
 }
