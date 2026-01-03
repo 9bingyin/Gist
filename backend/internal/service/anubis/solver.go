@@ -13,10 +13,13 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"gist/backend/internal/config"
 )
+
+const solverTimeout = 30 * time.Second
 
 // Challenge represents the Anubis challenge structure
 type Challenge struct {
@@ -34,16 +37,19 @@ type Challenge struct {
 type Solver struct {
 	httpClient *http.Client
 	store      *Store
+	mu         sync.Mutex
+	solving    map[string]chan struct{} // host -> done channel (prevents concurrent solving)
 }
 
 // NewSolver creates a new Anubis solver
 func NewSolver(httpClient *http.Client, store *Store) *Solver {
 	if httpClient == nil {
-		httpClient = &http.Client{Timeout: 30 * time.Second}
+		httpClient = &http.Client{Timeout: solverTimeout}
 	}
 	return &Solver{
 		httpClient: httpClient,
 		store:      store,
+		solving:    make(map[string]chan struct{}),
 	}
 }
 
@@ -72,6 +78,40 @@ func (s *Solver) SolveFromBody(ctx context.Context, body []byte, originalURL str
 		return "", nil
 	}
 
+	host := extractHost(originalURL)
+
+	// Check if another goroutine is already solving for this host
+	s.mu.Lock()
+	if ch, ok := s.solving[host]; ok {
+		s.mu.Unlock()
+		log.Printf("anubis: waiting for ongoing solve for %s", host)
+		select {
+		case <-ch:
+			// Small delay to let the cookie propagate and avoid thundering herd
+			time.Sleep(100 * time.Millisecond)
+			// Solving completed, get cookie from cache
+			if cookie := s.GetCachedCookie(ctx, host); cookie != "" {
+				return cookie, nil
+			}
+			// Cache miss after solve - this shouldn't happen normally
+			return "", fmt.Errorf("anubis solve completed but no cookie cached for %s", host)
+		case <-ctx.Done():
+			return "", ctx.Err()
+		}
+	}
+
+	// Mark this host as being solved
+	done := make(chan struct{})
+	s.solving[host] = done
+	s.mu.Unlock()
+
+	defer func() {
+		s.mu.Lock()
+		delete(s.solving, host)
+		close(done) // Notify waiting goroutines
+		s.mu.Unlock()
+	}()
+
 	// Parse the challenge JSON from HTML
 	challenge, err := parseChallenge(body)
 	if err != nil {
@@ -90,14 +130,11 @@ func (s *Solver) SolveFromBody(ctx context.Context, body []byte, originalURL str
 	}
 
 	// Cache the cookie
-	if s.store != nil {
-		host := extractHost(originalURL)
-		if host != "" {
-			if err := s.store.SetCookie(ctx, host, cookie, expiresAt); err != nil {
-				log.Printf("anubis: failed to cache cookie for %s: %v", host, err)
-			} else {
-				log.Printf("anubis: cached cookie for %s (expires %s)", host, expiresAt.Format(time.RFC3339))
-			}
+	if s.store != nil && host != "" {
+		if err := s.store.SetCookie(ctx, host, cookie, expiresAt); err != nil {
+			log.Printf("anubis: failed to cache cookie for %s: %v", host, err)
+		} else {
+			log.Printf("anubis: cached cookie for %s (expires %s)", host, expiresAt.Format(time.RFC3339))
 		}
 	}
 

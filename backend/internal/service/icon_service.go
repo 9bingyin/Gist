@@ -18,6 +18,8 @@ import (
 	"gist/backend/internal/service/anubis"
 )
 
+const iconTimeout = 15 * time.Second
+
 type IconService interface {
 	// FetchAndSaveIcon downloads and saves the icon locally
 	// Returns relative path like "example.com.png" based on domain
@@ -44,7 +46,7 @@ func NewIconService(dataDir string, feeds repository.FeedRepository, anubisSolve
 		dataDir: dataDir,
 		feeds:   feeds,
 		httpClient: &http.Client{
-			Timeout: 15 * time.Second,
+			Timeout: iconTimeout,
 		},
 		anubis: anubisSolver,
 	}
@@ -302,10 +304,10 @@ func iconFilename(siteURL string) string {
 }
 
 func (s *iconService) downloadIcon(ctx context.Context, iconURL string) ([]byte, error) {
-	return s.downloadIconWithCookie(ctx, iconURL, "")
+	return s.downloadIconWithRetry(ctx, iconURL, "", 0)
 }
 
-func (s *iconService) downloadIconWithCookie(ctx context.Context, iconURL string, cookie string) ([]byte, error) {
+func (s *iconService) downloadIconWithRetry(ctx context.Context, iconURL string, cookie string, retryCount int) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, iconURL, nil)
 	if err != nil {
 		return nil, err
@@ -339,16 +341,61 @@ func (s *iconService) downloadIconWithCookie(ctx context.Context, iconURL string
 	}
 
 	// Check if response is Anubis challenge (HTML instead of image)
-	if s.anubis != nil && cookie == "" && anubis.IsAnubisChallenge(data) {
+	if s.anubis != nil && anubis.IsAnubisChallenge(data) {
+		if retryCount >= 2 {
+			// Too many retries, give up
+			return nil, fmt.Errorf("anubis challenge persists after %d retries", retryCount)
+		}
 		newCookie, solveErr := s.anubis.SolveFromBody(ctx, data, iconURL, resp.Cookies())
 		if solveErr != nil {
 			return nil, solveErr
 		}
-		// Retry with the new cookie
-		return s.downloadIconWithCookie(ctx, iconURL, newCookie)
+		// Retry with fresh client to avoid connection reuse
+		return s.downloadIconWithFreshClient(ctx, iconURL, newCookie, retryCount+1)
 	}
 
 	// Check minimum size (avoid empty/broken images)
+	if len(data) < 100 {
+		return nil, fmt.Errorf("icon too small")
+	}
+
+	return data, nil
+}
+
+// downloadIconWithFreshClient creates a new http.Client to avoid connection reuse after Anubis
+func (s *iconService) downloadIconWithFreshClient(ctx context.Context, iconURL string, cookie string, retryCount int) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, iconURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", config.DefaultUserAgent)
+	if cookie != "" {
+		req.Header.Set("Cookie", cookie)
+	}
+
+	// Use fresh client to avoid connection reuse
+	freshClient := &http.Client{Timeout: iconTimeout}
+	resp, err := freshClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
+	}
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check if still getting Anubis (shouldn't happen with fresh connection)
+	if s.anubis != nil && anubis.IsAnubisChallenge(data) {
+		return nil, fmt.Errorf("anubis challenge persists after %d retries", retryCount)
+	}
+
+	// Check minimum size
 	if len(data) < 100 {
 		return nil, fmt.Errorf("icon too small")
 	}

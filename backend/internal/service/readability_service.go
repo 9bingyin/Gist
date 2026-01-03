@@ -22,6 +22,8 @@ import (
 	"gist/backend/internal/service/anubis"
 )
 
+const readabilityTimeout = 30 * time.Second
+
 type ReadabilityService interface {
 	FetchReadableContent(ctx context.Context, entryID int64) (string, error)
 	Close()
@@ -45,7 +47,7 @@ func NewReadabilityService(entries repository.EntryRepository, anubisSolver *anu
 	// Create azuretls session with Chrome fingerprint
 	session := azuretls.NewSession()
 	session.Browser = azuretls.Chrome
-	session.SetTimeout(30 * time.Second)
+	session.SetTimeout(readabilityTimeout)
 
 	return &readabilityService{
 		entries:   entries,
@@ -75,7 +77,7 @@ func (s *readabilityService) FetchReadableContent(ctx context.Context, entryID i
 	}
 
 	// Fetch with Chrome fingerprint and Anubis support
-	body, err := s.fetchWithChrome(ctx, *entry.URL, "")
+	body, err := s.fetchWithChrome(ctx, *entry.URL, "", 0)
 	if err != nil {
 		return "", err
 	}
@@ -129,24 +131,37 @@ func (s *readabilityService) Close() {
 }
 
 // fetchWithChrome fetches URL with Chrome TLS fingerprint and browser headers
-func (s *readabilityService) fetchWithChrome(ctx context.Context, targetURL string, cookie string) ([]byte, error) {
+func (s *readabilityService) fetchWithChrome(ctx context.Context, targetURL string, cookie string, retryCount int) ([]byte, error) {
+	return s.doFetch(ctx, s.session, targetURL, cookie, retryCount, false)
+}
+
+// fetchWithFreshSession creates a new azuretls session to avoid connection reuse after Anubis
+func (s *readabilityService) fetchWithFreshSession(ctx context.Context, targetURL, cookie string, retryCount int) ([]byte, error) {
+	tempSession := azuretls.NewSession()
+	tempSession.Browser = azuretls.Chrome
+	tempSession.SetTimeout(readabilityTimeout)
+	defer tempSession.Close()
+
+	return s.doFetch(ctx, tempSession, targetURL, cookie, retryCount, true)
+}
+
+// doFetch performs the actual HTTP request with the given session
+func (s *readabilityService) doFetch(ctx context.Context, session *azuretls.Session, targetURL, cookie string, retryCount int, isFreshSession bool) ([]byte, error) {
 	parsedURL, err := url.Parse(targetURL)
 	if err != nil {
 		return nil, ErrFeedFetch
 	}
 
-	// Validate URL scheme to prevent SSRF
 	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
 		return nil, ErrInvalid
 	}
 
-	// Build ordered headers matching Chrome 135
 	headers := azuretls.OrderedHeaders{
 		{"accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"},
 		{"accept-language", "zh-CN,zh;q=0.9"},
 		{"cache-control", "max-age=0"},
 		{"priority", "u=0, i"},
-		{"sec-ch-ua", `"Google Chrome";v="135", "Chromium";v="135", "Not-A.Brand";v="8"`},
+		{"sec-ch-ua", config.ChromeSecChUa},
 		{"sec-ch-ua-arch", `"x86"`},
 		{"sec-ch-ua-mobile", "?0"},
 		{"sec-ch-ua-model", `""`},
@@ -160,16 +175,15 @@ func (s *readabilityService) fetchWithChrome(ctx context.Context, targetURL stri
 		{"user-agent", config.ChromeUserAgent},
 	}
 
-	// Add cookie (either provided or from Anubis cache)
 	if cookie != "" {
 		headers = append(headers, []string{"cookie", cookie})
-	} else if s.anubis != nil {
+	} else if !isFreshSession && s.anubis != nil {
 		if cachedCookie := s.anubis.GetCachedCookie(ctx, parsedURL.Host); cachedCookie != "" {
 			headers = append(headers, []string{"cookie", cachedCookie})
 		}
 	}
 
-	resp, err := s.session.Do(&azuretls.Request{
+	resp, err := session.Do(&azuretls.Request{
 		Method:         http.MethodGet,
 		Url:            targetURL,
 		OrderedHeaders: headers,
@@ -184,10 +198,11 @@ func (s *readabilityService) fetchWithChrome(ctx context.Context, targetURL stri
 
 	body := resp.Body
 
-	// Check if response is Anubis challenge
-	if s.anubis != nil && cookie == "" && anubis.IsAnubisChallenge(body) {
+	if s.anubis != nil && anubis.IsAnubisChallenge(body) {
+		if retryCount >= 2 || isFreshSession {
+			return nil, fmt.Errorf("anubis challenge persists after %d retries for %s", retryCount, targetURL)
+		}
 		log.Printf("readability: detected Anubis challenge for %s", targetURL)
-		// Convert azuretls cookies (map[string]string) to []*http.Cookie
 		var initialCookies []*http.Cookie
 		for name, value := range resp.Cookies {
 			initialCookies = append(initialCookies, &http.Cookie{Name: name, Value: value})
@@ -196,8 +211,7 @@ func (s *readabilityService) fetchWithChrome(ctx context.Context, targetURL stri
 		if solveErr != nil {
 			return nil, fmt.Errorf("anubis solve failed: %w", solveErr)
 		}
-		// Retry with the new cookie
-		return s.fetchWithChrome(ctx, targetURL, newCookie)
+		return s.fetchWithFreshSession(ctx, targetURL, newCookie, retryCount+1)
 	}
 
 	return body, nil

@@ -23,6 +23,8 @@ import (
 	"gist/backend/internal/service/anubis"
 )
 
+const refreshTimeout = 30 * time.Second
+
 const (
 	// maxConcurrentRefresh limits parallel feed refreshes to avoid overwhelming
 	// the network and remote servers.
@@ -83,7 +85,7 @@ type refreshService struct {
 func NewRefreshService(feeds repository.FeedRepository, entries repository.EntryRepository, settings SettingsService, httpClient *http.Client, anubisSolver *anubis.Solver) RefreshService {
 	client := httpClient
 	if client == nil {
-		client = &http.Client{Timeout: 30 * time.Second}
+		client = &http.Client{Timeout: refreshTimeout}
 	}
 	return &refreshService{
 		feeds:      feeds,
@@ -173,10 +175,10 @@ func (s *refreshService) refreshFeedInternal(ctx context.Context, feed model.Fee
 }
 
 func (s *refreshService) refreshFeedWithUA(ctx context.Context, feed model.Feed, userAgent string, allowFallback bool) error {
-	return s.refreshFeedWithCookie(ctx, feed, userAgent, "", allowFallback)
+	return s.refreshFeedWithCookie(ctx, feed, userAgent, "", allowFallback, 0)
 }
 
-func (s *refreshService) refreshFeedWithCookie(ctx context.Context, feed model.Feed, userAgent string, cookie string, allowFallback bool) error {
+func (s *refreshService) refreshFeedWithCookie(ctx context.Context, feed model.Feed, userAgent string, cookie string, allowFallback bool, retryCount int) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, feed.URL, nil)
 	if err != nil {
 		errMsg := err.Error()
@@ -226,7 +228,7 @@ func (s *refreshService) refreshFeedWithCookie(ctx context.Context, feed model.F
 		fallbackUA := s.settings.GetFallbackUserAgent(ctx)
 		if fallbackUA != "" {
 			log.Printf("feed %d (%s): HTTP %d, retrying with fallback UA", feed.ID, feed.Title, resp.StatusCode)
-			return s.refreshFeedWithCookie(ctx, feed, fallbackUA, cookie, false)
+			return s.refreshFeedWithCookie(ctx, feed, fallbackUA, cookie, false, retryCount)
 		}
 	}
 
@@ -250,14 +252,20 @@ func (s *refreshService) refreshFeedWithCookie(ctx context.Context, feed model.F
 	if parseErr != nil {
 		// Parse failed, check if it's an Anubis challenge
 		if s.anubis != nil && anubis.IsAnubisChallenge(body) {
+			if retryCount >= 2 {
+				// Too many retries, give up
+				errMsg := fmt.Sprintf("anubis challenge persists after %d retries", retryCount)
+				_ = s.feeds.UpdateErrorMessage(ctx, feed.ID, &errMsg)
+				return errors.New(errMsg)
+			}
 			newCookie, solveErr := s.anubis.SolveFromBody(ctx, body, feed.URL, resp.Cookies())
 			if solveErr != nil {
 				errMsg := fmt.Sprintf("anubis solve failed: %v", solveErr)
 				_ = s.feeds.UpdateErrorMessage(ctx, feed.ID, &errMsg)
 				return solveErr
 			}
-			// Retry with the new cookie
-			return s.refreshFeedWithCookie(ctx, feed, userAgent, newCookie, false)
+			// Retry with fresh client to avoid connection reuse
+			return s.refreshFeedWithFreshClient(ctx, feed, userAgent, newCookie, retryCount+1)
 		}
 		errMsg := parseErr.Error()
 		_ = s.feeds.UpdateErrorMessage(ctx, feed.ID, &errMsg)
@@ -298,6 +306,115 @@ func (s *refreshService) refreshFeedWithCookie(ctx context.Context, feed model.F
 		}
 
 		// Check if entry already exists
+		exists, err := s.entries.ExistsByURL(ctx, feed.ID, *entry.URL)
+		if err != nil {
+			log.Printf("check entry exists: %v", err)
+			continue
+		}
+
+		if err := s.entries.CreateOrUpdate(ctx, entry); err != nil {
+			log.Printf("save entry: %v", err)
+			continue
+		}
+
+		if exists {
+			updatedCount++
+		} else {
+			newCount++
+		}
+	}
+
+	if newCount > 0 || updatedCount > 0 {
+		log.Printf("feed %d (%s): %d new, %d updated", feed.ID, feed.Title, newCount, updatedCount)
+	}
+	return nil
+}
+
+// refreshFeedWithFreshClient creates a new http.Client to avoid connection reuse after Anubis
+func (s *refreshService) refreshFeedWithFreshClient(ctx context.Context, feed model.Feed, userAgent string, cookie string, retryCount int) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, feed.URL, nil)
+	if err != nil {
+		errMsg := err.Error()
+		_ = s.feeds.UpdateErrorMessage(ctx, feed.ID, &errMsg)
+		return err
+	}
+	req.Header.Set("User-Agent", userAgent)
+	if cookie != "" {
+		req.Header.Set("Cookie", cookie)
+	}
+
+	// Use fresh client to avoid connection reuse
+	freshClient := &http.Client{Timeout: refreshTimeout}
+	resp, err := freshClient.Do(req)
+	if err != nil {
+		errMsg := err.Error()
+		_ = s.feeds.UpdateErrorMessage(ctx, feed.ID, &errMsg)
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= http.StatusBadRequest {
+		log.Printf("feed %d (%s): HTTP %d", feed.ID, feed.Title, resp.StatusCode)
+		errMsg := fmt.Sprintf("HTTP %d", resp.StatusCode)
+		_ = s.feeds.UpdateErrorMessage(ctx, feed.ID, &errMsg)
+		return nil
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		errMsg := err.Error()
+		_ = s.feeds.UpdateErrorMessage(ctx, feed.ID, &errMsg)
+		return err
+	}
+
+	// Check if still getting Anubis (shouldn't happen with fresh connection)
+	if s.anubis != nil && anubis.IsAnubisChallenge(body) {
+		errMsg := fmt.Sprintf("anubis challenge persists after %d retries", retryCount)
+		_ = s.feeds.UpdateErrorMessage(ctx, feed.ID, &errMsg)
+		return errors.New(errMsg)
+	}
+
+	parser := gofeed.NewParser()
+	parsed, parseErr := parser.Parse(bytes.NewReader(body))
+	if parseErr != nil {
+		errMsg := parseErr.Error()
+		_ = s.feeds.UpdateErrorMessage(ctx, feed.ID, &errMsg)
+		return parseErr
+	}
+
+	// Clear error message on successful refresh
+	if feed.ErrorMessage != nil {
+		_ = s.feeds.UpdateErrorMessage(ctx, feed.ID, nil)
+	}
+
+	// Update feed ETag and LastModified
+	newETag := strings.TrimSpace(resp.Header.Get("ETag"))
+	newLastModified := strings.TrimSpace(resp.Header.Get("Last-Modified"))
+	needsUpdate := false
+	if newETag != "" {
+		feed.ETag = &newETag
+		needsUpdate = true
+	}
+	if newLastModified != "" {
+		feed.LastModified = &newLastModified
+		needsUpdate = true
+	}
+	if needsUpdate {
+		if _, err := s.feeds.Update(ctx, feed); err != nil {
+			log.Printf("update feed %d etag: %v", feed.ID, err)
+		}
+	}
+
+	// Save entries
+	newCount := 0
+	updatedCount := 0
+	dynamicTime := hasDynamicTime(parsed.Items)
+	for _, item := range parsed.Items {
+		entry := itemToEntry(feed.ID, item, dynamicTime)
+		if entry.URL == nil || *entry.URL == "" {
+			continue
+		}
+
 		exists, err := s.entries.ExistsByURL(ctx, feed.ID, *entry.URL)
 		if err != nil {
 			log.Printf("check entry exists: %v", err)

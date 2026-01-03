@@ -55,38 +55,43 @@ func (s *proxyService) Close() {
 }
 
 func (s *proxyService) FetchImage(ctx context.Context, imageURL, refererURL string) (*ProxyResult, error) {
-	return s.fetchImageWithCookie(ctx, imageURL, refererURL, "")
+	return s.fetchImageWithRetry(ctx, imageURL, refererURL, "", 0)
 }
 
-func (s *proxyService) fetchImageWithCookie(ctx context.Context, imageURL, refererURL, cookie string) (*ProxyResult, error) {
-	// Validate URL
+func (s *proxyService) fetchImageWithRetry(ctx context.Context, imageURL, refererURL, cookie string, retryCount int) (*ProxyResult, error) {
+	return s.doFetch(ctx, s.session, imageURL, refererURL, cookie, retryCount, false)
+}
+
+// fetchWithFreshSession creates a new azuretls session to avoid connection reuse after Anubis
+func (s *proxyService) fetchWithFreshSession(ctx context.Context, imageURL, refererURL, cookie string, retryCount int) (*ProxyResult, error) {
+	tempSession := azuretls.NewSession()
+	tempSession.Browser = azuretls.Chrome
+	tempSession.SetTimeout(proxyTimeout)
+	defer tempSession.Close()
+
+	return s.doFetch(ctx, tempSession, imageURL, refererURL, cookie, retryCount, true)
+}
+
+// doFetch performs the actual HTTP request with the given session
+func (s *proxyService) doFetch(ctx context.Context, session *azuretls.Session, imageURL, refererURL, cookie string, retryCount int, isFreshSession bool) (*ProxyResult, error) {
 	parsedURL, err := url.Parse(imageURL)
 	if err != nil {
 		return nil, ErrInvalidURL
 	}
 
-	// Only allow http/https
 	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
 		return nil, ErrInvalidProtocol
 	}
 
-	// Build Referer: prefer article URL (for CDN anti-hotlinking), fallback to image URL host
-	var referer string
-	if refererURL != "" {
-		if parsed, err := url.Parse(refererURL); err == nil {
-			referer = parsed.Scheme + "://" + parsed.Host + "/"
-		}
-	}
-	if referer == "" {
-		referer = parsedURL.Scheme + "://" + parsedURL.Host + "/"
-	}
+	// Build Referer
+	referer := buildReferer(refererURL, parsedURL)
 
-	// Build ordered headers matching Chrome
+	// Build headers
 	headers := azuretls.OrderedHeaders{
 		{"accept", "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"},
 		{"accept-language", "zh-CN,zh;q=0.9"},
 		{"referer", referer},
-		{"sec-ch-ua", `"Google Chrome";v="135", "Chromium";v="135", "Not-A.Brand";v="8"`},
+		{"sec-ch-ua", config.ChromeSecChUa},
 		{"sec-ch-ua-mobile", "?0"},
 		{"sec-ch-ua-platform", `"Windows"`},
 		{"sec-fetch-dest", "image"},
@@ -95,16 +100,16 @@ func (s *proxyService) fetchImageWithCookie(ctx context.Context, imageURL, refer
 		{"user-agent", config.ChromeUserAgent},
 	}
 
-	// Add cookie (either provided or from cache)
+	// Add cookie
 	if cookie != "" {
 		headers = append(headers, []string{"cookie", cookie})
-	} else if s.anubis != nil {
+	} else if !isFreshSession && s.anubis != nil {
 		if cachedCookie := s.anubis.GetCachedCookie(ctx, parsedURL.Host); cachedCookie != "" {
 			headers = append(headers, []string{"cookie", cachedCookie})
 		}
 	}
 
-	resp, err := s.session.Do(&azuretls.Request{
+	resp, err := session.Do(&azuretls.Request{
 		Method:         http.MethodGet,
 		Url:            imageURL,
 		OrderedHeaders: headers,
@@ -119,8 +124,15 @@ func (s *proxyService) fetchImageWithCookie(ctx context.Context, imageURL, refer
 
 	data := resp.Body
 
-	// Check if response is Anubis challenge (HTML instead of image)
-	if s.anubis != nil && cookie == "" && anubis.IsAnubisChallenge(data) {
+	// Check for Anubis challenge
+	if s.anubis != nil && anubis.IsAnubisChallenge(data) {
+		if retryCount >= 2 {
+			return nil, fmt.Errorf("%w: anubis challenge persists after %d retries", ErrFetchFailed, retryCount)
+		}
+		if isFreshSession {
+			// Fresh session still got Anubis, give up
+			return nil, fmt.Errorf("%w: anubis challenge persists after %d retries", ErrFetchFailed, retryCount)
+		}
 		var initialCookies []*http.Cookie
 		for name, value := range resp.Cookies {
 			initialCookies = append(initialCookies, &http.Cookie{Name: name, Value: value})
@@ -129,8 +141,7 @@ func (s *proxyService) fetchImageWithCookie(ctx context.Context, imageURL, refer
 		if solveErr != nil {
 			return nil, ErrFetchFailed
 		}
-		// Retry with the new cookie
-		return s.fetchImageWithCookie(ctx, imageURL, refererURL, newCookie)
+		return s.fetchWithFreshSession(ctx, imageURL, refererURL, newCookie, retryCount+1)
 	}
 
 	contentType := resp.Header.Get("Content-Type")
@@ -142,4 +153,14 @@ func (s *proxyService) fetchImageWithCookie(ctx context.Context, imageURL, refer
 		Data:        data,
 		ContentType: contentType,
 	}, nil
+}
+
+// buildReferer constructs the Referer header value
+func buildReferer(refererURL string, parsedURL *url.URL) string {
+	if refererURL != "" {
+		if parsed, err := url.Parse(refererURL); err == nil {
+			return parsed.Scheme + "://" + parsed.Host + "/"
+		}
+	}
+	return parsedURL.Scheme + "://" + parsedURL.Host + "/"
 }

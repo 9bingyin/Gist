@@ -21,6 +21,8 @@ import (
 	"gist/backend/internal/service/anubis"
 )
 
+const feedTimeout = 20 * time.Second
+
 type FeedService interface {
 	Add(ctx context.Context, feedURL string, folderID *int64, titleOverride string, feedType string) (model.Feed, error)
 	Preview(ctx context.Context, feedURL string) (FeedPreview, error)
@@ -54,7 +56,7 @@ type feedService struct {
 func NewFeedService(feeds repository.FeedRepository, folders repository.FolderRepository, entries repository.EntryRepository, icons IconService, settings SettingsService, httpClient *http.Client, anubisSolver *anubis.Solver) FeedService {
 	client := httpClient
 	if client == nil {
-		client = &http.Client{Timeout: 20 * time.Second}
+		client = &http.Client{Timeout: feedTimeout}
 	}
 	return &feedService{feeds: feeds, folders: folders, entries: entries, icons: icons, settings: settings, httpClient: client, anubis: anubisSolver}
 }
@@ -256,10 +258,10 @@ func (s *feedService) fetchFeed(ctx context.Context, feedURL string) (feedFetch,
 }
 
 func (s *feedService) fetchFeedWithUA(ctx context.Context, feedURL string, userAgent string, allowFallback bool) (feedFetch, error) {
-	return s.fetchFeedWithCookie(ctx, feedURL, userAgent, "", allowFallback)
+	return s.fetchFeedWithCookie(ctx, feedURL, userAgent, "", allowFallback, 0)
 }
 
-func (s *feedService) fetchFeedWithCookie(ctx context.Context, feedURL string, userAgent string, cookie string, allowFallback bool) (feedFetch, error) {
+func (s *feedService) fetchFeedWithCookie(ctx context.Context, feedURL string, userAgent string, cookie string, allowFallback bool, retryCount int) (feedFetch, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, feedURL, nil)
 	if err != nil {
 		return feedFetch{}, ErrFeedFetch
@@ -287,7 +289,7 @@ func (s *feedService) fetchFeedWithCookie(ctx context.Context, feedURL string, u
 	if resp.StatusCode >= http.StatusBadRequest && allowFallback && s.settings != nil {
 		fallbackUA := s.settings.GetFallbackUserAgent(ctx)
 		if fallbackUA != "" {
-			return s.fetchFeedWithCookie(ctx, feedURL, fallbackUA, cookie, false)
+			return s.fetchFeedWithCookie(ctx, feedURL, fallbackUA, cookie, false, retryCount)
 		}
 	}
 
@@ -307,13 +309,91 @@ func (s *feedService) fetchFeedWithCookie(ctx context.Context, feedURL string, u
 	if parseErr != nil {
 		// Parse failed, check if it's an Anubis challenge
 		if s.anubis != nil && anubis.IsAnubisChallenge(body) {
+			if retryCount >= 2 {
+				// Too many retries, give up
+				return feedFetch{}, fmt.Errorf("anubis challenge persists after %d retries", retryCount)
+			}
 			newCookie, solveErr := s.anubis.SolveFromBody(ctx, body, feedURL, resp.Cookies())
 			if solveErr != nil {
 				return feedFetch{}, ErrFeedFetch
 			}
-			// Retry with the new cookie
-			return s.fetchFeedWithCookie(ctx, feedURL, userAgent, newCookie, false)
+			// Retry with fresh client to avoid connection reuse
+			return s.fetchFeedWithFreshClient(ctx, feedURL, userAgent, newCookie, retryCount+1)
 		}
+		return feedFetch{}, ErrFeedFetch
+	}
+
+	title := strings.TrimSpace(parsed.Title)
+	description := strings.TrimSpace(parsed.Description)
+	siteURL := strings.TrimSpace(parsed.Link)
+	imageURL := ""
+	if parsed.Image != nil {
+		imageURL = strings.TrimSpace(parsed.Image.URL)
+	}
+	lastUpdated := ""
+	if parsed.UpdatedParsed != nil {
+		lastUpdated = parsed.UpdatedParsed.UTC().Format(time.RFC3339)
+	} else if parsed.PublishedParsed != nil {
+		lastUpdated = parsed.PublishedParsed.UTC().Format(time.RFC3339)
+	}
+	var itemCount *int
+	if parsed.Items != nil {
+		count := len(parsed.Items)
+		itemCount = &count
+	}
+
+	etag := strings.TrimSpace(resp.Header.Get("ETag"))
+	lastModified := strings.TrimSpace(resp.Header.Get("Last-Modified"))
+
+	return feedFetch{
+		title:        title,
+		description:  description,
+		siteURL:      siteURL,
+		imageURL:     imageURL,
+		lastUpdated:  lastUpdated,
+		itemCount:    itemCount,
+		etag:         etag,
+		lastModified: lastModified,
+		items:        parsed.Items,
+	}, nil
+}
+
+// fetchFeedWithFreshClient creates a new http.Client to avoid connection reuse after Anubis
+func (s *feedService) fetchFeedWithFreshClient(ctx context.Context, feedURL string, userAgent string, cookie string, retryCount int) (feedFetch, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, feedURL, nil)
+	if err != nil {
+		return feedFetch{}, ErrFeedFetch
+	}
+	req.Header.Set("User-Agent", userAgent)
+	if cookie != "" {
+		req.Header.Set("Cookie", cookie)
+	}
+
+	// Use fresh client to avoid connection reuse
+	freshClient := &http.Client{Timeout: feedTimeout}
+	resp, err := freshClient.Do(req)
+	if err != nil {
+		return feedFetch{}, ErrFeedFetch
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= http.StatusBadRequest {
+		return feedFetch{}, ErrFeedFetch
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return feedFetch{}, ErrFeedFetch
+	}
+
+	// Check if still getting Anubis (shouldn't happen with fresh connection)
+	if s.anubis != nil && anubis.IsAnubisChallenge(body) {
+		return feedFetch{}, fmt.Errorf("anubis challenge persists after %d retries", retryCount)
+	}
+
+	parser := gofeed.NewParser()
+	parsed, parseErr := parser.Parse(bytes.NewReader(body))
+	if parseErr != nil {
 		return feedFetch{}, ErrFeedFetch
 	}
 
