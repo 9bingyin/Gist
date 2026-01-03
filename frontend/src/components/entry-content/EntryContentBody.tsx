@@ -1,11 +1,10 @@
 import type { RefCallback } from 'react'
-import { memo, useMemo, useRef } from 'react'
-import DOMPurify from 'dompurify'
+import { useRef } from 'react'
 import { useCodeHighlight } from '@/hooks/useCodeHighlight'
 import { useEntryMeta } from '@/hooks/useEntryMeta'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { isSafeUrl } from '@/lib/url'
-import { getProxiedImageUrl } from '@/lib/image-proxy'
+import { ArticleContent } from '@/components/ui/article-content'
 import { AiSummaryBox } from './AiSummaryBox'
 import type { Entry } from '@/types/api'
 
@@ -19,218 +18,6 @@ interface EntryContentBodyProps {
   summaryError?: string | null
 }
 
-interface SanitizedContentProps {
-  content: string | null | undefined
-  articleUrl?: string
-}
-
-const ALLOWED_TAGS = [
-  'p',
-  'br',
-  'strong',
-  'em',
-  'b',
-  'i',
-  'u',
-  's',
-  'h1',
-  'h2',
-  'h3',
-  'h4',
-  'h5',
-  'h6',
-  'ul',
-  'ol',
-  'li',
-  'blockquote',
-  'pre',
-  'code',
-  'a',
-  'img',
-  'figure',
-  'figcaption',
-  'table',
-  'thead',
-  'tbody',
-  'tr',
-  'th',
-  'td',
-  'div',
-  'span',
-  'hr',
-  'sup',
-  'sub',
-  'kbd',
-  'mark',
-  'del',
-  'ins',
-  'small',
-  'caption',
-  'colgroup',
-  'col',
-  'time',
-  'abbr',
-  'cite',
-  'q',
-  'details',
-  'summary',
-  'video',
-  'audio',
-  'source',
-]
-
-const ALLOWED_ATTR = [
-  'href',
-  'src',
-  'alt',
-  'title',
-  'class',
-  'target',
-  'rel',
-  'width',
-  'height',
-  'loading',
-  'decoding',
-  'srcset',
-  'sizes',
-  'id',
-  'lang',
-  'dir',
-  'cite',
-  'datetime',
-  'abbr',
-  'controls',
-  'open',
-  'poster',
-  'preload',
-  'type',
-  'muted',
-  'loop',
-  'autoplay',
-  'playsinline',
-  'colspan',
-  'rowspan',
-]
-
-let hooksBound = false
-
-function ensureBasePurifyHooks() {
-  if (hooksBound) return
-
-  // Only set up hooks that don't require articleUrl context
-  DOMPurify.addHook('afterSanitizeAttributes', (node) => {
-    if (node instanceof HTMLAnchorElement) {
-      node.setAttribute('target', '_blank')
-      node.setAttribute('rel', 'noopener noreferrer')
-    }
-
-    if (node instanceof HTMLImageElement) {
-      node.setAttribute('loading', 'lazy')
-      node.setAttribute('decoding', 'async')
-    }
-  })
-
-  hooksBound = true
-}
-
-function proxySrcset(srcset: string, articleUrl?: string): string {
-  return srcset
-    .split(',')
-    .map((entry) => {
-      const parts = entry.trim().split(/\s+/)
-      if (parts.length >= 1 && parts[0]) {
-        parts[0] = getProxiedImageUrl(parts[0], articleUrl)
-      }
-      return parts.join(' ')
-    })
-    .join(', ')
-}
-
-function proxyImageUrls(fragment: DocumentFragment, articleUrl?: string): void {
-  // Proxy img src and srcset
-  fragment.querySelectorAll('img').forEach((img) => {
-    const src = img.getAttribute('src')
-    if (src) {
-      img.setAttribute('src', getProxiedImageUrl(src, articleUrl))
-    }
-    const srcset = img.getAttribute('srcset')
-    if (srcset) {
-      img.setAttribute('srcset', proxySrcset(srcset, articleUrl))
-    }
-  })
-
-  // Proxy source elements only inside <picture> (responsive images)
-  // Do NOT proxy source inside <video> or <audio> to avoid high bandwidth usage
-  fragment.querySelectorAll('picture > source').forEach((source) => {
-    const srcset = source.getAttribute('srcset')
-    if (srcset) {
-      source.setAttribute('srcset', proxySrcset(srcset, articleUrl))
-    }
-  })
-
-  // Proxy video poster (cover image only, not the video itself)
-  fragment.querySelectorAll('video').forEach((video) => {
-    const poster = video.getAttribute('poster')
-    if (poster) {
-      video.setAttribute('poster', getProxiedImageUrl(poster, articleUrl))
-    }
-  })
-}
-
-function sanitizeContent(content: string, articleUrl?: string): string {
-  ensureBasePurifyHooks()
-
-  // Get DOM fragment instead of string for post-processing
-  const fragment = DOMPurify.sanitize(content, {
-    ALLOWED_TAGS,
-    ALLOWED_ATTR,
-    ADD_ATTR: ['target', 'rel', 'loading', 'decoding'],
-    ALLOW_DATA_ATTR: false,
-    RETURN_DOM_FRAGMENT: true,
-  })
-
-  // Proxy image URLs with articleUrl passed directly (no global state)
-  proxyImageUrls(fragment, articleUrl)
-
-  // Serialize back to string
-  const div = document.createElement('div')
-  div.appendChild(fragment)
-  return div.innerHTML
-}
-
-// Memoized component to prevent re-rendering when parent state changes
-const SanitizedContent = memo(function SanitizedContent({
-  content,
-  articleUrl,
-}: SanitizedContentProps) {
-  const contentRef = useRef<HTMLDivElement>(null)
-
-  const sanitizedHtml = useMemo(() => {
-    if (!content) return ''
-    return sanitizeContent(content, articleUrl)
-  }, [content, articleUrl])
-
-  useCodeHighlight(contentRef, sanitizedHtml)
-
-  const hasContent = sanitizedHtml.trim().length > 0
-
-  if (!hasContent) {
-    return (
-      <div className="rounded-lg border border-dashed border-border p-8 text-center text-muted-foreground">
-        No content available for this article.
-      </div>
-    )
-  }
-
-  return (
-    <div
-      ref={contentRef}
-      className="entry-content-body"
-      dangerouslySetInnerHTML={{ __html: sanitizedHtml }}
-    />
-  )
-})
-
 export function EntryContentBody({
   entry,
   displayTitle,
@@ -242,6 +29,12 @@ export function EntryContentBody({
 }: EntryContentBodyProps) {
   const { publishedLong, readingTime } = useEntryMeta(entry)
   const title = displayTitle ?? entry.title ?? 'Untitled'
+  const contentRef = useRef<HTMLDivElement>(null)
+
+  // Apply code highlighting after content renders
+  useCodeHighlight(contentRef, displayContent ?? '')
+
+  const hasContent = displayContent && displayContent.trim().length > 0
 
   return (
     <ScrollArea
@@ -333,7 +126,15 @@ export function EntryContentBody({
           error={summaryError}
         />
 
-        <SanitizedContent content={displayContent} articleUrl={entry.url} />
+        <div ref={contentRef} className="entry-content-body">
+          {hasContent ? (
+            <ArticleContent content={displayContent} articleUrl={entry.url} />
+          ) : (
+            <div className="rounded-lg border border-dashed border-border p-8 text-center text-muted-foreground">
+              No content available for this article.
+            </div>
+          )}
+        </div>
       </article>
     </ScrollArea>
   )
