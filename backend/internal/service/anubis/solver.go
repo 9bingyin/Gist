@@ -14,6 +14,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"gist/backend/internal/config"
 )
 
 // Challenge represents the Anubis challenge structure
@@ -158,7 +160,7 @@ func (s *Solver) submit(ctx context.Context, originalURL, challengeID, result st
 	if err != nil {
 		return "", time.Time{}, fmt.Errorf("create request: %w", err)
 	}
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+	req.Header.Set("User-Agent", config.ChromeUserAgent)
 
 	// Add initial cookies from the challenge request (required for session)
 	for _, c := range initialCookies {

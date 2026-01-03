@@ -77,7 +77,7 @@ func main() {
 	folderService := service.NewFolderService(folderRepo, feedRepo)
 	feedService := service.NewFeedService(feedRepo, folderRepo, entryRepo, iconService, settingsService, nil, anubisSolver)
 	entryService := service.NewEntryService(entryRepo, feedRepo, folderRepo)
-	readabilityService := service.NewReadabilityService(entryRepo)
+	readabilityService := service.NewReadabilityService(entryRepo, anubisSolver)
 	opmlService := service.NewOPMLService(folderService, feedService, folderRepo, feedRepo)
 	refreshService := service.NewRefreshService(feedRepo, entryRepo, settingsService, nil, anubisSolver)
 
@@ -112,6 +112,7 @@ func main() {
 		defer cancel()
 
 		sched.Stop()
+		readabilityService.Close()
 
 		// Gracefully shutdown the HTTP server
 		if err := router.Shutdown(ctx); err != nil {

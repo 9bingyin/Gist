@@ -14,8 +14,8 @@ const (
 // GistUserAgent identifies as Gist RSS reader
 var GistUserAgent = "Mozilla/5.0 (compatible; " + AppName + "/" + AppVersion + "; +" + AppRepo + ")"
 
-// ChromeUserAgent for image proxy and readability fetching
-const ChromeUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+// ChromeUserAgent for image proxy and readability fetching (must match TLS profile version)
+const ChromeUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36"
 
 // DefaultUserAgent for RSS fetching
 var DefaultUserAgent = GistUserAgent
