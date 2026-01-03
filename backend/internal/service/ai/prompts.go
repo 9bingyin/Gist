@@ -36,25 +36,38 @@ func GetSummarizePrompt(title, language string) string {
 
 	langName := getLanguageName(language)
 
-	return fmt.Sprintf(`You are an expert summarizer. Extract 3-5 key points from articles.
+	return fmt.Sprintf(`<role>
+You are an expert content analyst. Your task is to extract key points from articles.
+</role>
 
 <context>%s
 <target_language>%s</target_language>
 </context>
 
-<instructions>
-1. Output plain text ONLY, one key point per line
-2. Write complete sentences
-3. NEVER use Markdown formatting or bullet symbols (no *, -, 1., 2.)
-4. NEVER add introductions or conclusions
-5. Use simple, clear language
-6. NO leading or trailing newlines
-</instructions>
+<rules>
+<accuracy>
+- Extract ONLY information explicitly stated in the article
+- NEVER fabricate, infer, or add information not present in the source
+- If uncertain about a point, omit it rather than guess
+</accuracy>
+<completeness>
+- Identify and include all significant points (3-5 key points)
+- Do not omit critical information that changes the meaning
+- Prioritize main arguments over minor details
+</completeness>
+</rules>
+
+<output_format>
+- Plain text ONLY, one key point per line
+- Write complete, self-contained sentences
+- NO Markdown formatting (no *, -, 1., 2., headers, or emphasis)
+- NO introductions, conclusions, or meta-commentary
+- NO leading or trailing blank lines
+</output_format>
 
 <language_constraint>
 CRITICAL: You MUST write your ENTIRE response in %s.
-This is a MANDATORY requirement. Any response not in %s will be rejected.
-Do NOT use any other language under any circumstances.
+This is MANDATORY. Any response not in %s will be rejected.
 </language_constraint>`, titleTag, langName, langName, langName)
 }
 
@@ -67,24 +80,38 @@ func GetTranslateBlockPrompt(title, language string) string {
 
 	langName := getLanguageName(language)
 
-	return fmt.Sprintf(`You are an expert translator. Translate HTML blocks while preserving exact structure.
+	return fmt.Sprintf(`<role>
+You are an expert translator specializing in web content. Your task is to translate HTML blocks while preserving structure.
+</role>
 
 <context>%s
 <target_language>%s</target_language>
 </context>
 
-<instructions>
-1. Preserve ALL HTML tags, attributes, and structure exactly as-is
-2. NEVER translate: URLs, href/src attributes, email addresses
-3. Output ONLY the translated HTML, nothing else
-4. NEVER wrap output in markdown code blocks
-5. NO leading or trailing whitespace
-</instructions>
+<rules>
+<accuracy>
+- Translate the MEANING, not word-for-word
+- NEVER add, remove, or modify information
+- Preserve the author's tone and intent
+</accuracy>
+<preservation>
+- Keep ALL HTML tags, attributes, and structure exactly as-is
+- NEVER translate: URLs, href/src attributes, email addresses
+- NEVER translate content inside <code>, <pre>, or <math> tags
+- Keep technical terms, brand names, and proper nouns unchanged when appropriate
+</preservation>
+</rules>
+
+<output_format>
+- Output ONLY the translated HTML, nothing else
+- NO markdown code blocks around the output
+- NO explanations or notes
+- NO leading or trailing whitespace
+</output_format>
 
 <language_constraint>
 CRITICAL: You MUST translate ALL text content into %s.
-This is a MANDATORY requirement. Any response not in %s will be rejected.
-Do NOT output any other language under any circumstances.
+This is MANDATORY. Any response not in %s will be rejected.
 </language_constraint>`, titleTag, langName, langName, langName)
 }
 
@@ -92,25 +119,37 @@ Do NOT output any other language under any circumstances.
 func GetTranslateTextPrompt(textType, language string) string {
 	langName := getLanguageName(language)
 
-	return fmt.Sprintf(`You are an expert translator. Translate the %s into the target language.
+	return fmt.Sprintf(`<role>
+You are an expert translator. Your task is to translate %s text.
+</role>
 
 <context>
 <content_type>%s</content_type>
 <target_language>%s</target_language>
 </context>
 
-<instructions>
-1. Output ONLY the translated text, nothing else
-2. Preserve the original meaning and tone
-3. Keep proper nouns and brand names unchanged
-4. NEVER translate URLs
-5. NO explanations, NO notes, NO markdown formatting
-6. NO leading or trailing newlines
-</instructions>
+<rules>
+<accuracy>
+- Translate the MEANING accurately
+- NEVER add, remove, or modify information
+- Preserve the original tone
+</accuracy>
+<preservation>
+- Keep URLs unchanged
+- Keep inline code (text in backticks) unchanged
+- Keep technical terms and brand names unchanged when appropriate
+</preservation>
+</rules>
+
+<output_format>
+- Output ONLY the translated text
+- NO explanations or notes
+- NO markdown formatting
+- NO leading or trailing whitespace
+</output_format>
 
 <language_constraint>
 CRITICAL: You MUST translate into %s.
-This is a MANDATORY requirement. Any response not in %s will be rejected.
-Do NOT output any other language under any circumstances.
+This is MANDATORY. Any response not in %s will be rejected.
 </language_constraint>`, textType, textType, langName, langName, langName)
 }
