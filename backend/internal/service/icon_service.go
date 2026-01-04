@@ -13,7 +13,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mmcdole/gofeed"
+
 	"gist/backend/internal/config"
+	"gist/backend/internal/model"
 	"gist/backend/internal/repository"
 	"gist/backend/internal/service/anubis"
 )
@@ -85,26 +88,27 @@ func (s *iconService) FetchAndSaveIcon(ctx context.Context, feedImageURL, siteUR
 		return iconPath, nil
 	}
 
-	// Download icon
+	// Download icon with fallback:
+	// 1. Feed's own image URL (if provided)
+	// 2. Google Favicon API (which already tries /favicon.ico internally)
 	iconData, err := s.downloadIcon(ctx, iconURL)
 	if err != nil {
-		// Try Google Favicon API as fallback if feed image failed
-		if feedImageURL != "" {
-			fallbackURL := s.buildFaviconURL(siteURL)
-			if fallbackURL != "" {
-				iconData, err = s.downloadIcon(ctx, fallbackURL)
-				if err == nil {
-					// Switch to domain-based filename since we're using favicon
-					iconPath = iconFilename(siteURL)
-					if iconPath == "" {
-						return "", nil
-					}
-					fullPath = filepath.Join(s.dataDir, "icons", iconPath)
+		// Try Google Favicon API as fallback
+		googleURL := s.buildFaviconURL(siteURL)
+		if googleURL != "" && googleURL != iconURL {
+			iconData, err = s.downloadIcon(ctx, googleURL)
+			if err == nil {
+				// Switch to domain-based filename since we're using favicon
+				iconPath = iconFilename(siteURL)
+				if iconPath == "" {
+					return "", nil
 				}
+				fullPath = filepath.Join(s.dataDir, "icons", iconPath)
+			} else {
+				return "", nil // All attempts failed, icon is optional
 			}
-		}
-		if err != nil {
-			return "", nil // Silently fail, icon is optional
+		} else {
+			return "", nil // No valid Google Favicon URL available
 		}
 	}
 
@@ -125,6 +129,8 @@ func (s *iconService) EnsureIcon(ctx context.Context, iconPath, siteURL string) 
 		return nil
 	}
 
+	// Clean to prevent path traversal
+	iconPath = filepath.Clean(iconPath)
 	fullPath := filepath.Join(s.dataDir, "icons", iconPath)
 
 	// Check if file exists
@@ -197,35 +203,19 @@ func (s *iconService) EnsureIconByFeedID(ctx context.Context, feedID int64, icon
 }
 
 func (s *iconService) GetIconPath(filename string) string {
-	return filepath.Join(s.dataDir, "icons", filename)
+	// Clean to prevent path traversal
+	return filepath.Join(s.dataDir, "icons", filepath.Clean(filename))
 }
 
 func (s *iconService) BackfillIcons(ctx context.Context) error {
+	parser := gofeed.NewParser()
+
 	// 1. Fetch icons for feeds without icon_path in DB
 	feeds, err := s.feeds.ListWithoutIcon(ctx)
 	if err != nil {
 		return fmt.Errorf("list feeds without icon: %w", err)
 	}
-
-	for _, feed := range feeds {
-		siteURL := ""
-		if feed.SiteURL != nil {
-			siteURL = *feed.SiteURL
-		}
-		if siteURL == "" {
-			siteURL = feed.URL
-		}
-
-		iconPath, err := s.FetchAndSaveIcon(ctx, "", siteURL)
-		if err != nil {
-			continue // Skip failed feeds
-		}
-		if iconPath != "" {
-			if err := s.feeds.UpdateIconPath(ctx, feed.ID, iconPath); err != nil {
-				continue
-			}
-		}
-	}
+	s.fetchIconsForFeeds(ctx, parser, feeds)
 
 	// 2. Re-download missing or stale icon files
 	allFeeds, err := s.feeds.List(ctx, nil)
@@ -236,39 +226,68 @@ func (s *iconService) BackfillIcons(ctx context.Context) error {
 	const iconMaxAge = 30 * 24 * time.Hour // 30 days
 	now := time.Now()
 
+	var feedsNeedRefetch []int64
 	for _, feed := range allFeeds {
 		if feed.IconPath == nil || *feed.IconPath == "" {
 			continue
 		}
 
-		fullPath := filepath.Join(s.dataDir, "icons", *feed.IconPath)
-		info, err := os.Stat(fullPath)
-
-		needRefresh := false
-		if err != nil {
-			// File missing
-			needRefresh = true
-		} else if now.Sub(info.ModTime()) > iconMaxAge {
-			// File older than 30 days
-			needRefresh = true
-		}
-
+		// Clean to prevent path traversal
+		cleanPath := filepath.Clean(*feed.IconPath)
+		fullPath := filepath.Join(s.dataDir, "icons", cleanPath)
+		info, statErr := os.Stat(fullPath)
+		needRefresh := statErr != nil || now.Sub(info.ModTime()) > iconMaxAge
 		if !needRefresh {
 			continue
 		}
 
-		siteURL := ""
-		if feed.SiteURL != nil {
-			siteURL = *feed.SiteURL
-		}
-		if siteURL == "" {
-			siteURL = feed.URL
+		// Hash-based icons need re-fetch via RSS parsing
+		if isHashFilename(*feed.IconPath) {
+			feedsNeedRefetch = append(feedsNeedRefetch, feed.ID)
+			continue
 		}
 
+		// Domain-based icons can be re-downloaded directly
+		siteURL := feed.URL
+		if feed.SiteURL != nil && *feed.SiteURL != "" {
+			siteURL = *feed.SiteURL
+		}
 		_ = s.EnsureIcon(ctx, *feed.IconPath, siteURL)
 	}
 
+	// 3. Re-fetch hash-based icons by clearing DB and re-parsing RSS
+	if len(feedsNeedRefetch) > 0 {
+		for _, feedID := range feedsNeedRefetch {
+			_ = s.feeds.UpdateIconPath(ctx, feedID, "")
+		}
+		if feedsToRefetch, err := s.feeds.ListWithoutIcon(ctx); err == nil {
+			s.fetchIconsForFeeds(ctx, parser, feedsToRefetch)
+		}
+	}
+
 	return nil
+}
+
+// fetchIconsForFeeds parses RSS feeds to get imageURL and fetches icons
+func (s *iconService) fetchIconsForFeeds(ctx context.Context, parser *gofeed.Parser, feeds []model.Feed) {
+	for _, feed := range feeds {
+		siteURL := feed.URL
+		if feed.SiteURL != nil && *feed.SiteURL != "" {
+			siteURL = *feed.SiteURL
+		}
+
+		// Try to parse feed to get imageURL from RSS
+		imageURL := ""
+		if parsed, err := parser.ParseURLWithContext(feed.URL, ctx); err == nil && parsed.Image != nil {
+			imageURL = strings.TrimSpace(parsed.Image.URL)
+		}
+
+		iconPath, err := s.FetchAndSaveIcon(ctx, imageURL, siteURL)
+		if err != nil || iconPath == "" {
+			continue
+		}
+		_ = s.feeds.UpdateIconPath(ctx, feed.ID, iconPath)
+	}
 }
 
 func (s *iconService) buildFaviconURL(siteURL string) string {
@@ -300,7 +319,8 @@ func iconFilename(siteURL string) string {
 		return ""
 	}
 
-	return parsed.Hostname() + ".png"
+	// Clean to prevent path traversal
+	return filepath.Clean(parsed.Hostname()) + ".png"
 }
 
 func (s *iconService) downloadIcon(ctx context.Context, iconURL string) ([]byte, error) {
