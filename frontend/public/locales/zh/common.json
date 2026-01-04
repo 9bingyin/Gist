@@ -128,7 +128,8 @@
     "open_original": "打开原文",
     "close": "关闭",
     "min_read": "{{mins}} 分钟阅读",
-    "ai_summary": "AI 摘要"
+    "ai_summary": "AI 摘要",
+    "select_article": "选择一篇文章开始阅读"
   },
   "ai_settings": {
     "provider": "AI 提供商",

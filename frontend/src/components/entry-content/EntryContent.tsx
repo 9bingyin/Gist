@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useEntry, useMarkAsRead, useMarkAsStarred } from '@/hooks/useEntries'
 import { useAISettings } from '@/hooks/useAISettings'
 import { useGeneralSettings } from '@/hooks/useGeneralSettings'
@@ -14,6 +15,7 @@ import {
   type TranslateBlockData,
 } from '@/api'
 import { needsTranslation } from '@/lib/language-detect'
+import { stripHtml } from '@/lib/html-utils'
 import { useTranslationStore, translationActions } from '@/stores/translation-store'
 import { translateArticlesBatch } from '@/services/translation-service'
 import { EntryContentHeader } from './EntryContentHeader'
@@ -402,7 +404,7 @@ export function EntryContent({ entryId, isMobile, onBack }: EntryContentProps) {
     translationActions.enable(entry.id)
 
     // Also trigger title/summary translation for list view
-    const summary = entry.content ? stripHtmlForCheck(entry.content) : null
+    const summary = entry.content ? stripHtml(entry.content).slice(0, 200) : null
     if (needsTranslation(entry.title || '', summary, targetLanguage)) {
       translateArticlesBatch(
         [{ id: entry.id, title: entry.title || '', summary }],
@@ -466,7 +468,7 @@ export function EntryContent({ entryId, isMobile, onBack }: EntryContentProps) {
 
     // Check if translation is needed
     const content = isReadableActive ? readableContent : entry.content
-    const summary = content ? stripHtmlForCheck(content) : null
+    const summary = content ? stripHtml(content).slice(0, 200) : null
     if (!needsTranslation(entry.title || '', summary, targetLanguage)) {
       return
     }
@@ -557,6 +559,7 @@ export function EntryContent({ entryId, isMobile, onBack }: EntryContentProps) {
 }
 
 function EntryContentEmpty() {
+  const { t } = useTranslation()
   return (
     <div className="flex h-full flex-col">
       <div className="flex h-12 items-center px-6" />
@@ -575,7 +578,7 @@ function EntryContentEmpty() {
               d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
             />
           </svg>
-          <p className="mt-2 text-sm">Select an article to read</p>
+          <p className="mt-2 text-sm">{t('entry.select_article')}</p>
         </div>
       </div>
     </div>
@@ -610,9 +613,4 @@ function EntryContentSkeleton() {
       </div>
     </div>
   )
-}
-
-function stripHtmlForCheck(html: string): string {
-  const doc = new DOMParser().parseFromString(html, 'text/html')
-  return (doc.body.textContent || '').slice(0, 200)
 }

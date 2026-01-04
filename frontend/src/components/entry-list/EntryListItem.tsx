@@ -1,7 +1,10 @@
 import { forwardRef, useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
+import { formatRelativeTime } from '@/lib/date-utils'
+import { stripHtml } from '@/lib/html-utils'
 import { useTranslationStore } from '@/stores/translation-store'
+import { FeedIcon } from '@/components/ui/feed-icon'
 import type { Entry, Feed } from '@/types/api'
 
 interface EntryListItemProps {
@@ -105,38 +108,3 @@ export const EntryListItem = forwardRef<HTMLDivElement, EntryListItemProps>(
     )
   }
 )
-
-function FeedIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-      <path d="M6.18 15.64a2.18 2.18 0 1 1 0 4.36 2.18 2.18 0 0 1 0-4.36zM4 4.44A15.56 15.56 0 0 1 19.56 20h-2.83A12.73 12.73 0 0 0 4 7.27V4.44zm0 5.66a9.9 9.9 0 0 1 9.9 9.9h-2.83A7.07 7.07 0 0 0 4 12.93V10.1z" />
-    </svg>
-  )
-}
-
-function stripHtml(html: string): string {
-  const doc = new DOMParser().parseFromString(html, 'text/html')
-  return doc.body.textContent || ''
-}
-
-function formatRelativeTime(dateString: string, t: (key: string, options?: any) => string): string {
-  const date = new Date(dateString)
-  const now = new Date()
-  const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000)
-
-  if (diffInSeconds < 60) return t('add_feed.just_now')
-  if (diffInSeconds < 3600) {
-    const minutes = Math.floor(diffInSeconds / 60)
-    return t('add_feed.minutes_ago', { count: minutes })
-  }
-  if (diffInSeconds < 86400) {
-    const hours = Math.floor(diffInSeconds / 3600)
-    return t('add_feed.hours_ago', { count: hours })
-  }
-  if (diffInSeconds < 604800) {
-    const days = Math.floor(diffInSeconds / 86400)
-    return t('add_feed.days_ago', { count: days })
-  }
-
-  return date.toLocaleDateString()
-}

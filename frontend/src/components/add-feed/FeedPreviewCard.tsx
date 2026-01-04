@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
+import { formatRelativeTime } from '@/lib/date-utils'
 import { isSafeUrl, getSafeHostname } from '@/lib/url'
 import { getProxiedImageUrl } from '@/lib/image-proxy'
 import type { FeedPreview, Folder } from '@/types/api'
@@ -257,28 +258,4 @@ export function FeedPreviewCard({ feed, folders, onSubscribe, isLoading = false 
       </div>
     </div>
   )
-}
-
-function formatRelativeTime(dateString: string, t: (key: string, options?: any) => string): string {
-  const date = new Date(dateString)
-  const now = new Date()
-  const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000)
-
-  if (diffInSeconds < 60) {
-    return t('add_feed.just_now')
-  }
-  if (diffInSeconds < 3600) {
-    const minutes = Math.floor(diffInSeconds / 60)
-    return t('add_feed.minutes_ago', { count: minutes })
-  }
-  if (diffInSeconds < 86400) {
-    const hours = Math.floor(diffInSeconds / 3600)
-    return t('add_feed.hours_ago', { count: hours })
-  }
-  if (diffInSeconds < 604800) {
-    const days = Math.floor(diffInSeconds / 86400)
-    return t('add_feed.days_ago', { count: days })
-  }
-
-  return date.toLocaleDateString()
 }

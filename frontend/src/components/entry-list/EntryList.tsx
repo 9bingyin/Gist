@@ -6,6 +6,7 @@ import { useFeeds } from '@/hooks/useFeeds'
 import { useFolders } from '@/hooks/useFolders'
 import { useAISettings } from '@/hooks/useAISettings'
 import { selectionToParams, type SelectionType } from '@/hooks/useSelection'
+import { stripHtml } from '@/lib/html-utils'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { EntryListItem } from './EntryListItem'
 import { EntryListHeader } from './EntryListHeader'
@@ -116,7 +117,7 @@ export function EntryList({
       .map((entry) => ({
         id: entry.id,
         title: entry.title || '',
-        summary: entry.content ? stripHtmlForSummary(entry.content) : null,
+        summary: entry.content ? stripHtml(entry.content).slice(0, 200) : null,
       }))
 
     // Mark as translated to prevent re-translating
@@ -145,7 +146,7 @@ export function EntryList({
       if (translationActions.isDisabled(entry.id)) return
 
       // Check if needs translation
-      const summary = entry.content ? stripHtmlForSummary(entry.content) : null
+      const summary = entry.content ? stripHtml(entry.content).slice(0, 200) : null
       if (!needsTranslation(entry.title || '', summary, targetLanguage)) {
         translatedEntries.current.add(entry.id)
         return
@@ -326,9 +327,4 @@ function LoadingMore() {
       </svg>
     </div>
   )
-}
-
-function stripHtmlForSummary(html: string): string {
-  const doc = new DOMParser().parseFromString(html, 'text/html')
-  return (doc.body.textContent || '').slice(0, 200)
 }

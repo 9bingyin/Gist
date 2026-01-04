@@ -129,7 +129,8 @@
     "open_original": "Open original",
     "close": "Close",
     "min_read": "{{mins}} min read",
-    "ai_summary": "AI Summary"
+    "ai_summary": "AI Summary",
+    "select_article": "Select an article to read"
   },
   "ai_settings": {
     "provider": "AI Provider",
