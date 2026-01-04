@@ -23,13 +23,7 @@ interface SidebarHeaderProps {
 
 function GistLogo({ className }: { className?: string }) {
   return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      fill="currentColor"
-    >
-      <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
-    </svg>
+    <img src="/logo.svg" alt="Gist" className={cn(className, 'rounded')} />
   )
 }
 
@@ -65,8 +59,8 @@ export function SidebarHeader({
   return (
     <div className="flex items-center justify-between px-3 pt-2.5 pb-2">
       {/* Logo and title */}
-      <div className="flex items-center gap-1.5 text-lg font-semibold">
-        <GistLogo className="size-7 text-primary" />
+      <div className="flex items-center gap-1 text-lg font-semibold">
+        <GistLogo className="mr-1 size-6" />
         <span className="tracking-tight">{title}</span>
       </div>
 

@@ -113,9 +113,7 @@ export function SettingsSidebar({ activeTab, onTabChange }: SettingsSidebarProps
     <div className="flex min-w-[180px] max-w-[200px] flex-col border-r border-border bg-sidebar px-2 py-6">
       {/* Logo */}
       <div className="mb-4 flex h-8 items-center gap-2 px-2 font-bold text-foreground">
-        <svg className="size-6" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
-        </svg>
+        <img src="/logo.svg" alt="Gist" className="size-6 rounded" />
         <span className="text-lg">Gist</span>
       </div>
 
