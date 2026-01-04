@@ -1,16 +1,17 @@
-import { useState, type ReactNode } from 'react'
+import { useCallback, useRef, type ReactNode } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
+  ContextMenuTrigger,
+} from '@/components/ui/context-menu'
+import { useContextMenu } from '@/hooks/useContextMenu'
 import { useCategoryState } from '@/hooks/useCategoryState'
 import { feedItemStyles, sidebarItemIconStyles } from './styles'
 import type { ContentType } from '@/types/api'
@@ -43,16 +44,6 @@ function ChevronIcon({ className }: { className?: string }) {
   )
 }
 
-function MoreHorizontalIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="1" />
-      <circle cx="19" cy="12" r="1" />
-      <circle cx="5" cy="12" r="1" />
-    </svg>
-  )
-}
-
 export function FeedCategory({
   name,
   folderId,
@@ -66,82 +57,89 @@ export function FeedCategory({
 }: FeedCategoryProps) {
   const { t } = useTranslation()
   const [open, , toggle] = useCategoryState(name, defaultOpen)
-  const [menuOpen, setMenuOpen] = useState(false)
+  const triggerRef = useRef<HTMLDivElement>(null)
+
+  const handleContextMenu = useCallback(
+    (e: React.MouseEvent | { pageX: number; pageY: number }) => {
+      // Programmatically trigger the context menu for long press
+      if (!('button' in e) && triggerRef.current) {
+        triggerRef.current.dispatchEvent(
+          new MouseEvent('contextmenu', {
+            bubbles: true,
+            clientX: e.pageX,
+            clientY: e.pageY,
+          })
+        )
+      }
+    },
+    []
+  )
+
+  const contextMenuProps = useContextMenu({
+    onContextMenu: handleContextMenu,
+  })
 
   return (
     <div>
       {/* Category header */}
-      <div
-        data-active={isSelected}
-        className={cn(feedItemStyles, 'group relative py-0.5 pl-2.5 pr-7')}
-        onClick={onSelect}
-      >
-        {/* Arrow button - only this toggles expand/collapse */}
-        <button
-          type="button"
-          className="flex h-full items-center"
-          tabIndex={-1}
-          onClick={(e) => {
-            e.stopPropagation()
-            toggle()
-          }}
-        >
-          <span className={sidebarItemIconStyles}>
-            <ChevronIcon className={cn('size-4 transition-transform duration-200', open && 'rotate-90')} />
-          </span>
-        </button>
-        {/* Folder name - clicking selects the folder */}
-        <span className="grow truncate font-semibold">{name}</span>
-        {unreadCount !== undefined && unreadCount > 0 && (
-          <span className={cn(
-            'ml-2 shrink-0 text-[0.65rem] tabular-nums text-muted-foreground transition-opacity',
-            menuOpen && 'opacity-0'
-          )}>
-            {unreadCount}
-          </span>
-        )}
-
-        {/* Hover Menu */}
-        <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
-          <DropdownMenuTrigger asChild>
+      <ContextMenu>
+        <ContextMenuTrigger asChild ref={triggerRef}>
+          <div
+            data-active={isSelected}
+            className={cn(feedItemStyles, 'group relative py-0.5 pl-2.5 pr-2')}
+            onClick={onSelect}
+            {...contextMenuProps}
+          >
+            {/* Arrow button - only this toggles expand/collapse */}
             <button
-              className={cn(
-                'absolute right-1 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-md opacity-0 transition-opacity hover:bg-accent group-hover:opacity-100',
-                menuOpen && 'opacity-100'
-              )}
-              onClick={(e) => e.stopPropagation()}
+              type="button"
+              className="flex h-full items-center"
+              tabIndex={-1}
+              onClick={(e) => {
+                e.stopPropagation()
+                toggle()
+              }}
             >
-              <MoreHorizontalIcon className="size-4" />
+              <span className={sidebarItemIconStyles}>
+                <ChevronIcon className={cn('size-4 transition-transform duration-200', open && 'rotate-90')} />
+              </span>
             </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-            {onChangeType && (
-              <DropdownMenuSub>
-                <DropdownMenuSubTrigger>{t('actions.change_type')}</DropdownMenuSubTrigger>
-                <DropdownMenuSubContent>
-                  <DropdownMenuItem onClick={() => onChangeType(folderId, 'article')}>
-                    {t('content_type.article')}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => onChangeType(folderId, 'picture')}>
-                    {t('content_type.picture')}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => onChangeType(folderId, 'notification')}>
-                    {t('content_type.notification')}
-                  </DropdownMenuItem>
-                </DropdownMenuSubContent>
-              </DropdownMenuSub>
+            {/* Folder name - clicking selects the folder */}
+            <span className="grow truncate font-semibold">{name}</span>
+            {unreadCount !== undefined && unreadCount > 0 && (
+              <span className="ml-2 shrink-0 text-[0.65rem] tabular-nums text-muted-foreground">
+                {unreadCount}
+              </span>
             )}
-            {onDelete && (
-              <DropdownMenuItem
-                className="text-destructive focus:text-destructive"
-                onClick={() => onDelete(folderId)}
-              >
-                {t('actions.delete')}
-              </DropdownMenuItem>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
+          </div>
+        </ContextMenuTrigger>
+        <ContextMenuContent>
+          {onChangeType && (
+            <ContextMenuSub>
+              <ContextMenuSubTrigger>{t('actions.change_type')}</ContextMenuSubTrigger>
+              <ContextMenuSubContent>
+                <ContextMenuItem onClick={() => onChangeType(folderId, 'article')}>
+                  {t('content_type.article')}
+                </ContextMenuItem>
+                <ContextMenuItem onClick={() => onChangeType(folderId, 'picture')}>
+                  {t('content_type.picture')}
+                </ContextMenuItem>
+                <ContextMenuItem onClick={() => onChangeType(folderId, 'notification')}>
+                  {t('content_type.notification')}
+                </ContextMenuItem>
+              </ContextMenuSubContent>
+            </ContextMenuSub>
+          )}
+          {onDelete && (
+            <ContextMenuItem
+              className="text-destructive focus:text-destructive"
+              onClick={() => onDelete(folderId)}
+            >
+              {t('actions.delete')}
+            </ContextMenuItem>
+          )}
+        </ContextMenuContent>
+      </ContextMenu>
 
       {/* Children list with animation */}
       <AnimatePresence initial={false}>

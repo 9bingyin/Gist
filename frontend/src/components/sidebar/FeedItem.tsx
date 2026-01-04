@@ -1,15 +1,16 @@
-import { useState } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
+  ContextMenuTrigger,
+} from '@/components/ui/context-menu'
+import { useContextMenu } from '@/hooks/useContextMenu'
 import { feedItemStyles, sidebarItemIconStyles } from './styles'
 import type { ContentType, Folder } from '@/types/api'
 
@@ -56,16 +57,6 @@ function ErrorIcon({ className, title }: { className?: string; title?: string })
   )
 }
 
-function MoreHorizontalIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="1" />
-      <circle cx="19" cy="12" r="1" />
-      <circle cx="5" cy="12" r="1" />
-    </svg>
-  )
-}
-
 export function FeedItem({
   name,
   feedId,
@@ -83,100 +74,107 @@ export function FeedItem({
 }: FeedItemProps) {
   const { t } = useTranslation()
   const [iconError, setIconError] = useState(false)
-  const [menuOpen, setMenuOpen] = useState(false)
   const hasError = !!errorMessage
+  const triggerRef = useRef<HTMLSpanElement>(null)
+
+  const handleContextMenu = useCallback(
+    (e: React.MouseEvent | { pageX: number; pageY: number }) => {
+      // Programmatically trigger the context menu for long press
+      if (!('button' in e) && triggerRef.current) {
+        triggerRef.current.dispatchEvent(
+          new MouseEvent('contextmenu', {
+            bubbles: true,
+            clientX: e.pageX,
+            clientY: e.pageY,
+          })
+        )
+      }
+    },
+    []
+  )
+
+  const contextMenuProps = useContextMenu({
+    onContextMenu: handleContextMenu,
+  })
 
   return (
-    <div
-      data-active={isActive}
-      className={cn(feedItemStyles, 'group relative py-0.5 pr-7', className)}
-      onClick={onClick}
-    >
-      <div className={cn('flex min-w-0 flex-1 items-center gap-2', hasError && 'text-red-500 dark:text-red-400')}>
-        <span className={sidebarItemIconStyles}>
-          {iconPath && !iconError ? (
-            <img
-              src={`/icons/${iconPath}`}
-              alt=""
-              className="size-4 rounded-sm object-cover"
-              onError={() => setIconError(true)}
-            />
-          ) : (
-            <RssIcon className="size-4 text-muted-foreground" />
+    <ContextMenu>
+      <ContextMenuTrigger asChild ref={triggerRef}>
+        <div
+          data-active={isActive}
+          className={cn(feedItemStyles, 'group relative py-0.5 pr-2', className)}
+          onClick={onClick}
+          {...contextMenuProps}
+        >
+          <div className={cn('flex min-w-0 flex-1 items-center gap-2', hasError && 'text-red-500 dark:text-red-400')}>
+            <span className={sidebarItemIconStyles}>
+              {iconPath && !iconError ? (
+                <img
+                  src={`/icons/${iconPath}`}
+                  alt=""
+                  className="size-4 rounded-sm object-cover"
+                  onError={() => setIconError(true)}
+                />
+              ) : (
+                <RssIcon className="size-4 text-muted-foreground" />
+              )}
+            </span>
+            <span className="truncate">{name}</span>
+          </div>
+          {hasError && <ErrorIcon className="shrink-0 size-3.5 text-red-500" title={errorMessage} />}
+          {unreadCount !== undefined && unreadCount > 0 && !hasError && (
+            <span className="shrink-0 text-[0.65rem] tabular-nums text-muted-foreground">
+              {unreadCount}
+            </span>
           )}
-        </span>
-        <span className="truncate">{name}</span>
-      </div>
-      {hasError && <ErrorIcon className="shrink-0 size-3.5 text-red-500" title={errorMessage} />}
-      {unreadCount !== undefined && unreadCount > 0 && (
-        <span className={cn(
-          'shrink-0 text-[0.65rem] tabular-nums text-muted-foreground transition-opacity',
-          (menuOpen || hasError) && 'opacity-0'
-        )}>
-          {unreadCount}
-        </span>
-      )}
-
-      {/* Hover Menu */}
-      <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
-        <DropdownMenuTrigger asChild>
-          <button
-            className={cn(
-              'absolute right-1 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-md opacity-0 transition-opacity hover:bg-accent group-hover:opacity-100',
-              menuOpen && 'opacity-100'
-            )}
-            onClick={(e) => e.stopPropagation()}
+        </div>
+      </ContextMenuTrigger>
+      <ContextMenuContent>
+        {onRefresh && (
+          <ContextMenuItem onClick={() => onRefresh(feedId)}>
+            {t('actions.refresh')}
+          </ContextMenuItem>
+        )}
+        {onMoveToFolder && (
+          <ContextMenuSub>
+            <ContextMenuSubTrigger>{t('actions.move_to_folder')}</ContextMenuSubTrigger>
+            <ContextMenuSubContent>
+              <ContextMenuItem onClick={() => onMoveToFolder(feedId, null)}>
+                {t('actions.no_folder')}
+              </ContextMenuItem>
+              {folders.map((folder) => (
+                <ContextMenuItem key={folder.id} onClick={() => onMoveToFolder(feedId, folder.id)}>
+                  {folder.name}
+                </ContextMenuItem>
+              ))}
+            </ContextMenuSubContent>
+          </ContextMenuSub>
+        )}
+        {onChangeType && (
+          <ContextMenuSub>
+            <ContextMenuSubTrigger>{t('actions.change_type')}</ContextMenuSubTrigger>
+            <ContextMenuSubContent>
+              <ContextMenuItem onClick={() => onChangeType(feedId, 'article')}>
+                {t('content_type.article')}
+              </ContextMenuItem>
+              <ContextMenuItem onClick={() => onChangeType(feedId, 'picture')}>
+                {t('content_type.picture')}
+              </ContextMenuItem>
+              <ContextMenuItem onClick={() => onChangeType(feedId, 'notification')}>
+                {t('content_type.notification')}
+              </ContextMenuItem>
+            </ContextMenuSubContent>
+          </ContextMenuSub>
+        )}
+        {onDelete && (
+          <ContextMenuItem
+            className="text-destructive focus:text-destructive"
+            onClick={() => onDelete(feedId)}
           >
-            <MoreHorizontalIcon className="size-4" />
-          </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-          {onRefresh && (
-            <DropdownMenuItem onClick={() => onRefresh(feedId)}>
-              {t('actions.refresh')}
-            </DropdownMenuItem>
-          )}
-          {onMoveToFolder && (
-            <DropdownMenuSub>
-              <DropdownMenuSubTrigger>{t('actions.move_to_folder')}</DropdownMenuSubTrigger>
-              <DropdownMenuSubContent>
-                <DropdownMenuItem onClick={() => onMoveToFolder(feedId, null)}>
-                  {t('actions.no_folder')}
-                </DropdownMenuItem>
-                {folders.map((folder) => (
-                  <DropdownMenuItem key={folder.id} onClick={() => onMoveToFolder(feedId, folder.id)}>
-                    {folder.name}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuSubContent>
-            </DropdownMenuSub>
-          )}
-          {onChangeType && (
-            <DropdownMenuSub>
-              <DropdownMenuSubTrigger>{t('actions.change_type')}</DropdownMenuSubTrigger>
-              <DropdownMenuSubContent>
-                <DropdownMenuItem onClick={() => onChangeType(feedId, 'article')}>
-                  {t('content_type.article')}
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => onChangeType(feedId, 'picture')}>
-                  {t('content_type.picture')}
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => onChangeType(feedId, 'notification')}>
-                  {t('content_type.notification')}
-                </DropdownMenuItem>
-              </DropdownMenuSubContent>
-            </DropdownMenuSub>
-          )}
-          {onDelete && (
-            <DropdownMenuItem
-              className="text-destructive focus:text-destructive"
-              onClick={() => onDelete(feedId)}
-            >
-              {t('actions.delete')}
-            </DropdownMenuItem>
-          )}
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </div>
+            {t('actions.delete')}
+          </ContextMenuItem>
+        )}
+      </ContextMenuContent>
+    </ContextMenu>
   )
 }
