@@ -60,10 +60,12 @@ type aiTestResponse struct {
 
 type generalSettingsResponse struct {
 	FallbackUserAgent string `json:"fallbackUserAgent"`
+	AutoReadability   bool   `json:"autoReadability"`
 }
 
 type generalSettingsRequest struct {
 	FallbackUserAgent string `json:"fallbackUserAgent"`
+	AutoReadability   bool   `json:"autoReadability"`
 }
 
 func NewSettingsHandler(service service.SettingsService) *SettingsHandler {
@@ -187,7 +189,7 @@ func (h *SettingsHandler) TestAI(c echo.Context) error {
 
 // GetGeneralSettings returns the general settings.
 // @Summary Get general settings
-// @Description Get general application settings including fallback user agent
+// @Description Get general application settings including fallback user agent and auto readability
 // @Tags settings
 // @Produce json
 // @Success 200 {object} generalSettingsResponse
@@ -202,6 +204,7 @@ func (h *SettingsHandler) GetGeneralSettings(c echo.Context) error {
 
 	return c.JSON(http.StatusOK, generalSettingsResponse{
 		FallbackUserAgent: settings.FallbackUserAgent,
+		AutoReadability:   settings.AutoReadability,
 	})
 }
 
@@ -224,6 +227,7 @@ func (h *SettingsHandler) UpdateGeneralSettings(c echo.Context) error {
 
 	settings := &service.GeneralSettings{
 		FallbackUserAgent: req.FallbackUserAgent,
+		AutoReadability:   req.AutoReadability,
 	}
 
 	if err := h.service.SetGeneralSettings(c.Request().Context(), settings); err != nil {

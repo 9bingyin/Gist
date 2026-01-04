@@ -1,21 +1,26 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useQueryClient } from '@tanstack/react-query'
 import { useTheme, type Theme } from '@/hooks/useTheme'
 import { getGeneralSettings, updateGeneralSettings } from '@/api'
 import { cn } from '@/lib/utils'
+import { Switch } from '@/components/ui/switch'
 
 type Language = 'zh' | 'en'
 
 export function GeneralSettings() {
   const { t, i18n } = useTranslation()
   const { theme, setTheme } = useTheme()
+  const queryClient = useQueryClient()
   const [fallbackUA, setFallbackUA] = useState('')
+  const [autoReadability, setAutoReadability] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle')
 
   useEffect(() => {
     getGeneralSettings().then((settings) => {
       setFallbackUA(settings.fallbackUserAgent || '')
+      setAutoReadability(settings.autoReadability || false)
     }).catch(() => {
       // ignore
     })
@@ -25,7 +30,7 @@ export function GeneralSettings() {
     setIsSaving(true)
     setSaveStatus('idle')
     try {
-      await updateGeneralSettings({ fallbackUserAgent: fallbackUA })
+      await updateGeneralSettings({ fallbackUserAgent: fallbackUA, autoReadability })
       setSaveStatus('success')
       setTimeout(() => setSaveStatus('idle'), 2000)
     } catch {
@@ -34,6 +39,17 @@ export function GeneralSettings() {
       setIsSaving(false)
     }
   }
+
+  const handleAutoReadabilityChange = useCallback(async (checked: boolean) => {
+    setAutoReadability(checked)
+    try {
+      await updateGeneralSettings({ fallbackUserAgent: fallbackUA, autoReadability: checked })
+      queryClient.invalidateQueries({ queryKey: ['generalSettings'] })
+    } catch {
+      // Revert on error
+      setAutoReadability(!checked)
+    }
+  }, [fallbackUA, queryClient])
 
   const themeOptions: { value: Theme; label: string; icon: React.ReactNode }[] = [
     {
@@ -150,6 +166,20 @@ export function GeneralSettings() {
               ))}
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* Auto Readability Section */}
+      <section>
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-sm font-medium">{t('settings.auto_readability')}</div>
+            <div className="text-xs text-muted-foreground">{t('settings.auto_readability_description')}</div>
+          </div>
+          <Switch
+            checked={autoReadability}
+            onCheckedChange={handleAutoReadabilityChange}
+          />
         </div>
       </section>
 

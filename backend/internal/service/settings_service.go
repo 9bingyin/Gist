@@ -26,6 +26,7 @@ type AISettings struct {
 // GeneralSettings holds general application settings.
 type GeneralSettings struct {
 	FallbackUserAgent string `json:"fallbackUserAgent"`
+	AutoReadability   bool   `json:"autoReadability"`
 }
 
 // Setting keys
@@ -43,6 +44,7 @@ const (
 	keyAIRateLimit       = "ai.rate_limit"
 
 	keyFallbackUserAgent = "general.fallback_user_agent"
+	keyAutoReadability   = "general.auto_readability"
 )
 
 // SettingsService provides settings management.
@@ -286,6 +288,9 @@ func (s *settingsService) GetGeneralSettings(ctx context.Context) (*GeneralSetti
 	if val, err := s.getString(ctx, keyFallbackUserAgent); err == nil {
 		settings.FallbackUserAgent = val
 	}
+	if val, err := s.getString(ctx, keyAutoReadability); err == nil && val == "true" {
+		settings.AutoReadability = true
+	}
 
 	return settings, nil
 }
@@ -294,6 +299,13 @@ func (s *settingsService) GetGeneralSettings(ctx context.Context) (*GeneralSetti
 func (s *settingsService) SetGeneralSettings(ctx context.Context, settings *GeneralSettings) error {
 	if err := s.repo.Set(ctx, keyFallbackUserAgent, settings.FallbackUserAgent); err != nil {
 		return fmt.Errorf("set fallback user agent: %w", err)
+	}
+	autoReadabilityVal := "false"
+	if settings.AutoReadability {
+		autoReadabilityVal = "true"
+	}
+	if err := s.repo.Set(ctx, keyAutoReadability, autoReadabilityVal); err != nil {
+		return fmt.Errorf("set auto readability: %w", err)
 	}
 	return nil
 }

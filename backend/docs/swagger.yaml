@@ -289,11 +289,15 @@ definitions:
     type: object
   internal_handler.generalSettingsRequest:
     properties:
+      autoReadability:
+        type: boolean
       fallbackUserAgent:
         type: string
     type: object
   internal_handler.generalSettingsResponse:
     properties:
+      autoReadability:
+        type: boolean
       fallbackUserAgent:
         type: string
     type: object
@@ -1227,6 +1231,7 @@ paths:
   /settings/general:
     get:
       description: Get general application settings including fallback user agent
+        and auto readability
       produces:
       - application/json
       responses:

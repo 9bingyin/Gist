@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { useEntry, useMarkAsRead, useMarkAsStarred } from '@/hooks/useEntries'
 import { useAISettings } from '@/hooks/useAISettings'
+import { useGeneralSettings } from '@/hooks/useGeneralSettings'
 import { useEntryContentScroll } from '@/hooks/useEntryContentScroll'
 import {
   fetchReadableContent,
@@ -27,12 +28,14 @@ interface EntryContentProps {
 export function EntryContent({ entryId, isMobile, onBack }: EntryContentProps) {
   const { data: entry, isLoading } = useEntry(entryId)
   const { data: aiSettings } = useAISettings()
+  const { data: generalSettings } = useGeneralSettings()
   const { mutate: markAsRead } = useMarkAsRead()
   const { mutate: markAsStarred } = useMarkAsStarred()
   const { scrollRef, isAtTop } = useEntryContentScroll(entryId)
 
   const autoTranslate = aiSettings?.autoTranslate ?? false
   const targetLanguage = aiSettings?.summaryLanguage ?? 'zh-CN'
+  const autoReadability = generalSettings?.autoReadability ?? false
 
   const [isReadableLoading, setIsReadableLoading] = useState(false)
   const [localReadableContent, setLocalReadableContent] = useState<string | null>(null)
@@ -93,6 +96,11 @@ export function EntryContent({ entryId, isMobile, onBack }: EntryContentProps) {
     translateRequestedRef.current = false
     prevTranslateReadableRef.current = false
     manuallyDisabledRef.current = false
+
+    // Reset readability state
+    setLocalReadableContent(null)
+    setShowReadable(false)
+    setReadableError(null)
   }, [entryId])
 
   const readableContent = localReadableContent || entry?.readableContent
@@ -123,6 +131,37 @@ export function EntryContent({ entryId, isMobile, onBack }: EntryContentProps) {
 
   const baseContent = hasReadableContent && showReadable ? readableContent : entry?.content
   const isReadableActive = hasReadableContent && showReadable
+
+  // Auto-enable readability when entry is selected
+  useEffect(() => {
+    if (!autoReadability || !entry || isReadableLoading) return
+    // Skip if already showing readable
+    if (showReadable) return
+
+    // If has cached readable content, show it
+    if (entry.readableContent) {
+      setShowReadable(true)
+      return
+    }
+
+    // If has URL, fetch readable content
+    if (entry.url) {
+      setIsReadableLoading(true)
+      setReadableError(null)
+      fetchReadableContent(entry.id)
+        .then((content) => {
+          setLocalReadableContent(content)
+          setShowReadable(true)
+        })
+        .catch((err) => {
+          const message = err instanceof Error ? err.message : 'Failed to fetch readable content'
+          setReadableError(message)
+        })
+        .finally(() => {
+          setIsReadableLoading(false)
+        })
+    }
+  }, [autoReadability, entry, isReadableLoading, showReadable])
 
   const handleToggleStarred = useCallback(() => {
     if (entry) {

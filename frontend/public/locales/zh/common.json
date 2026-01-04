@@ -54,6 +54,8 @@
     "ai": "AI",
     "data": "数据控制",
     "advanced": "高级",
+    "auto_readability": "自动开启阅读模式",
+    "auto_readability_description": "查看文章时自动切换到阅读模式",
     "fallback_ua": "备用 User-Agent",
     "fallback_ua_description": "当默认 UA 被服务器拒绝时使用的备用 User-Agent（留空表示不使用备用）",
     "fallback_ua_placeholder": "例如: Mozilla/5.0 (Windows NT 10.0; Win64; x64) ...",

@@ -54,6 +54,8 @@
     "ai": "AI",
     "data": "Data Control",
     "advanced": "Advanced",
+    "auto_readability": "Auto Readability",
+    "auto_readability_description": "Automatically switch to reader mode when viewing articles",
     "fallback_ua": "Fallback User-Agent",
     "fallback_ua_description": "User-Agent to use when the default one is rejected by the server (leave empty to disable)",
     "fallback_ua_placeholder": "e.g. Mozilla/5.0 (Windows NT 10.0; Win64; x64) ...",

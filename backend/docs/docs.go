@@ -1258,7 +1258,7 @@ const docTemplate = `{
         },
         "/settings/general": {
             "get": {
-                "description": "Get general application settings including fallback user agent",
+                "description": "Get general application settings including fallback user agent and auto readability",
                 "produces": [
                     "application/json"
                 ],
@@ -1811,6 +1811,9 @@ const docTemplate = `{
         "internal_handler.generalSettingsRequest": {
             "type": "object",
             "properties": {
+                "autoReadability": {
+                    "type": "boolean"
+                },
                 "fallbackUserAgent": {
                     "type": "string"
                 }
@@ -1819,6 +1822,9 @@ const docTemplate = `{
         "internal_handler.generalSettingsResponse": {
             "type": "object",
             "properties": {
+                "autoReadability": {
+                    "type": "boolean"
+                },
                 "fallbackUserAgent": {
                     "type": "string"
                 }

@@ -136,6 +136,7 @@
 - `ai.auto_summary` - 自动生成 AI 摘要 (true/false)
 - `ai.rate_limit` - API 请求速率限制 QPS (默认 10)
 - `general.fallback_user_agent` - 备用 User-Agent (当默认 UA 被拒绝时使用)
+- `general.auto_readability` - 自动开启阅读模式 (true/false)
 - `anubis.cookie.<host>` - Anubis 挑战通过后的 Cookie (按域名存储)
 - `anubis.cookie.<host>.expires` - Anubis Cookie 过期时间 (RFC3339 格式)
 

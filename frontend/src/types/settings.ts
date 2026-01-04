@@ -34,4 +34,5 @@ export interface AITestResponse {
 
 export interface GeneralSettings {
   fallbackUserAgent: string;
+  autoReadability: boolean;
 }
