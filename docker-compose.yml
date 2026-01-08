@@ -1,8 +1,6 @@
 services:
   gist:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ghcr.io/9bingyin/gist:develop
     container_name: gist
     ports:
       - "8080:8080"
