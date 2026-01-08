@@ -28,6 +28,8 @@ func (h *EntryHandler) RegisterRoutes(g *echo.Group) {
 	g.PATCH("/entries/:id/starred", h.UpdateStarredStatus)
 	g.POST("/entries/:id/fetch-readable", h.FetchReadable)
 	g.POST("/entries/mark-read", h.MarkAllAsRead)
+	g.DELETE("/entries/readability-cache", h.ClearReadabilityCache)
+	g.DELETE("/entries/cache", h.ClearEntryCache)
 	g.GET("/unread-counts", h.GetUnreadCounts)
 	g.GET("/starred-count", h.GetStarredCount)
 }
@@ -67,6 +69,10 @@ type updateStarredRequest struct {
 
 type starredCountResponse struct {
 	Count int `json:"count"`
+}
+
+type entryClearResponse struct {
+	Deleted int64 `json:"deleted"`
 }
 
 type markAllReadRequest struct {
@@ -375,6 +381,40 @@ func (h *EntryHandler) GetStarredCount(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, starredCountResponse{Count: count})
+}
+
+// ClearReadabilityCache clears all readable_content from entries.
+// @Summary Clear readability cache
+// @Description Delete all extracted readable content from entries
+// @Tags entries
+// @Produce json
+// @Success 200 {object} entryClearResponse
+// @Failure 500 {object} errorResponse
+// @Router /entries/readability-cache [delete]
+func (h *EntryHandler) ClearReadabilityCache(c echo.Context) error {
+	deleted, err := h.service.ClearReadabilityCache(c.Request().Context())
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, errorResponse{Error: err.Error()})
+	}
+
+	return c.JSON(http.StatusOK, entryClearResponse{Deleted: deleted})
+}
+
+// ClearEntryCache deletes all unstarred entries.
+// @Summary Clear entry cache
+// @Description Delete all unstarred entries (preserves starred entries)
+// @Tags entries
+// @Produce json
+// @Success 200 {object} entryClearResponse
+// @Failure 500 {object} errorResponse
+// @Router /entries/cache [delete]
+func (h *EntryHandler) ClearEntryCache(c echo.Context) error {
+	deleted, err := h.service.ClearEntryCache(c.Request().Context())
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, errorResponse{Error: err.Error()})
+	}
+
+	return c.JSON(http.StatusOK, entryClearResponse{Deleted: deleted})
 }
 
 func toEntryResponse(e model.Entry) entryResponse {

@@ -20,8 +20,16 @@ func NewIconHandler(iconService service.IconService) *IconHandler {
 	}
 }
 
+type iconClearResponse struct {
+	Deleted int64 `json:"deleted"`
+}
+
 func (h *IconHandler) RegisterRoutes(e *echo.Echo) {
 	e.GET("/icons/:filename", h.GetIcon)
+}
+
+func (h *IconHandler) RegisterAPIRoutes(g *echo.Group) {
+	g.DELETE("/icons/cache", h.ClearIconCache)
 }
 
 // GetIcon serves icon files.
@@ -43,4 +51,21 @@ func (h *IconHandler) GetIcon(c echo.Context) error {
 
 	// Icon not found - frontend will show fallback
 	return c.NoContent(http.StatusNotFound)
+}
+
+// ClearIconCache deletes all icon files and clears icon_path in database.
+// @Summary Clear icon cache
+// @Description Delete all feed icon files and clear icon_path references in database
+// @Tags icons
+// @Produce json
+// @Success 200 {object} iconClearResponse
+// @Failure 500 {object} errorResponse
+// @Router /icons/cache [delete]
+func (h *IconHandler) ClearIconCache(c echo.Context) error {
+	deleted, err := h.iconService.ClearAllIcons(c.Request().Context())
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, errorResponse{Error: err.Error()})
+	}
+
+	return c.JSON(http.StatusOK, iconClearResponse{Deleted: deleted})
 }

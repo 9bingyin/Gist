@@ -28,6 +28,10 @@ type EntryService interface {
 	MarkAllAsRead(ctx context.Context, feedID *int64, folderID *int64, contentType *string) error
 	GetUnreadCounts(ctx context.Context) (map[int64]int, error)
 	GetStarredCount(ctx context.Context) (int, error)
+	// ClearReadabilityCache clears all readable_content from entries
+	ClearReadabilityCache(ctx context.Context) (int64, error)
+	// ClearEntryCache deletes all unstarred entries
+	ClearEntryCache(ctx context.Context) (int64, error)
 }
 
 type entryService struct {
@@ -174,4 +178,12 @@ func (s *entryService) MarkAsStarred(ctx context.Context, id int64, starred bool
 
 func (s *entryService) GetStarredCount(ctx context.Context) (int, error) {
 	return s.entries.GetStarredCount(ctx)
+}
+
+func (s *entryService) ClearReadabilityCache(ctx context.Context) (int64, error) {
+	return s.entries.ClearAllReadableContent(ctx)
+}
+
+func (s *entryService) ClearEntryCache(ctx context.Context) (int64, error) {
+	return s.entries.DeleteUnstarred(ctx)
 }

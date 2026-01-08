@@ -72,12 +72,17 @@ func NewSettingsHandler(service service.SettingsService) *SettingsHandler {
 	return &SettingsHandler{service: service}
 }
 
+type deletedCountResponse struct {
+	Deleted int64 `json:"deleted"`
+}
+
 func (h *SettingsHandler) RegisterRoutes(g *echo.Group) {
 	g.GET("/settings/ai", h.GetAISettings)
 	g.PUT("/settings/ai", h.UpdateAISettings)
 	g.POST("/settings/ai/test", h.TestAI)
 	g.GET("/settings/general", h.GetGeneralSettings)
 	g.PUT("/settings/general", h.UpdateGeneralSettings)
+	g.DELETE("/settings/anubis-cookies", h.ClearAnubisCookies)
 }
 
 // GetAISettings returns the AI configuration.
@@ -236,4 +241,21 @@ func (h *SettingsHandler) UpdateGeneralSettings(c echo.Context) error {
 	}
 
 	return h.GetGeneralSettings(c)
+}
+
+// ClearAnubisCookies deletes all Anubis cookies from settings.
+// @Summary Clear Anubis cookies
+// @Description Delete all Anubis challenge cookies used for bypassing protection
+// @Tags settings
+// @Produce json
+// @Success 200 {object} deletedCountResponse
+// @Failure 500 {object} errorResponse
+// @Router /settings/anubis-cookies [delete]
+func (h *SettingsHandler) ClearAnubisCookies(c echo.Context) error {
+	deleted, err := h.service.ClearAnubisCookies(c.Request().Context())
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, errorResponse{Error: err.Error()})
+	}
+
+	return c.JSON(http.StatusOK, deletedCountResponse{Deleted: deleted})
 }

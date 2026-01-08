@@ -1,8 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQueryClient } from '@tanstack/react-query'
-import { startImportOPML, watchImportStatus, cancelImportOPML, exportOPML, clearAICache } from '@/api'
-import type { ClearAICacheResponse } from '@/api'
+import {
+  startImportOPML,
+  watchImportStatus,
+  cancelImportOPML,
+  exportOPML,
+  clearAICache,
+  clearAnubisCookies,
+  clearIconCache,
+  clearReadabilityCache,
+  clearEntryCache,
+} from '@/api'
+import type { ClearAICacheResponse, ClearCacheResponse } from '@/api'
 import { cn } from '@/lib/utils'
 import type { ImportResult, ImportTask } from '@/types/api'
 
@@ -15,9 +25,30 @@ export function DataControl() {
   const [importError, setImportError] = useState<string | null>(null)
   const [task, setTask] = useState<ImportTask | null>(null)
 
-  const [isClearing, setIsClearing] = useState(false)
-  const [clearResult, setClearResult] = useState<ClearAICacheResponse | null>(null)
-  const [clearError, setClearError] = useState<string | null>(null)
+  // AI cache
+  const [isClearingAI, setIsClearingAI] = useState(false)
+  const [clearAIResult, setClearAIResult] = useState<ClearAICacheResponse | null>(null)
+  const [clearAIError, setClearAIError] = useState<string | null>(null)
+
+  // Anubis cookies
+  const [isClearingAnubis, setIsClearingAnubis] = useState(false)
+  const [clearAnubisResult, setClearAnubisResult] = useState<ClearCacheResponse | null>(null)
+  const [clearAnubisError, setClearAnubisError] = useState<string | null>(null)
+
+  // Icon cache
+  const [isClearingIcon, setIsClearingIcon] = useState(false)
+  const [clearIconResult, setClearIconResult] = useState<ClearCacheResponse | null>(null)
+  const [clearIconError, setClearIconError] = useState<string | null>(null)
+
+  // Readability cache
+  const [isClearingReadability, setIsClearingReadability] = useState(false)
+  const [clearReadabilityResult, setClearReadabilityResult] = useState<ClearCacheResponse | null>(null)
+  const [clearReadabilityError, setClearReadabilityError] = useState<string | null>(null)
+
+  // Entry cache
+  const [isClearingEntry, setIsClearingEntry] = useState(false)
+  const [clearEntryResult, setClearEntryResult] = useState<ClearCacheResponse | null>(null)
+  const [clearEntryError, setClearEntryError] = useState<string | null>(null)
 
   const isImporting = task?.status === 'running'
 
@@ -80,18 +111,85 @@ export function DataControl() {
   }
 
   const handleClearAICache = async () => {
-    setIsClearing(true)
-    setClearResult(null)
-    setClearError(null)
+    setIsClearingAI(true)
+    setClearAIResult(null)
+    setClearAIError(null)
 
     try {
       const result = await clearAICache()
-      setClearResult(result)
+      setClearAIResult(result)
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Clear failed'
-      setClearError(message)
+      setClearAIError(message)
     } finally {
-      setIsClearing(false)
+      setIsClearingAI(false)
+    }
+  }
+
+  const handleClearAnubisCookies = async () => {
+    setIsClearingAnubis(true)
+    setClearAnubisResult(null)
+    setClearAnubisError(null)
+
+    try {
+      const result = await clearAnubisCookies()
+      setClearAnubisResult(result)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Clear failed'
+      setClearAnubisError(message)
+    } finally {
+      setIsClearingAnubis(false)
+    }
+  }
+
+  const handleClearIconCache = async () => {
+    setIsClearingIcon(true)
+    setClearIconResult(null)
+    setClearIconError(null)
+
+    try {
+      const result = await clearIconCache()
+      setClearIconResult(result)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Clear failed'
+      setClearIconError(message)
+    } finally {
+      setIsClearingIcon(false)
+    }
+  }
+
+  const handleClearReadabilityCache = async () => {
+    setIsClearingReadability(true)
+    setClearReadabilityResult(null)
+    setClearReadabilityError(null)
+
+    try {
+      const result = await clearReadabilityCache()
+      setClearReadabilityResult(result)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Clear failed'
+      setClearReadabilityError(message)
+    } finally {
+      setIsClearingReadability(false)
+    }
+  }
+
+  const handleClearEntryCache = async () => {
+    setIsClearingEntry(true)
+    setClearEntryResult(null)
+    setClearEntryError(null)
+
+    try {
+      const result = await clearEntryCache()
+      setClearEntryResult(result)
+      // Invalidate entries query to refresh the list
+      queryClient.invalidateQueries({ queryKey: ['entries'] })
+      queryClient.invalidateQueries({ queryKey: ['unreadCounts'] })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Clear failed'
+      setClearEntryError(message)
+    } finally {
+      setIsClearingEntry(false)
     }
   }
 
@@ -259,79 +357,147 @@ export function DataControl() {
       <section>
         <h3 className="mb-4 text-sm font-semibold text-muted-foreground">{t('data_control.clear_cache')}</h3>
 
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-sm font-medium">{t('data_control.clear_ai_cache')}</div>
-              <div className="text-xs text-muted-foreground">{t('data_control.clear_ai_cache_description')}</div>
-            </div>
+        <div className="space-y-4">
+          {/* Entry Cache */}
+          <ClearCacheItem
+            title={t('data_control.clear_entry_cache')}
+            description={t('data_control.clear_entry_cache_description')}
+            isClearing={isClearingEntry}
+            onClear={handleClearEntryCache}
+            result={clearEntryResult && t('data_control.cleared_count', { count: clearEntryResult.deleted })}
+            error={clearEntryError}
+            t={t}
+          />
 
-            <button
-              type="button"
-              onClick={handleClearAICache}
-              disabled={isClearing}
-              className={cn(
-                'inline-flex h-8 items-center gap-2 rounded-lg border border-border bg-background px-4 text-sm font-medium',
-                'transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50'
-              )}
-            >
-              {isClearing ? (
-                <>
-                  <svg className="size-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    />
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    />
-                  </svg>
-                  <span>{t('data_control.clearing')}</span>
-                </>
-              ) : (
-                <>
-                  <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={1.5}
-                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                    />
-                  </svg>
-                  <span>{t('data_control.clear')}</span>
-                </>
-              )}
-            </button>
-          </div>
+          {/* Readability Cache */}
+          <ClearCacheItem
+            title={t('data_control.clear_readability_cache')}
+            description={t('data_control.clear_readability_cache_description')}
+            isClearing={isClearingReadability}
+            onClear={handleClearReadabilityCache}
+            result={clearReadabilityResult && t('data_control.cleared_count', { count: clearReadabilityResult.deleted })}
+            error={clearReadabilityError}
+            t={t}
+          />
 
-          {/* Clear Result */}
-          {clearResult && (
-            <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm dark:border-green-900 dark:bg-green-950">
-              <div className="font-medium text-green-800 dark:text-green-200">{t('data_control.clear_success')}</div>
-              <div className="mt-1 text-green-700 dark:text-green-300">
-                {t('data_control.cleared_items', {
-                  summaries: clearResult.summaries,
-                  translations: clearResult.translations + clearResult.listTranslations,
-                })}
-              </div>
-            </div>
-          )}
+          {/* Icon Cache */}
+          <ClearCacheItem
+            title={t('data_control.clear_icon_cache')}
+            description={t('data_control.clear_icon_cache_description')}
+            isClearing={isClearingIcon}
+            onClear={handleClearIconCache}
+            result={clearIconResult && t('data_control.cleared_count', { count: clearIconResult.deleted })}
+            error={clearIconError}
+            t={t}
+          />
 
-          {/* Clear Error */}
-          {clearError && (
-            <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm dark:border-red-900 dark:bg-red-950">
-              <div className="font-medium text-red-800 dark:text-red-200">{t('data_control.clear_failed')}</div>
-              <div className="mt-1 text-red-700 dark:text-red-300">{clearError}</div>
-            </div>
-          )}
+          {/* AI Cache */}
+          <ClearCacheItem
+            title={t('data_control.clear_ai_cache')}
+            description={t('data_control.clear_ai_cache_description')}
+            isClearing={isClearingAI}
+            onClear={handleClearAICache}
+            result={clearAIResult && t('data_control.cleared_ai_items', {
+              summaries: clearAIResult.summaries,
+              translations: clearAIResult.translations + clearAIResult.listTranslations,
+            })}
+            error={clearAIError}
+            t={t}
+          />
+
+          {/* Anubis Cookies */}
+          <ClearCacheItem
+            title={t('data_control.clear_anubis_cookies')}
+            description={t('data_control.clear_anubis_cookies_description')}
+            isClearing={isClearingAnubis}
+            onClear={handleClearAnubisCookies}
+            result={clearAnubisResult && t('data_control.cleared_count', { count: clearAnubisResult.deleted })}
+            error={clearAnubisError}
+            t={t}
+          />
         </div>
       </section>
+    </div>
+  )
+}
+
+interface ClearCacheItemProps {
+  title: string
+  description: string
+  isClearing: boolean
+  onClear: () => void
+  result: string | null | false
+  error: string | null
+  t: (key: string) => string
+}
+
+function ClearCacheItem({ title, description, isClearing, onClear, result, error, t }: ClearCacheItemProps) {
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="text-sm font-medium">{title}</div>
+          <div className="text-xs text-muted-foreground">{description}</div>
+        </div>
+
+        <button
+          type="button"
+          onClick={onClear}
+          disabled={isClearing}
+          className={cn(
+            'inline-flex h-8 items-center gap-2 rounded-lg border px-4 text-sm font-medium',
+            'transition-colors disabled:cursor-not-allowed disabled:opacity-50',
+            'border-red-300 bg-red-50 text-red-700 hover:bg-red-100 dark:border-red-800 dark:bg-red-950 dark:text-red-400 dark:hover:bg-red-900'
+          )}
+        >
+          {isClearing ? (
+            <>
+              <svg className="size-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                />
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                />
+              </svg>
+              <span>{t('data_control.clearing')}</span>
+            </>
+          ) : (
+            <>
+              <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={1.5}
+                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                />
+              </svg>
+              <span>{t('data_control.clear')}</span>
+            </>
+          )}
+        </button>
+      </div>
+
+      {/* Result */}
+      {result && (
+        <div className="rounded-lg border border-green-200 bg-green-50 p-2 text-xs dark:border-green-900 dark:bg-green-950">
+          <span className="text-green-700 dark:text-green-300">{result}</span>
+        </div>
+      )}
+
+      {/* Error */}
+      {error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-2 text-xs dark:border-red-900 dark:bg-red-950">
+          <span className="text-red-700 dark:text-red-300">{error}</span>
+        </div>
+      )}
     </div>
   )
 }

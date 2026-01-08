@@ -62,6 +62,8 @@ type SettingsService interface {
 	SetGeneralSettings(ctx context.Context, settings *GeneralSettings) error
 	// GetFallbackUserAgent returns the fallback user agent if set.
 	GetFallbackUserAgent(ctx context.Context) string
+	// ClearAnubisCookies deletes all Anubis cookies from settings.
+	ClearAnubisCookies(ctx context.Context) (int64, error)
 }
 
 type settingsService struct {
@@ -318,4 +320,9 @@ func (s *settingsService) GetFallbackUserAgent(ctx context.Context) string {
 		return ""
 	}
 	return val
+}
+
+// ClearAnubisCookies deletes all Anubis cookies from settings.
+func (s *settingsService) ClearAnubisCookies(ctx context.Context) (int64, error) {
+	return s.repo.DeleteByPrefix(ctx, "anubis.cookie.")
 }

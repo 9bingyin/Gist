@@ -14,6 +14,7 @@ type SettingsRepository interface {
 	Set(ctx context.Context, key, value string) error
 	GetByPrefix(ctx context.Context, prefix string) ([]model.Setting, error)
 	Delete(ctx context.Context, key string) error
+	DeleteByPrefix(ctx context.Context, prefix string) (int64, error)
 }
 
 type settingsRepository struct {
@@ -84,4 +85,13 @@ func (r *settingsRepository) GetByPrefix(ctx context.Context, prefix string) ([]
 func (r *settingsRepository) Delete(ctx context.Context, key string) error {
 	_, err := r.db.ExecContext(ctx, `DELETE FROM settings WHERE key = ?`, key)
 	return err
+}
+
+// DeleteByPrefix removes all settings with keys starting with the given prefix.
+func (r *settingsRepository) DeleteByPrefix(ctx context.Context, prefix string) (int64, error) {
+	result, err := r.db.ExecContext(ctx, `DELETE FROM settings WHERE key LIKE ?`, prefix+"%")
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }

@@ -37,6 +37,8 @@ type EntryRepository interface {
 	GetStarredCount(ctx context.Context) (int, error)
 	CreateOrUpdate(ctx context.Context, entry model.Entry) error
 	ExistsByURL(ctx context.Context, feedID int64, url string) (bool, error)
+	ClearAllReadableContent(ctx context.Context) (int64, error)
+	DeleteUnstarred(ctx context.Context) (int64, error)
 }
 
 type entryRepository struct {
@@ -360,4 +362,20 @@ func (r *entryRepository) GetStarredCount(ctx context.Context) (int, error) {
 	var count int
 	err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM entries WHERE starred = 1`).Scan(&count)
 	return count, err
+}
+
+func (r *entryRepository) ClearAllReadableContent(ctx context.Context) (int64, error) {
+	result, err := r.db.ExecContext(ctx, `UPDATE entries SET readable_content = NULL, updated_at = ? WHERE readable_content IS NOT NULL`, formatTime(time.Now()))
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+func (r *entryRepository) DeleteUnstarred(ctx context.Context) (int64, error) {
+	result, err := r.db.ExecContext(ctx, `DELETE FROM entries WHERE starred = 0`)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }

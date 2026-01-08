@@ -35,6 +35,7 @@ func NewRouter(
 	proxyHandler.RegisterRoutes(api)
 	settingsHandler.RegisterRoutes(api)
 	aiHandler.RegisterRoutes(api)
+	iconHandler.RegisterAPIRoutes(api)
 
 	// Icon routes with cache recovery
 	iconHandler.RegisterRoutes(e)

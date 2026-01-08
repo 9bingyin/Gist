@@ -39,6 +39,8 @@ type IconService interface {
 	BackfillIcons(ctx context.Context) error
 	// GetIconPath returns the full path for an icon file
 	GetIconPath(filename string) string
+	// ClearAllIcons deletes all icon files and clears icon_path in database
+	ClearAllIcons(ctx context.Context) (int64, error)
 }
 
 type iconService struct {
@@ -434,4 +436,32 @@ func (s *iconService) downloadIconWithFreshClient(ctx context.Context, iconURL s
 	}
 
 	return data, nil
+}
+
+func (s *iconService) ClearAllIcons(ctx context.Context) (int64, error) {
+	// 1. Delete all icon files from the icons directory
+	iconsDir := filepath.Join(s.dataDir, "icons")
+	entries, err := os.ReadDir(iconsDir)
+	if err != nil && !os.IsNotExist(err) {
+		return 0, fmt.Errorf("read icons dir: %w", err)
+	}
+
+	var deletedFiles int64
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		filePath := filepath.Join(iconsDir, entry.Name())
+		if err := os.Remove(filePath); err == nil {
+			deletedFiles++
+		}
+	}
+
+	// 2. Clear all icon_path in database
+	_, err = s.feeds.ClearAllIconPaths(ctx)
+	if err != nil {
+		return deletedFiles, fmt.Errorf("clear icon paths in db: %w", err)
+	}
+
+	return deletedFiles, nil
 }

@@ -166,6 +166,16 @@ definitions:
           type: string
         type: array
     type: object
+  internal_handler.deletedCountResponse:
+    properties:
+      deleted:
+        type: integer
+    type: object
+  internal_handler.entryClearResponse:
+    properties:
+      deleted:
+        type: integer
+    type: object
   internal_handler.entryListResponse:
     properties:
       entries:
@@ -300,6 +310,11 @@ definitions:
         type: boolean
       fallbackUserAgent:
         type: string
+    type: object
+  internal_handler.iconClearResponse:
+    properties:
+      deleted:
+        type: integer
     type: object
   internal_handler.importCancelledResponse:
     properties:
@@ -720,6 +735,23 @@ paths:
       summary: Update starred status
       tags:
       - entries
+  /entries/cache:
+    delete:
+      description: Delete all unstarred entries (preserves starred entries)
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handler.entryClearResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_handler.errorResponse'
+      summary: Clear entry cache
+      tags:
+      - entries
   /entries/mark-read:
     post:
       consumes:
@@ -743,6 +775,23 @@ paths:
           schema:
             $ref: '#/definitions/internal_handler.errorResponse'
       summary: Mark all as read
+      tags:
+      - entries
+  /entries/readability-cache:
+    delete:
+      description: Delete all extracted readable content from entries
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handler.entryClearResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_handler.errorResponse'
+      summary: Clear readability cache
       tags:
       - entries
   /feeds:
@@ -1088,6 +1137,23 @@ paths:
       summary: Update folder type
       tags:
       - folders
+  /icons/cache:
+    delete:
+      description: Delete all feed icon files and clear icon_path references in database
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handler.iconClearResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_handler.errorResponse'
+      summary: Clear icon cache
+      tags:
+      - icons
   /opml/export:
     get:
       description: Export all feeds and folders to an OPML file
@@ -1226,6 +1292,23 @@ paths:
           schema:
             $ref: '#/definitions/internal_handler.errorResponse'
       summary: Test AI connection
+      tags:
+      - settings
+  /settings/anubis-cookies:
+    delete:
+      description: Delete all Anubis challenge cookies used for bypassing protection
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handler.deletedCountResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_handler.errorResponse'
+      summary: Clear Anubis cookies
       tags:
       - settings
   /settings/general:

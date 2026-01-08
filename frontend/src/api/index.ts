@@ -666,3 +666,31 @@ export async function clearAICache(): Promise<ClearAICacheResponse> {
     method: 'DELETE',
   })
 }
+
+export interface ClearCacheResponse {
+  deleted: number
+}
+
+export async function clearAnubisCookies(): Promise<ClearCacheResponse> {
+  return request<ClearCacheResponse>('/api/settings/anubis-cookies', {
+    method: 'DELETE',
+  })
+}
+
+export async function clearIconCache(): Promise<ClearCacheResponse> {
+  return request<ClearCacheResponse>('/api/icons/cache', {
+    method: 'DELETE',
+  })
+}
+
+export async function clearReadabilityCache(): Promise<ClearCacheResponse> {
+  return request<ClearCacheResponse>('/api/entries/readability-cache', {
+    method: 'DELETE',
+  })
+}
+
+export async function clearEntryCache(): Promise<ClearCacheResponse> {
+  return request<ClearCacheResponse>('/api/entries/cache', {
+    method: 'DELETE',
+  })
+}

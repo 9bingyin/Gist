@@ -304,6 +304,32 @@ const docTemplate = `{
                 }
             }
         },
+        "/entries/cache": {
+            "delete": {
+                "description": "Delete all unstarred entries (preserves starred entries)",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "entries"
+                ],
+                "summary": "Clear entry cache",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.entryClearResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.errorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/entries/mark-read": {
             "post": {
                 "description": "Mark all entries as read, optionally filtered by feed, folder, or content type",
@@ -334,6 +360,32 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.errorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/entries/readability-cache": {
+            "delete": {
+                "description": "Delete all extracted readable content from entries",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "entries"
+                ],
+                "summary": "Clear readability cache",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.entryClearResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/internal_handler.errorResponse"
                         }
@@ -1044,6 +1096,32 @@ const docTemplate = `{
                 }
             }
         },
+        "/icons/cache": {
+            "delete": {
+                "description": "Delete all feed icon files and clear icon_path references in database",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "icons"
+                ],
+                "summary": "Clear icon cache",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.iconClearResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.errorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/opml/export": {
             "get": {
                 "description": "Export all feeds and folders to an OPML file",
@@ -1249,6 +1327,32 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.errorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/settings/anubis-cookies": {
+            "delete": {
+                "description": "Delete all Anubis challenge cookies used for bypassing protection",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "settings"
+                ],
+                "summary": "Clear Anubis cookies",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.deletedCountResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/internal_handler.errorResponse"
                         }
@@ -1623,6 +1727,22 @@ const docTemplate = `{
                 }
             }
         },
+        "internal_handler.deletedCountResponse": {
+            "type": "object",
+            "properties": {
+                "deleted": {
+                    "type": "integer"
+                }
+            }
+        },
+        "internal_handler.entryClearResponse": {
+            "type": "object",
+            "properties": {
+                "deleted": {
+                    "type": "integer"
+                }
+            }
+        },
         "internal_handler.entryListResponse": {
             "type": "object",
             "properties": {
@@ -1827,6 +1947,14 @@ const docTemplate = `{
                 },
                 "fallbackUserAgent": {
                     "type": "string"
+                }
+            }
+        },
+        "internal_handler.iconClearResponse": {
+            "type": "object",
+            "properties": {
+                "deleted": {
+                    "type": "integer"
                 }
             }
         },
