@@ -186,3 +186,33 @@ func (mr *MockEntryRepositoryMockRecorder) UpdateStarredStatus(ctx, id, starred 
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateStarredStatus", reflect.TypeOf((*MockEntryRepository)(nil).UpdateStarredStatus), ctx, id, starred)
 }
+
+// ClearAllReadableContent mocks base method.
+func (m *MockEntryRepository) ClearAllReadableContent(ctx context.Context) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ClearAllReadableContent", ctx)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ClearAllReadableContent indicates an expected call of ClearAllReadableContent.
+func (mr *MockEntryRepositoryMockRecorder) ClearAllReadableContent(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClearAllReadableContent", reflect.TypeOf((*MockEntryRepository)(nil).ClearAllReadableContent), ctx)
+}
+
+// DeleteUnstarred mocks base method.
+func (m *MockEntryRepository) DeleteUnstarred(ctx context.Context) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteUnstarred", ctx)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DeleteUnstarred indicates an expected call of DeleteUnstarred.
+func (mr *MockEntryRepositoryMockRecorder) DeleteUnstarred(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteUnstarred", reflect.TypeOf((*MockEntryRepository)(nil).DeleteUnstarred), ctx)
+}

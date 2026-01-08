@@ -104,8 +104,8 @@ func (s *settingsService) GetAISettings(ctx context.Context) (*AISettings, error
 		settings.ThinkingBudget = val
 	}
 	// Allow empty string to override default (for Compatible Budget mode)
-	if val, err := s.getString(ctx, keyAIReasoningEffort); err == nil {
-		settings.ReasoningEffort = val
+	if setting, err := s.repo.Get(ctx, keyAIReasoningEffort); err == nil && setting != nil {
+		settings.ReasoningEffort = setting.Value
 	}
 	if val, err := s.getString(ctx, keyAISummaryLanguage); err == nil && val != "" {
 		settings.SummaryLanguage = val

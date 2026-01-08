@@ -98,3 +98,18 @@ func (mr *MockSettingsRepositoryMockRecorder) Set(ctx, key, value any) *gomock.C
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Set", reflect.TypeOf((*MockSettingsRepository)(nil).Set), ctx, key, value)
 }
+
+// DeleteByPrefix mocks base method.
+func (m *MockSettingsRepository) DeleteByPrefix(ctx context.Context, prefix string) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteByPrefix", ctx, prefix)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DeleteByPrefix indicates an expected call of DeleteByPrefix.
+func (mr *MockSettingsRepositoryMockRecorder) DeleteByPrefix(ctx, prefix any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteByPrefix", reflect.TypeOf((*MockSettingsRepository)(nil).DeleteByPrefix), ctx, prefix)
+}

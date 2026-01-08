@@ -201,3 +201,33 @@ func (mr *MockFeedRepositoryMockRecorder) UpdateType(ctx, id, feedType any) *gom
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateType", reflect.TypeOf((*MockFeedRepository)(nil).UpdateType), ctx, id, feedType)
 }
+
+// GetByIDs mocks base method.
+func (m *MockFeedRepository) GetByIDs(ctx context.Context, ids []int64) ([]model.Feed, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetByIDs", ctx, ids)
+	ret0, _ := ret[0].([]model.Feed)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetByIDs indicates an expected call of GetByIDs.
+func (mr *MockFeedRepositoryMockRecorder) GetByIDs(ctx, ids any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetByIDs", reflect.TypeOf((*MockFeedRepository)(nil).GetByIDs), ctx, ids)
+}
+
+// ClearAllIconPaths mocks base method.
+func (m *MockFeedRepository) ClearAllIconPaths(ctx context.Context) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ClearAllIconPaths", ctx)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ClearAllIconPaths indicates an expected call of ClearAllIconPaths.
+func (mr *MockFeedRepositoryMockRecorder) ClearAllIconPaths(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClearAllIconPaths", reflect.TypeOf((*MockFeedRepository)(nil).ClearAllIconPaths), ctx)
+}
