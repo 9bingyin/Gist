@@ -19,6 +19,7 @@ import (
 	"gist/backend/internal/config"
 	"gist/backend/internal/logger"
 	"gist/backend/internal/model"
+	"gist/backend/internal/network"
 	"gist/backend/internal/repository"
 	"gist/backend/internal/service/anubis"
 )
@@ -45,20 +46,18 @@ type IconService interface {
 }
 
 type iconService struct {
-	dataDir    string
-	feeds      repository.FeedRepository
-	httpClient *http.Client
-	anubis     *anubis.Solver
+	dataDir       string
+	feeds         repository.FeedRepository
+	clientFactory *network.ClientFactory
+	anubis        *anubis.Solver
 }
 
-func NewIconService(dataDir string, feeds repository.FeedRepository, anubisSolver *anubis.Solver) IconService {
+func NewIconService(dataDir string, feeds repository.FeedRepository, clientFactory *network.ClientFactory, anubisSolver *anubis.Solver) IconService {
 	return &iconService{
-		dataDir: dataDir,
-		feeds:   feeds,
-		httpClient: &http.Client{
-			Timeout: iconTimeout,
-		},
-		anubis: anubisSolver,
+		dataDir:       dataDir,
+		feeds:         feeds,
+		clientFactory: clientFactory,
+		anubis:        anubisSolver,
 	}
 }
 
@@ -367,7 +366,8 @@ func (s *iconService) downloadIconWithRetry(ctx context.Context, iconURL string,
 		}
 	}
 
-	resp, err := s.httpClient.Do(req)
+	httpClient := s.clientFactory.NewHTTPClient(ctx, iconTimeout)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -417,7 +417,7 @@ func (s *iconService) downloadIconWithFreshClient(ctx context.Context, iconURL s
 	}
 
 	// Use fresh client to avoid connection reuse
-	freshClient := &http.Client{Timeout: iconTimeout}
+	freshClient := s.clientFactory.NewHTTPClient(ctx, iconTimeout)
 	resp, err := freshClient.Do(req)
 	if err != nil {
 		return nil, err

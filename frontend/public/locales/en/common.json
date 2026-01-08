@@ -49,6 +49,7 @@
   "settings": {
     "title": "Settings",
     "general": "General",
+    "network": "Network",
     "appearance": "Appearance",
     "subscriptions": "Subscriptions",
     "folders": "Folders",
@@ -62,7 +63,19 @@
     "fallback_ua_placeholder": "e.g. Mozilla/5.0 (Windows NT 10.0; Win64; x64) ...",
     "save": "Save",
     "saving": "Saving...",
-    "saved": "Saved"
+    "saved": "Saved",
+    "proxy_enabled": "Enable Proxy",
+    "proxy_enabled_description": "Access feeds through a proxy server",
+    "proxy_type": "Proxy Type",
+    "proxy_host": "Host",
+    "proxy_port": "Port",
+    "proxy_auth": "Authentication (Optional)",
+    "proxy_username": "Username",
+    "proxy_password": "Password",
+    "proxy_test": "Test Connection",
+    "proxy_testing": "Testing...",
+    "proxy_test_success": "Connection successful",
+    "proxy_test_failed": "Connection failed"
   },
   "theme": {
     "system": "Follow System",

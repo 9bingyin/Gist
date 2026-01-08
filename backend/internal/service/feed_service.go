@@ -17,6 +17,7 @@ import (
 
 	"gist/backend/internal/config"
 	"gist/backend/internal/model"
+	"gist/backend/internal/network"
 	"gist/backend/internal/repository"
 	"gist/backend/internal/service/anubis"
 )
@@ -45,21 +46,17 @@ type FeedPreview struct {
 }
 
 type feedService struct {
-	feeds      repository.FeedRepository
-	folders    repository.FolderRepository
-	entries    repository.EntryRepository
-	icons      IconService
-	settings   SettingsService
-	httpClient *http.Client
-	anubis     *anubis.Solver
+	feeds         repository.FeedRepository
+	folders       repository.FolderRepository
+	entries       repository.EntryRepository
+	icons         IconService
+	settings      SettingsService
+	clientFactory *network.ClientFactory
+	anubis        *anubis.Solver
 }
 
-func NewFeedService(feeds repository.FeedRepository, folders repository.FolderRepository, entries repository.EntryRepository, icons IconService, settings SettingsService, httpClient *http.Client, anubisSolver *anubis.Solver) FeedService {
-	client := httpClient
-	if client == nil {
-		client = &http.Client{Timeout: feedTimeout}
-	}
-	return &feedService{feeds: feeds, folders: folders, entries: entries, icons: icons, settings: settings, httpClient: client, anubis: anubisSolver}
+func NewFeedService(feeds repository.FeedRepository, folders repository.FolderRepository, entries repository.EntryRepository, icons IconService, settings SettingsService, clientFactory *network.ClientFactory, anubisSolver *anubis.Solver) FeedService {
+	return &feedService{feeds: feeds, folders: folders, entries: entries, icons: icons, settings: settings, clientFactory: clientFactory, anubis: anubisSolver}
 }
 
 func (s *feedService) Add(ctx context.Context, feedURL string, folderID *int64, titleOverride string, feedType string) (model.Feed, error) {
@@ -324,7 +321,8 @@ func (s *feedService) fetchFeedWithCookie(ctx context.Context, feedURL string, u
 		req.Header.Set("Cookie", cookie)
 	}
 
-	resp, err := s.httpClient.Do(req)
+	httpClient := s.clientFactory.NewHTTPClient(ctx, feedTimeout)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return feedFetch{}, ErrFeedFetch
 	}
@@ -415,7 +413,7 @@ func (s *feedService) fetchFeedWithFreshClient(ctx context.Context, feedURL stri
 	}
 
 	// Use fresh client to avoid connection reuse
-	freshClient := &http.Client{Timeout: feedTimeout}
+	freshClient := s.clientFactory.NewHTTPClient(ctx, feedTimeout)
 	resp, err := freshClient.Do(req)
 	if err != nil {
 		return feedFetch{}, ErrFeedFetch

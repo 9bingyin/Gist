@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"net/url"
 
 	"gist/backend/internal/repository"
 	"gist/backend/internal/service/ai"
@@ -29,6 +30,16 @@ type GeneralSettings struct {
 	AutoReadability   bool   `json:"autoReadability"`
 }
 
+// NetworkSettings holds network proxy configuration.
+type NetworkSettings struct {
+	Enabled  bool   `json:"enabled"`
+	Type     string `json:"type"`     // http, socks5
+	Host     string `json:"host"`
+	Port     int    `json:"port"`
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
 // Setting keys
 const (
 	keyAIProvider        = "ai.provider"
@@ -45,6 +56,13 @@ const (
 
 	keyFallbackUserAgent = "general.fallback_user_agent"
 	keyAutoReadability   = "general.auto_readability"
+
+	keyNetworkEnabled  = "network.proxy_enabled"
+	keyNetworkType     = "network.proxy_type"
+	keyNetworkHost     = "network.proxy_host"
+	keyNetworkPort     = "network.proxy_port"
+	keyNetworkUsername = "network.proxy_username"
+	keyNetworkPassword = "network.proxy_password"
 )
 
 // SettingsService provides settings management.
@@ -64,6 +82,13 @@ type SettingsService interface {
 	GetFallbackUserAgent(ctx context.Context) string
 	// ClearAnubisCookies deletes all Anubis cookies from settings.
 	ClearAnubisCookies(ctx context.Context) (int64, error)
+	// GetNetworkSettings returns the network proxy configuration.
+	GetNetworkSettings(ctx context.Context) (*NetworkSettings, error)
+	// SetNetworkSettings updates the network proxy configuration.
+	SetNetworkSettings(ctx context.Context, settings *NetworkSettings) error
+	// GetProxyURL returns the formatted proxy URL (e.g., socks5://user:pass@host:port).
+	// Returns empty string if proxy is disabled.
+	GetProxyURL(ctx context.Context) string
 }
 
 type settingsService struct {
@@ -325,4 +350,117 @@ func (s *settingsService) GetFallbackUserAgent(ctx context.Context) string {
 // ClearAnubisCookies deletes all Anubis cookies from settings.
 func (s *settingsService) ClearAnubisCookies(ctx context.Context) (int64, error) {
 	return s.repo.DeleteByPrefix(ctx, "anubis.cookie.")
+}
+
+// GetNetworkSettings returns the network proxy configuration.
+func (s *settingsService) GetNetworkSettings(ctx context.Context) (*NetworkSettings, error) {
+	settings := &NetworkSettings{
+		Type: "http", // default
+	}
+
+	if val, err := s.getString(ctx, keyNetworkEnabled); err == nil && val == "true" {
+		settings.Enabled = true
+	}
+	if val, err := s.getString(ctx, keyNetworkType); err == nil && val != "" {
+		settings.Type = val
+	}
+	if val, err := s.getString(ctx, keyNetworkHost); err == nil {
+		settings.Host = val
+	}
+	if val, err := s.getInt(ctx, keyNetworkPort); err == nil && val > 0 {
+		settings.Port = val
+	}
+	if val, err := s.getString(ctx, keyNetworkUsername); err == nil {
+		settings.Username = val
+	}
+	if val, err := s.getString(ctx, keyNetworkPassword); err == nil && val != "" {
+		settings.Password = maskAPIKey(val)
+	}
+
+	return settings, nil
+}
+
+// SetNetworkSettings updates the network proxy configuration.
+func (s *settingsService) SetNetworkSettings(ctx context.Context, settings *NetworkSettings) error {
+	enabledVal := "false"
+	if settings.Enabled {
+		enabledVal = "true"
+	}
+	if err := s.repo.Set(ctx, keyNetworkEnabled, enabledVal); err != nil {
+		return fmt.Errorf("set network enabled: %w", err)
+	}
+
+	if settings.Type != "" {
+		if err := s.repo.Set(ctx, keyNetworkType, settings.Type); err != nil {
+			return fmt.Errorf("set network type: %w", err)
+		}
+	}
+
+	if err := s.repo.Set(ctx, keyNetworkHost, settings.Host); err != nil {
+		return fmt.Errorf("set network host: %w", err)
+	}
+
+	if err := s.repo.Set(ctx, keyNetworkPort, fmt.Sprintf("%d", settings.Port)); err != nil {
+		return fmt.Errorf("set network port: %w", err)
+	}
+
+	if err := s.repo.Set(ctx, keyNetworkUsername, settings.Username); err != nil {
+		return fmt.Errorf("set network username: %w", err)
+	}
+
+	// Only update password if it's not masked
+	if err := s.setAPIKey(ctx, keyNetworkPassword, settings.Password); err != nil {
+		return fmt.Errorf("set network password: %w", err)
+	}
+
+	return nil
+}
+
+// GetProxyURL returns the formatted proxy URL (e.g., socks5://user:pass@host:port).
+// Returns empty string if proxy is disabled or not configured.
+func (s *settingsService) GetProxyURL(ctx context.Context) string {
+	enabledVal, err := s.getString(ctx, keyNetworkEnabled)
+	if err != nil || enabledVal != "true" {
+		return ""
+	}
+
+	host, _ := s.getString(ctx, keyNetworkHost)
+	if host == "" {
+		return ""
+	}
+
+	port, _ := s.getInt(ctx, keyNetworkPort)
+	if port <= 0 {
+		return ""
+	}
+
+	proxyType, _ := s.getString(ctx, keyNetworkType)
+	if proxyType == "" {
+		proxyType = "http"
+	}
+
+	username, _ := s.getString(ctx, keyNetworkUsername)
+	password, _ := s.getString(ctx, keyNetworkPassword)
+
+	var proxyURL string
+	if username != "" && password != "" {
+		proxyURL = fmt.Sprintf("%s://%s:%s@%s:%d",
+			proxyType,
+			url.QueryEscape(username),
+			url.QueryEscape(password),
+			host,
+			port,
+		)
+	} else if username != "" {
+		proxyURL = fmt.Sprintf("%s://%s@%s:%d",
+			proxyType,
+			url.QueryEscape(username),
+			host,
+			port,
+		)
+	} else {
+		proxyURL = fmt.Sprintf("%s://%s:%d", proxyType, host, port)
+	}
+
+	return proxyURL
 }

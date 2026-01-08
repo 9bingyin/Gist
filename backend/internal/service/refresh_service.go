@@ -19,6 +19,7 @@ import (
 	"gist/backend/internal/config"
 	"gist/backend/internal/logger"
 	"gist/backend/internal/model"
+	"gist/backend/internal/network"
 	"gist/backend/internal/repository"
 	"gist/backend/internal/service/anubis"
 )
@@ -74,28 +75,24 @@ type RefreshService interface {
 }
 
 type refreshService struct {
-	feeds        repository.FeedRepository
-	entries      repository.EntryRepository
-	settings     SettingsService
-	icons        IconService
-	httpClient   *http.Client
-	anubis       *anubis.Solver
-	mu           sync.Mutex
-	isRefreshing bool
+	feeds         repository.FeedRepository
+	entries       repository.EntryRepository
+	settings      SettingsService
+	icons         IconService
+	clientFactory *network.ClientFactory
+	anubis        *anubis.Solver
+	mu            sync.Mutex
+	isRefreshing  bool
 }
 
-func NewRefreshService(feeds repository.FeedRepository, entries repository.EntryRepository, settings SettingsService, icons IconService, httpClient *http.Client, anubisSolver *anubis.Solver) RefreshService {
-	client := httpClient
-	if client == nil {
-		client = &http.Client{Timeout: refreshTimeout}
-	}
+func NewRefreshService(feeds repository.FeedRepository, entries repository.EntryRepository, settings SettingsService, icons IconService, clientFactory *network.ClientFactory, anubisSolver *anubis.Solver) RefreshService {
 	return &refreshService{
-		feeds:      feeds,
-		entries:    entries,
-		settings:   settings,
-		icons:      icons,
-		httpClient: client,
-		anubis:     anubisSolver,
+		feeds:         feeds,
+		entries:       entries,
+		settings:      settings,
+		icons:         icons,
+		clientFactory: clientFactory,
+		anubis:        anubisSolver,
 	}
 }
 
@@ -254,7 +251,8 @@ func (s *refreshService) refreshFeedWithCookie(ctx context.Context, feed model.F
 		req.Header.Set("If-Modified-Since", *feed.LastModified)
 	}
 
-	resp, err := s.httpClient.Do(req)
+	httpClient := s.clientFactory.NewHTTPClient(ctx, refreshTimeout)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		errMsg := err.Error()
 		_ = s.feeds.UpdateErrorMessage(ctx, feed.ID, &errMsg)
@@ -408,7 +406,7 @@ func (s *refreshService) refreshFeedWithFreshClient(ctx context.Context, feed mo
 	}
 
 	// Use fresh client to avoid connection reuse
-	freshClient := &http.Client{Timeout: refreshTimeout}
+	freshClient := s.clientFactory.NewHTTPClient(ctx, refreshTimeout)
 	resp, err := freshClient.Do(req)
 	if err != nil {
 		errMsg := err.Error()

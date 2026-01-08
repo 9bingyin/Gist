@@ -17,6 +17,7 @@ import (
 
 	"gist/backend/internal/config"
 	"gist/backend/internal/logger"
+	"gist/backend/internal/network"
 )
 
 const solverTimeout = 30 * time.Second
@@ -35,21 +36,18 @@ type Challenge struct {
 
 // Solver handles Anubis challenge detection and solving
 type Solver struct {
-	httpClient *http.Client
-	store      *Store
-	mu         sync.Mutex
-	solving    map[string]chan struct{} // host -> done channel (prevents concurrent solving)
+	clientFactory *network.ClientFactory
+	store         *Store
+	mu            sync.Mutex
+	solving       map[string]chan struct{} // host -> done channel (prevents concurrent solving)
 }
 
 // NewSolver creates a new Anubis solver
-func NewSolver(httpClient *http.Client, store *Store) *Solver {
-	if httpClient == nil {
-		httpClient = &http.Client{Timeout: solverTimeout}
-	}
+func NewSolver(clientFactory *network.ClientFactory, store *Store) *Solver {
 	return &Solver{
-		httpClient: httpClient,
-		store:      store,
-		solving:    make(map[string]chan struct{}),
+		clientFactory: clientFactory,
+		store:         store,
+		solving:       make(map[string]chan struct{}),
 	}
 }
 
@@ -206,7 +204,8 @@ func (s *Solver) submit(ctx context.Context, originalURL, challengeID, result st
 
 	// Don't follow redirects to capture the Set-Cookie header
 	client := &http.Client{
-		Timeout: s.httpClient.Timeout,
+		Timeout:   solverTimeout,
+		Transport: s.clientFactory.NewHTTPTransport(ctx),
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse
 		},

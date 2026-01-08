@@ -12,7 +12,7 @@ import type {
   StarredCountResponse,
   UnreadCountsResponse,
 } from '@/types/api'
-import type { AISettings, AITestRequest, AITestResponse, GeneralSettings } from '@/types/settings'
+import type { AISettings, AITestRequest, AITestResponse, GeneralSettings, NetworkSettings, NetworkTestRequest, NetworkTestResponse } from '@/types/settings'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? ''
 const TOKEN_KEY = 'gist_auth_token'
@@ -480,6 +480,24 @@ export async function updateGeneralSettings(settings: GeneralSettings): Promise<
   return request<GeneralSettings>('/api/settings/general', {
     method: 'PUT',
     body: JSON.stringify(settings),
+  })
+}
+
+export async function getNetworkSettings(): Promise<NetworkSettings> {
+  return request<NetworkSettings>('/api/settings/network')
+}
+
+export async function updateNetworkSettings(settings: NetworkSettings): Promise<NetworkSettings> {
+  return request<NetworkSettings>('/api/settings/network', {
+    method: 'PUT',
+    body: JSON.stringify(settings),
+  })
+}
+
+export async function testNetworkProxy(config: NetworkTestRequest): Promise<NetworkTestResponse> {
+  return request<NetworkTestResponse>('/api/settings/network/test', {
+    method: 'POST',
+    body: JSON.stringify(config),
   })
 }
 

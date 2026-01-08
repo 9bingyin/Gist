@@ -144,6 +144,12 @@
 - `general.auto_readability` - 自动开启阅读模式 (true/false)
 - `anubis.cookie.<host>` - Anubis 挑战通过后的 Cookie (按域名存储)
 - `anubis.cookie.<host>.expires` - Anubis Cookie 过期时间 (RFC3339 格式)
+- `network.proxy_enabled` - 是否启用代理 (true/false)
+- `network.proxy_type` - 代理类型 (http/socks5)
+- `network.proxy_host` - 代理主机地址
+- `network.proxy_port` - 代理端口
+- `network.proxy_username` - 代理用户名 (可选)
+- `network.proxy_password` - 代理密码 (可选)
 
 **ai_summaries** - AI 摘要缓存表
 | 列名 | 类型 | 约束 | 说明 |

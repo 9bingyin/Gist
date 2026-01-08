@@ -354,6 +354,60 @@ definitions:
       folderId:
         type: string
     type: object
+  internal_handler.networkSettingsRequest:
+    properties:
+      enabled:
+        type: boolean
+      host:
+        type: string
+      password:
+        type: string
+      port:
+        type: integer
+      type:
+        type: string
+      username:
+        type: string
+    type: object
+  internal_handler.networkSettingsResponse:
+    properties:
+      enabled:
+        type: boolean
+      host:
+        type: string
+      password:
+        type: string
+      port:
+        type: integer
+      type:
+        type: string
+      username:
+        type: string
+    type: object
+  internal_handler.networkTestRequest:
+    properties:
+      enabled:
+        type: boolean
+      host:
+        type: string
+      password:
+        type: string
+      port:
+        type: integer
+      type:
+        type: string
+      username:
+        type: string
+    type: object
+  internal_handler.networkTestResponse:
+    properties:
+      error:
+        type: string
+      message:
+        type: string
+      success:
+        type: boolean
+    type: object
   internal_handler.readableContentResponse:
     properties:
       readableContent:
@@ -1569,6 +1623,79 @@ paths:
           schema:
             $ref: '#/definitions/internal_handler.errorResponse'
       summary: Update general settings
+      tags:
+      - settings
+  /settings/network:
+    get:
+      description: Get the network proxy configuration with masked password
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handler.networkSettingsResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_handler.errorResponse'
+      summary: Get network settings
+      tags:
+      - settings
+    put:
+      consumes:
+      - application/json
+      description: Update the network proxy configuration. Empty password keeps existing
+        password.
+      parameters:
+      - description: Network settings
+        in: body
+        name: settings
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.networkSettingsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handler.networkSettingsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_handler.errorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_handler.errorResponse'
+      summary: Update network settings
+      tags:
+      - settings
+  /settings/network/test:
+    post:
+      consumes:
+      - application/json
+      description: Test the network proxy connection by accessing https://captive.apple.com/
+      parameters:
+      - description: Network test configuration
+        in: body
+        name: config
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.networkTestRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handler.networkTestResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_handler.errorResponse'
+      summary: Test network proxy
       tags:
       - settings
   /starred-count:

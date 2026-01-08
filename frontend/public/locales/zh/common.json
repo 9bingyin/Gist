@@ -49,6 +49,7 @@
   "settings": {
     "title": "设置",
     "general": "通用",
+    "network": "网络",
     "appearance": "外观",
     "subscriptions": "订阅",
     "folders": "文件夹",
@@ -62,7 +63,19 @@
     "fallback_ua_placeholder": "例如: Mozilla/5.0 (Windows NT 10.0; Win64; x64) ...",
     "save": "保存",
     "saving": "保存中...",
-    "saved": "已保存"
+    "saved": "已保存",
+    "proxy_enabled": "启用代理",
+    "proxy_enabled_description": "通过代理服务器访问订阅源",
+    "proxy_type": "代理类型",
+    "proxy_host": "主机",
+    "proxy_port": "端口",
+    "proxy_auth": "认证 (可选)",
+    "proxy_username": "用户名",
+    "proxy_password": "密码",
+    "proxy_test": "测试连接",
+    "proxy_testing": "测试中...",
+    "proxy_test_success": "连接成功",
+    "proxy_test_failed": "连接失败"
   },
   "theme": {
     "system": "跟随系统",

@@ -2,14 +2,17 @@ package handler
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/labstack/echo/v4"
 
+	"gist/backend/internal/network"
 	"gist/backend/internal/service"
 )
 
 type SettingsHandler struct {
-	service service.SettingsService
+	service       service.SettingsService
+	clientFactory *network.ClientFactory
 }
 
 // Request/Response types
@@ -68,8 +71,41 @@ type generalSettingsRequest struct {
 	AutoReadability   bool   `json:"autoReadability"`
 }
 
-func NewSettingsHandler(service service.SettingsService) *SettingsHandler {
-	return &SettingsHandler{service: service}
+type networkSettingsResponse struct {
+	Enabled  bool   `json:"enabled"`
+	Type     string `json:"type"`
+	Host     string `json:"host"`
+	Port     int    `json:"port"`
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+type networkSettingsRequest struct {
+	Enabled  bool   `json:"enabled"`
+	Type     string `json:"type"`
+	Host     string `json:"host"`
+	Port     int    `json:"port"`
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+type networkTestRequest struct {
+	Enabled  bool   `json:"enabled"`
+	Type     string `json:"type"`
+	Host     string `json:"host"`
+	Port     int    `json:"port"`
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+type networkTestResponse struct {
+	Success bool   `json:"success"`
+	Message string `json:"message,omitempty"`
+	Error   string `json:"error,omitempty"`
+}
+
+func NewSettingsHandler(service service.SettingsService, clientFactory *network.ClientFactory) *SettingsHandler {
+	return &SettingsHandler{service: service, clientFactory: clientFactory}
 }
 
 type deletedCountResponse struct {
@@ -82,6 +118,9 @@ func (h *SettingsHandler) RegisterRoutes(g *echo.Group) {
 	g.POST("/settings/ai/test", h.TestAI)
 	g.GET("/settings/general", h.GetGeneralSettings)
 	g.PUT("/settings/general", h.UpdateGeneralSettings)
+	g.GET("/settings/network", h.GetNetworkSettings)
+	g.PUT("/settings/network", h.UpdateNetworkSettings)
+	g.POST("/settings/network/test", h.TestNetworkProxy)
 	g.DELETE("/settings/anubis-cookies", h.ClearAnubisCookies)
 }
 
@@ -258,4 +297,125 @@ func (h *SettingsHandler) ClearAnubisCookies(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, deletedCountResponse{Deleted: deleted})
+}
+
+// GetNetworkSettings returns the network proxy configuration.
+// @Summary Get network settings
+// @Description Get the network proxy configuration with masked password
+// @Tags settings
+// @Produce json
+// @Success 200 {object} networkSettingsResponse
+// @Failure 500 {object} errorResponse
+// @Router /settings/network [get]
+func (h *SettingsHandler) GetNetworkSettings(c echo.Context) error {
+	settings, err := h.service.GetNetworkSettings(c.Request().Context())
+	if err != nil {
+		c.Logger().Error(err)
+		return c.JSON(http.StatusInternalServerError, errorResponse{Error: "failed to get settings"})
+	}
+
+	return c.JSON(http.StatusOK, networkSettingsResponse{
+		Enabled:  settings.Enabled,
+		Type:     settings.Type,
+		Host:     settings.Host,
+		Port:     settings.Port,
+		Username: settings.Username,
+		Password: settings.Password,
+	})
+}
+
+// UpdateNetworkSettings updates the network proxy configuration.
+// @Summary Update network settings
+// @Description Update the network proxy configuration. Empty password keeps existing password.
+// @Tags settings
+// @Accept json
+// @Produce json
+// @Param settings body networkSettingsRequest true "Network settings"
+// @Success 200 {object} networkSettingsResponse
+// @Failure 400 {object} errorResponse
+// @Failure 500 {object} errorResponse
+// @Router /settings/network [put]
+func (h *SettingsHandler) UpdateNetworkSettings(c echo.Context) error {
+	var req networkSettingsRequest
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, errorResponse{Error: "invalid request"})
+	}
+
+	settings := &service.NetworkSettings{
+		Enabled:  req.Enabled,
+		Type:     req.Type,
+		Host:     req.Host,
+		Port:     req.Port,
+		Username: req.Username,
+		Password: req.Password,
+	}
+
+	if err := h.service.SetNetworkSettings(c.Request().Context(), settings); err != nil {
+		c.Logger().Error(err)
+		return c.JSON(http.StatusInternalServerError, errorResponse{Error: "failed to save settings"})
+	}
+
+	return h.GetNetworkSettings(c)
+}
+
+// TestNetworkProxy tests the network proxy connection.
+// @Summary Test network proxy
+// @Description Test the network proxy connection by accessing https://captive.apple.com/
+// @Tags settings
+// @Accept json
+// @Produce json
+// @Param config body networkTestRequest true "Network test configuration"
+// @Success 200 {object} networkTestResponse
+// @Failure 400 {object} errorResponse
+// @Router /settings/network/test [post]
+func (h *SettingsHandler) TestNetworkProxy(c echo.Context) error {
+	var req networkTestRequest
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, errorResponse{Error: "invalid request"})
+	}
+
+	if !req.Enabled {
+		return c.JSON(http.StatusOK, networkTestResponse{
+			Success: true,
+			Message: "Proxy is disabled, direct connection will be used",
+		})
+	}
+
+	if req.Host == "" {
+		return c.JSON(http.StatusBadRequest, errorResponse{Error: "host is required"})
+	}
+	if req.Port <= 0 {
+		return c.JSON(http.StatusBadRequest, errorResponse{Error: "valid port is required"})
+	}
+
+	// Build proxy URL from request
+	proxyType := req.Type
+	if proxyType == "" {
+		proxyType = "http"
+	}
+	var proxyURL string
+	if req.Username != "" && req.Password != "" {
+		proxyURL = proxyType + "://" + req.Username + ":" + req.Password + "@" + req.Host + ":" + itoa(req.Port)
+	} else {
+		proxyURL = proxyType + "://" + req.Host + ":" + itoa(req.Port)
+	}
+
+	// Test proxy connection using https://captive.apple.com/
+	const testURL = "https://captive.apple.com/"
+	err := h.clientFactory.TestProxyWithConfig(c.Request().Context(), proxyURL, testURL)
+	if err != nil {
+		return c.JSON(http.StatusOK, networkTestResponse{
+			Success: false,
+			Error:   err.Error(),
+		})
+	}
+
+	return c.JSON(http.StatusOK, networkTestResponse{
+		Success: true,
+		Message: "Proxy connection successful",
+	})
+}
+
+func itoa(i int) string {
+	return strconv.Itoa(i)
 }

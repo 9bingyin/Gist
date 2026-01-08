@@ -18,6 +18,7 @@ import (
 
 	"gist/backend/internal/config"
 	"gist/backend/internal/logger"
+	"gist/backend/internal/network"
 	"gist/backend/internal/repository"
 	"gist/backend/internal/service/anubis"
 )
@@ -30,13 +31,13 @@ type ReadabilityService interface {
 }
 
 type readabilityService struct {
-	entries   repository.EntryRepository
-	session   *azuretls.Session
-	sanitizer *bluemonday.Policy
-	anubis    *anubis.Solver
+	entries       repository.EntryRepository
+	clientFactory *network.ClientFactory
+	sanitizer     *bluemonday.Policy
+	anubis        *anubis.Solver
 }
 
-func NewReadabilityService(entries repository.EntryRepository, anubisSolver *anubis.Solver) ReadabilityService {
+func NewReadabilityService(entries repository.EntryRepository, clientFactory *network.ClientFactory, anubisSolver *anubis.Solver) ReadabilityService {
 	// Create a sanitizer policy similar to DOMPurify
 	// This removes scripts and other elements that interfere with readability parsing
 	p := bluemonday.UGCPolicy()
@@ -44,16 +45,11 @@ func NewReadabilityService(entries repository.EntryRepository, anubisSolver *anu
 	p.AllowAttrs("id", "class", "lang", "dir").Globally()
 	p.AllowRelativeURLs(true)
 
-	// Create azuretls session with Chrome fingerprint
-	session := azuretls.NewSession()
-	session.Browser = azuretls.Chrome
-	session.SetTimeout(readabilityTimeout)
-
 	return &readabilityService{
-		entries:   entries,
-		session:   session,
-		sanitizer: p,
-		anubis:    anubisSolver,
+		entries:       entries,
+		clientFactory: clientFactory,
+		sanitizer:     p,
+		anubis:        anubisSolver,
 	}
 }
 
@@ -125,24 +121,21 @@ func (s *readabilityService) FetchReadableContent(ctx context.Context, entryID i
 
 // Close releases resources held by the service
 func (s *readabilityService) Close() {
-	if s.session != nil {
-		s.session.Close()
-	}
+	// No persistent resources to release
 }
 
 // fetchWithChrome fetches URL with Chrome TLS fingerprint and browser headers
 func (s *readabilityService) fetchWithChrome(ctx context.Context, targetURL string, cookie string, retryCount int) ([]byte, error) {
-	return s.doFetch(ctx, s.session, targetURL, cookie, retryCount, false)
+	session := s.clientFactory.NewAzureSession(ctx, readabilityTimeout)
+	defer session.Close()
+	return s.doFetch(ctx, session, targetURL, cookie, retryCount, false)
 }
 
 // fetchWithFreshSession creates a new azuretls session to avoid connection reuse after Anubis
 func (s *readabilityService) fetchWithFreshSession(ctx context.Context, targetURL, cookie string, retryCount int) ([]byte, error) {
-	tempSession := azuretls.NewSession()
-	tempSession.Browser = azuretls.Chrome
-	tempSession.SetTimeout(readabilityTimeout)
-	defer tempSession.Close()
-
-	return s.doFetch(ctx, tempSession, targetURL, cookie, retryCount, true)
+	session := s.clientFactory.NewAzureSession(ctx, readabilityTimeout)
+	defer session.Close()
+	return s.doFetch(ctx, session, targetURL, cookie, retryCount, true)
 }
 
 // doFetch performs the actual HTTP request with the given session

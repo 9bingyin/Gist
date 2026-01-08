@@ -13,9 +13,10 @@ import { DataControl } from './tabs/DataControl'
 import { FeedsSettings } from './tabs/FeedsSettings'
 import { FoldersSettings } from './tabs/FoldersSettings'
 import { AISettings } from './tabs/AISettings'
+import { NetworkSettings } from './tabs/NetworkSettings'
 import { cn } from '@/lib/utils'
 
-export type SettingsTab = 'profile' | 'general' | 'appearance' | 'ai' | 'data' | 'feeds' | 'folders'
+export type SettingsTab = 'profile' | 'general' | 'network' | 'appearance' | 'ai' | 'data' | 'feeds' | 'folders'
 
 interface SettingsModalProps {
   open: boolean
@@ -57,6 +58,8 @@ export function SettingsModal({ open, onOpenChange, initialTab }: SettingsModalP
         return <ProfileSettings />
       case 'general':
         return <GeneralSettings />
+      case 'network':
+        return <NetworkSettings />
       case 'appearance':
         return <AppearanceSettings />
       case 'ai':
@@ -78,6 +81,8 @@ export function SettingsModal({ open, onOpenChange, initialTab }: SettingsModalP
         return t('profile.title')
       case 'general':
         return t('settings.general')
+      case 'network':
+        return t('settings.network')
       case 'appearance':
         return t('settings.appearance')
       case 'ai':
@@ -96,6 +101,7 @@ export function SettingsModal({ open, onOpenChange, initialTab }: SettingsModalP
   const tabs: { id: SettingsTab; label: string }[] = [
     { id: 'profile', label: t('profile.title') },
     { id: 'general', label: t('settings.general') },
+    { id: 'network', label: t('settings.network') },
     { id: 'appearance', label: t('settings.appearance') },
     { id: 'ai', label: t('settings.ai') },
     { id: 'data', label: t('settings.data') },
