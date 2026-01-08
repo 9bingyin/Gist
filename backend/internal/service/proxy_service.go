@@ -10,6 +10,7 @@ import (
 	"github.com/Noooste/azuretls-client"
 
 	"gist/backend/internal/config"
+	"gist/backend/internal/network"
 	"gist/backend/internal/service/anubis"
 )
 
@@ -33,25 +34,19 @@ type ProxyService interface {
 }
 
 type proxyService struct {
-	session *azuretls.Session
-	anubis  *anubis.Solver
+	clientFactory *network.ClientFactory
+	anubis        *anubis.Solver
 }
 
-func NewProxyService(anubisSolver *anubis.Solver) ProxyService {
-	session := azuretls.NewSession()
-	session.Browser = azuretls.Chrome
-	session.SetTimeout(proxyTimeout)
-
+func NewProxyService(clientFactory *network.ClientFactory, anubisSolver *anubis.Solver) ProxyService {
 	return &proxyService{
-		session: session,
-		anubis:  anubisSolver,
+		clientFactory: clientFactory,
+		anubis:        anubisSolver,
 	}
 }
 
 func (s *proxyService) Close() {
-	if s.session != nil {
-		s.session.Close()
-	}
+	// No persistent resources to release
 }
 
 func (s *proxyService) FetchImage(ctx context.Context, imageURL, refererURL string) (*ProxyResult, error) {
@@ -59,17 +54,16 @@ func (s *proxyService) FetchImage(ctx context.Context, imageURL, refererURL stri
 }
 
 func (s *proxyService) fetchImageWithRetry(ctx context.Context, imageURL, refererURL, cookie string, retryCount int) (*ProxyResult, error) {
-	return s.doFetch(ctx, s.session, imageURL, refererURL, cookie, retryCount, false)
+	session := s.clientFactory.NewAzureSession(ctx, proxyTimeout)
+	defer session.Close()
+	return s.doFetch(ctx, session, imageURL, refererURL, cookie, retryCount, false)
 }
 
 // fetchWithFreshSession creates a new azuretls session to avoid connection reuse after Anubis
 func (s *proxyService) fetchWithFreshSession(ctx context.Context, imageURL, refererURL, cookie string, retryCount int) (*ProxyResult, error) {
-	tempSession := azuretls.NewSession()
-	tempSession.Browser = azuretls.Chrome
-	tempSession.SetTimeout(proxyTimeout)
-	defer tempSession.Close()
-
-	return s.doFetch(ctx, tempSession, imageURL, refererURL, cookie, retryCount, true)
+	session := s.clientFactory.NewAzureSession(ctx, proxyTimeout)
+	defer session.Close()
+	return s.doFetch(ctx, session, imageURL, refererURL, cookie, retryCount, true)
 }
 
 // doFetch performs the actual HTTP request with the given session

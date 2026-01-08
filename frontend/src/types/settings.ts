@@ -36,3 +36,29 @@ export interface GeneralSettings {
   fallbackUserAgent: string;
   autoReadability: boolean;
 }
+
+export type ProxyType = 'http' | 'socks5';
+
+export interface NetworkSettings {
+  enabled: boolean;
+  type: ProxyType;
+  host: string;
+  port: number;
+  username: string;
+  password: string;
+}
+
+export interface NetworkTestRequest {
+  enabled: boolean;
+  type: ProxyType;
+  host: string;
+  port: number;
+  username: string;
+  password: string;
+}
+
+export interface NetworkTestResponse {
+  success: boolean;
+  message?: string;
+  error?: string;
+}

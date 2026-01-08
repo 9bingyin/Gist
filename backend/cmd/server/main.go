@@ -15,6 +15,7 @@ import (
 	"gist/backend/internal/handler"
 	transport "gist/backend/internal/http"
 	"gist/backend/internal/logger"
+	"gist/backend/internal/network"
 	"gist/backend/internal/repository"
 	"gist/backend/internal/scheduler"
 	"gist/backend/internal/service"
@@ -65,11 +66,14 @@ func main() {
 
 	settingsService := service.NewSettingsService(settingsRepo, rateLimiter)
 
+	// Initialize client factory for proxy support
+	clientFactory := network.NewClientFactory(settingsService)
+
 	// Initialize Anubis solver for bypassing Anubis protection
 	anubisStore := anubis.NewStore(settingsRepo)
-	anubisSolver := anubis.NewSolver(nil, anubisStore)
+	anubisSolver := anubis.NewSolver(clientFactory, anubisStore)
 
-	iconService := service.NewIconService(cfg.DataDir, feedRepo, anubisSolver)
+	iconService := service.NewIconService(cfg.DataDir, feedRepo, clientFactory, anubisSolver)
 
 	// Backfill icons for existing feeds (run in background)
 	go func() {
@@ -79,13 +83,13 @@ func main() {
 	}()
 
 	folderService := service.NewFolderService(folderRepo, feedRepo)
-	feedService := service.NewFeedService(feedRepo, folderRepo, entryRepo, iconService, settingsService, nil, anubisSolver)
+	feedService := service.NewFeedService(feedRepo, folderRepo, entryRepo, iconService, settingsService, clientFactory, anubisSolver)
 	entryService := service.NewEntryService(entryRepo, feedRepo, folderRepo)
-	readabilityService := service.NewReadabilityService(entryRepo, anubisSolver)
-	refreshService := service.NewRefreshService(feedRepo, entryRepo, settingsService, iconService, nil, anubisSolver)
+	readabilityService := service.NewReadabilityService(entryRepo, clientFactory, anubisSolver)
+	refreshService := service.NewRefreshService(feedRepo, entryRepo, settingsService, iconService, clientFactory, anubisSolver)
 	opmlService := service.NewOPMLService(folderService, feedService, refreshService, iconService, folderRepo, feedRepo)
 
-	proxyService := service.NewProxyService(anubisSolver)
+	proxyService := service.NewProxyService(clientFactory, anubisSolver)
 	aiService := service.NewAIService(aiSummaryRepo, aiTranslationRepo, aiListTranslationRepo, settingsRepo, rateLimiter)
 	authService := service.NewAuthService(settingsRepo)
 
@@ -96,7 +100,7 @@ func main() {
 	opmlHandler := handler.NewOPMLHandler(opmlService, importTaskService)
 	iconHandler := handler.NewIconHandler(iconService)
 	proxyHandler := handler.NewProxyHandler(proxyService)
-	settingsHandler := handler.NewSettingsHandler(settingsService)
+	settingsHandler := handler.NewSettingsHandler(settingsService, clientFactory)
 	aiHandler := handler.NewAIHandler(aiService)
 	authHandler := handler.NewAuthHandler(authService)
 

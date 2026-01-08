@@ -13,6 +13,7 @@ import (
 
 	"gist/backend/internal/config"
 	"gist/backend/internal/model"
+	"gist/backend/internal/network"
 	"gist/backend/internal/service/testutil"
 
 	"github.com/mmcdole/gofeed"
@@ -93,7 +94,8 @@ func TestFeedService_Add_Success(t *testing.T) {
 		},
 	).Times(1)
 
-	svc := NewFeedService(mockFeeds, mockFolders, mockEntries, nil, nil, client, nil)
+	clientFactory := network.NewClientFactoryForTest(client)
+	svc := NewFeedService(mockFeeds, mockFolders, mockEntries, nil, nil, clientFactory, nil)
 	feed, err := svc.Add(context.Background(), feedURL, &folderID, "", "article")
 	if err != nil {
 		t.Fatalf("Add failed: %v", err)
@@ -182,7 +184,8 @@ func TestFeedService_Add_FetchErrorCreatesFeed(t *testing.T) {
 		},
 	)
 
-	svc := NewFeedService(mockFeeds, mockFolders, mockEntries, nil, nil, client, nil)
+	clientFactory := network.NewClientFactoryForTest(client)
+	svc := NewFeedService(mockFeeds, mockFolders, mockEntries, nil, nil, clientFactory, nil)
 	_, err := svc.Add(context.Background(), feedURL, nil, "Custom", "article")
 	if err != nil {
 		t.Fatalf("expected add to succeed with error feed, got %v", err)
@@ -242,7 +245,8 @@ func TestFeedService_Preview_WithFallbackUserAgent(t *testing.T) {
 		}),
 	}
 
-	svc := NewFeedService(testutil.NewMockFeedRepository(ctrl), testutil.NewMockFolderRepository(ctrl), testutil.NewMockEntryRepository(ctrl), nil, settings, client, nil)
+	clientFactory := network.NewClientFactoryForTest(client)
+	svc := NewFeedService(testutil.NewMockFeedRepository(ctrl), testutil.NewMockFolderRepository(ctrl), testutil.NewMockEntryRepository(ctrl), nil, settings, clientFactory, nil)
 	_, err := svc.Preview(context.Background(), feedURL)
 	if err != nil {
 		t.Fatalf("Preview failed: %v", err)
@@ -404,6 +408,7 @@ func TestFeedService_HelperFunctions(t *testing.T) {
 // settingsServiceStub is a minimal SettingsService implementation for tests.
 type settingsServiceStub struct {
 	fallbackUserAgent string
+	proxyURL          string
 }
 
 type roundTripperFunc func(*http.Request) (*http.Response, error)
@@ -438,4 +443,16 @@ func (s *settingsServiceStub) GetFallbackUserAgent(ctx context.Context) string {
 
 func (s *settingsServiceStub) ClearAnubisCookies(ctx context.Context) (int64, error) {
 	return 0, nil
+}
+
+func (s *settingsServiceStub) GetNetworkSettings(ctx context.Context) (*NetworkSettings, error) {
+	return &NetworkSettings{}, nil
+}
+
+func (s *settingsServiceStub) SetNetworkSettings(ctx context.Context, settings *NetworkSettings) error {
+	return nil
+}
+
+func (s *settingsServiceStub) GetProxyURL(ctx context.Context) string {
+	return s.proxyURL
 }
