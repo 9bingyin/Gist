@@ -25,6 +25,7 @@ const feedTimeout = 20 * time.Second
 
 type FeedService interface {
 	Add(ctx context.Context, feedURL string, folderID *int64, titleOverride string, feedType string) (model.Feed, error)
+	AddWithoutFetch(ctx context.Context, feedURL string, folderID *int64, titleOverride string, feedType string) (model.Feed, bool, error)
 	Preview(ctx context.Context, feedURL string) (FeedPreview, error)
 	List(ctx context.Context, folderID *int64) ([]model.Feed, error)
 	Update(ctx context.Context, id int64, title string, folderID *int64) (model.Feed, error)
@@ -148,6 +149,47 @@ func (s *feedService) Add(ctx context.Context, feedURL string, folderID *int64, 
 	}
 
 	return created, nil
+}
+
+// AddWithoutFetch creates a feed record without fetching content.
+// Returns (feed, isNew, error). isNew is true if a new feed was created.
+func (s *feedService) AddWithoutFetch(ctx context.Context, feedURL string, folderID *int64, titleOverride string, feedType string) (model.Feed, bool, error) {
+	trimmedURL := strings.TrimSpace(feedURL)
+	if !isValidURL(trimmedURL) {
+		return model.Feed{}, false, ErrInvalid
+	}
+	if existing, err := s.feeds.FindByURL(ctx, trimmedURL); err != nil {
+		return model.Feed{}, false, fmt.Errorf("check feed url: %w", err)
+	} else if existing != nil {
+		return *existing, false, nil // Feed already exists, not an error
+	}
+	if folderID != nil {
+		if _, err := s.folders.GetByID(ctx, *folderID); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return model.Feed{}, false, ErrNotFound
+			}
+			return model.Feed{}, false, fmt.Errorf("check folder: %w", err)
+		}
+	}
+
+	finalTitle := strings.TrimSpace(titleOverride)
+	if finalTitle == "" {
+		finalTitle = trimmedURL
+	}
+
+	feed := model.Feed{
+		FolderID: folderID,
+		Title:    finalTitle,
+		URL:      trimmedURL,
+		Type:     feedType,
+	}
+
+	created, err := s.feeds.Create(ctx, feed)
+	if err != nil {
+		return model.Feed{}, false, err
+	}
+
+	return created, true, nil
 }
 
 func (s *feedService) Preview(ctx context.Context, feedURL string) (FeedPreview, error) {

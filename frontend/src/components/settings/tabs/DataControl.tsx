@@ -71,8 +71,12 @@ export function DataControl() {
     await cancelImportOPML()
   }
 
-  const handleExport = () => {
-    exportOPML()
+  const handleExport = async () => {
+    try {
+      await exportOPML()
+    } catch {
+      // Export error handled silently
+    }
   }
 
   const handleClearAICache = async () => {

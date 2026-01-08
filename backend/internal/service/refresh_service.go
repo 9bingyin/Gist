@@ -69,6 +69,7 @@ var ErrAlreadyRefreshing = errors.New("refresh already in progress")
 type RefreshService interface {
 	RefreshAll(ctx context.Context) error
 	RefreshFeed(ctx context.Context, feedID int64) error
+	RefreshFeeds(ctx context.Context, feedIDs []int64) error
 	IsRefreshing() bool
 }
 
@@ -168,6 +169,51 @@ func (s *refreshService) RefreshFeed(ctx context.Context, feedID int64) error {
 		return err
 	}
 	return s.refreshFeedInternal(ctx, feed)
+}
+
+func (s *refreshService) RefreshFeeds(ctx context.Context, feedIDs []int64) error {
+	if len(feedIDs) == 0 {
+		return nil
+	}
+
+	// Get all feeds by IDs in a single query
+	feeds, err := s.feeds.GetByIDs(ctx, feedIDs)
+	if err != nil {
+		log.Printf("get feeds by ids: %v", err)
+		return err
+	}
+
+	if len(feeds) == 0 {
+		return nil
+	}
+
+	// Use errgroup for parallel refresh with concurrency limit
+	g, ctx := errgroup.WithContext(ctx)
+	g.SetLimit(maxConcurrentRefresh)
+
+	// Per-host limiter to avoid overwhelming single servers
+	hl := newHostLimiter()
+
+	for _, feed := range feeds {
+		feed := feed // capture loop variable
+		g.Go(func() error {
+			// Extract host for per-host limiting
+			host := extractHost(feed.URL)
+			if host != "" {
+				if err := hl.acquire(ctx, host); err != nil {
+					return nil // context cancelled
+				}
+				defer hl.release(host)
+			}
+
+			if err := s.refreshFeedInternal(ctx, feed); err != nil {
+				log.Printf("refresh feed %d (%s): %v", feed.ID, feed.Title, err)
+			}
+			return nil
+		})
+	}
+
+	return g.Wait()
 }
 
 func (s *refreshService) refreshFeedInternal(ctx context.Context, feed model.Feed) error {

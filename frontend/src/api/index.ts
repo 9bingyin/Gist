@@ -328,9 +328,20 @@ export function watchImportStatus(onUpdate: (task: ImportTask) => void): () => v
   }
 }
 
-export function exportOPML(): void {
-  const url = `${API_BASE_URL}/api/opml/export`
-  window.location.href = url
+export async function exportOPML(): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/opml/export`)
+  if (!response.ok) {
+    throw new ApiError('Export failed', response.status)
+  }
+  const blob = await response.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'gist.opml'
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
 }
 
 export async function getAISettings(): Promise<AISettings> {

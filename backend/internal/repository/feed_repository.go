@@ -15,6 +15,7 @@ import (
 type FeedRepository interface {
 	Create(ctx context.Context, feed model.Feed) (model.Feed, error)
 	GetByID(ctx context.Context, id int64) (model.Feed, error)
+	GetByIDs(ctx context.Context, ids []int64) ([]model.Feed, error)
 	FindByURL(ctx context.Context, url string) (*model.Feed, error)
 	List(ctx context.Context, folderID *int64) ([]model.Feed, error)
 	ListWithoutIcon(ctx context.Context) ([]model.Feed, error)
@@ -68,6 +69,35 @@ func (r *feedRepository) Create(ctx context.Context, feed model.Feed) (model.Fee
 func (r *feedRepository) GetByID(ctx context.Context, id int64) (model.Feed, error) {
 	row := r.db.QueryRowContext(ctx, `SELECT id, folder_id, title, url, site_url, description, icon_path, type, etag, last_modified, error_message, created_at, updated_at FROM feeds WHERE id = ?`, id)
 	return scanFeed(row)
+}
+
+func (r *feedRepository) GetByIDs(ctx context.Context, ids []int64) ([]model.Feed, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	placeholders := strings.Repeat("?,", len(ids)-1) + "?"
+	args := make([]interface{}, len(ids))
+	for i, id := range ids {
+		args[i] = id
+	}
+	rows, err := r.db.QueryContext(ctx, `SELECT id, folder_id, title, url, site_url, description, icon_path, type, etag, last_modified, error_message, created_at, updated_at FROM feeds WHERE id IN (`+placeholders+`)`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("get feeds by ids: %w", err)
+	}
+	defer rows.Close()
+
+	var feeds []model.Feed
+	for rows.Next() {
+		feed, err := scanFeed(rows)
+		if err != nil {
+			return nil, err
+		}
+		feeds = append(feeds, feed)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate feeds: %w", err)
+	}
+	return feeds, nil
 }
 
 func (r *feedRepository) FindByURL(ctx context.Context, url string) (*model.Feed, error) {

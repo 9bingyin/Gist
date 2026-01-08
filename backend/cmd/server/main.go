@@ -78,8 +78,8 @@ func main() {
 	feedService := service.NewFeedService(feedRepo, folderRepo, entryRepo, iconService, settingsService, nil, anubisSolver)
 	entryService := service.NewEntryService(entryRepo, feedRepo, folderRepo)
 	readabilityService := service.NewReadabilityService(entryRepo, anubisSolver)
-	opmlService := service.NewOPMLService(folderService, feedService, folderRepo, feedRepo)
 	refreshService := service.NewRefreshService(feedRepo, entryRepo, settingsService, nil, anubisSolver)
+	opmlService := service.NewOPMLService(folderService, feedService, refreshService, iconService, folderRepo, feedRepo)
 
 	proxyService := service.NewProxyService(anubisSolver)
 	aiService := service.NewAIService(aiSummaryRepo, aiTranslationRepo, aiListTranslationRepo, settingsRepo, rateLimiter)
