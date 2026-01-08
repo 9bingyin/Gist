@@ -5,6 +5,11 @@ export function formatRelativeTime(dateString: string, t: TranslateFunction): st
   const now = new Date()
   const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000)
 
+  // Future date: show absolute date
+  if (diffInSeconds < 0) {
+    return date.toLocaleDateString()
+  }
+
   if (diffInSeconds < 60) return t('add_feed.just_now')
   if (diffInSeconds < 3600) {
     const minutes = Math.floor(diffInSeconds / 60)

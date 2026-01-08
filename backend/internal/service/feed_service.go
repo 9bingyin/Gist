@@ -499,19 +499,17 @@ func itemToEntry(feedID int64, item *gofeed.Item, ignoreDynamicTime bool) model.
 }
 
 func extractPublishedAt(item *gofeed.Item, ignoreDynamicTime bool) *time.Time {
-	now := time.Now()
-
 	// 1. Try to extract from summary (SEC RSS: "Filed: 2025-12-17")
 	if t := extractDateFromSummary(item.Description); t != nil {
 		return t
 	}
 
-	// 2. Try standard fields, reject future dates
-	if item.PublishedParsed != nil && !item.PublishedParsed.After(now) {
+	// 2. Try standard fields
+	if item.PublishedParsed != nil {
 		t := item.PublishedParsed.UTC()
 		return &t
 	}
-	if !ignoreDynamicTime && item.UpdatedParsed != nil && !item.UpdatedParsed.After(now) {
+	if !ignoreDynamicTime && item.UpdatedParsed != nil {
 		t := item.UpdatedParsed.UTC()
 		return &t
 	}
