@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -15,6 +14,7 @@ import (
 	"gist/backend/internal/db"
 	"gist/backend/internal/handler"
 	transport "gist/backend/internal/http"
+	"gist/backend/internal/logger"
 	"gist/backend/internal/repository"
 	"gist/backend/internal/scheduler"
 	"gist/backend/internal/service"
@@ -30,13 +30,17 @@ import (
 func main() {
 	cfg := config.Load()
 
+	logger.Init(logger.ParseLevel(cfg.LogLevel))
+
 	if err := snowflake.Init(1); err != nil {
-		log.Fatalf("init snowflake: %v", err)
+		logger.Error("init snowflake", "error", err)
+		os.Exit(1)
 	}
 
 	dbConn, err := db.Open(cfg.DBPath)
 	if err != nil {
-		log.Fatalf("open database: %v", err)
+		logger.Error("open database", "error", err)
+		os.Exit(1)
 	}
 	defer dbConn.Close()
 
@@ -70,7 +74,7 @@ func main() {
 	// Backfill icons for existing feeds (run in background)
 	go func() {
 		if err := iconService.BackfillIcons(context.Background()); err != nil {
-			log.Printf("backfill icons: %v", err)
+			logger.Warn("backfill icons", "error", err)
 		}
 	}()
 
@@ -107,7 +111,7 @@ func main() {
 		sigCh := make(chan os.Signal, 1)
 		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 		<-sigCh
-		log.Println("shutting down...")
+		logger.Info("shutting down...")
 
 		// Create a deadline for shutdown
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -119,13 +123,14 @@ func main() {
 
 		// Gracefully shutdown the HTTP server
 		if err := router.Shutdown(ctx); err != nil {
-			log.Printf("server shutdown error: %v", err)
+			logger.Error("server shutdown", "error", err)
 		}
 	}()
 
 	if err := router.Start(cfg.Addr); err != nil && !errors.Is(err, http.ErrServerClosed) {
-		log.Fatalf("start server: %v", err)
+		logger.Error("start server", "error", err)
+		os.Exit(1)
 	}
 
-	log.Println("server stopped")
+	logger.Info("server stopped")
 }

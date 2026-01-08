@@ -2,10 +2,10 @@ package scheduler
 
 import (
 	"context"
-	"log"
 	"sync"
 	"time"
 
+	"gist/backend/internal/logger"
 	"gist/backend/internal/service"
 )
 
@@ -27,13 +27,13 @@ func New(refreshService service.RefreshService, interval time.Duration) *Schedul
 func (s *Scheduler) Start() {
 	s.wg.Add(1)
 	go s.run()
-	log.Printf("scheduler started with interval %v", s.interval)
+	logger.Info("scheduler started", "interval", s.interval)
 }
 
 func (s *Scheduler) Stop() {
 	close(s.stopCh)
 	s.wg.Wait()
-	log.Println("scheduler stopped")
+	logger.Info("scheduler stopped")
 }
 
 func (s *Scheduler) run() {
@@ -59,9 +59,9 @@ func (s *Scheduler) refresh() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
-	log.Println("starting scheduled feed refresh")
+	logger.Info("starting scheduled feed refresh")
 	if err := s.refreshService.RefreshAll(ctx); err != nil {
-		log.Printf("scheduled refresh error: %v", err)
+		logger.Error("scheduled refresh", "error", err)
 	}
-	log.Println("scheduled feed refresh completed")
+	logger.Info("scheduled feed refresh completed")
 }

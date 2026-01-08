@@ -3,14 +3,60 @@ package http
 import (
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/labstack/echo/v4"
 
+	"gist/backend/internal/logger"
 	"gist/backend/internal/service"
 )
 
 // AuthCookieName is the name of the authentication cookie.
 const AuthCookieName = "gist_auth"
+
+// RequestLoggerMiddleware logs HTTP requests using slog.
+func RequestLoggerMiddleware() echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			start := time.Now()
+
+			err := next(c)
+			if err != nil {
+				c.Error(err)
+			}
+
+			req := c.Request()
+			res := c.Response()
+			latency := time.Since(start)
+
+			status := res.Status
+			if status >= 500 {
+				logger.Error("request",
+					"method", req.Method,
+					"uri", req.RequestURI,
+					"status", status,
+					"latency", latency,
+				)
+			} else if status >= 400 {
+				logger.Warn("request",
+					"method", req.Method,
+					"uri", req.RequestURI,
+					"status", status,
+					"latency", latency,
+				)
+			} else {
+				logger.Debug("request",
+					"method", req.Method,
+					"uri", req.RequestURI,
+					"status", status,
+					"latency", latency,
+				)
+			}
+
+			return nil
+		}
+	}
+}
 
 // JWTAuthMiddleware creates a middleware that validates JWT tokens.
 // It checks both Authorization header (for API calls) and Cookie (for browser resource requests like images).

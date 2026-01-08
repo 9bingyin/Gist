@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"strings"
@@ -18,6 +17,7 @@ import (
 	"golang.org/x/sync/semaphore"
 
 	"gist/backend/internal/config"
+	"gist/backend/internal/logger"
 	"gist/backend/internal/model"
 	"gist/backend/internal/repository"
 	"gist/backend/internal/service/anubis"
@@ -139,7 +139,7 @@ func (s *refreshService) RefreshAll(ctx context.Context) error {
 			}
 
 			if err := s.refreshFeedInternal(ctx, feed); err != nil {
-				log.Printf("refresh feed %d (%s): %v", feed.ID, feed.Title, err)
+				logger.Warn("refresh feed", "feedID", feed.ID, "title", feed.Title, "error", err)
 				// Don't return error to continue refreshing other feeds
 			}
 			return nil
@@ -181,7 +181,7 @@ func (s *refreshService) RefreshFeeds(ctx context.Context, feedIDs []int64) erro
 	// Get all feeds by IDs in a single query
 	feeds, err := s.feeds.GetByIDs(ctx, feedIDs)
 	if err != nil {
-		log.Printf("get feeds by ids: %v", err)
+		logger.Error("get feeds by ids", "error", err)
 		return err
 	}
 
@@ -209,7 +209,7 @@ func (s *refreshService) RefreshFeeds(ctx context.Context, feedIDs []int64) erro
 			}
 
 			if err := s.refreshFeedInternal(ctx, feed); err != nil {
-				log.Printf("refresh feed %d (%s): %v", feed.ID, feed.Title, err)
+				logger.Warn("refresh feed", "feedID", feed.ID, "title", feed.Title, "error", err)
 			}
 			return nil
 		})
@@ -264,7 +264,7 @@ func (s *refreshService) refreshFeedWithCookie(ctx context.Context, feed model.F
 
 	// Not modified, skip parsing but clear error if any
 	if resp.StatusCode == http.StatusNotModified {
-		log.Printf("feed %d (%s): not modified", feed.ID, feed.Title)
+		logger.Debug("feed not modified", "feedID", feed.ID, "title", feed.Title)
 		if feed.ErrorMessage != nil {
 			_ = s.feeds.UpdateErrorMessage(ctx, feed.ID, nil)
 		}
@@ -275,13 +275,13 @@ func (s *refreshService) refreshFeedWithCookie(ctx context.Context, feed model.F
 	if resp.StatusCode >= http.StatusBadRequest && allowFallback && s.settings != nil {
 		fallbackUA := s.settings.GetFallbackUserAgent(ctx)
 		if fallbackUA != "" {
-			log.Printf("feed %d (%s): HTTP %d, retrying with fallback UA", feed.ID, feed.Title, resp.StatusCode)
+			logger.Info("retrying with fallback UA", "feedID", feed.ID, "title", feed.Title, "statusCode", resp.StatusCode)
 			return s.refreshFeedWithCookie(ctx, feed, fallbackUA, cookie, false, retryCount)
 		}
 	}
 
 	if resp.StatusCode >= http.StatusBadRequest {
-		log.Printf("feed %d (%s): HTTP %d", feed.ID, feed.Title, resp.StatusCode)
+		logger.Info("feed HTTP error", "feedID", feed.ID, "title", feed.Title, "statusCode", resp.StatusCode)
 		errMsg := fmt.Sprintf("HTTP %d", resp.StatusCode)
 		_ = s.feeds.UpdateErrorMessage(ctx, feed.ID, &errMsg)
 		return nil
@@ -339,7 +339,7 @@ func (s *refreshService) refreshFeedWithCookie(ctx context.Context, feed model.F
 	}
 	if needsUpdate {
 		if _, err := s.feeds.Update(ctx, feed); err != nil {
-			log.Printf("update feed %d etag: %v", feed.ID, err)
+			logger.Warn("update feed etag", "feedID", feed.ID, "error", err)
 		}
 	}
 
@@ -356,12 +356,12 @@ func (s *refreshService) refreshFeedWithCookie(ctx context.Context, feed model.F
 		// Check if entry already exists
 		exists, err := s.entries.ExistsByURL(ctx, feed.ID, *entry.URL)
 		if err != nil {
-			log.Printf("check entry exists: %v", err)
+			logger.Warn("check entry exists", "error", err)
 			continue
 		}
 
 		if err := s.entries.CreateOrUpdate(ctx, entry); err != nil {
-			log.Printf("save entry: %v", err)
+			logger.Warn("save entry", "error", err)
 			continue
 		}
 
@@ -373,7 +373,7 @@ func (s *refreshService) refreshFeedWithCookie(ctx context.Context, feed model.F
 	}
 
 	if newCount > 0 || updatedCount > 0 {
-		log.Printf("feed %d (%s): %d new, %d updated", feed.ID, feed.Title, newCount, updatedCount)
+		logger.Info("feed refreshed", "feedID", feed.ID, "title", feed.Title, "new", newCount, "updated", updatedCount)
 	}
 
 	// Fetch icon if feed doesn't have one
@@ -418,7 +418,7 @@ func (s *refreshService) refreshFeedWithFreshClient(ctx context.Context, feed mo
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= http.StatusBadRequest {
-		log.Printf("feed %d (%s): HTTP %d", feed.ID, feed.Title, resp.StatusCode)
+		logger.Info("feed HTTP error", "feedID", feed.ID, "title", feed.Title, "statusCode", resp.StatusCode)
 		errMsg := fmt.Sprintf("HTTP %d", resp.StatusCode)
 		_ = s.feeds.UpdateErrorMessage(ctx, feed.ID, &errMsg)
 		return nil
@@ -465,7 +465,7 @@ func (s *refreshService) refreshFeedWithFreshClient(ctx context.Context, feed mo
 	}
 	if needsUpdate {
 		if _, err := s.feeds.Update(ctx, feed); err != nil {
-			log.Printf("update feed %d etag: %v", feed.ID, err)
+			logger.Warn("update feed etag", "feedID", feed.ID, "error", err)
 		}
 	}
 
@@ -481,12 +481,12 @@ func (s *refreshService) refreshFeedWithFreshClient(ctx context.Context, feed mo
 
 		exists, err := s.entries.ExistsByURL(ctx, feed.ID, *entry.URL)
 		if err != nil {
-			log.Printf("check entry exists: %v", err)
+			logger.Warn("check entry exists", "error", err)
 			continue
 		}
 
 		if err := s.entries.CreateOrUpdate(ctx, entry); err != nil {
-			log.Printf("save entry: %v", err)
+			logger.Warn("save entry", "error", err)
 			continue
 		}
 
@@ -498,7 +498,7 @@ func (s *refreshService) refreshFeedWithFreshClient(ctx context.Context, feed mo
 	}
 
 	if newCount > 0 || updatedCount > 0 {
-		log.Printf("feed %d (%s): %d new, %d updated", feed.ID, feed.Title, newCount, updatedCount)
+		logger.Info("feed refreshed", "feedID", feed.ID, "title", feed.Title, "new", newCount, "updated", updatedCount)
 	}
 
 	// Fetch icon if feed doesn't have one

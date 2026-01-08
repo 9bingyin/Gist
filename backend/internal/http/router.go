@@ -26,7 +26,7 @@ func NewRouter(
 	e := echo.New()
 	e.HideBanner = true
 	e.Use(middleware.Recover())
-	e.Use(middleware.Logger())
+	e.Use(RequestLoggerMiddleware())
 
 	e.GET("/swagger/*", echoSwagger.WrapHandler)
 

@@ -29,6 +29,7 @@ RUN mkdir -p /app/data
 ENV GIST_ADDR=:8080
 ENV GIST_DATA_DIR=/app/data
 ENV GIST_STATIC_DIR=/app/static
+ENV GIST_LOG_LEVEL=info
 ENV TZ=Asia/Shanghai
 
 EXPOSE 8080
