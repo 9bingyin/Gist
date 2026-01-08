@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/mmcdole/gofeed"
+	"golang.org/x/sync/errgroup"
 
 	"gist/backend/internal/config"
 	"gist/backend/internal/model"
@@ -21,7 +22,10 @@ import (
 	"gist/backend/internal/service/anubis"
 )
 
-const iconTimeout = 15 * time.Second
+const (
+	iconTimeout        = 15 * time.Second
+	maxConcurrentIcons = 4 // Concurrent icon fetch limit
+)
 
 type IconService interface {
 	// FetchAndSaveIcon downloads and saves the icon locally
@@ -268,26 +272,35 @@ func (s *iconService) BackfillIcons(ctx context.Context) error {
 	return nil
 }
 
-// fetchIconsForFeeds parses RSS feeds to get imageURL and fetches icons
+// fetchIconsForFeeds parses RSS feeds to get imageURL and fetches icons concurrently
 func (s *iconService) fetchIconsForFeeds(ctx context.Context, parser *gofeed.Parser, feeds []model.Feed) {
+	g, ctx := errgroup.WithContext(ctx)
+	g.SetLimit(maxConcurrentIcons)
+
 	for _, feed := range feeds {
-		siteURL := feed.URL
-		if feed.SiteURL != nil && *feed.SiteURL != "" {
-			siteURL = *feed.SiteURL
-		}
+		feed := feed // capture loop variable
+		g.Go(func() error {
+			siteURL := feed.URL
+			if feed.SiteURL != nil && *feed.SiteURL != "" {
+				siteURL = *feed.SiteURL
+			}
 
-		// Try to parse feed to get imageURL from RSS
-		imageURL := ""
-		if parsed, err := parser.ParseURLWithContext(feed.URL, ctx); err == nil && parsed.Image != nil {
-			imageURL = strings.TrimSpace(parsed.Image.URL)
-		}
+			// Try to parse feed to get imageURL from RSS
+			imageURL := ""
+			if parsed, err := parser.ParseURLWithContext(feed.URL, ctx); err == nil && parsed.Image != nil {
+				imageURL = strings.TrimSpace(parsed.Image.URL)
+			}
 
-		iconPath, err := s.FetchAndSaveIcon(ctx, imageURL, siteURL)
-		if err != nil || iconPath == "" {
-			continue
-		}
-		_ = s.feeds.UpdateIconPath(ctx, feed.ID, iconPath)
+			iconPath, err := s.FetchAndSaveIcon(ctx, imageURL, siteURL)
+			if err != nil || iconPath == "" {
+				return nil // Don't propagate error, continue with other feeds
+			}
+			_ = s.feeds.UpdateIconPath(ctx, feed.ID, iconPath)
+			return nil
+		})
 	}
+
+	_ = g.Wait()
 }
 
 func (s *iconService) buildFaviconURL(siteURL string) string {

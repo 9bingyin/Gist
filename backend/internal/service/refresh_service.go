@@ -77,13 +77,14 @@ type refreshService struct {
 	feeds        repository.FeedRepository
 	entries      repository.EntryRepository
 	settings     SettingsService
+	icons        IconService
 	httpClient   *http.Client
 	anubis       *anubis.Solver
 	mu           sync.Mutex
 	isRefreshing bool
 }
 
-func NewRefreshService(feeds repository.FeedRepository, entries repository.EntryRepository, settings SettingsService, httpClient *http.Client, anubisSolver *anubis.Solver) RefreshService {
+func NewRefreshService(feeds repository.FeedRepository, entries repository.EntryRepository, settings SettingsService, icons IconService, httpClient *http.Client, anubisSolver *anubis.Solver) RefreshService {
 	client := httpClient
 	if client == nil {
 		client = &http.Client{Timeout: refreshTimeout}
@@ -92,6 +93,7 @@ func NewRefreshService(feeds repository.FeedRepository, entries repository.Entry
 		feeds:      feeds,
 		entries:    entries,
 		settings:   settings,
+		icons:      icons,
 		httpClient: client,
 		anubis:     anubisSolver,
 	}
@@ -373,6 +375,22 @@ func (s *refreshService) refreshFeedWithCookie(ctx context.Context, feed model.F
 	if newCount > 0 || updatedCount > 0 {
 		log.Printf("feed %d (%s): %d new, %d updated", feed.ID, feed.Title, newCount, updatedCount)
 	}
+
+	// Fetch icon if feed doesn't have one
+	if s.icons != nil && (feed.IconPath == nil || *feed.IconPath == "") {
+		imageURL := ""
+		if parsed.Image != nil {
+			imageURL = strings.TrimSpace(parsed.Image.URL)
+		}
+		siteURL := feed.URL
+		if feed.SiteURL != nil && *feed.SiteURL != "" {
+			siteURL = *feed.SiteURL
+		}
+		if iconPath, err := s.icons.FetchAndSaveIcon(ctx, imageURL, siteURL); err == nil && iconPath != "" {
+			_ = s.feeds.UpdateIconPath(ctx, feed.ID, iconPath)
+		}
+	}
+
 	return nil
 }
 
@@ -482,6 +500,22 @@ func (s *refreshService) refreshFeedWithFreshClient(ctx context.Context, feed mo
 	if newCount > 0 || updatedCount > 0 {
 		log.Printf("feed %d (%s): %d new, %d updated", feed.ID, feed.Title, newCount, updatedCount)
 	}
+
+	// Fetch icon if feed doesn't have one
+	if s.icons != nil && (feed.IconPath == nil || *feed.IconPath == "") {
+		imageURL := ""
+		if parsed.Image != nil {
+			imageURL = strings.TrimSpace(parsed.Image.URL)
+		}
+		siteURL := feed.URL
+		if feed.SiteURL != nil && *feed.SiteURL != "" {
+			siteURL = *feed.SiteURL
+		}
+		if iconPath, err := s.icons.FetchAndSaveIcon(ctx, imageURL, siteURL); err == nil && iconPath != "" {
+			_ = s.feeds.UpdateIconPath(ctx, feed.ID, iconPath)
+		}
+	}
+
 	return nil
 }
 
