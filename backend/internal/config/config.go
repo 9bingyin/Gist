@@ -28,6 +28,7 @@ type Config struct {
 	DBPath    string
 	DataDir   string
 	StaticDir string
+	LogLevel  string
 }
 
 func Load() Config {
@@ -48,11 +49,17 @@ func Load() Config {
 		staticDir = detectStaticDir()
 	}
 
+	logLevel := os.Getenv("GIST_LOG_LEVEL")
+	if logLevel == "" {
+		logLevel = "info"
+	}
+
 	return Config{
 		Addr:      addr,
 		DBPath:    filepath.Clean(path),
 		DataDir:   filepath.Clean(dataDir),
 		StaticDir: filepath.Clean(staticDir),
+		LogLevel:  logLevel,
 	}
 }
 

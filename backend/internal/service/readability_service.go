@@ -6,18 +6,18 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
+	readability "codeberg.org/readeck/go-readability/v2"
 	"github.com/Noooste/azuretls-client"
 	"github.com/microcosm-cc/bluemonday"
 	"golang.org/x/net/html"
-	readability "codeberg.org/readeck/go-readability/v2"
 
 	"gist/backend/internal/config"
+	"gist/backend/internal/logger"
 	"gist/backend/internal/repository"
 	"gist/backend/internal/service/anubis"
 )
@@ -202,7 +202,7 @@ func (s *readabilityService) doFetch(ctx context.Context, session *azuretls.Sess
 		if retryCount >= 2 || isFreshSession {
 			return nil, fmt.Errorf("anubis challenge persists after %d retries for %s", retryCount, targetURL)
 		}
-		log.Printf("readability: detected Anubis challenge for %s", targetURL)
+		logger.Debug("readability detected Anubis challenge", "url", targetURL)
 		var initialCookies []*http.Cookie
 		for name, value := range resp.Cookies {
 			initialCookies = append(initialCookies, &http.Cookie{Name: name, Value: value})

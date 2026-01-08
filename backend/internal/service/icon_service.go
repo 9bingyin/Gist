@@ -17,6 +17,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"gist/backend/internal/config"
+	"gist/backend/internal/logger"
 	"gist/backend/internal/model"
 	"gist/backend/internal/repository"
 	"gist/backend/internal/service/anubis"
@@ -99,6 +100,7 @@ func (s *iconService) FetchAndSaveIcon(ctx context.Context, feedImageURL, siteUR
 	// 2. Google Favicon API (which already tries /favicon.ico internally)
 	iconData, err := s.downloadIcon(ctx, iconURL)
 	if err != nil {
+		logger.Debug("icon download failed, trying fallback", "url", iconURL, "error", err)
 		// Try Google Favicon API as fallback
 		googleURL := s.buildFaviconURL(siteURL)
 		if googleURL != "" && googleURL != iconURL {
@@ -111,6 +113,7 @@ func (s *iconService) FetchAndSaveIcon(ctx context.Context, feedImageURL, siteUR
 				}
 				fullPath = filepath.Join(s.dataDir, "icons", iconPath)
 			} else {
+				logger.Debug("icon fallback also failed", "url", googleURL, "error", err)
 				return "", nil // All attempts failed, icon is optional
 			}
 		} else {
@@ -127,6 +130,7 @@ func (s *iconService) FetchAndSaveIcon(ctx context.Context, feedImageURL, siteUR
 		return "", fmt.Errorf("write icon file: %w", err)
 	}
 
+	logger.Info("icon saved", "path", iconPath, "site", siteURL)
 	return iconPath, nil
 }
 
@@ -220,6 +224,9 @@ func (s *iconService) BackfillIcons(ctx context.Context) error {
 	feeds, err := s.feeds.ListWithoutIcon(ctx)
 	if err != nil {
 		return fmt.Errorf("list feeds without icon: %w", err)
+	}
+	if len(feeds) > 0 {
+		logger.Info("backfilling icons for feeds without icon", "count", len(feeds))
 	}
 	s.fetchIconsForFeeds(ctx, parser, feeds)
 
@@ -381,6 +388,7 @@ func (s *iconService) downloadIconWithRetry(ctx context.Context, iconURL string,
 			// Too many retries, give up
 			return nil, fmt.Errorf("anubis challenge persists after %d retries", retryCount)
 		}
+		logger.Debug("icon download detected Anubis challenge", "url", iconURL)
 		newCookie, solveErr := s.anubis.SolveFromBody(ctx, data, iconURL, resp.Cookies())
 		if solveErr != nil {
 			return nil, solveErr

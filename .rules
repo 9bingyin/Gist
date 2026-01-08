@@ -232,6 +232,7 @@ entries_ad  -- AFTER DELETE: 同步删除 entries_fts
 *   `GIST_DB_PATH` - 数据库路径
 *   `GIST_DATA_DIR` - 数据目录 (默认 `./data`)
 *   `GIST_STATIC_DIR` - 静态文件目录
+*   `GIST_LOG_LEVEL` - 日志级别 (debug/info/warn/error，默认 `info`)
 
 ---
 

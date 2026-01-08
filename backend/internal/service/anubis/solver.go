@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -17,6 +16,7 @@ import (
 	"time"
 
 	"gist/backend/internal/config"
+	"gist/backend/internal/logger"
 )
 
 const solverTimeout = 30 * time.Second
@@ -84,7 +84,7 @@ func (s *Solver) SolveFromBody(ctx context.Context, body []byte, originalURL str
 	s.mu.Lock()
 	if ch, ok := s.solving[host]; ok {
 		s.mu.Unlock()
-		log.Printf("anubis: waiting for ongoing solve for %s", host)
+		logger.Debug("anubis waiting for ongoing solve", "host", host)
 		select {
 		case <-ch:
 			// Small delay to let the cookie propagate and avoid thundering herd
@@ -118,7 +118,7 @@ func (s *Solver) SolveFromBody(ctx context.Context, body []byte, originalURL str
 		return "", fmt.Errorf("parse anubis challenge: %w", err)
 	}
 
-	log.Printf("anubis: detected challenge for %s (difficulty=%d)", originalURL, challenge.Rules.Difficulty)
+	logger.Debug("anubis detected challenge", "url", originalURL, "difficulty", challenge.Rules.Difficulty)
 
 	// Solve the challenge
 	result := solveChallenge(challenge)
@@ -132,9 +132,9 @@ func (s *Solver) SolveFromBody(ctx context.Context, body []byte, originalURL str
 	// Cache the cookie
 	if s.store != nil && host != "" {
 		if err := s.store.SetCookie(ctx, host, cookie, expiresAt); err != nil {
-			log.Printf("anubis: failed to cache cookie for %s: %v", host, err)
+			logger.Warn("anubis failed to cache cookie", "host", host, "error", err)
 		} else {
-			log.Printf("anubis: cached cookie for %s (expires %s)", host, expiresAt.Format(time.RFC3339))
+			logger.Debug("anubis cached cookie", "host", host, "expires", expiresAt.Format(time.RFC3339))
 		}
 	}
 
