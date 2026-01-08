@@ -11,7 +11,7 @@ import {
 import { SidebarHeader } from './SidebarHeader'
 import { FeedCategory } from './FeedCategory'
 import { FeedItem } from './FeedItem'
-import { SettingsModal } from '@/components/settings'
+import { SettingsModal, type SettingsTab } from '@/components/settings'
 import { useFolders, useDeleteFolder, useUpdateFolderType } from '@/hooks/useFolders'
 import { useFeeds, useDeleteFeed, useUpdateFeed, useUpdateFeedType } from '@/hooks/useFeeds'
 import { useUnreadCounts, useStarredCount } from '@/hooks/useEntries'
@@ -113,6 +113,7 @@ export function Sidebar({
   const { t } = useTranslation()
   const { user, logout } = useAuth()
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>('general')
   const [sortBy, setSortBy] = useState<SortBy>('name')
 
   // Animation direction tracking
@@ -257,7 +258,14 @@ export function Sidebar({
         starredCount={starredCountData?.count}
         isStarredSelected={isStarredSelected}
         onStarredClick={onSelectStarred}
-        onSettingsClick={() => setIsSettingsOpen(true)}
+        onProfileClick={() => {
+          setSettingsTab('profile')
+          setIsSettingsOpen(true)
+        }}
+        onSettingsClick={() => {
+          setSettingsTab('general')
+          setIsSettingsOpen(true)
+        }}
         onLogoutClick={logout}
       />
 
@@ -411,7 +419,7 @@ export function Sidebar({
         </AnimatePresence>
       </div>
 
-      <SettingsModal open={isSettingsOpen} onOpenChange={setIsSettingsOpen} />
+      <SettingsModal open={isSettingsOpen} onOpenChange={setIsSettingsOpen} initialTab={settingsTab} />
     </div>
   )
 }

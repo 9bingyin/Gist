@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 
 interface RegisterPageProps {
-  onRegister: (username: string, email: string, password: string) => Promise<void>
+  onRegister: (username: string, nickname: string, email: string, password: string) => Promise<void>
   error: string | null
   onClearError: () => void
 }
@@ -11,6 +11,7 @@ interface RegisterPageProps {
 export function RegisterPage({ onRegister, error, onClearError }: RegisterPageProps) {
   const { t } = useTranslation()
   const [username, setUsername] = useState('')
+  const [nickname, setNickname] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -35,7 +36,7 @@ export function RegisterPage({ onRegister, error, onClearError }: RegisterPagePr
 
     setIsLoading(true)
     try {
-      await onRegister(username, email, password)
+      await onRegister(username, nickname, email, password)
     } finally {
       setIsLoading(false)
     }
@@ -48,21 +49,7 @@ export function RegisterPage({ onRegister, error, onClearError }: RegisterPagePr
       <div className="w-full max-w-sm space-y-6">
         {/* Logo and Title */}
         <div className="text-center">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10">
-            <svg
-              className="h-8 w-8 text-primary"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M6 5c7.18 0 13 5.82 13 13M6 11a7 7 0 017 7m-6 0a1 1 0 11-2 0 1 1 0 012 0z"
-              />
-            </svg>
-          </div>
+          <img src="/logo.svg" alt="Gist" className="mx-auto mb-4 h-16 w-16 rounded-2xl" />
           <h1 className="text-2xl font-bold tracking-tight text-foreground">Gist</h1>
           <p className="mt-2 text-sm text-muted-foreground">{t('auth.register_description')}</p>
         </div>
@@ -93,7 +80,7 @@ export function RegisterPage({ onRegister, error, onClearError }: RegisterPagePr
               id="username"
               type="text"
               value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9]/g, '').replace(/^[0-9]+/, ''))}
               placeholder={t('auth.username_placeholder')}
               className={cn(
                 'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2',
@@ -105,6 +92,29 @@ export function RegisterPage({ onRegister, error, onClearError }: RegisterPagePr
               autoComplete="username"
               autoFocus
             />
+            <p className="text-xs text-muted-foreground">{t('auth.username_hint')}</p>
+          </div>
+
+          <div className="space-y-2">
+            <label htmlFor="nickname" className="text-sm font-medium text-foreground">
+              {t('auth.nickname')}
+            </label>
+            <input
+              id="nickname"
+              type="text"
+              value={nickname}
+              onChange={(e) => setNickname(e.target.value)}
+              placeholder={t('auth.nickname_placeholder')}
+              className={cn(
+                'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2',
+                'text-sm placeholder:text-muted-foreground',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                'disabled:cursor-not-allowed disabled:opacity-50'
+              )}
+              disabled={isLoading}
+              autoComplete="nickname"
+            />
+            <p className="text-xs text-muted-foreground">{t('auth.nickname_hint')}</p>
           </div>
 
           <div className="space-y-2">
@@ -126,7 +136,6 @@ export function RegisterPage({ onRegister, error, onClearError }: RegisterPagePr
               disabled={isLoading}
               autoComplete="email"
             />
-            <p className="text-xs text-muted-foreground">{t('auth.email_hint')}</p>
           </div>
 
           <div className="space-y-2">

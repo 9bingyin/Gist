@@ -340,9 +340,9 @@ definitions:
     type: object
   internal_handler.loginRequest:
     properties:
-      password:
+      identifier:
         type: string
-      username:
+      password:
         type: string
     type: object
   internal_handler.markAllReadRequest:
@@ -362,6 +362,8 @@ definitions:
   internal_handler.registerRequest:
     properties:
       email:
+        type: string
+      nickname:
         type: string
       password:
         type: string
@@ -428,6 +430,17 @@ definitions:
       type:
         type: string
     type: object
+  internal_handler.updateProfileRequest:
+    properties:
+      currentPassword:
+        type: string
+      email:
+        type: string
+      newPassword:
+        type: string
+      nickname:
+        type: string
+    type: object
   internal_handler.updateReadRequest:
     properties:
       read:
@@ -448,6 +461,8 @@ definitions:
       avatarUrl:
         type: string
       email:
+        type: string
+      nickname:
         type: string
       username:
         type: string
@@ -610,7 +625,7 @@ paths:
     post:
       consumes:
       - application/json
-      description: Authenticate a user and get a JWT token
+      description: Authenticate a user with username or email and get a JWT token
       parameters:
       - description: Login credentials
         in: body
@@ -678,6 +693,42 @@ paths:
       security:
       - BearerAuth: []
       summary: Get current user
+      tags:
+      - auth
+  /auth/profile:
+    put:
+      consumes:
+      - application/json
+      description: Update user nickname, email and/or password
+      parameters:
+      - description: Profile update
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.updateProfileRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handler.userResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_handler.errorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_handler.errorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_handler.errorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update profile
       tags:
       - auth
   /auth/register:

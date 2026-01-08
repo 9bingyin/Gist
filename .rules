@@ -124,7 +124,8 @@
 | updated_at | TEXT | NOT NULL | 更新时间 (RFC3339) |
 
 *已使用的配置键*:
-- `user.username` - 用户名 (单用户模式)
+- `user.username` - 用户名 (单用户模式，小写字母和数字，注册后不可修改)
+- `user.nickname` - 用户昵称 (显示名称，可选，默认使用用户名)
 - `user.email` - 用户邮箱 (用于 Gravatar 头像)
 - `user.password_hash` - bcrypt 密码哈希
 - `user.jwt_secret` - JWT 签名密钥 (hex 编码的 32 字节随机数)

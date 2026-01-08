@@ -3,24 +3,24 @@ import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 
 interface LoginPageProps {
-  onLogin: (username: string, password: string) => Promise<void>
+  onLogin: (identifier: string, password: string) => Promise<void>
   error: string | null
   onClearError: () => void
 }
 
 export function LoginPage({ onLogin, error, onClearError }: LoginPageProps) {
   const { t } = useTranslation()
-  const [username, setUsername] = useState('')
+  const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
   const [isLoading, setIsLoading] = useState(false)
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
-    if (!username || !password) return
+    if (!identifier || !password) return
 
     setIsLoading(true)
     try {
-      await onLogin(username, password)
+      await onLogin(identifier, password)
     } finally {
       setIsLoading(false)
     }
@@ -31,21 +31,7 @@ export function LoginPage({ onLogin, error, onClearError }: LoginPageProps) {
       <div className="w-full max-w-sm space-y-6">
         {/* Logo and Title */}
         <div className="text-center">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10">
-            <svg
-              className="h-8 w-8 text-primary"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M6 5c7.18 0 13 5.82 13 13M6 11a7 7 0 017 7m-6 0a1 1 0 11-2 0 1 1 0 012 0z"
-              />
-            </svg>
-          </div>
+          <img src="/logo.svg" alt="Gist" className="mx-auto mb-4 h-16 w-16 rounded-2xl" />
           <h1 className="text-2xl font-bold tracking-tight text-foreground">Gist</h1>
           <p className="mt-2 text-sm text-muted-foreground">{t('auth.login_description')}</p>
         </div>
@@ -66,15 +52,15 @@ export function LoginPage({ onLogin, error, onClearError }: LoginPageProps) {
           )}
 
           <div className="space-y-2">
-            <label htmlFor="username" className="text-sm font-medium text-foreground">
-              {t('auth.username')}
+            <label htmlFor="identifier" className="text-sm font-medium text-foreground">
+              {t('auth.identifier')}
             </label>
             <input
-              id="username"
+              id="identifier"
               type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder={t('auth.username_placeholder')}
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
+              placeholder={t('auth.identifier_placeholder')}
               className={cn(
                 'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2',
                 'text-sm placeholder:text-muted-foreground',
@@ -110,7 +96,7 @@ export function LoginPage({ onLogin, error, onClearError }: LoginPageProps) {
 
           <button
             type="submit"
-            disabled={isLoading || !username || !password}
+            disabled={isLoading || !identifier || !password}
             className={cn(
               'inline-flex h-10 w-full items-center justify-center rounded-md',
               'bg-primary px-4 py-2 text-sm font-medium text-primary-foreground',

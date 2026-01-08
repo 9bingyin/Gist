@@ -17,6 +17,7 @@ interface SidebarHeaderProps {
   isStarredSelected?: boolean
   onAddClick?: () => void
   onStarredClick?: () => void
+  onProfileClick?: () => void
   onSettingsClick?: () => void
   onLogoutClick?: () => void
 }
@@ -51,6 +52,7 @@ export function SidebarHeader({
   isStarredSelected,
   onAddClick,
   onStarredClick,
+  onProfileClick,
   onSettingsClick,
   onLogoutClick,
 }: SidebarHeaderProps) {
@@ -83,6 +85,7 @@ export function SidebarHeader({
           starredCount={starredCount}
           isStarredSelected={isStarredSelected}
           onStarredClick={onStarredClick}
+          onProfileClick={onProfileClick}
           onSettingsClick={onSettingsClick}
           onLogoutClick={onLogoutClick}
         />

@@ -28,13 +28,21 @@ type authStatusResponse struct {
 
 type registerRequest struct {
 	Username string `json:"username"`
+	Nickname string `json:"nickname"`
 	Email    string `json:"email"`
 	Password string `json:"password"`
 }
 
 type loginRequest struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
+	Identifier string `json:"identifier"`
+	Password   string `json:"password"`
+}
+
+type updateProfileRequest struct {
+	Nickname        string `json:"nickname"`
+	Email           string `json:"email"`
+	CurrentPassword string `json:"currentPassword"`
+	NewPassword     string `json:"newPassword"`
 }
 
 type authResponse struct {
@@ -44,6 +52,7 @@ type authResponse struct {
 
 type userResponse struct {
 	Username  string `json:"username"`
+	Nickname  string `json:"nickname"`
 	Email     string `json:"email"`
 	AvatarURL string `json:"avatarUrl"`
 }
@@ -58,6 +67,7 @@ func (h *AuthHandler) RegisterPublicRoutes(g *echo.Group) {
 // RegisterProtectedRoutes registers routes that require authentication.
 func (h *AuthHandler) RegisterProtectedRoutes(g *echo.Group) {
 	g.GET("/auth/me", h.GetCurrentUser)
+	g.PUT("/auth/profile", h.UpdateProfile)
 	g.POST("/auth/logout", h.Logout)
 }
 
@@ -97,7 +107,7 @@ func (h *AuthHandler) Register(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, errorResponse{Error: "invalid request"})
 	}
 
-	resp, err := h.service.Register(c.Request().Context(), req.Username, req.Email, req.Password)
+	resp, err := h.service.Register(c.Request().Context(), req.Username, req.Nickname, req.Email, req.Password)
 	if err != nil {
 		return h.handleAuthError(c, err)
 	}
@@ -113,7 +123,7 @@ func (h *AuthHandler) Register(c echo.Context) error {
 
 // Login authenticates a user.
 // @Summary Login
-// @Description Authenticate a user and get a JWT token
+// @Description Authenticate a user with username or email and get a JWT token
 // @Tags auth
 // @Accept json
 // @Produce json
@@ -129,7 +139,7 @@ func (h *AuthHandler) Login(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, errorResponse{Error: "invalid request"})
 	}
 
-	resp, err := h.service.Login(c.Request().Context(), req.Username, req.Password)
+	resp, err := h.service.Login(c.Request().Context(), req.Identifier, req.Password)
 	if err != nil {
 		return h.handleAuthError(c, err)
 	}
@@ -166,6 +176,33 @@ func (h *AuthHandler) GetCurrentUser(c echo.Context) error {
 	return c.JSON(http.StatusOK, toUserResponse(user))
 }
 
+// UpdateProfile updates the user's profile.
+// @Summary Update profile
+// @Description Update user nickname, email and/or password
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body updateProfileRequest true "Profile update"
+// @Success 200 {object} userResponse
+// @Failure 400 {object} errorResponse
+// @Failure 401 {object} errorResponse
+// @Failure 500 {object} errorResponse
+// @Router /auth/profile [put]
+func (h *AuthHandler) UpdateProfile(c echo.Context) error {
+	var req updateProfileRequest
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, errorResponse{Error: "invalid request"})
+	}
+
+	user, err := h.service.UpdateProfile(c.Request().Context(), req.Nickname, req.Email, req.CurrentPassword, req.NewPassword)
+	if err != nil {
+		return h.handleAuthError(c, err)
+	}
+
+	return c.JSON(http.StatusOK, toUserResponse(user))
+}
+
 // Logout clears the authentication cookie.
 // @Summary Logout
 // @Description Clear authentication cookie and log out the user
@@ -189,12 +226,18 @@ func (h *AuthHandler) handleAuthError(c echo.Context, err error) error {
 		return c.JSON(http.StatusUnauthorized, errorResponse{Error: "invalid credentials"})
 	case errors.Is(err, service.ErrUsernameRequired):
 		return c.JSON(http.StatusBadRequest, errorResponse{Error: "username is required"})
+	case errors.Is(err, service.ErrInvalidUsername):
+		return c.JSON(http.StatusBadRequest, errorResponse{Error: "username must be lowercase letters and numbers only"})
 	case errors.Is(err, service.ErrEmailRequired):
 		return c.JSON(http.StatusBadRequest, errorResponse{Error: "email is required"})
 	case errors.Is(err, service.ErrPasswordRequired):
 		return c.JSON(http.StatusBadRequest, errorResponse{Error: "password is required"})
 	case errors.Is(err, service.ErrPasswordTooShort):
 		return c.JSON(http.StatusBadRequest, errorResponse{Error: "password must be at least 6 characters"})
+	case errors.Is(err, service.ErrCurrentPasswordRequired):
+		return c.JSON(http.StatusBadRequest, errorResponse{Error: "current password is required"})
+	case errors.Is(err, service.ErrSamePassword):
+		return c.JSON(http.StatusBadRequest, errorResponse{Error: "new password must be different from current password"})
 	default:
 		c.Logger().Error(err)
 		return c.JSON(http.StatusInternalServerError, errorResponse{Error: "internal error"})
@@ -207,6 +250,7 @@ func toUserResponse(user *service.User) *userResponse {
 	}
 	return &userResponse{
 		Username:  user.Username,
+		Nickname:  user.Nickname,
 		Email:     user.Email,
 		AvatarURL: user.AvatarURL,
 	}

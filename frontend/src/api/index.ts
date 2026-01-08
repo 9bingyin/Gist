@@ -113,6 +113,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 // Auth API types
 export interface AuthUser {
   username: string
+  nickname: string
   email: string
   avatarUrl: string
 }
@@ -131,17 +132,17 @@ export async function checkAuthStatus(): Promise<AuthStatusResponse> {
   return request<AuthStatusResponse>('/api/auth/status')
 }
 
-export async function register(username: string, email: string, password: string): Promise<AuthResponse> {
+export async function register(username: string, nickname: string, email: string, password: string): Promise<AuthResponse> {
   return request<AuthResponse>('/api/auth/register', {
     method: 'POST',
-    body: JSON.stringify({ username, email, password }),
+    body: JSON.stringify({ username, nickname, email, password }),
   })
 }
 
-export async function login(username: string, password: string): Promise<AuthResponse> {
+export async function login(identifier: string, password: string): Promise<AuthResponse> {
   return request<AuthResponse>('/api/auth/login', {
     method: 'POST',
-    body: JSON.stringify({ username, password }),
+    body: JSON.stringify({ identifier, password }),
   })
 }
 
@@ -152,6 +153,20 @@ export async function getCurrentUser(): Promise<AuthUser> {
 export async function logout(): Promise<void> {
   return request<void>('/api/auth/logout', {
     method: 'POST',
+  })
+}
+
+export interface UpdateProfileRequest {
+  nickname?: string
+  email?: string
+  currentPassword?: string
+  newPassword?: string
+}
+
+export async function updateProfile(data: UpdateProfileRequest): Promise<AuthUser> {
+  return request<AuthUser>('/api/auth/profile', {
+    method: 'PUT',
+    body: JSON.stringify(data),
   })
 }
 

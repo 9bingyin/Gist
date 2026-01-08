@@ -6,6 +6,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { SettingsSidebar } from './SettingsSidebar'
+import { ProfileSettings } from './tabs/ProfileSettings'
 import { GeneralSettings } from './tabs/GeneralSettings'
 import { AppearanceSettings } from './tabs/AppearanceSettings'
 import { DataControl } from './tabs/DataControl'
@@ -14,11 +15,12 @@ import { FoldersSettings } from './tabs/FoldersSettings'
 import { AISettings } from './tabs/AISettings'
 import { cn } from '@/lib/utils'
 
-export type SettingsTab = 'general' | 'appearance' | 'ai' | 'data' | 'feeds' | 'folders'
+export type SettingsTab = 'profile' | 'general' | 'appearance' | 'ai' | 'data' | 'feeds' | 'folders'
 
 interface SettingsModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
+  initialTab?: SettingsTab
 }
 
 const MOBILE_BREAKPOINT = 768
@@ -37,13 +39,22 @@ function useMobileDetect() {
   return isMobile
 }
 
-export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
+export function SettingsModal({ open, onOpenChange, initialTab }: SettingsModalProps) {
   const { t } = useTranslation()
-  const [activeTab, setActiveTab] = useState<SettingsTab>('general')
+  const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab ?? 'general')
   const isMobile = useMobileDetect()
+
+  // Reset to initialTab when modal opens
+  useEffect(() => {
+    if (open && initialTab) {
+      setActiveTab(initialTab)
+    }
+  }, [open, initialTab])
 
   const renderContent = () => {
     switch (activeTab) {
+      case 'profile':
+        return <ProfileSettings />
       case 'general':
         return <GeneralSettings />
       case 'appearance':
@@ -63,6 +74,8 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
 
   const getTitle = () => {
     switch (activeTab) {
+      case 'profile':
+        return t('profile.title')
       case 'general':
         return t('settings.general')
       case 'appearance':
@@ -81,6 +94,7 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
   }
 
   const tabs: { id: SettingsTab; label: string }[] = [
+    { id: 'profile', label: t('profile.title') },
     { id: 'general', label: t('settings.general') },
     { id: 'appearance', label: t('settings.appearance') },
     { id: 'ai', label: t('settings.ai') },

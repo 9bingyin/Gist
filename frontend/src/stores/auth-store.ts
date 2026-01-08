@@ -22,10 +22,11 @@ interface AuthStore {
 
   // Actions
   initialize: () => Promise<void>
-  login: (username: string, password: string) => Promise<void>
-  register: (username: string, email: string, password: string) => Promise<void>
+  login: (identifier: string, password: string) => Promise<void>
+  register: (username: string, nickname: string, email: string, password: string) => Promise<void>
   logout: () => Promise<void>
   clearError: () => void
+  setUser: (user: AuthUser) => void
 }
 
 export const useAuthStore = create<AuthStore>((set, get) => {
@@ -72,10 +73,10 @@ export const useAuthStore = create<AuthStore>((set, get) => {
       }
     },
 
-    login: async (username: string, password: string) => {
+    login: async (identifier: string, password: string) => {
       set({ error: null })
       try {
-        const response = await apiLogin(username, password)
+        const response = await apiLogin(identifier, password)
         setAuthToken(response.token)
         set({ state: 'authenticated', user: response.user })
       } catch (err) {
@@ -85,10 +86,10 @@ export const useAuthStore = create<AuthStore>((set, get) => {
       }
     },
 
-    register: async (username: string, email: string, password: string) => {
+    register: async (username: string, nickname: string, email: string, password: string) => {
       set({ error: null })
       try {
-        const response = await apiRegister(username, email, password)
+        const response = await apiRegister(username, nickname, email, password)
         setAuthToken(response.token)
         set({ state: 'authenticated', user: response.user })
       } catch (err) {
@@ -111,14 +112,19 @@ export const useAuthStore = create<AuthStore>((set, get) => {
     clearError: () => {
       set({ error: null })
     },
+
+    setUser: (user: AuthUser) => {
+      set({ user })
+    },
   }
 })
 
 // Actions that can be called from outside React
 export const authActions = {
   initialize: () => useAuthStore.getState().initialize(),
-  login: (username: string, password: string) => useAuthStore.getState().login(username, password),
-  register: (username: string, email: string, password: string) =>
-    useAuthStore.getState().register(username, email, password),
+  login: (identifier: string, password: string) => useAuthStore.getState().login(identifier, password),
+  register: (username: string, nickname: string, email: string, password: string) =>
+    useAuthStore.getState().register(username, nickname, email, password),
   logout: () => useAuthStore.getState().logout(),
+  setUser: (user: AuthUser) => useAuthStore.getState().setUser(user),
 }

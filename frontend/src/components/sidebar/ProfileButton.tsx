@@ -27,6 +27,7 @@ interface ProfileButtonProps {
   starredCount?: number
   isStarredSelected?: boolean
   onStarredClick?: () => void
+  onProfileClick?: () => void
   onSettingsClick?: () => void
   onLogoutClick?: () => void
 }
@@ -137,6 +138,7 @@ export function ProfileButton({
   starredCount = 0,
   isStarredSelected = false,
   onStarredClick,
+  onProfileClick,
   onSettingsClick,
   onLogoutClick,
 }: ProfileButtonProps) {
@@ -195,7 +197,7 @@ export function ProfileButton({
         <DropdownMenuSeparator className="bg-border/50" />
 
         {/* Profile */}
-        <DropdownMenuItem className={menuItemStyles}>
+        <DropdownMenuItem className={menuItemStyles} onSelect={onProfileClick}>
           <span className="inline-flex size-4 items-center justify-center">
             <svg className={iconStyles} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
