@@ -7,13 +7,14 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"regexp"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Noooste/azuretls-client"
 
 	"gist/backend/internal/config"
 	"gist/backend/internal/logger"
@@ -191,61 +192,67 @@ func (s *Solver) submit(ctx context.Context, originalURL, challengeID, result st
 		url.QueryEscape(result),
 	)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, submitURL, nil)
-	if err != nil {
-		return "", time.Time{}, fmt.Errorf("create request: %w", err)
+	// Create azuretls session with Chrome fingerprint
+	session := s.clientFactory.NewAzureSession(ctx, solverTimeout)
+	defer session.Close()
+
+	// Build Chrome headers
+	headers := azuretls.OrderedHeaders{
+		{"accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"},
+		{"accept-language", "zh-CN,zh;q=0.9"},
+		{"cache-control", "max-age=0"},
+		{"sec-ch-ua", config.ChromeSecChUa},
+		{"sec-ch-ua-mobile", "?0"},
+		{"sec-ch-ua-platform", `"Windows"`},
+		{"sec-fetch-dest", "document"},
+		{"sec-fetch-mode", "navigate"},
+		{"sec-fetch-site", "none"},
+		{"sec-fetch-user", "?1"},
+		{"upgrade-insecure-requests", "1"},
+		{"user-agent", config.ChromeUserAgent},
 	}
-	req.Header.Set("User-Agent", config.ChromeUserAgent)
 
 	// Add initial cookies from the challenge request (required for session)
-	for _, c := range initialCookies {
-		req.AddCookie(c)
+	if len(initialCookies) > 0 {
+		var cookieParts []string
+		for _, c := range initialCookies {
+			cookieParts = append(cookieParts, fmt.Sprintf("%s=%s", c.Name, c.Value))
+		}
+		headers = append(headers, []string{"cookie", strings.Join(cookieParts, "; ")})
 	}
 
-	// Don't follow redirects to capture the Set-Cookie header
-	client := &http.Client{
-		Timeout:   solverTimeout,
-		Transport: s.clientFactory.NewHTTPTransport(ctx),
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-	}
-
-	resp, err := client.Do(req)
+	// Send request with redirect disabled to capture Set-Cookie header
+	resp, err := session.Do(&azuretls.Request{
+		Method:           http.MethodGet,
+		Url:              submitURL,
+		OrderedHeaders:   headers,
+		DisableRedirects: true,
+	})
 	if err != nil {
 		return "", time.Time{}, fmt.Errorf("submit request: %w", err)
 	}
-	defer resp.Body.Close()
 
 	// Expected: 302 redirect with Set-Cookie
 	if resp.StatusCode != http.StatusFound && resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return "", time.Time{}, fmt.Errorf("unexpected status %d: %s", resp.StatusCode, string(body))
+		return "", time.Time{}, fmt.Errorf("unexpected status %d: %s", resp.StatusCode, string(resp.Body))
 	}
 
-	// Extract cookies from response
-	var cookieParts []string
-	var expiresAt time.Time
-	for _, c := range resp.Cookies() {
-		if strings.HasPrefix(c.Name, "techaro.lol-anubis") {
-			cookieParts = append(cookieParts, fmt.Sprintf("%s=%s", c.Name, c.Value))
-			// Use the longest expiry time
-			if !c.Expires.IsZero() && c.Expires.After(expiresAt) {
-				expiresAt = c.Expires
-			}
+	// Extract cookies from response (azuretls uses map[string]string)
+	var anubisCookieParts []string
+	for name, value := range resp.Cookies {
+		if strings.HasPrefix(name, "techaro.lol-anubis") {
+			anubisCookieParts = append(anubisCookieParts, fmt.Sprintf("%s=%s", name, value))
 		}
 	}
 
-	if len(cookieParts) == 0 {
+	if len(anubisCookieParts) == 0 {
 		return "", time.Time{}, fmt.Errorf("no anubis cookies in response")
 	}
 
-	// Default expiry if not set (7 days)
-	if expiresAt.IsZero() {
-		expiresAt = time.Now().Add(7 * 24 * time.Hour)
-	}
+	// Default expiry (7 days) - azuretls cookies map doesn't include expiry info
+	expiresAt := time.Now().Add(7 * 24 * time.Hour)
 
-	cookie := strings.Join(cookieParts, "; ")
+	cookie := strings.Join(anubisCookieParts, "; ")
 	return cookie, expiresAt, nil
 }
 
