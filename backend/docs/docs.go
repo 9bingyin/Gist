@@ -358,7 +358,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Update user nickname, email and/or password",
+                "description": "Update user nickname, email and/or password. Returns new token when password is changed.",
                 "consumes": [
                     "application/json"
                 ],
@@ -384,7 +384,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_handler.userResponse"
+                            "$ref": "#/definitions/internal_handler.updateProfileResponse"
                         }
                     },
                     "400": {
@@ -2602,6 +2602,17 @@ const docTemplate = `{
                 },
                 "nickname": {
                     "type": "string"
+                }
+            }
+        },
+        "internal_handler.updateProfileResponse": {
+            "type": "object",
+            "properties": {
+                "token": {
+                    "type": "string"
+                },
+                "user": {
+                    "$ref": "#/definitions/internal_handler.userResponse"
                 }
             }
         },

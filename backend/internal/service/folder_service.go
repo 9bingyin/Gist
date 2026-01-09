@@ -135,15 +135,9 @@ func (s *folderService) UpdateType(ctx context.Context, id int64, folderType str
 		return err
 	}
 
-	// Update all feeds in this folder to the same type
-	feeds, err := s.feeds.List(ctx, &id)
-	if err != nil {
-		return fmt.Errorf("list feeds in folder: %w", err)
-	}
-	for _, feed := range feeds {
-		if err := s.feeds.UpdateType(ctx, feed.ID, folderType); err != nil {
-			return fmt.Errorf("update feed %d type: %w", feed.ID, err)
-		}
+	// Update all feeds in this folder to the same type using batch operation
+	if err := s.feeds.UpdateTypeByFolderID(ctx, id, folderType); err != nil {
+		return fmt.Errorf("update feeds type in folder: %w", err)
 	}
 
 	return nil
@@ -157,14 +151,18 @@ func (s *folderService) Delete(ctx context.Context, id int64) error {
 		return fmt.Errorf("get folder: %w", err)
 	}
 
-	// Delete all feeds in this folder (entries will be cascade deleted by DB)
+	// Delete all feeds in this folder using batch operation (entries will be cascade deleted by DB)
 	feeds, err := s.feeds.List(ctx, &id)
 	if err != nil {
 		return fmt.Errorf("list feeds in folder: %w", err)
 	}
-	for _, feed := range feeds {
-		if err := s.feeds.Delete(ctx, feed.ID); err != nil {
-			return fmt.Errorf("delete feed %d: %w", feed.ID, err)
+	if len(feeds) > 0 {
+		feedIDs := make([]int64, len(feeds))
+		for i, feed := range feeds {
+			feedIDs[i] = feed.ID
+		}
+		if _, err := s.feeds.DeleteBatch(ctx, feedIDs); err != nil {
+			return fmt.Errorf("delete feeds in folder: %w", err)
 		}
 	}
 

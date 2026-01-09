@@ -202,6 +202,20 @@ func (mr *MockFeedRepositoryMockRecorder) UpdateType(ctx, id, feedType any) *gom
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateType", reflect.TypeOf((*MockFeedRepository)(nil).UpdateType), ctx, id, feedType)
 }
 
+// UpdateTypeByFolderID mocks base method.
+func (m *MockFeedRepository) UpdateTypeByFolderID(ctx context.Context, folderID int64, feedType string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateTypeByFolderID", ctx, folderID, feedType)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateTypeByFolderID indicates an expected call of UpdateTypeByFolderID.
+func (mr *MockFeedRepositoryMockRecorder) UpdateTypeByFolderID(ctx, folderID, feedType any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateTypeByFolderID", reflect.TypeOf((*MockFeedRepository)(nil).UpdateTypeByFolderID), ctx, folderID, feedType)
+}
+
 // GetByIDs mocks base method.
 func (m *MockFeedRepository) GetByIDs(ctx context.Context, ids []int64) ([]model.Feed, error) {
 	m.ctrl.T.Helper()

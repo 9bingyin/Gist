@@ -1,6 +1,6 @@
 import { useState, useEffect, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
-import { getCurrentUser, updateProfile } from '@/api'
+import { getCurrentUser, updateProfile, setAuthToken } from '@/api'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 
@@ -42,8 +42,8 @@ export function ProfileSettings() {
     setNicknameStatus('idle')
     setError(null)
     try {
-      const updatedUser = await updateProfile({ nickname })
-      setUser(updatedUser)
+      const result = await updateProfile({ nickname })
+      setUser(result.user)
       setNicknameStatus('success')
       setTimeout(() => setNicknameStatus('idle'), 2000)
     } catch (err) {
@@ -59,8 +59,8 @@ export function ProfileSettings() {
     setEmailStatus('idle')
     setError(null)
     try {
-      const updatedUser = await updateProfile({ email })
-      setUser(updatedUser)
+      const result = await updateProfile({ email })
+      setUser(result.user)
       setEmailStatus('success')
       setTimeout(() => setEmailStatus('idle'), 2000)
     } catch (err) {
@@ -88,7 +88,11 @@ export function ProfileSettings() {
     setIsLoadingPassword(true)
     setPasswordStatus('idle')
     try {
-      await updateProfile({ currentPassword, newPassword })
+      const result = await updateProfile({ currentPassword, newPassword })
+      // Update token if password was changed (old tokens are invalidated)
+      if (result.token) {
+        setAuthToken(result.token)
+      }
       setPasswordStatus('success')
       setCurrentPassword('')
       setNewPassword('')

@@ -259,23 +259,9 @@ func TestFolderService_UpdateType_CascadeToFeeds(t *testing.T) {
 		UpdateType(ctx, folderID, "picture").
 		Return(nil)
 
-	// Return 2 feeds in this folder
-	feeds := []model.Feed{
-		{ID: 1, FolderID: &folderID, Title: "Feed 1"},
-		{ID: 2, FolderID: &folderID, Title: "Feed 2"},
-	}
-
+	// Feeds should be updated using batch operation
 	mockFeeds.EXPECT().
-		List(ctx, &folderID).
-		Return(feeds, nil)
-
-	// Each feed should be updated to the new type
-	mockFeeds.EXPECT().
-		UpdateType(ctx, int64(1), "picture").
-		Return(nil)
-
-	mockFeeds.EXPECT().
-		UpdateType(ctx, int64(2), "picture").
+		UpdateTypeByFolderID(ctx, folderID, "picture").
 		Return(nil)
 
 	err := service.UpdateType(ctx, folderID, "picture")
@@ -339,14 +325,10 @@ func TestFolderService_Delete_WithFeeds(t *testing.T) {
 		List(ctx, &folderID).
 		Return(feeds, nil)
 
-	// Each feed should be deleted
+	// Feeds should be deleted using batch operation
 	mockFeeds.EXPECT().
-		Delete(ctx, int64(1)).
-		Return(nil)
-
-	mockFeeds.EXPECT().
-		Delete(ctx, int64(2)).
-		Return(nil)
+		DeleteBatch(ctx, []int64{1, 2}).
+		Return(int64(2), nil)
 
 	mockFolders.EXPECT().
 		Delete(ctx, folderID).
@@ -620,7 +602,7 @@ func TestFolderService_UpdateType_FolderUpdateFails(t *testing.T) {
 	}
 }
 
-func TestFolderService_UpdateType_ListFeedsFails(t *testing.T) {
+func TestFolderService_UpdateType_BatchUpdateFails(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -630,7 +612,7 @@ func TestFolderService_UpdateType_ListFeedsFails(t *testing.T) {
 	ctx := context.Background()
 
 	folderID := int64(123)
-	dbError := errors.New("list feeds failed")
+	dbError := errors.New("batch update failed")
 
 	mockFolders.EXPECT().
 		GetByID(ctx, folderID).
@@ -641,56 +623,7 @@ func TestFolderService_UpdateType_ListFeedsFails(t *testing.T) {
 		Return(nil)
 
 	mockFeeds.EXPECT().
-		List(ctx, &folderID).
-		Return(nil, dbError)
-
-	err := service.UpdateType(ctx, folderID, "picture")
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
-
-	if !strings.Contains(err.Error(), "list feeds in folder") {
-		t.Errorf("expected wrapped error with context, got: %v", err)
-	}
-}
-
-func TestFolderService_UpdateType_FeedUpdateFails(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockFolders := testutil.NewMockFolderRepository(ctrl)
-	mockFeeds := testutil.NewMockFeedRepository(ctrl)
-	service := NewFolderService(mockFolders, mockFeeds)
-	ctx := context.Background()
-
-	folderID := int64(123)
-	dbError := errors.New("feed update failed")
-
-	mockFolders.EXPECT().
-		GetByID(ctx, folderID).
-		Return(model.Folder{ID: folderID, Name: "Test"}, nil)
-
-	mockFolders.EXPECT().
-		UpdateType(ctx, folderID, "picture").
-		Return(nil)
-
-	feeds := []model.Feed{
-		{ID: 1, FolderID: &folderID, Title: "Feed 1"},
-		{ID: 2, FolderID: &folderID, Title: "Feed 2"},
-	}
-
-	mockFeeds.EXPECT().
-		List(ctx, &folderID).
-		Return(feeds, nil)
-
-	// First feed update succeeds
-	mockFeeds.EXPECT().
-		UpdateType(ctx, int64(1), "picture").
-		Return(nil)
-
-	// Second feed update fails
-	mockFeeds.EXPECT().
-		UpdateType(ctx, int64(2), "picture").
+		UpdateTypeByFolderID(ctx, folderID, "picture").
 		Return(dbError)
 
 	err := service.UpdateType(ctx, folderID, "picture")
@@ -698,8 +631,8 @@ func TestFolderService_UpdateType_FeedUpdateFails(t *testing.T) {
 		t.Fatal("expected error, got nil")
 	}
 
-	if !strings.Contains(err.Error(), "update feed 2 type") {
-		t.Errorf("expected error mentioning feed ID, got: %v", err)
+	if !strings.Contains(err.Error(), "update feeds type in folder") {
+		t.Errorf("expected wrapped error with context, got: %v", err)
 	}
 }
 
@@ -733,7 +666,7 @@ func TestFolderService_Delete_ListFeedsFails(t *testing.T) {
 	}
 }
 
-func TestFolderService_Delete_FeedDeleteFails(t *testing.T) {
+func TestFolderService_Delete_FeedDeleteBatchFails(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -743,7 +676,7 @@ func TestFolderService_Delete_FeedDeleteFails(t *testing.T) {
 	ctx := context.Background()
 
 	folderID := int64(123)
-	dbError := errors.New("feed delete failed")
+	dbError := errors.New("feed batch delete failed")
 
 	mockFolders.EXPECT().
 		GetByID(ctx, folderID).
@@ -758,23 +691,18 @@ func TestFolderService_Delete_FeedDeleteFails(t *testing.T) {
 		List(ctx, &folderID).
 		Return(feeds, nil)
 
-	// First feed delete succeeds
+	// Batch delete fails
 	mockFeeds.EXPECT().
-		Delete(ctx, int64(1)).
-		Return(nil)
-
-	// Second feed delete fails
-	mockFeeds.EXPECT().
-		Delete(ctx, int64(2)).
-		Return(dbError)
+		DeleteBatch(ctx, []int64{1, 2}).
+		Return(int64(0), dbError)
 
 	err := service.Delete(ctx, folderID)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
 
-	if !strings.Contains(err.Error(), "delete feed 2") {
-		t.Errorf("expected error mentioning feed ID, got: %v", err)
+	if !strings.Contains(err.Error(), "delete feeds in folder") {
+		t.Errorf("expected error mentioning feed deletion, got: %v", err)
 	}
 }
 

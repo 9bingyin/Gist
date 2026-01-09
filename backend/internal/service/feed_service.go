@@ -16,6 +16,7 @@ import (
 	"github.com/mmcdole/gofeed"
 
 	"gist/backend/internal/config"
+	"gist/backend/internal/logger"
 	"gist/backend/internal/model"
 	"gist/backend/internal/network"
 	"gist/backend/internal/repository"
@@ -142,7 +143,9 @@ func (s *feedService) Add(ctx context.Context, feedURL string, folderID *int64, 
 		if entry.URL == nil || *entry.URL == "" {
 			continue
 		}
-		_ = s.entries.CreateOrUpdate(ctx, entry)
+		if err := s.entries.CreateOrUpdate(ctx, entry); err != nil {
+			logger.Warn("create entry failed", "feedID", created.ID, "url", *entry.URL, "error", err)
+		}
 	}
 
 	return created, nil

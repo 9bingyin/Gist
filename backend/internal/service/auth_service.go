@@ -66,13 +66,21 @@ type AuthService interface {
 	// ValidateToken validates a JWT token and returns whether it's valid.
 	ValidateToken(token string) (bool, error)
 	// UpdateProfile updates user nickname, email and/or password.
-	UpdateProfile(ctx context.Context, nickname, email, currentPassword, newPassword string) (*User, error)
+	// Returns new token when password is changed (old tokens become invalid).
+	UpdateProfile(ctx context.Context, nickname, email, currentPassword, newPassword string) (*UpdateProfileResponse, error)
 }
 
 // AuthResponse is returned after successful login/register.
 type AuthResponse struct {
 	Token string `json:"token"`
 	User  *User  `json:"user"`
+}
+
+// UpdateProfileResponse is returned after updating profile.
+// Token is only set when password was changed (old tokens become invalid).
+type UpdateProfileResponse struct {
+	User  *User   `json:"user"`
+	Token *string `json:"token,omitempty"`
 }
 
 type authService struct {
@@ -316,7 +324,7 @@ func (s *authService) generateToken(username, jwtSecretHex string) (string, erro
 }
 
 // UpdateProfile updates user nickname, email and/or password.
-func (s *authService) UpdateProfile(ctx context.Context, nickname, email, currentPassword, newPassword string) (*User, error) {
+func (s *authService) UpdateProfile(ctx context.Context, nickname, email, currentPassword, newPassword string) (*UpdateProfileResponse, error) {
 	// Check if user exists
 	username, err := s.getString(ctx, keyUserUsername)
 	if err != nil {
@@ -351,6 +359,8 @@ func (s *authService) UpdateProfile(ctx context.Context, nickname, email, curren
 		currentEmail = email
 	}
 
+	var newToken *string
+
 	// Update password if provided
 	if newPassword != "" {
 		if currentPassword == "" {
@@ -382,13 +392,33 @@ func (s *authService) UpdateProfile(ctx context.Context, nickname, email, curren
 		if err := s.repo.Set(ctx, keyUserPasswordHash, string(hash)); err != nil {
 			return nil, fmt.Errorf("update password: %w", err)
 		}
+
+		// Regenerate JWT secret to invalidate all existing tokens
+		newJwtSecret := make([]byte, 32)
+		if _, err := rand.Read(newJwtSecret); err != nil {
+			return nil, fmt.Errorf("generate new jwt secret: %w", err)
+		}
+		jwtSecretHex := hex.EncodeToString(newJwtSecret)
+		if err := s.repo.Set(ctx, keyUserJWTSecret, jwtSecretHex); err != nil {
+			return nil, fmt.Errorf("update jwt secret: %w", err)
+		}
+
+		// Generate new token for the user
+		token, err := s.generateToken(username, jwtSecretHex)
+		if err != nil {
+			return nil, fmt.Errorf("generate new token: %w", err)
+		}
+		newToken = &token
 	}
 
-	return &User{
-		Username:  username,
-		Nickname:  currentNickname,
-		Email:     currentEmail,
-		AvatarURL: gravatarURL(currentEmail),
+	return &UpdateProfileResponse{
+		User: &User{
+			Username:  username,
+			Nickname:  currentNickname,
+			Email:     currentEmail,
+			AvatarURL: gravatarURL(currentEmail),
+		},
+		Token: newToken,
 	}, nil
 }
 

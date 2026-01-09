@@ -1,5 +1,7 @@
 # Gist 开发规范 (SPEC)
 
+> **Note**: 本文件 (`.rules`) 是项目的核心规范文档。`CLAUDE.md`、`AGENTS.md`、`GEMINI.md` 均为指向此文件的软链接（可通过 `ls -la` 查看）。修改时只需编辑 `.rules` 文件。
+
 ## 1. 开发环境与工具
 
 *   **包管理器**：必须使用 **bun**。
@@ -33,6 +35,24 @@
 ## 4. 后端开发规范 (Go)
 
 ### 4.1 代码结构与分层
+
+**目录结构** (`backend/internal/`)：
+*   `handler/` - HTTP 请求处理
+*   `service/` - 业务逻辑层
+    *   `service/ai/` - AI Provider 实现 (OpenAI/Anthropic/Compatible)
+    *   `service/anubis/` - Anubis 反爬虫挑战解决器
+    *   `service/testutil/` - Mock 文件
+*   `repository/` - 数据访问层
+*   `model/` - 数据模型定义
+*   `config/` - 配置加载
+*   `db/` - 数据库迁移
+*   `http/` - HTTP 中间件、路由、静态文件服务
+*   `logger/` - 日志封装 (slog)
+*   `network/` - 网络客户端工厂（代理、IP 栈、TLS 指纹）
+*   `scheduler/` - 定时任务调度
+*   `snowflake/` - Snowflake ID 生成器
+*   `opml/` - OPML 导入导出解析
+
 遵循 `Handler -> Service -> Repository` 严格分层模式：
 *   **Handler (Transport Layer)**：仅处理 HTTP 协议转换（参数绑定、DTO 转换、状态码）。**禁止**编写业务逻辑。
 *   **Service (Business Layer)**：纯粹业务逻辑，必须定义为 `interface` 以解耦和测试。
@@ -230,8 +250,12 @@ entries_ad  -- AFTER DELETE: 同步删除 entries_fts
 *   **定时任务**：在启动时立即执行一次，然后按间隔运行；刷新任务设置合理超时 (如 5 分钟)。
 
 ### 4.7 HTTP 客户端
+*   **ClientFactory 模式**：`network.ClientFactory` 统一管理 HTTP 客户端创建，支持代理和 IP 栈配置。
+*   **Provider 接口**：使用 `ProxyProvider` 和 `IPStackProvider` 接口避免与 service 包的循环依赖。
 *   **User-Agent 策略**：默认使用 `GistUserAgent` 标识自身，备用 `ChromeUserAgent` 用于被屏蔽时重试。
-*   **TLS 指纹**：Chrome UA 版本需与 TLS 指纹配置匹配 (当前 Chrome 135)。
+*   **TLS 指纹**：Chrome UA 版本需与 TLS 指纹配置匹配 (当前 Chrome 135)，使用 `azuretls-client` 库。
+*   **代理支持**：支持 HTTP/SOCKS5 代理，通过 `network.*` 配置键设置。
+*   **IP 栈选择**：支持 `default/ipv4/ipv6` 优先级，IPv4/IPv6 故障自动切换。
 
 ### 4.8 环境变量
 后端环境变量使用 `GIST_` 前缀：
@@ -247,12 +271,16 @@ entries_ad  -- AFTER DELETE: 同步删除 entries_fts
 
 ### 5.1 架构与组件
 *   **目录结构**：
-    *   `src/components/ui`: 通用组件。
-    *   `src/components/{feature}/`: 业务组件 (如 `article/`)。
-    *   `src/stores/`: Zustand 状态管理。
+    *   `src/api/`: API 调用封装（请求函数、类型定义、流式响应处理）。
+    *   `src/components/ui/`: 通用 UI 组件 (shadcn/ui)。
+    *   `src/components/{feature}/`: 业务组件 (如 `sidebar/`, `entry-list/`, `settings/`)。
     *   `src/hooks/`: 自定义 React Hooks。
-    *   `src/lib/`: 工具函数。
-*   **逻辑分离**：UI 负责渲染，逻辑抽离至自定义 Hooks (`useFeedData` 等)。
+    *   `src/lib/`: 工具函数（HTML 解析、日期处理、路由等）。
+    *   `src/services/`: 服务层（复杂异步逻辑，如批量翻译请求去重/取消）。
+    *   `src/stores/`: Zustand 状态管理。
+    *   `src/types/`: TypeScript 类型定义。
+    *   `src/i18n/`: 国际化配置。
+*   **逻辑分离**：UI 负责渲染，逻辑抽离至自定义 Hooks (`useFeeds`, `useEntries` 等)。
 *   **类型规范**：所有 Props 和 API 响应必须定义 Interface，**严禁**使用 `any`。
 *   **路径别名**：使用 `@` 别名指向 `src` 目录，import 使用 `@/components/...` 格式。
 *   **路由库**：使用 `wouter` 轻量路由，路由解析/构建逻辑集中在 `lib/router.ts`。

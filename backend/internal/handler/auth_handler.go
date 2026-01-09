@@ -50,6 +50,11 @@ type authResponse struct {
 	User  *userResponse `json:"user"`
 }
 
+type updateProfileResponse struct {
+	User  *userResponse `json:"user"`
+	Token *string       `json:"token,omitempty"`
+}
+
 type userResponse struct {
 	Username  string `json:"username"`
 	Nickname  string `json:"nickname"`
@@ -178,13 +183,13 @@ func (h *AuthHandler) GetCurrentUser(c echo.Context) error {
 
 // UpdateProfile updates the user's profile.
 // @Summary Update profile
-// @Description Update user nickname, email and/or password
+// @Description Update user nickname, email and/or password. Returns new token when password is changed.
 // @Tags auth
 // @Accept json
 // @Produce json
 // @Security BearerAuth
 // @Param request body updateProfileRequest true "Profile update"
-// @Success 200 {object} userResponse
+// @Success 200 {object} updateProfileResponse
 // @Failure 400 {object} errorResponse
 // @Failure 401 {object} errorResponse
 // @Failure 500 {object} errorResponse
@@ -195,12 +200,20 @@ func (h *AuthHandler) UpdateProfile(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, errorResponse{Error: "invalid request"})
 	}
 
-	user, err := h.service.UpdateProfile(c.Request().Context(), req.Nickname, req.Email, req.CurrentPassword, req.NewPassword)
+	result, err := h.service.UpdateProfile(c.Request().Context(), req.Nickname, req.Email, req.CurrentPassword, req.NewPassword)
 	if err != nil {
 		return h.handleAuthError(c, err)
 	}
 
-	return c.JSON(http.StatusOK, toUserResponse(user))
+	// Update auth cookie if new token was generated
+	if result.Token != nil {
+		setAuthCookie(c, *result.Token)
+	}
+
+	return c.JSON(http.StatusOK, updateProfileResponse{
+		User:  toUserResponse(result.User),
+		Token: result.Token,
+	})
 }
 
 // Logout clears the authentication cookie.

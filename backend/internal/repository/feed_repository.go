@@ -23,6 +23,7 @@ type FeedRepository interface {
 	UpdateIconPath(ctx context.Context, id int64, iconPath string) error
 	UpdateErrorMessage(ctx context.Context, id int64, errorMessage *string) error
 	UpdateType(ctx context.Context, id int64, feedType string) error
+	UpdateTypeByFolderID(ctx context.Context, folderID int64, feedType string) error
 	Delete(ctx context.Context, id int64) error
 	DeleteBatch(ctx context.Context, ids []int64) (int64, error)
 	ClearAllIconPaths(ctx context.Context) (int64, error)
@@ -215,6 +216,17 @@ func (r *feedRepository) UpdateType(ctx context.Context, id int64, feedType stri
 		feedType,
 		formatTime(time.Now()),
 		id,
+	)
+	return err
+}
+
+func (r *feedRepository) UpdateTypeByFolderID(ctx context.Context, folderID int64, feedType string) error {
+	_, err := r.db.ExecContext(
+		ctx,
+		`UPDATE feeds SET type = ?, updated_at = ? WHERE folder_id = ?`,
+		feedType,
+		formatTime(time.Now()),
+		folderID,
 	)
 	return err
 }

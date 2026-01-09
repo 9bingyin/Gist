@@ -140,8 +140,11 @@ func TestAuthService_UpdateProfile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("update profile failed: %v", err)
 	}
-	if updated.Nickname != "New Nick" || updated.Email != "new@example.com" {
+	if updated.User.Nickname != "New Nick" || updated.User.Email != "new@example.com" {
 		t.Fatalf("unexpected updated user")
+	}
+	if updated.Token != nil {
+		t.Fatalf("expected no token for non-password update")
 	}
 
 	if _, err := svc.UpdateProfile(context.Background(), "", "", "", "newpass"); !errors.Is(err, ErrCurrentPasswordRequired) {
@@ -161,8 +164,11 @@ func TestAuthService_UpdateProfile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("update password failed: %v", err)
 	}
-	if updated.Username != "alice" {
+	if updated.User.Username != "alice" {
 		t.Fatalf("unexpected username after update")
+	}
+	if updated.Token == nil || *updated.Token == "" {
+		t.Fatalf("expected new token after password change")
 	}
 }
 

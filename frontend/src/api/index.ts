@@ -163,8 +163,13 @@ export interface UpdateProfileRequest {
   newPassword?: string
 }
 
-export async function updateProfile(data: UpdateProfileRequest): Promise<AuthUser> {
-  return request<AuthUser>('/api/auth/profile', {
+export interface UpdateProfileResponse {
+  user: AuthUser
+  token?: string
+}
+
+export async function updateProfile(data: UpdateProfileRequest): Promise<UpdateProfileResponse> {
+  return request<UpdateProfileResponse>('/api/auth/profile', {
     method: 'PUT',
     body: JSON.stringify(data),
   })

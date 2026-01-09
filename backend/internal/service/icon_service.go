@@ -138,6 +138,11 @@ func (s *iconService) EnsureIcon(ctx context.Context, iconPath, siteURL string) 
 		return nil
 	}
 
+	// Validate path to prevent path traversal attacks
+	if !isValidIconPath(iconPath) {
+		return nil
+	}
+
 	// Clean to prevent path traversal
 	iconPath = filepath.Clean(iconPath)
 	fullPath := filepath.Join(s.dataDir, "icons", iconPath)
@@ -192,6 +197,23 @@ func isHashFilename(filename string) bool {
 	return true
 }
 
+// isValidIconPath checks if the icon path is safe (no absolute path or parent directory reference)
+func isValidIconPath(iconPath string) bool {
+	if iconPath == "" {
+		return false
+	}
+	cleaned := filepath.Clean(iconPath)
+	// Reject absolute paths
+	if filepath.IsAbs(cleaned) {
+		return false
+	}
+	// Reject paths that try to escape (start with .. or contain ../)
+	if strings.HasPrefix(cleaned, "..") {
+		return false
+	}
+	return true
+}
+
 func (s *iconService) EnsureIconByFeedID(ctx context.Context, feedID int64, iconPath string) error {
 	if iconPath == "" {
 		return fmt.Errorf("empty icon path")
@@ -212,6 +234,10 @@ func (s *iconService) EnsureIconByFeedID(ctx context.Context, feedID int64, icon
 }
 
 func (s *iconService) GetIconPath(filename string) string {
+	// Validate path to prevent path traversal attacks
+	if !isValidIconPath(filename) {
+		return ""
+	}
 	// Clean to prevent path traversal
 	return filepath.Join(s.dataDir, "icons", filepath.Clean(filename))
 }
@@ -241,6 +267,11 @@ func (s *iconService) BackfillIcons(ctx context.Context) error {
 	var feedsNeedRefetch []int64
 	for _, feed := range allFeeds {
 		if feed.IconPath == nil || *feed.IconPath == "" {
+			continue
+		}
+
+		// Validate path to prevent path traversal attacks
+		if !isValidIconPath(*feed.IconPath) {
 			continue
 		}
 

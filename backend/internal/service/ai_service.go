@@ -147,49 +147,51 @@ func (s *aiService) GetSummaryLanguage(ctx context.Context) string {
 func (s *aiService) getAIConfig(ctx context.Context) (ai.Config, error) {
 	var cfg ai.Config
 
-	// Get provider
-	if setting, err := s.settingsRepo.Get(ctx, "ai.provider"); err == nil && setting != nil {
-		cfg.Provider = setting.Value
+	// Batch fetch all ai.* settings in a single query
+	settings, err := s.settingsRepo.GetByPrefix(ctx, "ai.")
+	if err != nil {
+		return cfg, fmt.Errorf("get AI settings: %w", err)
 	}
+
+	// Build a map for quick lookup
+	settingsMap := make(map[string]string, len(settings))
+	for _, s := range settings {
+		settingsMap[s.Key] = s.Value
+	}
+
+	// Get provider
+	cfg.Provider = settingsMap["ai.provider"]
 	if cfg.Provider == "" {
 		cfg.Provider = ai.ProviderOpenAI
 	}
 
 	// Get API key
-	if setting, err := s.settingsRepo.Get(ctx, "ai.api_key"); err == nil && setting != nil {
-		cfg.APIKey = setting.Value
-	}
+	cfg.APIKey = settingsMap["ai.api_key"]
 	if cfg.APIKey == "" {
 		return cfg, fmt.Errorf("AI API key is not configured")
 	}
 
 	// Get base URL
-	if setting, err := s.settingsRepo.Get(ctx, "ai.base_url"); err == nil && setting != nil {
-		cfg.BaseURL = setting.Value
-	}
+	cfg.BaseURL = settingsMap["ai.base_url"]
 
 	// Get model
-	if setting, err := s.settingsRepo.Get(ctx, "ai.model"); err == nil && setting != nil {
-		cfg.Model = setting.Value
-	}
+	cfg.Model = settingsMap["ai.model"]
 	if cfg.Model == "" {
 		return cfg, fmt.Errorf("AI model is not configured")
 	}
 
 	// Get thinking settings
-	if setting, err := s.settingsRepo.Get(ctx, "ai.thinking"); err == nil && setting != nil && setting.Value == "true" {
+	if settingsMap["ai.thinking"] == "true" {
 		cfg.Thinking = true
 	}
 
-	if setting, err := s.settingsRepo.Get(ctx, "ai.thinking_budget"); err == nil && setting != nil {
+	if val := settingsMap["ai.thinking_budget"]; val != "" {
 		var budget int
-		fmt.Sscanf(setting.Value, "%d", &budget)
+		fmt.Sscanf(val, "%d", &budget)
 		cfg.ThinkingBudget = budget
 	}
 
-	if setting, err := s.settingsRepo.Get(ctx, "ai.reasoning_effort"); err == nil && setting != nil {
-		cfg.ReasoningEffort = setting.Value
-	}
+	cfg.ReasoningEffort = settingsMap["ai.reasoning_effort"]
 
 	return cfg, nil
 }
