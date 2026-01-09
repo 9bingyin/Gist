@@ -113,8 +113,8 @@ export function SettingsModal({ open, onOpenChange, initialTab }: SettingsModalP
   if (isMobile) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="w-screen h-screen max-w-none max-h-none p-0 overflow-hidden gap-0 rounded-none">
-          <div className="flex h-full flex-col">
+        <DialogContent className="!inset-0 !translate-x-0 !translate-y-0 w-screen h-screen max-w-none max-h-none p-0 overflow-hidden gap-0 rounded-none">
+          <div className="flex h-full flex-col safe-area-inset">
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
               <DialogTitle className="text-lg font-bold">{getTitle()}</DialogTitle>
