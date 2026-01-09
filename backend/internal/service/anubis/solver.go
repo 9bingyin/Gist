@@ -117,13 +117,16 @@ func (s *Solver) SolveFromBody(ctx context.Context, body []byte, originalURL str
 		return "", fmt.Errorf("parse anubis challenge: %w", err)
 	}
 
-	logger.Debug("anubis detected challenge", "url", originalURL, "difficulty", challenge.Rules.Difficulty)
+	logger.Debug("anubis detected challenge",
+		"url", originalURL,
+		"algorithm", challenge.Rules.Algorithm,
+		"difficulty", challenge.Rules.Difficulty)
 
-	// Solve the challenge
+	// Solve the challenge based on algorithm type
 	result := solveChallenge(challenge)
 
 	// Submit the solution (pass initial cookies for session)
-	cookie, expiresAt, err := s.submit(ctx, originalURL, challenge.Challenge.ID, result, initialCookies)
+	cookie, expiresAt, err := s.submit(ctx, originalURL, challenge, result, initialCookies)
 	if err != nil {
 		return "", fmt.Errorf("submit anubis solution: %w", err)
 	}
@@ -162,21 +165,91 @@ func parseChallenge(body []byte) (*Challenge, error) {
 	return &challenge, nil
 }
 
-// solveChallenge computes the solution for the Anubis challenge
-// Algorithm: sha256(randomData) - Anubis uses simple hash, not actual PoW with nonce
-func solveChallenge(challenge *Challenge) string {
+// solveResult holds the result of solving an Anubis challenge
+type solveResult struct {
+	Hash    string // The computed hash
+	Nonce   int    // Nonce (only for proofofwork algorithms)
+	Elapsed int64  // Elapsed time in milliseconds (only for proofofwork)
+}
+
+// solveChallenge solves the Anubis challenge based on algorithm type.
+// - preact: SHA256(randomData) + wait difficulty*80ms, param: result
+// - metarefresh: return randomData + wait difficulty*800ms, param: challenge
+// - fast/slow (proofofwork): iterate SHA256(randomData+nonce), params: response, nonce, elapsedTime
+func solveChallenge(challenge *Challenge) solveResult {
 	randomData := challenge.Challenge.RandomData
+	difficulty := challenge.Rules.Difficulty
+	algorithm := challenge.Rules.Algorithm
 
-	// Compute sha256(randomData)
-	hash := sha256.Sum256([]byte(randomData))
-	hashHex := hex.EncodeToString(hash[:])
+	switch algorithm {
+	case "preact":
+		return solvePreact(randomData, difficulty)
+	case "metarefresh":
+		return solveMetaRefresh(randomData, difficulty)
+	case "fast", "slow":
+		return solveProofOfWork(randomData, difficulty)
+	default:
+		// Default to preact for unknown algorithms
+		logger.Warn("anubis unknown algorithm, using preact", "algorithm", algorithm)
+		return solvePreact(randomData, difficulty)
+	}
+}
 
-	logger.Debug("anubis challenge solved", "hash", hashHex[:16]+"...")
-	return hashHex
+// solvePreact implements the preact algorithm: SHA256(randomData) + wait difficulty*80ms
+func solvePreact(randomData string, difficulty int) solveResult {
+	// Compute simple SHA256(randomData)
+	h := sha256.Sum256([]byte(randomData))
+	hash := hex.EncodeToString(h[:])
+
+	// Wait required time: difficulty * 80ms (server validates this)
+	waitTime := time.Duration(difficulty) * 80 * time.Millisecond
+	logger.Debug("anubis preact: waiting", "duration", waitTime)
+	time.Sleep(waitTime + 50*time.Millisecond) // Add small buffer
+
+	logger.Debug("anubis preact solved", "hash", truncateForLog(hash))
+	return solveResult{Hash: hash}
+}
+
+// solveMetaRefresh implements the metarefresh algorithm: return randomData + wait difficulty*800ms
+func solveMetaRefresh(randomData string, difficulty int) solveResult {
+	// Wait required time: difficulty * 800ms (server validates this)
+	waitTime := time.Duration(difficulty) * 800 * time.Millisecond
+	logger.Debug("anubis metarefresh: waiting", "duration", waitTime)
+	time.Sleep(waitTime + 100*time.Millisecond) // Add buffer
+
+	// metarefresh returns randomData directly, not a hash
+	logger.Debug("anubis metarefresh solved", "data", truncateForLog(randomData))
+	return solveResult{Hash: randomData}
+}
+
+// solveProofOfWork implements the proofofwork algorithm: iterate until enough leading zeros
+func solveProofOfWork(randomData string, difficulty int) solveResult {
+	startTime := time.Now()
+	prefix := strings.Repeat("0", difficulty)
+
+	for nonce := 0; ; nonce++ {
+		input := fmt.Sprintf("%s%d", randomData, nonce)
+		h := sha256.Sum256([]byte(input))
+		hashHex := hex.EncodeToString(h[:])
+
+		if strings.HasPrefix(hashHex, prefix) {
+			elapsed := time.Since(startTime).Milliseconds()
+			logger.Debug("anubis PoW solved",
+				"difficulty", difficulty,
+				"nonce", nonce,
+				"elapsed_ms", elapsed,
+				"hash", truncateForLog(hashHex))
+			return solveResult{
+				Hash:    hashHex,
+				Nonce:   nonce,
+				Elapsed: elapsed,
+			}
+		}
+	}
 }
 
 // submit sends the solution to Anubis and retrieves the cookie
-func (s *Solver) submit(ctx context.Context, originalURL, challengeID, result string, initialCookies []*http.Cookie) (string, time.Time, error) {
+func (s *Solver) submit(ctx context.Context, originalURL string, challenge *Challenge, result solveResult, initialCookies []*http.Cookie) (string, time.Time, error) {
 	// Parse the original URL to get the base
 	parsed, err := url.Parse(originalURL)
 	if err != nil {
@@ -184,13 +257,46 @@ func (s *Solver) submit(ctx context.Context, originalURL, challengeID, result st
 	}
 	baseURL := fmt.Sprintf("%s://%s", parsed.Scheme, parsed.Host)
 
-	// Build the submission URL (order matters: id, redir, result)
-	submitURL := fmt.Sprintf("%s/.within.website/x/cmd/anubis/api/pass-challenge?id=%s&redir=%s&result=%s",
-		baseURL,
-		url.QueryEscape(challengeID),
-		parsed.RequestURI(), // Don't encode the path
-		url.QueryEscape(result),
-	)
+	// Build submission URL based on algorithm type
+	var submitURL string
+	algorithm := challenge.Rules.Algorithm
+
+	switch algorithm {
+	case "preact":
+		// preact: uses 'result' parameter (SHA256 hash), no nonce/elapsedTime
+		submitURL = fmt.Sprintf("%s/.within.website/x/cmd/anubis/api/pass-challenge?id=%s&redir=%s&result=%s",
+			baseURL,
+			url.QueryEscape(challenge.Challenge.ID),
+			url.QueryEscape(parsed.RequestURI()),
+			url.QueryEscape(result.Hash),
+		)
+	case "metarefresh":
+		// metarefresh: uses 'challenge' parameter (raw randomData), no nonce/elapsedTime
+		submitURL = fmt.Sprintf("%s/.within.website/x/cmd/anubis/api/pass-challenge?id=%s&redir=%s&challenge=%s",
+			baseURL,
+			url.QueryEscape(challenge.Challenge.ID),
+			url.QueryEscape(parsed.RequestURI()),
+			url.QueryEscape(result.Hash), // Hash field contains randomData for metarefresh
+		)
+	case "fast", "slow":
+		// proofofwork: uses 'response', 'nonce', 'elapsedTime' parameters
+		submitURL = fmt.Sprintf("%s/.within.website/x/cmd/anubis/api/pass-challenge?id=%s&response=%s&nonce=%d&redir=%s&elapsedTime=%d",
+			baseURL,
+			url.QueryEscape(challenge.Challenge.ID),
+			url.QueryEscape(result.Hash),
+			result.Nonce,
+			url.QueryEscape(parsed.RequestURI()),
+			result.Elapsed,
+		)
+	default:
+		// Default to preact format
+		submitURL = fmt.Sprintf("%s/.within.website/x/cmd/anubis/api/pass-challenge?id=%s&redir=%s&result=%s",
+			baseURL,
+			url.QueryEscape(challenge.Challenge.ID),
+			url.QueryEscape(parsed.RequestURI()),
+			url.QueryEscape(result.Hash),
+		)
+	}
 
 	// Create azuretls session with Chrome fingerprint
 	session := s.clientFactory.NewAzureSession(ctx, solverTimeout)
@@ -270,4 +376,12 @@ func extractHost(rawURL string) string {
 		return ""
 	}
 	return u.Host
+}
+
+// truncateForLog safely truncates a string for logging purposes
+func truncateForLog(s string) string {
+	if len(s) <= 16 {
+		return s
+	}
+	return s[:16] + "..."
 }
