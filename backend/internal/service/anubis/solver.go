@@ -123,7 +123,10 @@ func (s *Solver) SolveFromBody(ctx context.Context, body []byte, originalURL str
 		"difficulty", challenge.Rules.Difficulty)
 
 	// Solve the challenge based on algorithm type
-	result := solveChallenge(challenge)
+	result, err := solveChallenge(ctx, challenge)
+	if err != nil {
+		return "", fmt.Errorf("solve anubis challenge: %w", err)
+	}
 
 	// Submit the solution (pass initial cookies for session)
 	cookie, expiresAt, err := s.submit(ctx, originalURL, challenge, result, initialCookies)
@@ -176,58 +179,75 @@ type solveResult struct {
 // - preact: SHA256(randomData) + wait difficulty*80ms, param: result
 // - metarefresh: return randomData + wait difficulty*800ms, param: challenge
 // - fast/slow (proofofwork): iterate SHA256(randomData+nonce), params: response, nonce, elapsedTime
-func solveChallenge(challenge *Challenge) solveResult {
+func solveChallenge(ctx context.Context, challenge *Challenge) (solveResult, error) {
 	randomData := challenge.Challenge.RandomData
 	difficulty := challenge.Rules.Difficulty
 	algorithm := challenge.Rules.Algorithm
 
 	switch algorithm {
 	case "preact":
-		return solvePreact(randomData, difficulty)
+		return solvePreact(ctx, randomData, difficulty)
 	case "metarefresh":
-		return solveMetaRefresh(randomData, difficulty)
+		return solveMetaRefresh(ctx, randomData, difficulty)
 	case "fast", "slow":
-		return solveProofOfWork(randomData, difficulty)
+		return solveProofOfWork(ctx, randomData, difficulty)
 	default:
 		// Default to preact for unknown algorithms
 		logger.Warn("anubis unknown algorithm, using preact", "algorithm", algorithm)
-		return solvePreact(randomData, difficulty)
+		return solvePreact(ctx, randomData, difficulty)
 	}
 }
 
 // solvePreact implements the preact algorithm: SHA256(randomData) + wait difficulty*80ms
-func solvePreact(randomData string, difficulty int) solveResult {
+func solvePreact(ctx context.Context, randomData string, difficulty int) (solveResult, error) {
 	// Compute simple SHA256(randomData)
 	h := sha256.Sum256([]byte(randomData))
 	hash := hex.EncodeToString(h[:])
 
 	// Wait required time: difficulty * 80ms (server validates this)
-	waitTime := time.Duration(difficulty) * 80 * time.Millisecond
+	waitTime := time.Duration(difficulty)*80*time.Millisecond + 50*time.Millisecond
 	logger.Debug("anubis preact: waiting", "duration", waitTime)
-	time.Sleep(waitTime + 50*time.Millisecond) // Add small buffer
 
-	logger.Debug("anubis preact solved", "hash", truncateForLog(hash))
-	return solveResult{Hash: hash}
+	select {
+	case <-time.After(waitTime):
+		logger.Debug("anubis preact solved", "hash", truncateForLog(hash))
+		return solveResult{Hash: hash}, nil
+	case <-ctx.Done():
+		return solveResult{}, ctx.Err()
+	}
 }
 
 // solveMetaRefresh implements the metarefresh algorithm: return randomData + wait difficulty*800ms
-func solveMetaRefresh(randomData string, difficulty int) solveResult {
+func solveMetaRefresh(ctx context.Context, randomData string, difficulty int) (solveResult, error) {
 	// Wait required time: difficulty * 800ms (server validates this)
-	waitTime := time.Duration(difficulty) * 800 * time.Millisecond
+	waitTime := time.Duration(difficulty)*800*time.Millisecond + 100*time.Millisecond
 	logger.Debug("anubis metarefresh: waiting", "duration", waitTime)
-	time.Sleep(waitTime + 100*time.Millisecond) // Add buffer
 
-	// metarefresh returns randomData directly, not a hash
-	logger.Debug("anubis metarefresh solved", "data", truncateForLog(randomData))
-	return solveResult{Hash: randomData}
+	select {
+	case <-time.After(waitTime):
+		// metarefresh returns randomData directly, not a hash
+		logger.Debug("anubis metarefresh solved", "data", truncateForLog(randomData))
+		return solveResult{Hash: randomData}, nil
+	case <-ctx.Done():
+		return solveResult{}, ctx.Err()
+	}
 }
 
 // solveProofOfWork implements the proofofwork algorithm: iterate until enough leading zeros
-func solveProofOfWork(randomData string, difficulty int) solveResult {
+func solveProofOfWork(ctx context.Context, randomData string, difficulty int) (solveResult, error) {
 	startTime := time.Now()
 	prefix := strings.Repeat("0", difficulty)
 
 	for nonce := 0; ; nonce++ {
+		// Check context cancellation periodically to avoid blocking
+		if nonce%10000 == 0 {
+			select {
+			case <-ctx.Done():
+				return solveResult{}, ctx.Err()
+			default:
+			}
+		}
+
 		input := fmt.Sprintf("%s%d", randomData, nonce)
 		h := sha256.Sum256([]byte(input))
 		hashHex := hex.EncodeToString(h[:])
@@ -243,7 +263,7 @@ func solveProofOfWork(randomData string, difficulty int) solveResult {
 				Hash:    hashHex,
 				Nonce:   nonce,
 				Elapsed: elapsed,
-			}
+			}, nil
 		}
 	}
 }

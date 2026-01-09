@@ -240,7 +240,7 @@ func (s *aiService) TranslateBlocks(ctx context.Context, entryID int64, content,
 
 	// Create channels
 	resultCh := make(chan TranslateBlockResult)
-	errCh := make(chan error, 1)
+	errCh := make(chan error, len(blocks))
 
 	// Start parallel translation
 	go func() {
