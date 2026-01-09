@@ -1,23 +1,30 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useLocation, useSearch } from 'wouter'
+import { parseRoute } from '@/lib/router'
 
 export type MobileView = 'list' | 'detail'
 
 const MOBILE_BREAKPOINT = 768
 
 export function useMobileLayout() {
+  const [location] = useLocation()
+  const search = useSearch()
   const [isMobile, setIsMobile] = useState(
     typeof window !== 'undefined' ? window.innerWidth < MOBILE_BREAKPOINT : false
   )
-  const [mobileView, setMobileView] = useState<MobileView>('list')
   const [sidebarOpen, setSidebarOpen] = useState(false)
+
+  // Mobile view is derived from URL - if there's an entryId, show detail
+  const mobileView: MobileView = useMemo(() => {
+    const routeState = parseRoute(location, search)
+    return routeState.entryId ? 'detail' : 'list'
+  }, [location, search])
 
   useEffect(() => {
     const handleResize = () => {
       const mobile = window.innerWidth < MOBILE_BREAKPOINT
       setIsMobile(mobile)
-      // Reset to list view when switching to desktop
       if (!mobile) {
-        setMobileView('list')
         setSidebarOpen(false)
       }
     }
@@ -25,8 +32,16 @@ export function useMobileLayout() {
     return () => window.removeEventListener('resize', handleResize)
   }, [])
 
-  const showDetail = useCallback(() => setMobileView('detail'), [])
-  const showList = useCallback(() => setMobileView('list'), [])
+  // showDetail is now a no-op - view is controlled by URL (entryId)
+  const showDetail = useCallback(() => {
+    // View changes automatically when entryId is set in URL
+  }, [])
+
+  // showList navigates back to remove entryId from URL
+  const showList = useCallback(() => {
+    window.history.back()
+  }, [])
+
   const openSidebar = useCallback(() => setSidebarOpen(true), [])
   const closeSidebar = useCallback(() => setSidebarOpen(false), [])
 
