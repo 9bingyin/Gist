@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 
 /**
  * Check if running as iOS PWA in standalone mode
@@ -15,47 +15,68 @@ function isIOSStandalone(): boolean {
  * Hook to handle iOS PWA history navigation issues.
  *
  * In iOS PWA standalone mode, the system's edge swipe gesture triggers
- * browser history navigation. When the history stack is empty, swiping
- * back shows a blank page.
+ * browser history navigation. When the history stack is empty or user
+ * swipes back past the app's initial state, it shows a blank page.
  *
- * This hook adds an initial history entry and handles the popstate event
- * to prevent showing a blank page.
+ * Strategy:
+ * - Only intercept popstate events that would navigate to our anchor
+ * - Use anchor state (pwaAnchor) as the only marker
+ * - Track current URL and restore when hitting anchor
  */
 export function usePWAHistory() {
+  const currentUrlRef = useRef<string>('')
+
   useEffect(() => {
     // Only apply for iOS PWA standalone mode
     if (!isIOSStandalone()) return
 
-    // Mark current state with our flag if not already marked
-    const currentState = window.history.state
-    if (!currentState?.pwaInitialized) {
-      // Add marker to current state
-      window.history.replaceState(
-        { ...currentState, pwaInitialized: true },
-        ''
-      )
-      // Push a duplicate entry so first back swipe stays in app
-      window.history.pushState(
-        { pwaInitialized: true, isAnchor: true },
-        '',
-        window.location.href
-      )
-    }
+    // Initialize - save current URL
+    currentUrlRef.current = window.location.href
 
-    // Handle back navigation
+    // Push an anchor entry to catch back gestures that go too far
+    window.history.pushState(
+      { pwaAnchor: true },
+      '',
+      window.location.href
+    )
+
+    // Handle popstate in capture phase - runs BEFORE wouter's handler
     const handlePopState = (event: PopStateEvent) => {
-      // If user hit our anchor entry, they're trying to go back too far
-      if (event.state?.isAnchor) {
-        // Push another anchor to maintain the safety net
+      // Only intercept if this is our anchor entry
+      if (event.state?.pwaAnchor) {
+        // Stop the event from reaching wouter
+        event.stopImmediatePropagation()
+
+        // Push back to the current URL (not replace, to maintain position)
         window.history.pushState(
-          { pwaInitialized: true, isAnchor: true },
+          null,
           '',
-          window.location.href
+          currentUrlRef.current
         )
+
+        // Push another anchor for future back gestures
+        window.history.pushState(
+          { pwaAnchor: true },
+          '',
+          currentUrlRef.current
+        )
+      } else {
+        // Normal back navigation within app - update tracked URL
+        currentUrlRef.current = window.location.href
       }
     }
 
-    window.addEventListener('popstate', handlePopState)
-    return () => window.removeEventListener('popstate', handlePopState)
+    // Use capture phase to intercept before wouter
+    window.addEventListener('popstate', handlePopState, true)
+    return () => window.removeEventListener('popstate', handlePopState, true)
   }, [])
+
+  // Track URL changes from programmatic navigation (wouter's navigate calls pushState)
+  // This runs on every render but only updates ref when URL changes
+  useEffect(() => {
+    if (!isIOSStandalone()) return
+    if (window.location.href !== currentUrlRef.current) {
+      currentUrlRef.current = window.location.href
+    }
+  })
 }

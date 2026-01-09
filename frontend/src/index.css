@@ -92,6 +92,11 @@
   border-color: theme(colors.border);
 }
 
+html {
+  /* Prevent pinch-to-zoom on iOS PWA */
+  touch-action: pan-x pan-y;
+}
+
 body {
   background-color: theme(colors.background);
   color: theme(colors.foreground);

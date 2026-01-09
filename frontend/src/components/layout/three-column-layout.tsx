@@ -183,9 +183,11 @@ export function ThreeColumnLayout({
       <aside
         className={cn(
           'flex h-full shrink-0 flex-col overflow-hidden bg-sidebar',
+          'pt-[env(safe-area-inset-top,0px)]',
+          'pl-[env(safe-area-inset-left,0px)]',
           !feedColResizable.isDragging && 'transition-[width] duration-200'
         )}
-        style={{ width: feedColResizable.position }}
+        style={{ width: `calc(${feedColResizable.position}px + env(safe-area-inset-left, 0px))` }}
       >
         {sidebar}
       </aside>

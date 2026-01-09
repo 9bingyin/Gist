@@ -79,6 +79,36 @@ export default defineConfig({
               },
             },
           },
+          // Feed icons cache
+          {
+            urlPattern: /\/icons\/[^/]+$/,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'feed-icons-cache',
+              expiration: {
+                maxEntries: 500,
+                maxAgeSeconds: 60 * 60 * 24 * 30, // 30 days
+              },
+              cacheableResponse: {
+                statuses: [0, 200],
+              },
+            },
+          },
+          // Proxied images cache
+          {
+            urlPattern: /\/api\/proxy\/image\/.+/,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'proxied-images-cache',
+              expiration: {
+                maxEntries: 1000,
+                maxAgeSeconds: 60 * 60 * 24 * 7, // 7 days
+              },
+              cacheableResponse: {
+                statuses: [0, 200],
+              },
+            },
+          },
         ],
       },
       // Enable SW in dev for testing (optional, can be removed)
