@@ -17,10 +17,11 @@ import (
 const proxyTimeout = 30 * time.Second
 
 var (
-	ErrInvalidURL      = fmt.Errorf("invalid URL")
-	ErrInvalidProtocol = fmt.Errorf("invalid protocol")
-	ErrRequestTimeout  = fmt.Errorf("request timeout")
-	ErrFetchFailed     = fmt.Errorf("fetch failed")
+	ErrInvalidURL       = fmt.Errorf("invalid URL")
+	ErrInvalidProtocol  = fmt.Errorf("invalid protocol")
+	ErrRequestTimeout   = fmt.Errorf("request timeout")
+	ErrFetchFailed      = fmt.Errorf("fetch failed")
+	ErrUpstreamRejected = fmt.Errorf("upstream rejected")
 )
 
 type ProxyResult struct {
@@ -118,8 +119,13 @@ func (s *proxyService) doFetch(ctx context.Context, session *azuretls.Session, i
 
 	data := resp.Body
 
-	// Check for Anubis challenge
-	if s.anubis != nil && anubis.IsAnubisChallenge(data) {
+	// Check for Anubis pages
+	if s.anubis != nil && anubis.IsAnubisPage(data) {
+		// Check if it's a rejection (not a solvable challenge)
+		if !anubis.IsAnubisChallenge(data) {
+			return nil, ErrUpstreamRejected
+		}
+		// It's a solvable challenge, try to solve it
 		if retryCount >= 2 {
 			return nil, fmt.Errorf("%w: anubis challenge persists after %d retries", ErrFetchFailed, retryCount)
 		}

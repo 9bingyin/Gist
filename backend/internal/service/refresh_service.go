@@ -294,8 +294,15 @@ func (s *refreshService) refreshFeedWithCookie(ctx context.Context, feed model.F
 	parser := gofeed.NewParser()
 	parsed, parseErr := parser.Parse(bytes.NewReader(body))
 	if parseErr != nil {
-		// Parse failed, check if it's an Anubis challenge
-		if s.anubis != nil && anubis.IsAnubisChallenge(body) {
+		// Parse failed, check if it's an Anubis page
+		if s.anubis != nil && anubis.IsAnubisPage(body) {
+			// Check if it's a rejection (not solvable)
+			if !anubis.IsAnubisChallenge(body) {
+				errMsg := "upstream rejected"
+				_ = s.feeds.UpdateErrorMessage(ctx, feed.ID, &errMsg)
+				return errors.New(errMsg)
+			}
+			// It's a solvable challenge
 			if retryCount >= 2 {
 				// Too many retries, give up
 				errMsg := fmt.Sprintf("anubis challenge persists after %d retries", retryCount)
@@ -427,8 +434,13 @@ func (s *refreshService) refreshFeedWithFreshClient(ctx context.Context, feed mo
 	}
 
 	// Check if still getting Anubis (shouldn't happen with fresh connection)
-	if s.anubis != nil && anubis.IsAnubisChallenge(body) {
-		errMsg := fmt.Sprintf("anubis challenge persists after %d retries", retryCount)
+	if s.anubis != nil && anubis.IsAnubisPage(body) {
+		var errMsg string
+		if !anubis.IsAnubisChallenge(body) {
+			errMsg = "upstream rejected"
+		} else {
+			errMsg = fmt.Sprintf("anubis challenge persists after %d retries", retryCount)
+		}
 		_ = s.feeds.UpdateErrorMessage(ctx, feed.ID, &errMsg)
 		return errors.New(errMsg)
 	}

@@ -191,7 +191,13 @@ func (s *readabilityService) doFetch(ctx context.Context, session *azuretls.Sess
 
 	body := resp.Body
 
-	if s.anubis != nil && anubis.IsAnubisChallenge(body) {
+	// Check for Anubis page (challenge or rejection)
+	if s.anubis != nil && anubis.IsAnubisPage(body) {
+		// Check if it's a rejection (not solvable)
+		if !anubis.IsAnubisChallenge(body) {
+			return nil, fmt.Errorf("upstream rejected")
+		}
+		// It's a solvable challenge
 		if retryCount >= 2 || isFreshSession {
 			return nil, fmt.Errorf("anubis challenge persists after %d retries for %s", retryCount, targetURL)
 		}

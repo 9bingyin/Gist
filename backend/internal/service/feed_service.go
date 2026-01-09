@@ -353,8 +353,13 @@ func (s *feedService) fetchFeedWithCookie(ctx context.Context, feedURL string, u
 	parser := gofeed.NewParser()
 	parsed, parseErr := parser.Parse(bytes.NewReader(body))
 	if parseErr != nil {
-		// Parse failed, check if it's an Anubis challenge
-		if s.anubis != nil && anubis.IsAnubisChallenge(body) {
+		// Parse failed, check if it's an Anubis page
+		if s.anubis != nil && anubis.IsAnubisPage(body) {
+			// Check if it's a rejection (not solvable)
+			if !anubis.IsAnubisChallenge(body) {
+				return feedFetch{}, fmt.Errorf("upstream rejected")
+			}
+			// It's a solvable challenge
 			if retryCount >= 2 {
 				// Too many retries, give up
 				return feedFetch{}, fmt.Errorf("anubis challenge persists after %d retries", retryCount)
@@ -433,7 +438,10 @@ func (s *feedService) fetchFeedWithFreshClient(ctx context.Context, feedURL stri
 	}
 
 	// Check if still getting Anubis (shouldn't happen with fresh connection)
-	if s.anubis != nil && anubis.IsAnubisChallenge(body) {
+	if s.anubis != nil && anubis.IsAnubisPage(body) {
+		if !anubis.IsAnubisChallenge(body) {
+			return feedFetch{}, fmt.Errorf("upstream rejected")
+		}
 		return feedFetch{}, fmt.Errorf("anubis challenge persists after %d retries", retryCount)
 	}
 

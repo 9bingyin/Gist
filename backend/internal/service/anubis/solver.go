@@ -52,9 +52,19 @@ func NewSolver(clientFactory *network.ClientFactory, store *Store) *Solver {
 	}
 }
 
-// IsAnubisChallenge checks if the response body is an Anubis challenge page
-func IsAnubisChallenge(body []byte) bool {
+// IsAnubisPage checks if the response body is any Anubis page (challenge or rejection).
+func IsAnubisPage(body []byte) bool {
 	return bytes.Contains(body, []byte(`id="anubis_challenge"`))
+}
+
+// IsAnubisChallenge checks if the response body is a solvable Anubis challenge.
+// Returns false for rejection pages where challenge is null.
+func IsAnubisChallenge(body []byte) bool {
+	if !IsAnubisPage(body) {
+		return false
+	}
+	// Rejection pages have null challenge, not solvable
+	return !bytes.Contains(body, []byte(`"anubis_challenge" type="application/json">null`))
 }
 
 // GetCachedCookie returns the cached cookie for the given host if valid

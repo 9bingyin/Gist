@@ -80,6 +80,10 @@ func (h *ProxyHandler) handleServiceError(c echo.Context, err error) error {
 		return Error(c, http.StatusBadRequest, "Invalid protocol")
 	case errors.Is(err, service.ErrRequestTimeout):
 		return Error(c, http.StatusGatewayTimeout, "Request timeout")
+	case errors.Is(err, service.ErrUpstreamRejected):
+		// Upstream rejected the request, return 502 and prevent caching
+		c.Response().Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
+		return Error(c, http.StatusBadGateway, "Upstream rejected")
 	default:
 		return Error(c, http.StatusInternalServerError, "Failed to fetch image")
 	}

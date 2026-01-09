@@ -413,8 +413,13 @@ func (s *iconService) downloadIconWithRetry(ctx context.Context, iconURL string,
 		return nil, err
 	}
 
-	// Check if response is Anubis challenge (HTML instead of image)
-	if s.anubis != nil && anubis.IsAnubisChallenge(data) {
+	// Check if response is Anubis page (challenge or rejection)
+	if s.anubis != nil && anubis.IsAnubisPage(data) {
+		// Check if it's a rejection (not solvable)
+		if !anubis.IsAnubisChallenge(data) {
+			return nil, fmt.Errorf("upstream rejected")
+		}
+		// It's a solvable challenge
 		if retryCount >= 2 {
 			// Too many retries, give up
 			return nil, fmt.Errorf("anubis challenge persists after %d retries", retryCount)
@@ -465,7 +470,10 @@ func (s *iconService) downloadIconWithFreshClient(ctx context.Context, iconURL s
 	}
 
 	// Check if still getting Anubis (shouldn't happen with fresh connection)
-	if s.anubis != nil && anubis.IsAnubisChallenge(data) {
+	if s.anubis != nil && anubis.IsAnubisPage(data) {
+		if !anubis.IsAnubisChallenge(data) {
+			return nil, fmt.Errorf("upstream rejected")
+		}
 		return nil, fmt.Errorf("anubis challenge persists after %d retries", retryCount)
 	}
 
