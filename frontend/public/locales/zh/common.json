@@ -314,7 +314,14 @@
     "no_feeds": "暂无订阅源",
     "name": "名称",
     "subscribe_date": "订阅日期",
-    "last_update": "最后更新"
+    "last_update": "最后更新",
+    "actions": "操作",
+    "edit": "编辑",
+    "edit_feed": "编辑订阅源",
+    "feed_title": "标题",
+    "feed_url": "URL",
+    "url_readonly": "不可修改",
+    "update_failed": "更新失败"
   },
   "entry_list": {
     "all_articles": "全部文章",
