@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useFeeds } from '@/hooks/useFeeds'
 import { deleteFeeds, refreshAllFeeds, ApiError } from '@/api'
 import { cn } from '@/lib/utils'
+import { EditFeedDialog } from './EditFeedDialog'
 import type { Feed } from '@/types/api'
 
 type SortField = 'title' | 'createdAt' | 'updatedAt'
@@ -39,6 +40,7 @@ export function FeedsSettings() {
   const [error, setError] = useState<string | null>(null)
   const [sortField, setSortField] = useState<SortField>('title')
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
+  const [editingFeed, setEditingFeed] = useState<Feed | null>(null)
 
   const sortedFeeds = useMemo(() => {
     const isAscii = (str: string) => /^[\x00-\x7F]/.test(str)
@@ -271,6 +273,9 @@ export function FeedsSettings() {
                     <SortIcon field="updatedAt" />
                   </button>
                 </th>
+                <th className="w-16 px-3 py-2 text-left font-medium text-muted-foreground">
+                  {t('feeds.actions')}
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -348,6 +353,26 @@ export function FeedsSettings() {
                     <td className="px-3 py-2 text-muted-foreground">
                       {formatDateTime(feed.updatedAt)}
                     </td>
+                    <td className="px-3 py-2">
+                      <button
+                        type="button"
+                        onClick={() => setEditingFeed(feed)}
+                        className={cn(
+                          'flex size-7 items-center justify-center rounded transition-colors',
+                          'text-muted-foreground hover:bg-muted hover:text-foreground'
+                        )}
+                        title={t('feeds.edit')}
+                      >
+                        <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                          />
+                        </svg>
+                      </button>
+                    </td>
                   </tr>
                 )
               })}
@@ -355,6 +380,12 @@ export function FeedsSettings() {
           </table>
         </div>
       )}
+
+      <EditFeedDialog
+        feed={editingFeed}
+        open={editingFeed !== null}
+        onOpenChange={(open) => !open && setEditingFeed(null)}
+      />
     </div>
   )
 }
