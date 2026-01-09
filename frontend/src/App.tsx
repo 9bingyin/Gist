@@ -122,13 +122,13 @@ function AuthenticatedApp() {
 
     if (isAddFeedPath(location)) {
       mobileContent = (
-        <div className="h-screen">
+        <div className="h-screen safe-area-top">
           <AddFeedPage onClose={handleCloseAddFeed} contentType={addFeedContentType} />
         </div>
       )
     } else if (contentType === 'picture') {
       mobileContent = (
-        <div className="h-screen flex flex-col overflow-hidden">
+        <div className="h-screen flex flex-col overflow-hidden safe-area-top">
           <PictureMasonry
             selection={selection}
             contentType={contentType}
@@ -142,7 +142,7 @@ function AuthenticatedApp() {
       )
     } else {
       mobileContent = (
-        <div className="h-screen flex flex-col overflow-hidden">
+        <div className="h-screen flex flex-col overflow-hidden safe-area-top">
           {mobileView === 'list' ? (
             <EntryList
               selection={selection}
