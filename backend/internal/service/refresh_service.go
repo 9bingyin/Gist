@@ -326,6 +326,7 @@ func (s *refreshService) refreshFeedWithCookie(ctx context.Context, feed model.F
 	// Clear error message on successful refresh (always clear, not just when feed.ErrorMessage != nil,
 	// because the error might have been set earlier in this refresh cycle)
 	_ = s.feeds.UpdateErrorMessage(ctx, feed.ID, nil)
+	feed.ErrorMessage = nil
 
 	// Update feed ETag and LastModified (only update non-empty values to preserve existing ones)
 	newETag := strings.TrimSpace(resp.Header.Get("ETag"))
@@ -456,6 +457,7 @@ func (s *refreshService) refreshFeedWithFreshClient(ctx context.Context, feed mo
 	// Clear error message on successful refresh (always clear, not just when feed.ErrorMessage != nil,
 	// because the error might have been set earlier in this refresh cycle)
 	_ = s.feeds.UpdateErrorMessage(ctx, feed.ID, nil)
+	feed.ErrorMessage = nil
 
 	// Update feed ETag and LastModified
 	newETag := strings.TrimSpace(resp.Header.Get("ETag"))
@@ -524,4 +526,3 @@ func (s *refreshService) refreshFeedWithFreshClient(ctx context.Context, feed mo
 
 	return nil
 }
-
