@@ -40,6 +40,20 @@ function ArticleLink({
 }
 
 /**
+ * Wrapper for table elements to enable horizontal scrolling on mobile
+ */
+function ArticleTable({
+  children,
+  ...props
+}: React.TableHTMLAttributes<HTMLTableElement>) {
+  return (
+    <div className="overflow-x-auto">
+      <table {...props}>{children}</table>
+    </div>
+  )
+}
+
+/**
  * Article content renderer using React component tree
  * This allows React to diff only the changed parts, keeping images stable
  */
@@ -76,6 +90,8 @@ export function ArticleContent({
         },
         a: ({ node: _, ...props }) =>
           createElement(ArticleLink, props as React.ComponentProps<'a'>),
+        table: ({ node: _, ...props }) =>
+          createElement(ArticleTable, props as React.ComponentProps<'table'>),
       },
     })
 
