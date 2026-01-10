@@ -27,6 +27,7 @@ type FeedRepository interface {
 	Delete(ctx context.Context, id int64) error
 	DeleteBatch(ctx context.Context, ids []int64) (int64, error)
 	ClearAllIconPaths(ctx context.Context) (int64, error)
+	ClearAllConditionalGet(ctx context.Context) (int64, error)
 }
 
 type feedRepository struct {
@@ -259,6 +260,14 @@ func (r *feedRepository) ClearAllIconPaths(ctx context.Context) (int64, error) {
 	result, err := r.db.ExecContext(ctx, `UPDATE feeds SET icon_path = NULL, updated_at = ? WHERE icon_path IS NOT NULL`, formatTime(time.Now()))
 	if err != nil {
 		return 0, fmt.Errorf("clear icon paths: %w", err)
+	}
+	return result.RowsAffected()
+}
+
+func (r *feedRepository) ClearAllConditionalGet(ctx context.Context) (int64, error) {
+	result, err := r.db.ExecContext(ctx, `UPDATE feeds SET etag = NULL, last_modified = NULL, updated_at = ? WHERE etag IS NOT NULL OR last_modified IS NOT NULL`, formatTime(time.Now()))
+	if err != nil {
+		return 0, fmt.Errorf("clear conditional get: %w", err)
 	}
 	return result.RowsAffected()
 }

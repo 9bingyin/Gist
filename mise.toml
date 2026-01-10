@@ -1,4 +1,5 @@
 [tools]
 bun = "latest"
 go = "latest"
+"go:go.uber.org/mock/mockgen" = "latest"
 sqlite = "latest"

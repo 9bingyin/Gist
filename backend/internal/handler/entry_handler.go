@@ -402,7 +402,7 @@ func (h *EntryHandler) ClearReadabilityCache(c echo.Context) error {
 
 // ClearEntryCache deletes all unstarred entries.
 // @Summary Clear entry cache
-// @Description Delete all unstarred entries (preserves starred entries)
+// @Description Delete all unstarred entries (preserves starred entries). Also resets all feeds' ETag/Last-Modified to force full refresh on next update.
 // @Tags entries
 // @Produce json
 // @Success 200 {object} entryClearResponse

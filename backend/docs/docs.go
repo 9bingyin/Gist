@@ -558,7 +558,7 @@ const docTemplate = `{
         },
         "/entries/cache": {
             "delete": {
-                "description": "Delete all unstarred entries (preserves starred entries)",
+                "description": "Delete all unstarred entries (preserves starred entries). Also resets all feeds' ETag/Last-Modified to force full refresh on next update.",
                 "produces": [
                     "application/json"
                 ],

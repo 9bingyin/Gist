@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 
+	"gist/backend/internal/logger"
 	"gist/backend/internal/model"
 	"gist/backend/internal/repository"
 )
@@ -185,5 +186,14 @@ func (s *entryService) ClearReadabilityCache(ctx context.Context) (int64, error)
 }
 
 func (s *entryService) ClearEntryCache(ctx context.Context) (int64, error) {
-	return s.entries.DeleteUnstarred(ctx)
+	deleted, err := s.entries.DeleteUnstarred(ctx)
+	if err != nil {
+		return 0, err
+	}
+	// 重置所有 feeds 的 Conditional GET 信息，强制下次刷新时全量拉取
+	// 避免因 304 Not Modified 导致已删除的文章无法被重新拉取
+	if _, resetErr := s.feeds.ClearAllConditionalGet(ctx); resetErr != nil {
+		logger.Warn("failed to reset feed conditional get after clearing entries", "error", resetErr)
+	}
+	return deleted, nil
 }
