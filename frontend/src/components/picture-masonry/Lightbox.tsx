@@ -100,7 +100,7 @@ export function Lightbox() {
           onClick={handleOverlayClick}
         >
           {/* Top right buttons */}
-          <div className="absolute right-4 top-4 z-10 flex gap-2">
+          <div className="absolute right-[calc(1rem+env(safe-area-inset-right,0px))] top-[calc(1rem+env(safe-area-inset-top,0px))] z-10 flex gap-2">
             {/* Open original page */}
             {entry?.url && (
               <a
@@ -240,7 +240,7 @@ export function Lightbox() {
 
           {/* Bottom info bar */}
           <div
-            className="shrink-0 bg-black/50 px-6 py-4 backdrop-blur-sm"
+            className="shrink-0 bg-black/50 px-6 py-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))] backdrop-blur-sm"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mx-auto max-w-3xl">
