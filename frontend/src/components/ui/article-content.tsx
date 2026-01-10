@@ -1,4 +1,4 @@
-import { useMemo, createElement } from 'react'
+import { memo, useMemo, createElement } from 'react'
 import { parseHtml } from '@/lib/parse-html'
 import { ArticleImage, ArticleLinkContext } from './article-image'
 
@@ -18,11 +18,24 @@ function pruneImageCache() {
   }
 }
 
-interface ArticleContentProps {
-  content: string
-  articleUrl?: string
-  className?: string
+export interface ArticleContentBlock {
+  key: string
+  html: string
 }
+
+type ArticleContentProps =
+  | {
+      content: string
+      blocks?: never
+      articleUrl?: string
+      className?: string
+    }
+  | {
+      content?: never
+      blocks: ArticleContentBlock[]
+      articleUrl?: string
+      className?: string
+    }
 
 /**
  * Custom link component that opens in new tab
@@ -53,29 +66,25 @@ function ArticleTable({
   )
 }
 
-/**
- * Article content renderer using React component tree
- * This allows React to diff only the changed parts, keeping images stable
- */
-export function ArticleContent({
+const ArticleContentBlockRenderer = memo(function ArticleContentBlockRenderer({
   content,
   articleUrl,
-  className,
-}: ArticleContentProps) {
+}: {
+  content: string
+  articleUrl?: string
+}) {
   const renderedContent = useMemo(() => {
     if (!content) return null
-
-    // Track image index for unique keys (handles duplicate src)
-    let imgIndex = 0
 
     const result = parseHtml(content, {
       components: {
         img: ({ node: _, ...props }) => {
           const imgProps = props as React.ComponentProps<typeof ArticleImage>
           const src = imgProps.src || ''
-          // Use articleUrl + src + index as cache key for uniqueness
-          // Index handles cases where same image appears multiple times
-          const cacheKey = `${articleUrl || ''}-${src}-${imgIndex++}`
+          // Use articleUrl + src as cache key
+          // This ensures the same image is cached regardless of rendering mode
+          // (string mode vs blocks mode), preventing flicker during translation
+          const cacheKey = `${articleUrl || ''}-${src}`
 
           // Reuse cached element to prevent re-creation during translation updates
           if (imageElementCache.has(cacheKey)) {
@@ -98,9 +107,34 @@ export function ArticleContent({
     return result.toContent()
   }, [content, articleUrl])
 
+  return <>{renderedContent}</>
+})
+
+/**
+ * Article content renderer using React component tree
+ * This allows React to diff only the changed parts, keeping images stable
+ */
+export function ArticleContent(props: ArticleContentProps) {
+  const { articleUrl, className } = props
+
   return (
     <ArticleLinkContext.Provider value={articleUrl}>
-      <div className={className}>{renderedContent}</div>
+      <div className={className}>
+        {'blocks' in props && props.blocks ? (
+          props.blocks.map((block) => (
+            <ArticleContentBlockRenderer
+              key={block.key}
+              content={block.html}
+              articleUrl={articleUrl}
+            />
+          ))
+        ) : 'content' in props ? (
+          <ArticleContentBlockRenderer
+            content={props.content}
+            articleUrl={articleUrl}
+          />
+        ) : null}
+      </div>
     </ArticleLinkContext.Provider>
   )
 }

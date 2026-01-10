@@ -5,6 +5,7 @@ import { useEntryMeta } from '@/hooks/useEntryMeta'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { isSafeUrl } from '@/lib/url'
 import { ArticleContent } from '@/components/ui/article-content'
+import type { ArticleContentBlock } from '@/components/ui/article-content'
 import { AiSummaryBox } from './AiSummaryBox'
 import type { Entry } from '@/types/api'
 
@@ -13,6 +14,8 @@ interface EntryContentBodyProps {
   displayTitle?: string | null
   scrollRef: RefCallback<HTMLDivElement>
   displayContent: string | null | undefined
+  displayBlocks?: ArticleContentBlock[] | null
+  highlightContent?: string
   aiSummary?: string | null
   isLoadingSummary?: boolean
   summaryError?: string | null
@@ -23,6 +26,8 @@ export function EntryContentBody({
   displayTitle,
   scrollRef,
   displayContent,
+  displayBlocks,
+  highlightContent,
   aiSummary,
   isLoadingSummary,
   summaryError,
@@ -32,9 +37,10 @@ export function EntryContentBody({
   const contentRef = useRef<HTMLDivElement>(null)
 
   // Apply code highlighting after content renders
-  useCodeHighlight(contentRef, displayContent ?? '')
+  useCodeHighlight(contentRef, highlightContent ?? displayContent ?? '')
 
-  const hasContent = displayContent && displayContent.trim().length > 0
+  const hasBlocks = !!displayBlocks && displayBlocks.length > 0
+  const hasContent = hasBlocks || (!!displayContent && displayContent.trim().length > 0)
 
   return (
     <ScrollArea
@@ -128,7 +134,11 @@ export function EntryContentBody({
 
         <div ref={contentRef} className="entry-content-body">
           {hasContent ? (
-            <ArticleContent content={displayContent} articleUrl={entry.url} />
+            hasBlocks ? (
+              <ArticleContent blocks={displayBlocks ?? []} articleUrl={entry.url} />
+            ) : (
+              <ArticleContent content={displayContent ?? ''} articleUrl={entry.url} />
+            )
           ) : (
             <div className="rounded-lg border border-dashed border-border p-8 text-center text-muted-foreground">
               No content available for this article.

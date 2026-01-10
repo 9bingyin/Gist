@@ -503,6 +503,18 @@ export function EntryContent({ entryId, isMobile, onBack }: EntryContentProps) {
       .join('')
   }, [translatedContent, originalBlocks, translatedBlocks])
 
+  const translatedContentBlocks = useMemo(() => {
+    // Use blocks mode as soon as we have originalBlocks (from init event)
+    // This minimizes mode switching which causes image flicker
+    if (!entry || translatedContent || originalBlocks.length === 0) {
+      return null
+    }
+    return originalBlocks.map((block) => ({
+      key: `${entry.id}-${block.index}`,
+      html: translatedBlocks.get(block.index) ?? block.html,
+    }))
+  }, [entry, translatedContent, originalBlocks, translatedBlocks])
+
   // Save translation to store when completed
   useEffect(() => {
     if (!entry || !autoTranslate) return
@@ -549,7 +561,9 @@ export function EntryContent({ entryId, isMobile, onBack }: EntryContentProps) {
         entry={entry}
         displayTitle={displayTitle}
         scrollRef={scrollRef}
-        displayContent={combinedTranslatedContent ?? baseContent}
+        displayContent={translatedContent ?? baseContent}
+        displayBlocks={translatedContentBlocks}
+        highlightContent={combinedTranslatedContent ?? baseContent ?? ''}
         aiSummary={aiSummary}
         isLoadingSummary={isLoadingSummary}
         summaryError={summaryError}
