@@ -52,6 +52,7 @@ func main() {
 	aiSummaryRepo := repository.NewAISummaryRepository(dbConn)
 	aiTranslationRepo := repository.NewAITranslationRepository(dbConn)
 	aiListTranslationRepo := repository.NewAIListTranslationRepository(dbConn)
+	domainRateLimitRepo := repository.NewDomainRateLimitRepository(dbConn)
 
 	// Initialize rate limiter with stored setting
 	initialRateLimit := ai.DefaultRateLimit
@@ -86,7 +87,8 @@ func main() {
 	feedService := service.NewFeedService(feedRepo, folderRepo, entryRepo, iconService, settingsService, clientFactory, anubisSolver)
 	entryService := service.NewEntryService(entryRepo, feedRepo, folderRepo)
 	readabilityService := service.NewReadabilityService(entryRepo, clientFactory, anubisSolver)
-	refreshService := service.NewRefreshService(feedRepo, entryRepo, settingsService, iconService, clientFactory, anubisSolver)
+	domainRateLimitService := service.NewDomainRateLimitService(domainRateLimitRepo)
+	refreshService := service.NewRefreshService(feedRepo, entryRepo, settingsService, iconService, clientFactory, anubisSolver, domainRateLimitService)
 	opmlService := service.NewOPMLService(folderService, feedService, refreshService, iconService, folderRepo, feedRepo)
 
 	proxyService := service.NewProxyService(clientFactory, anubisSolver)
@@ -103,8 +105,9 @@ func main() {
 	settingsHandler := handler.NewSettingsHandler(settingsService, clientFactory)
 	aiHandler := handler.NewAIHandler(aiService)
 	authHandler := handler.NewAuthHandler(authService)
+	domainRateLimitHandler := handler.NewDomainRateLimitHandler(domainRateLimitService)
 
-	router := transport.NewRouter(folderHandler, feedHandler, entryHandler, opmlHandler, iconHandler, proxyHandler, settingsHandler, aiHandler, authHandler, authService, cfg.StaticDir)
+	router := transport.NewRouter(folderHandler, feedHandler, entryHandler, opmlHandler, iconHandler, proxyHandler, settingsHandler, aiHandler, authHandler, domainRateLimitHandler, authService, cfg.StaticDir)
 
 	// Start background scheduler (15 minutes interval)
 	sched := scheduler.New(refreshService, 15*time.Minute)

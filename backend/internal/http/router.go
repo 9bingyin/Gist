@@ -20,6 +20,7 @@ func NewRouter(
 	settingsHandler *handler.SettingsHandler,
 	aiHandler *handler.AIHandler,
 	authHandler *handler.AuthHandler,
+	domainRateLimitHandler *handler.DomainRateLimitHandler,
 	authService service.AuthService,
 	staticDir string,
 ) *echo.Echo {
@@ -47,6 +48,7 @@ func NewRouter(
 	aiHandler.RegisterRoutes(api)
 	iconHandler.RegisterAPIRoutes(api)
 	authHandler.RegisterProtectedRoutes(api)
+	domainRateLimitHandler.RegisterRoutes(api)
 
 	// Icon routes with cache recovery
 	iconHandler.RegisterRoutes(e)

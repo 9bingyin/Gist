@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/mmcdole/gofeed"
-	"golang.org/x/sync/errgroup"
 	"golang.org/x/sync/semaphore"
 
 	"gist/backend/internal/config"
@@ -34,34 +33,75 @@ const (
 	maxConcurrentPerHost = 1
 )
 
-// hostLimiter manages per-host concurrency limits.
-type hostLimiter struct {
-	mu       sync.Mutex
-	limiters map[string]*semaphore.Weighted
+// hostRateLimiter manages per-host concurrency and rate limits.
+type hostRateLimiter struct {
+	mu          sync.Mutex
+	semaphores  map[string]*semaphore.Weighted
+	lastRequest map[string]time.Time
+	getInterval func(host string) time.Duration
 }
 
-func newHostLimiter() *hostLimiter {
-	return &hostLimiter{
-		limiters: make(map[string]*semaphore.Weighted),
+func newHostRateLimiter(getInterval func(host string) time.Duration) *hostRateLimiter {
+	return &hostRateLimiter{
+		semaphores:  make(map[string]*semaphore.Weighted),
+		lastRequest: make(map[string]time.Time),
+		getInterval: getInterval,
 	}
 }
 
-func (h *hostLimiter) acquire(ctx context.Context, host string) error {
+// acquireSemaphore acquires the per-host semaphore to ensure serial execution for the same host.
+// This does NOT occupy global concurrency slots, allowing different hosts to queue in parallel.
+func (h *hostRateLimiter) acquireSemaphore(ctx context.Context, host string) error {
 	h.mu.Lock()
-	sem, ok := h.limiters[host]
+	sem, ok := h.semaphores[host]
 	if !ok {
 		sem = semaphore.NewWeighted(maxConcurrentPerHost)
-		h.limiters[host] = sem
+		h.semaphores[host] = sem
 	}
 	h.mu.Unlock()
+
 	return sem.Acquire(ctx, 1)
 }
 
-func (h *hostLimiter) release(host string) {
+// releaseSemaphore releases the per-host semaphore.
+func (h *hostRateLimiter) releaseSemaphore(host string) {
 	h.mu.Lock()
-	if sem, ok := h.limiters[host]; ok {
+	if sem, ok := h.semaphores[host]; ok {
 		sem.Release(1)
 	}
+	h.mu.Unlock()
+}
+
+// waitForInterval waits until the configured interval has passed since the last request.
+// This should be called AFTER acquiring the per-host semaphore to ensure serial waiting.
+func (h *hostRateLimiter) waitForInterval(ctx context.Context, host string) error {
+	interval := h.getInterval(host)
+	if interval <= 0 {
+		return nil
+	}
+
+	h.mu.Lock()
+	lastReq, exists := h.lastRequest[host]
+	h.mu.Unlock()
+
+	if exists {
+		elapsed := time.Since(lastReq)
+		if elapsed < interval {
+			waitTime := interval - elapsed
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(waitTime):
+			}
+		}
+	}
+	return nil
+}
+
+// recordRequest records the current time as the last request time for the host.
+func (h *hostRateLimiter) recordRequest(host string) {
+	h.mu.Lock()
+	h.lastRequest[host] = time.Now()
 	h.mu.Unlock()
 }
 
@@ -75,17 +115,18 @@ type RefreshService interface {
 }
 
 type refreshService struct {
-	feeds         repository.FeedRepository
-	entries       repository.EntryRepository
-	settings      SettingsService
-	icons         IconService
-	clientFactory *network.ClientFactory
-	anubis        *anubis.Solver
-	mu            sync.Mutex
-	isRefreshing  bool
+	feeds          repository.FeedRepository
+	entries        repository.EntryRepository
+	settings       SettingsService
+	icons          IconService
+	clientFactory  *network.ClientFactory
+	anubis         *anubis.Solver
+	rateLimitSvc   DomainRateLimitService
+	mu             sync.Mutex
+	isRefreshing   bool
 }
 
-func NewRefreshService(feeds repository.FeedRepository, entries repository.EntryRepository, settings SettingsService, icons IconService, clientFactory *network.ClientFactory, anubisSolver *anubis.Solver) RefreshService {
+func NewRefreshService(feeds repository.FeedRepository, entries repository.EntryRepository, settings SettingsService, icons IconService, clientFactory *network.ClientFactory, anubisSolver *anubis.Solver, rateLimitSvc DomainRateLimitService) RefreshService {
 	return &refreshService{
 		feeds:         feeds,
 		entries:       entries,
@@ -93,6 +134,7 @@ func NewRefreshService(feeds repository.FeedRepository, entries repository.Entry
 		icons:         icons,
 		clientFactory: clientFactory,
 		anubis:        anubisSolver,
+		rateLimitSvc:  rateLimitSvc,
 	}
 }
 
@@ -116,35 +158,64 @@ func (s *refreshService) RefreshAll(ctx context.Context) error {
 		return err
 	}
 
-	// Use errgroup for parallel refresh with concurrency limit
-	g, ctx := errgroup.WithContext(ctx)
-	g.SetLimit(maxConcurrentRefresh)
+	// Global concurrency limit for actual network requests
+	globalSem := semaphore.NewWeighted(maxConcurrentRefresh)
 
-	// Per-host limiter to avoid overwhelming single servers
-	hl := newHostLimiter()
+	// Per-host rate limiter to avoid overwhelming single servers
+	hl := newHostRateLimiter(func(host string) time.Duration {
+		if s.rateLimitSvc != nil {
+			return s.rateLimitSvc.GetIntervalDuration(ctx, host)
+		}
+		return 0
+	})
 
+	// Use WaitGroup instead of errgroup to allow all goroutines to start immediately.
+	// This prevents different hosts from blocking each other while waiting for rate limits.
+	var wg sync.WaitGroup
 	for _, feed := range feeds {
 		feed := feed // capture loop variable
-		g.Go(func() error {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
 			// Extract host for per-host limiting
 			host := extractHost(feed.URL)
+
+			// Step 1: Acquire per-host semaphore (queue for same-host requests)
+			// This does NOT occupy global slots, so different hosts can queue in parallel
 			if host != "" {
-				if err := hl.acquire(ctx, host); err != nil {
-					return nil // context cancelled
+				if err := hl.acquireSemaphore(ctx, host); err != nil {
+					return // context cancelled
 				}
-				defer hl.release(host)
+				defer hl.releaseSemaphore(host)
+
+				// Step 2: Wait for rate limit interval (still not occupying global slots)
+				if err := hl.waitForInterval(ctx, host); err != nil {
+					return // context cancelled
+				}
 			}
 
+			// Step 3: Acquire global concurrency permit (only when actually making request)
+			if err := globalSem.Acquire(ctx, 1); err != nil {
+				return // context cancelled
+			}
+			defer globalSem.Release(1)
+
+			// Step 4: Record request time for rate limiting
+			if host != "" {
+				hl.recordRequest(host)
+			}
+
+			// Step 5: Execute refresh
 			if err := s.refreshFeedInternal(ctx, feed); err != nil {
 				logger.Warn("refresh feed", "feedID", feed.ID, "title", feed.Title, "error", err)
-				// Don't return error to continue refreshing other feeds
 			}
-			return nil
-		})
+		}()
 	}
 
 	// Wait for all goroutines to complete
-	return g.Wait()
+	wg.Wait()
+	return nil
 }
 
 // extractHost returns the host from a URL string.
@@ -186,33 +257,62 @@ func (s *refreshService) RefreshFeeds(ctx context.Context, feedIDs []int64) erro
 		return nil
 	}
 
-	// Use errgroup for parallel refresh with concurrency limit
-	g, ctx := errgroup.WithContext(ctx)
-	g.SetLimit(maxConcurrentRefresh)
+	// Global concurrency limit for actual network requests
+	globalSem := semaphore.NewWeighted(maxConcurrentRefresh)
 
-	// Per-host limiter to avoid overwhelming single servers
-	hl := newHostLimiter()
+	// Per-host rate limiter to avoid overwhelming single servers
+	hl := newHostRateLimiter(func(host string) time.Duration {
+		if s.rateLimitSvc != nil {
+			return s.rateLimitSvc.GetIntervalDuration(ctx, host)
+		}
+		return 0
+	})
 
+	// Use WaitGroup instead of errgroup to allow all goroutines to start immediately.
+	// This prevents different hosts from blocking each other while waiting for rate limits.
+	var wg sync.WaitGroup
 	for _, feed := range feeds {
 		feed := feed // capture loop variable
-		g.Go(func() error {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
 			// Extract host for per-host limiting
 			host := extractHost(feed.URL)
+
+			// Step 1: Acquire per-host semaphore (queue for same-host requests)
 			if host != "" {
-				if err := hl.acquire(ctx, host); err != nil {
-					return nil // context cancelled
+				if err := hl.acquireSemaphore(ctx, host); err != nil {
+					return // context cancelled
 				}
-				defer hl.release(host)
+				defer hl.releaseSemaphore(host)
+
+				// Step 2: Wait for rate limit interval
+				if err := hl.waitForInterval(ctx, host); err != nil {
+					return // context cancelled
+				}
 			}
 
+			// Step 3: Acquire global concurrency permit
+			if err := globalSem.Acquire(ctx, 1); err != nil {
+				return // context cancelled
+			}
+			defer globalSem.Release(1)
+
+			// Step 4: Record request time for rate limiting
+			if host != "" {
+				hl.recordRequest(host)
+			}
+
+			// Step 5: Execute refresh
 			if err := s.refreshFeedInternal(ctx, feed); err != nil {
 				logger.Warn("refresh feed", "feedID", feed.ID, "title", feed.Title, "error", err)
 			}
-			return nil
-		})
+		}()
 	}
 
-	return g.Wait()
+	wg.Wait()
+	return nil
 }
 
 func (s *refreshService) refreshFeedInternal(ctx context.Context, feed model.Feed) error {

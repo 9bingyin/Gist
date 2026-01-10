@@ -80,7 +80,19 @@
     "ip_stack_description": "Select IP protocol priority",
     "ip_stack_default": "Default",
     "ip_stack_ipv4": "IPv4 First",
-    "ip_stack_ipv6": "IPv6 First"
+    "ip_stack_ipv6": "IPv6 First",
+    "advanced_seconds": "seconds",
+    "advanced_domain_limits": "Domain Rate Limits",
+    "advanced_domain_limits_description": "Set request intervals for specific domains",
+    "advanced_add_domain": "Add Domain",
+    "advanced_no_domains": "No domain rate limits configured",
+    "advanced_host": "Domain",
+    "advanced_interval": "Interval",
+    "advanced_actions": "Actions",
+    "advanced_edit": "Edit",
+    "advanced_delete": "Delete",
+    "advanced_edit_domain": "Edit Domain Rate Limit",
+    "confirm_delete": "Are you sure?"
   },
   "theme": {
     "system": "Follow System",

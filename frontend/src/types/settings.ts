@@ -65,3 +65,13 @@ export interface NetworkTestResponse {
   message?: string;
   error?: string;
 }
+
+export interface DomainRateLimit {
+  id: string;
+  host: string;
+  intervalSeconds: number;
+}
+
+export interface DomainRateLimitListResponse {
+  items: DomainRateLimit[];
+}

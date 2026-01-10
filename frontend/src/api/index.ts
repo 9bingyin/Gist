@@ -12,7 +12,7 @@ import type {
   StarredCountResponse,
   UnreadCountsResponse,
 } from '@/types/api'
-import type { AISettings, AITestRequest, AITestResponse, GeneralSettings, NetworkSettings, NetworkTestRequest, NetworkTestResponse } from '@/types/settings'
+import type { AISettings, AITestRequest, AITestResponse, DomainRateLimit, DomainRateLimitListResponse, GeneralSettings, NetworkSettings, NetworkTestRequest, NetworkTestResponse } from '@/types/settings'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? ''
 const TOKEN_KEY = 'gist_auth_token'
@@ -845,3 +845,30 @@ export async function clearEntryCache(): Promise<ClearCacheResponse> {
     method: 'DELETE',
   })
 }
+
+// Domain Rate Limit API
+
+export async function getDomainRateLimits(): Promise<DomainRateLimitListResponse> {
+  return request<DomainRateLimitListResponse>('/api/domain-rate-limits')
+}
+
+export async function createDomainRateLimit(host: string, intervalSeconds: number): Promise<DomainRateLimit> {
+  return request<DomainRateLimit>('/api/domain-rate-limits', {
+    method: 'POST',
+    body: JSON.stringify({ host, intervalSeconds }),
+  })
+}
+
+export async function updateDomainRateLimit(host: string, intervalSeconds: number): Promise<DomainRateLimit> {
+  return request<DomainRateLimit>(`/api/domain-rate-limits/${encodeURIComponent(host)}`, {
+    method: 'PUT',
+    body: JSON.stringify({ intervalSeconds }),
+  })
+}
+
+export async function deleteDomainRateLimit(host: string): Promise<void> {
+  return request<void>(`/api/domain-rate-limits/${encodeURIComponent(host)}`, {
+    method: 'DELETE',
+  })
+}
+

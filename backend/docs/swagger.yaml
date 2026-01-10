@@ -183,6 +183,29 @@ definitions:
       deleted:
         type: integer
     type: object
+  internal_handler.domainRateLimitListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/internal_handler.domainRateLimitResponse'
+        type: array
+    type: object
+  internal_handler.domainRateLimitRequest:
+    properties:
+      host:
+        type: string
+      intervalSeconds:
+        type: integer
+    type: object
+  internal_handler.domainRateLimitResponse:
+    properties:
+      host:
+        type: string
+      id:
+        type: string
+      intervalSeconds:
+        type: integer
+    type: object
   internal_handler.entryClearResponse:
     properties:
       deleted:
@@ -650,6 +673,77 @@ paths:
       summary: Batch translate articles
       tags:
       - ai
+  /api/domain-rate-limits:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handler.domainRateLimitListResponse'
+      summary: List all domain rate limits
+      tags:
+      - domain-rate-limits
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Domain rate limit
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.domainRateLimitRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/internal_handler.domainRateLimitResponse'
+      summary: Create a domain rate limit
+      tags:
+      - domain-rate-limits
+  /api/domain-rate-limits/{host}:
+    delete:
+      parameters:
+      - description: Host
+        in: path
+        name: host
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+      summary: Delete a domain rate limit
+      tags:
+      - domain-rate-limits
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Host
+        in: path
+        name: host
+        required: true
+        type: string
+      - description: Domain rate limit
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.domainRateLimitRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handler.domainRateLimitResponse'
+      summary: Update a domain rate limit
+      tags:
+      - domain-rate-limits
   /api/proxy/image/{encoded}:
     get:
       description: Proxies external images to avoid triggering anti-crawling mechanisms

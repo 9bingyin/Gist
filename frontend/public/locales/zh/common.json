@@ -80,7 +80,19 @@
     "ip_stack_description": "选择 IP 协议优先级",
     "ip_stack_default": "默认",
     "ip_stack_ipv4": "IPv4 优先",
-    "ip_stack_ipv6": "IPv6 优先"
+    "ip_stack_ipv6": "IPv6 优先",
+    "advanced_seconds": "秒",
+    "advanced_domain_limits": "域名限速配置",
+    "advanced_domain_limits_description": "为特定域名设置请求间隔时间",
+    "advanced_add_domain": "添加域名",
+    "advanced_no_domains": "暂无域名限速配置",
+    "advanced_host": "域名",
+    "advanced_interval": "间隔",
+    "advanced_actions": "操作",
+    "advanced_edit": "编辑",
+    "advanced_delete": "删除",
+    "advanced_edit_domain": "编辑域名限速",
+    "confirm_delete": "确认删除？"
   },
   "theme": {
     "system": "跟随系统",
