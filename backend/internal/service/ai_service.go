@@ -309,9 +309,12 @@ func (s *aiService) TranslateBlocks(ctx context.Context, entryID int64, content,
 					return
 				}
 
+				// Replace media elements with placeholders to prevent AI from modifying them
+				htmlForTranslation, mediaElements := ai.ReplaceMediaWithPlaceholders(b.HTML)
+
 				// Translate single block using non-streaming Complete
 				systemPrompt := ai.GetTranslateBlockPrompt(title, language)
-				translatedHTML, err := provider.Complete(ctx, systemPrompt, b.HTML)
+				translatedHTML, err := provider.Complete(ctx, systemPrompt, htmlForTranslation)
 				if err != nil {
 					select {
 					case errCh <- fmt.Errorf("translate block %d: %w", b.Index, err):
@@ -320,6 +323,9 @@ func (s *aiService) TranslateBlocks(ctx context.Context, entryID int64, content,
 					}
 					return
 				}
+
+				// Restore media elements from placeholders
+				translatedHTML = ai.RestoreMediaFromPlaceholders(translatedHTML, mediaElements)
 
 				// Send result
 				result := TranslateBlockResult{

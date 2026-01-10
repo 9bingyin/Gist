@@ -2,6 +2,8 @@ package ai
 
 import (
 	"bytes"
+	"fmt"
+	"regexp"
 	"strings"
 
 	"golang.org/x/net/html"
@@ -333,4 +335,52 @@ func extractText(n *html.Node, buf *strings.Builder) {
 			buf.WriteString("\n")
 		}
 	}
+}
+
+// Regex patterns for media elements that should be preserved during translation
+var (
+	// Matches self-closing img tags: <img ... /> or <img ...>
+	imgPattern = regexp.MustCompile(`<img\s[^>]*(?:/>|>)`)
+	// Matches picture elements with all content: <picture>...</picture>
+	picturePattern = regexp.MustCompile(`(?s)<picture[^>]*>.*?</picture>`)
+	// Matches video elements with all content: <video>...</video>
+	videoPattern = regexp.MustCompile(`(?s)<video[^>]*>.*?</video>`)
+	// Matches audio elements with all content: <audio>...</audio>
+	audioPattern = regexp.MustCompile(`(?s)<audio[^>]*>.*?</audio>`)
+)
+
+// mediaPlaceholderPrefix is the prefix for media placeholders.
+const mediaPlaceholderPrefix = "{{__MEDIA_PLACEHOLDER_"
+
+// ReplaceMediaWithPlaceholders replaces img/picture/video/audio elements with placeholders.
+// This prevents AI from modifying media element attributes (like img alt) during translation.
+// Returns the modified HTML and a slice of original elements.
+func ReplaceMediaWithPlaceholders(htmlContent string) (string, []string) {
+	var elements []string
+	result := htmlContent
+
+	// Process all media patterns
+	patterns := []*regexp.Regexp{picturePattern, videoPattern, audioPattern, imgPattern}
+
+	for _, pattern := range patterns {
+		result = pattern.ReplaceAllStringFunc(result, func(match string) string {
+			index := len(elements)
+			elements = append(elements, match)
+			return fmt.Sprintf("%s%d__}}", mediaPlaceholderPrefix, index)
+		})
+	}
+
+	return result, elements
+}
+
+// RestoreMediaFromPlaceholders restores placeholders back to original media elements.
+func RestoreMediaFromPlaceholders(htmlContent string, elements []string) string {
+	result := htmlContent
+
+	for i, element := range elements {
+		placeholder := fmt.Sprintf("%s%d__}}", mediaPlaceholderPrefix, i)
+		result = strings.Replace(result, placeholder, element, 1)
+	}
+
+	return result
 }
