@@ -1,5 +1,6 @@
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
+import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
 import {
   DropdownMenu,
@@ -47,7 +48,7 @@ const UserAvatar = React.forwardRef<
     style={style}
     onTransitionEnd={onTransitionEnd}
     className={cn(
-      'relative flex shrink-0 overflow-hidden rounded-full border bg-muted',
+      'relative flex shrink-0 overflow-hidden rounded-full border bg-muted select-none',
       className
     )}
   >
@@ -74,16 +75,7 @@ const TransitionAvatar = React.forwardRef<
   } & React.HTMLAttributes<HTMLButtonElement>
 >(({ stage, avatarUrl, className, ...props }, forwardRef) => {
   const [measureRef, { x, y }, forceRefresh] = useMeasure()
-  const [avatarHovered, setAvatarHovered] = React.useState(false)
-
   const zoomIn = stage === 'zoom-in'
-  const [currentZoomIn, setCurrentZoomIn] = React.useState(false)
-
-  React.useLayoutEffect(() => {
-    if (zoomIn) {
-      setCurrentZoomIn(true)
-    }
-  }, [zoomIn])
 
   return (
     <>
@@ -91,42 +83,67 @@ const TransitionAvatar = React.forwardRef<
         {...props}
         ref={forwardRef}
         className={cn(
-            "group relative inline-flex items-center justify-center rounded-md size-8 outline-none focus-visible:ring-0",
+            "group relative inline-flex items-center justify-center rounded-md size-8 outline-none focus-visible:ring-0 select-none",
             className
         )}
-        onMouseEnter={React.useCallback(() => {
+        onPointerDown={React.useCallback((e: React.PointerEvent<HTMLButtonElement>) => {
           forceRefresh()
-          setAvatarHovered(true)
-        }, [forceRefresh])}
-        onMouseLeave={React.useCallback(() => {
-          setAvatarHovered(false)
-        }, [])}
+          props.onPointerDown?.(e)
+        }, [forceRefresh, props.onPointerDown])}
+        onClick={React.useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+          forceRefresh()
+          props.onClick?.(e)
+        }, [forceRefresh, props.onClick])}
       >
         <UserAvatar ref={measureRef} className="size-6 border-0" avatarUrl={avatarUrl} />
       </button>
 
-      {x !== 0 && y !== 0 && (avatarHovered || zoomIn || currentZoomIn) && (
-        <RootPortal>
-          <UserAvatar
-            avatarUrl={avatarUrl}
-            style={{
-              left: x - (zoomIn ? 16 : 0),
-              top: y,
-            }}
-            className={cn(
-              "fixed p-0 border-0 pointer-events-none",
-              "transition-all duration-200 ease-in-out",
-              "transform-gpu will-change-[left,top,height,width]",
-              zoomIn ? "z-[100] size-14" : "z-[-1] size-6"
-            )}
-            onTransitionEnd={() => {
-              if (!zoomIn && currentZoomIn) {
-                setCurrentZoomIn(false)
-              }
-            }}
-          />
-        </RootPortal>
-      )}
+      <RootPortal>
+        <AnimatePresence>
+          {zoomIn && x !== 0 && y !== 0 && (
+            <motion.div
+              initial={{
+                left: x,
+                top: y,
+                width: 24,
+                height: 24,
+                opacity: 0.5,
+              }}
+              animate={{
+                left: x - 16,
+                top: y,
+                width: 56,
+                height: 56,
+                opacity: 1,
+              }}
+              exit={{
+                left: x,
+                top: y,
+                width: 24,
+                height: 24,
+                opacity: 0,
+              }}
+              transition={{
+                duration: 0.2,
+                ease: [0.4, 0, 0.2, 1], // Standard Ease
+              }}
+              className="fixed p-0 border-0 pointer-events-none rounded-full overflow-hidden bg-muted z-[100] transform-gpu shadow-xl select-none"
+            >
+              {avatarUrl ? (
+                <img className="size-full object-cover" src={avatarUrl} alt="User avatar" />
+              ) : (
+                <svg
+                  className="size-full p-1 text-muted-foreground"
+                  fill="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+                </svg>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </RootPortal>
     </>
   )
 })
