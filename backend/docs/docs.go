@@ -181,6 +181,116 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/domain-rate-limits": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "domain-rate-limits"
+                ],
+                "summary": "List all domain rate limits",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.domainRateLimitListResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "domain-rate-limits"
+                ],
+                "summary": "Create a domain rate limit",
+                "parameters": [
+                    {
+                        "description": "Domain rate limit",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.domainRateLimitRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.domainRateLimitResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/domain-rate-limits/{host}": {
+            "put": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "domain-rate-limits"
+                ],
+                "summary": "Update a domain rate limit",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Host",
+                        "name": "host",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Domain rate limit",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.domainRateLimitRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.domainRateLimitResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "tags": [
+                    "domain-rate-limits"
+                ],
+                "summary": "Delete a domain rate limit",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Host",
+                        "name": "host",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    }
+                }
+            }
+        },
         "/api/proxy/image/{encoded}": {
             "get": {
                 "description": "Proxies external images to avoid triggering anti-crawling mechanisms",
@@ -2112,6 +2222,42 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "deleted": {
+                    "type": "integer"
+                }
+            }
+        },
+        "internal_handler.domainRateLimitListResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_handler.domainRateLimitResponse"
+                    }
+                }
+            }
+        },
+        "internal_handler.domainRateLimitRequest": {
+            "type": "object",
+            "properties": {
+                "host": {
+                    "type": "string"
+                },
+                "intervalSeconds": {
+                    "type": "integer"
+                }
+            }
+        },
+        "internal_handler.domainRateLimitResponse": {
+            "type": "object",
+            "properties": {
+                "host": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "intervalSeconds": {
                     "type": "integer"
                 }
             }

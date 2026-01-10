@@ -297,5 +297,22 @@ func runMigrations(db *sql.DB) error {
 		return fmt.Errorf("create entries_ad trigger: %w", err)
 	}
 
+	// Migration 16: Create domain_rate_limits table for per-host rate limiting
+	if _, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS domain_rate_limits (
+			id INTEGER PRIMARY KEY,
+			host TEXT NOT NULL UNIQUE,
+			interval_seconds INTEGER NOT NULL,
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL
+		)
+	`); err != nil {
+		return fmt.Errorf("create domain_rate_limits table: %w", err)
+	}
+
+	if _, err := db.Exec(`CREATE INDEX IF NOT EXISTS idx_domain_rate_limits_host ON domain_rate_limits(host)`); err != nil {
+		return fmt.Errorf("create idx_domain_rate_limits_host: %w", err)
+	}
+
 	return nil
 }

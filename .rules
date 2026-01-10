@@ -202,6 +202,15 @@
 | summary | TEXT | NOT NULL | 翻译后摘要 |
 | created_at | TEXT | NOT NULL | 创建时间 (RFC3339) |
 
+**domain_rate_limits** - 域名限速配置表
+| 列名 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| id | INTEGER | PRIMARY KEY | Snowflake ID |
+| host | TEXT | NOT NULL UNIQUE | 域名 (如 rsshub.app) |
+| interval_seconds | INTEGER | NOT NULL | 请求间隔秒数 |
+| created_at | TEXT | NOT NULL | 创建时间 (RFC3339) |
+| updated_at | TEXT | NOT NULL | 更新时间 (RFC3339) |
+
 #### 4.2.2 索引
 ```sql
 idx_folders_parent_id    ON folders(parent_id)
@@ -214,6 +223,7 @@ idx_entries_feed_url     ON entries(feed_id, url) UNIQUE
 idx_ai_summaries_entry_mode ON ai_summaries(entry_id, is_readability, language) UNIQUE
 idx_ai_translations_entry_mode ON ai_translations(entry_id, is_readability, language) UNIQUE
 idx_ai_list_translations_entry_lang ON ai_list_translations(entry_id, language) UNIQUE
+idx_domain_rate_limits_host ON domain_rate_limits(host)
 ```
 
 #### 4.2.3 触发器

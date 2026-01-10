@@ -14,9 +14,10 @@ import { FeedsSettings } from './tabs/FeedsSettings'
 import { FoldersSettings } from './tabs/FoldersSettings'
 import { AISettings } from './tabs/AISettings'
 import { NetworkSettings } from './tabs/NetworkSettings'
+import { AdvancedSettings } from './tabs/AdvancedSettings'
 import { cn } from '@/lib/utils'
 
-export type SettingsTab = 'profile' | 'general' | 'network' | 'appearance' | 'ai' | 'data' | 'feeds' | 'folders'
+export type SettingsTab = 'profile' | 'general' | 'network' | 'appearance' | 'ai' | 'data' | 'feeds' | 'folders' | 'advanced'
 
 interface SettingsModalProps {
   open: boolean
@@ -70,6 +71,8 @@ export function SettingsModal({ open, onOpenChange, initialTab }: SettingsModalP
         return <FeedsSettings />
       case 'folders':
         return <FoldersSettings />
+      case 'advanced':
+        return <AdvancedSettings />
       default:
         return null
     }
@@ -93,6 +96,8 @@ export function SettingsModal({ open, onOpenChange, initialTab }: SettingsModalP
         return t('settings.subscriptions')
       case 'folders':
         return t('settings.folders')
+      case 'advanced':
+        return t('settings.advanced')
       default:
         return t('settings.title')
     }
@@ -107,6 +112,7 @@ export function SettingsModal({ open, onOpenChange, initialTab }: SettingsModalP
     { id: 'data', label: t('settings.data') },
     { id: 'feeds', label: t('settings.subscriptions') },
     { id: 'folders', label: t('settings.folders') },
+    { id: 'advanced', label: t('settings.advanced') },
   ]
 
   // Mobile layout
