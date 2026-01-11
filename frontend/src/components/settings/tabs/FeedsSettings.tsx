@@ -4,31 +4,12 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useFeeds } from '@/hooks/useFeeds'
 import { deleteFeeds, refreshAllFeeds, ApiError } from '@/api'
 import { cn } from '@/lib/utils'
+import { formatDate, formatDateTime, compareStrings, getSortIcon } from '@/lib/table-utils'
 import { EditFeedDialog } from './EditFeedDialog'
 import type { Feed } from '@/types/api'
 
 type SortField = 'title' | 'createdAt' | 'updatedAt'
 type SortDirection = 'asc' | 'desc'
-
-function formatDate(dateString: string): string {
-  const date = new Date(dateString)
-  return date.toLocaleDateString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  })
-}
-
-function formatDateTime(dateString: string): string {
-  const date = new Date(dateString)
-  return date.toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
 
 export function FeedsSettings() {
   const { t } = useTranslation()
@@ -43,20 +24,10 @@ export function FeedsSettings() {
   const [editingFeed, setEditingFeed] = useState<Feed | null>(null)
 
   const sortedFeeds = useMemo(() => {
-    const isAscii = (str: string) => /^[\x00-\x7F]/.test(str)
-
     return [...feeds].sort((a, b) => {
       let cmp = 0
       if (sortField === 'title') {
-        const aIsAscii = isAscii(a.title)
-        const bIsAscii = isAscii(b.title)
-        if (aIsAscii && !bIsAscii) {
-          cmp = -1
-        } else if (!aIsAscii && bIsAscii) {
-          cmp = 1
-        } else {
-          cmp = a.title.localeCompare(b.title, 'zh-CN')
-        }
+        cmp = compareStrings(a.title, b.title)
       } else if (sortField === 'createdAt') {
         cmp = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
       } else if (sortField === 'updatedAt') {
@@ -75,11 +46,10 @@ export function FeedsSettings() {
     }
   }
 
-  const SortIcon = ({ field }: { field: SortField }) => {
-    if (sortField !== field) {
-      return <span className="ml-1 text-muted-foreground/50">-</span>
-    }
-    return <span className="ml-1">{sortDirection === 'asc' ? '\u2191' : '\u2193'}</span>
+  const renderSortIcon = (field: SortField) => {
+    const icon = getSortIcon(sortField, field, sortDirection)
+    const className = sortField === field ? 'ml-1' : 'ml-1 text-muted-foreground/50'
+    return <span className={className}>{icon}</span>
   }
 
   const handleSelectAll = () => {
@@ -250,7 +220,7 @@ export function FeedsSettings() {
                     className="flex items-center hover:text-foreground transition-colors"
                   >
                     {t('feeds.name')}
-                    <SortIcon field="title" />
+                    {renderSortIcon('title')}
                   </button>
                 </th>
                 <th className="w-28 px-3 py-2 text-left font-medium text-muted-foreground">
@@ -260,7 +230,7 @@ export function FeedsSettings() {
                     className="flex items-center hover:text-foreground transition-colors"
                   >
                     {t('feeds.subscribe_date')}
-                    <SortIcon field="createdAt" />
+                    {renderSortIcon('createdAt')}
                   </button>
                 </th>
                 <th className="w-36 px-3 py-2 text-left font-medium text-muted-foreground">
@@ -270,7 +240,7 @@ export function FeedsSettings() {
                     className="flex items-center hover:text-foreground transition-colors"
                   >
                     {t('feeds.last_update')}
-                    <SortIcon field="updatedAt" />
+                    {renderSortIcon('updatedAt')}
                   </button>
                 </th>
                 <th className="w-16 px-3 py-2 text-left font-medium text-muted-foreground">

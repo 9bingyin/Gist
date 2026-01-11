@@ -15,12 +15,16 @@ interface LightboxState {
   prev: () => void
 }
 
-export const useLightboxStore = create<LightboxState>((set, get) => ({
+const initialState = {
   isOpen: false,
   entry: null,
   feed: null,
-  images: [],
+  images: [] as string[],
   currentIndex: 0,
+}
+
+export const useLightboxStore = create<LightboxState>((set, get) => ({
+  ...initialState,
 
   open: (entry, feed, images, startIndex = 0) => {
     set({
@@ -33,13 +37,7 @@ export const useLightboxStore = create<LightboxState>((set, get) => ({
   },
 
   close: () => {
-    set({
-      isOpen: false,
-      entry: null,
-      feed: null,
-      images: [],
-      currentIndex: 0,
-    })
+    set(initialState)
   },
 
   setIndex: (index) => {

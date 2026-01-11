@@ -74,17 +74,19 @@ export function useCategoryState(
 }
 
 export function useCategoryActions() {
-  const expandAll = useCallback((categories: string[]) => {
+  const setAllCategories = useCallback((categories: string[], isOpen: boolean) => {
     for (const category of categories) {
-      setCategoryState(category, true)
+      setCategoryState(category, isOpen)
     }
   }, [])
+
+  const expandAll = useCallback((categories: string[]) => {
+    setAllCategories(categories, true)
+  }, [setAllCategories])
 
   const collapseAll = useCallback((categories: string[]) => {
-    for (const category of categories) {
-      setCategoryState(category, false)
-    }
-  }, [])
+    setAllCategories(categories, false)
+  }, [setAllCategories])
 
-  return { expandAll, collapseAll }
+  return { expandAll, collapseAll, setAllCategories }
 }

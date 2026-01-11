@@ -8,9 +8,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { ArrowDownAZIcon, CalendarIcon } from '@/components/ui/icons'
 import { SidebarHeader } from './SidebarHeader'
 import { FeedCategory } from './FeedCategory'
 import { FeedItem } from './FeedItem'
+import { ContentTypeSwitcher } from './ContentTypeSwitcher'
 import { SettingsModal, type SettingsTab } from '@/components/settings'
 import { useFolders, useDeleteFolder, useUpdateFolderType } from '@/hooks/useFolders'
 import { useFeeds, useDeleteFeed, useUpdateFeed, useUpdateFeedType } from '@/hooks/useFeeds'
@@ -30,29 +32,6 @@ function compareNames(a: string, b: string): number {
   return a.localeCompare(b, 'zh-CN')
 }
 
-function ArrowDownAZIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <path d="m3 8 4-4 4 4" />
-      <path d="M7 4v16" />
-      <path d="M11 12h4" />
-      <path d="M11 16h7" />
-      <path d="M11 20h10" />
-    </svg>
-  )
-}
-
-function CalendarIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <path d="M8 2v4" />
-      <path d="M16 2v4" />
-      <rect width="18" height="18" x="3" y="4" rx="2" />
-      <path d="M3 10h18" />
-    </svg>
-  )
-}
-
 interface SidebarProps {
   onAddClick?: (contentType: ContentType) => void
   selection: SelectionType
@@ -66,37 +45,6 @@ interface SidebarProps {
 interface FolderWithFeeds {
   folder: Folder
   feeds: Feed[]
-}
-
-function FileTextIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
-      <polyline points="14 2 14 8 20 8" />
-      <line x1="16" x2="8" y1="13" y2="13" />
-      <line x1="16" x2="8" y1="17" y2="17" />
-      <line x1="10" x2="8" y1="9" y2="9" />
-    </svg>
-  )
-}
-
-function ImageIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
-      <circle cx="9" cy="9" r="2" />
-      <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
-    </svg>
-  )
-}
-
-function BellIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
-      <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
-    </svg>
-  )
 }
 
 export function Sidebar({
@@ -277,56 +225,11 @@ export function Sidebar({
         onLogoutClick={logout}
       />
 
-      {/* Content Type Switcher */}
-      <div className="relative mb-2 mt-3">
-        <div className="flex h-11 items-center px-1 text-xl text-muted-foreground">
-          <button
-            onClick={() => onSelectAll?.('article')}
-            className={cn(
-              'flex h-11 w-8 shrink-0 grow flex-col items-center justify-center gap-1 rounded-md transition-colors',
-              contentType === 'article'
-                ? 'text-lime-600 dark:text-lime-500'
-                : 'text-muted-foreground hover:text-foreground'
-            )}
-            title={t('content_type.article')}
-          >
-            <FileTextIcon className="size-[1.375rem]" />
-            <div className="text-[0.625rem] font-medium leading-none">
-              {contentTypeCounts.article}
-            </div>
-          </button>
-          <button
-            onClick={() => onSelectAll?.('picture')}
-            className={cn(
-              'flex h-11 w-8 shrink-0 grow flex-col items-center justify-center gap-1 rounded-md transition-colors',
-              contentType === 'picture'
-                ? 'text-lime-600 dark:text-lime-500'
-                : 'text-muted-foreground hover:text-foreground'
-            )}
-            title={t('content_type.picture')}
-          >
-            <ImageIcon className="size-[1.375rem]" />
-            <div className="text-[0.625rem] font-medium leading-none">
-              {contentTypeCounts.picture}
-            </div>
-          </button>
-          <button
-            onClick={() => onSelectAll?.('notification')}
-            className={cn(
-              'flex h-11 w-8 shrink-0 grow flex-col items-center justify-center gap-1 rounded-md transition-colors',
-              contentType === 'notification'
-                ? 'text-lime-600 dark:text-lime-500'
-                : 'text-muted-foreground hover:text-foreground'
-            )}
-            title={t('content_type.notification')}
-          >
-            <BellIcon className="size-[1.375rem]" />
-            <div className="text-[0.625rem] font-medium leading-none">
-              {contentTypeCounts.notification}
-            </div>
-          </button>
-        </div>
-      </div>
+      <ContentTypeSwitcher
+        contentType={contentType}
+        counts={contentTypeCounts}
+        onSelect={(type) => onSelectAll?.(type)}
+      />
 
       {/* Content */}
       <div className="relative flex-1 overflow-hidden">

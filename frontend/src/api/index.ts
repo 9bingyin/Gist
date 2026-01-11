@@ -48,6 +48,131 @@ async function parseResponse(response: Response): Promise<unknown> {
   return text
 }
 
+/**
+ * Extract error message from response data
+ */
+function extractErrorMessage(data: unknown, fallback: string): string {
+  if (isErrorResponse(data)) return data.error
+  if (typeof data === 'string') return data
+  return fallback
+}
+
+/**
+ * Create headers with auth token
+ */
+function createAuthHeaders(): HeadersInit {
+  const headers: HeadersInit = { 'Content-Type': 'application/json' }
+  const token = getAuthToken()
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
+  }
+  return headers
+}
+
+/**
+ * Fetch with auth and error handling for streaming endpoints
+ */
+async function fetchWithAuth(
+  url: string,
+  options: RequestInit
+): Promise<Response> {
+  const response = await fetch(url, {
+    ...options,
+    headers: createAuthHeaders(),
+  })
+
+  if (!response.ok) {
+    const data = await parseResponse(response)
+    throw new ApiError(
+      extractErrorMessage(data, response.statusText) || 'Request failed',
+      response.status
+    )
+  }
+
+  return response
+}
+
+/**
+ * Read NDJSON lines from a stream
+ */
+async function* readNDJSONLines<T>(response: Response): AsyncGenerator<T> {
+  if (!response.body) {
+    throw new ApiError('No response body', 500)
+  }
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
+
+      for (const line of lines) {
+        if (line.trim()) {
+          try {
+            yield JSON.parse(line) as T
+          } catch {
+            // Ignore parse errors
+          }
+        }
+      }
+    }
+
+    // Process remaining buffer
+    if (buffer.trim()) {
+      try {
+        yield JSON.parse(buffer) as T
+      } catch {
+        // Ignore parse errors
+      }
+    }
+  } finally {
+    reader.releaseLock()
+  }
+}
+
+/**
+ * Read SSE events from a stream
+ */
+async function* readSSEEvents<T>(response: Response): AsyncGenerator<T> {
+  if (!response.body) {
+    throw new ApiError('No response body', 500)
+  }
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            yield JSON.parse(line.slice(6)) as T
+          } catch {
+            // Ignore parse errors
+          }
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock()
+  }
+}
+
 // Token management
 export function getAuthToken(): string | null {
   return localStorage.getItem(TOKEN_KEY)
@@ -523,28 +648,11 @@ export async function* streamSummary(
   signal?: AbortSignal
 ): AsyncGenerator<string | { cached: true; summary: string }> {
   const url = `${API_BASE_URL}/api/ai/summarize`
-  const headers: HeadersInit = { 'Content-Type': 'application/json' }
-  const token = getAuthToken()
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`
-  }
-
-  const response = await fetch(url, {
+  const response = await fetchWithAuth(url, {
     method: 'POST',
-    headers,
     body: JSON.stringify(req),
     signal,
   })
-
-  if (!response.ok) {
-    const data = await parseResponse(response)
-    const message = isErrorResponse(data)
-      ? data.error
-      : typeof data === 'string'
-        ? data
-        : response.statusText
-    throw new ApiError(message || 'Request failed', response.status)
-  }
 
   const contentType = response.headers.get('Content-Type') ?? ''
 
@@ -636,28 +744,11 @@ export async function* streamTranslateBlocks(
   signal?: AbortSignal
 ): AsyncGenerator<TranslateEvent | { cached: true; content: string }> {
   const url = `${API_BASE_URL}/api/ai/translate`
-  const headers: HeadersInit = { 'Content-Type': 'application/json' }
-  const token = getAuthToken()
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`
-  }
-
-  const response = await fetch(url, {
+  const response = await fetchWithAuth(url, {
     method: 'POST',
-    headers,
     body: JSON.stringify(req),
     signal,
   })
-
-  if (!response.ok) {
-    const data = await parseResponse(response)
-    const message = isErrorResponse(data)
-      ? data.error
-      : typeof data === 'string'
-        ? data
-        : response.statusText
-    throw new ApiError(message || 'Request failed', response.status)
-  }
 
   const contentType = response.headers.get('Content-Type') ?? ''
 
@@ -669,37 +760,7 @@ export async function* streamTranslateBlocks(
   }
 
   // SSE stream
-  if (!response.body) {
-    throw new ApiError('No response body', 500)
-  }
-
-  const reader = response.body.getReader()
-  const decoder = new TextDecoder()
-  let buffer = ''
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-
-      buffer += decoder.decode(value, { stream: true })
-      const lines = buffer.split('\n')
-      buffer = lines.pop() || ''
-
-      for (const line of lines) {
-        if (line.startsWith('data: ')) {
-          try {
-            const data = JSON.parse(line.slice(6)) as TranslateEvent
-            yield data
-          } catch {
-            // Ignore parse errors
-          }
-        }
-      }
-    }
-  } finally {
-    reader.releaseLock()
-  }
+  yield* readSSEEvents<TranslateEvent>(response)
 }
 
 // Re-export type guards for use in components
@@ -740,70 +801,13 @@ export async function* streamBatchTranslate(
   signal?: AbortSignal
 ): AsyncGenerator<BatchTranslateResult> {
   const url = `${API_BASE_URL}/api/ai/translate/batch`
-  const headers: HeadersInit = { 'Content-Type': 'application/json' }
-  const token = getAuthToken()
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`
-  }
-
-  const response = await fetch(url, {
+  const response = await fetchWithAuth(url, {
     method: 'POST',
-    headers,
     body: JSON.stringify({ articles }),
     signal,
   })
 
-  if (!response.ok) {
-    const data = await parseResponse(response)
-    const message = isErrorResponse(data)
-      ? data.error
-      : typeof data === 'string'
-        ? data
-        : response.statusText
-    throw new ApiError(message || 'Request failed', response.status)
-  }
-
-  if (!response.body) {
-    throw new ApiError('No response body', 500)
-  }
-
-  const reader = response.body.getReader()
-  const decoder = new TextDecoder()
-  let buffer = ''
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-
-      buffer += decoder.decode(value, { stream: true })
-      const lines = buffer.split('\n')
-      buffer = lines.pop() || ''
-
-      for (const line of lines) {
-        if (line.trim()) {
-          try {
-            const result = JSON.parse(line) as BatchTranslateResult
-            yield result
-          } catch {
-            // Ignore parse errors
-          }
-        }
-      }
-    }
-
-    // Process remaining buffer
-    if (buffer.trim()) {
-      try {
-        const result = JSON.parse(buffer) as BatchTranslateResult
-        yield result
-      } catch {
-        // Ignore parse errors
-      }
-    }
-  } finally {
-    reader.releaseLock()
-  }
+  yield* readNDJSONLines<BatchTranslateResult>(response)
 }
 
 export interface ClearAICacheResponse {

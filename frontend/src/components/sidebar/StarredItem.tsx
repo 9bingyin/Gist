@@ -1,23 +1,12 @@
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
+import { StarIcon } from '@/components/ui/icons'
 import { feedItemStyles, sidebarItemIconStyles } from './styles'
 
 interface StarredItemProps {
   isActive?: boolean
   count?: number
   onClick?: () => void
-}
-
-function StarIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      fill="currentColor"
-    >
-      <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-    </svg>
-  )
 }
 
 export function StarredItem({ isActive = false, count = 0, onClick }: StarredItemProps) {

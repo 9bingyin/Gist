@@ -117,11 +117,18 @@ export const useTranslationStore = create<TranslationState>((set, get) => ({
 export { getCacheKey }
 
 // Actions for external use (outside React components)
+// Use dynamic getState() to avoid stale references
 export const translationActions = {
-  get: useTranslationStore.getState().getTranslation,
-  set: useTranslationStore.getState().setTranslation,
-  clear: useTranslationStore.getState().clearTranslation,
-  disable: useTranslationStore.getState().disableTranslation,
-  enable: useTranslationStore.getState().enableTranslation,
-  isDisabled: useTranslationStore.getState().isDisabled,
+  get: (articleId: string, language: string, isReadability?: boolean) =>
+    useTranslationStore.getState().getTranslation(articleId, language, isReadability),
+  set: (articleId: string, language: string, translation: Partial<ArticleTranslation>, isReadability?: boolean) =>
+    useTranslationStore.getState().setTranslation(articleId, language, translation, isReadability),
+  clear: (articleId: string) =>
+    useTranslationStore.getState().clearTranslation(articleId),
+  disable: (articleId: string) =>
+    useTranslationStore.getState().disableTranslation(articleId),
+  enable: (articleId: string) =>
+    useTranslationStore.getState().enableTranslation(articleId),
+  isDisabled: (articleId: string) =>
+    useTranslationStore.getState().isDisabled(articleId),
 }
