@@ -187,6 +187,8 @@ export function PictureMasonry({
 
   const ItemContent = useCallback(
     ({ data: item }: { data: MasonryItem; context: MasonryContext }) => {
+      // Guard against undefined data during list refresh
+      if (!item?.entry) return null
       return <PictureItem entry={item.entry} feed={item.feed} />
     },
     []
