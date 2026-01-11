@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils'
 import { isVideoThumbnail } from '@/lib/media-utils'
 import { formatRelativeTime } from '@/lib/date-utils'
 import { stripHtml } from '@/lib/html-utils'
-import { useMarkAsRead } from '@/hooks/useEntries'
+import { useMarkAsRead, useRemoveFromUnreadList } from '@/hooks/useEntries'
 import { useLightboxStore } from '@/stores/lightbox-store'
 import { FeedIcon } from '@/components/ui/feed-icon'
 
@@ -16,6 +16,7 @@ export function Lightbox() {
   const { isOpen, entry, feed, images, currentIndex, close, setIndex, next, prev } =
     useLightboxStore()
   const { mutate: markAsRead } = useMarkAsRead()
+  const removeFromUnreadList = useRemoveFromUnreadList()
 
   // Motion values for swipe to close
   const dragY = useMotionValue(0)
@@ -36,19 +37,22 @@ export function Lightbox() {
   // Mark entry as read when lightbox opens
   // This is done here instead of in PictureItem to avoid race condition
   // when unreadOnly filter is enabled (list item would disappear before lightbox opens)
+  // Use skipInvalidate to prevent list refresh while lightbox is open
   useEffect(() => {
     if (isOpen && entry && !entry.read && !markedAsReadRef.current.has(entry.id)) {
       markedAsReadRef.current.add(entry.id)
-      markAsRead({ id: entry.id, read: true })
+      markAsRead({ id: entry.id, read: true, skipInvalidate: true })
     }
   }, [isOpen, entry, markAsRead])
 
-  // Clear the marked set when lightbox closes
+  // When lightbox closes, remove read entries from unreadOnly list
+  // This deferred removal prevents white screen on mobile when unreadOnly is enabled
   useEffect(() => {
-    if (!isOpen) {
+    if (!isOpen && markedAsReadRef.current.size > 0) {
+      removeFromUnreadList(markedAsReadRef.current)
       markedAsReadRef.current.clear()
     }
-  }, [isOpen])
+  }, [isOpen, removeFromUnreadList])
 
   // Sync embla with store
   useEffect(() => {

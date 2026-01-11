@@ -1,3 +1,4 @@
+import { useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from '@tanstack/react-query'
 import {
   listEntries,
@@ -46,21 +47,109 @@ export function useUnreadCounts() {
   })
 }
 
+interface MarkAsReadOptions {
+  id: string
+  read: boolean
+  /** Skip invalidating entries query (for lightbox to avoid list refresh during viewing) */
+  skipInvalidate?: boolean
+}
+
 export function useMarkAsRead() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: ({ id, read }: { id: string; read: boolean }) =>
+    mutationFn: ({ id, read }: MarkAsReadOptions) =>
       updateEntryReadStatus(id, read),
-    onSuccess: (_, { id, read }) => {
+
+    // Optimistic update: immediately update UI before API call completes
+    onMutate: async ({ id, read }) => {
+      // Cancel outgoing refetches to avoid overwriting optimistic update
+      await queryClient.cancelQueries({ queryKey: ['entry', id] })
+      await queryClient.cancelQueries({ queryKey: ['entries'] })
+
+      // Snapshot previous values for rollback
+      const previousEntry = queryClient.getQueryData<Entry>(['entry', id])
+      const previousEntries = queryClient.getQueriesData<{ pages: { entries: Entry[] }[] }>({
+        queryKey: ['entries'],
+      })
+
+      // Optimistically update single entry cache
       queryClient.setQueryData(['entry', id], (old: Entry | undefined) => {
         if (!old) return old
         return { ...old, read }
       })
+
+      // Optimistically update entries list cache
+      queryClient.setQueriesData<{ pages: { entries: Entry[] }[] }>(
+        { queryKey: ['entries'] },
+        (old) => {
+          if (!old) return old
+          return {
+            ...old,
+            pages: old.pages.map((page) => ({
+              ...page,
+              entries: page.entries.map((entry) =>
+                entry.id === id ? { ...entry, read } : entry
+              ),
+            })),
+          }
+        }
+      )
+
+      return { previousEntry, previousEntries }
+    },
+
+    onSuccess: (_, { skipInvalidate }) => {
+      // Always update unread counts immediately
       queryClient.invalidateQueries({ queryKey: ['unreadCounts'] })
-      queryClient.invalidateQueries({ queryKey: ['entries'] })
+      // Only invalidate entries if not skipped (e.g., not in lightbox/detail view)
+      if (!skipInvalidate) {
+        queryClient.invalidateQueries({ queryKey: ['entries'] })
+      }
+    },
+
+    onError: (_, { id }, context) => {
+      // Rollback to previous values on error
+      if (context?.previousEntry) {
+        queryClient.setQueryData(['entry', id], context.previousEntry)
+      }
+      if (context?.previousEntries) {
+        for (const [queryKey, data] of context.previousEntries) {
+          queryClient.setQueryData(queryKey, data)
+        }
+      }
     },
   })
+}
+
+/** Remove specific entries from unreadOnly list cache (for delayed removal) */
+export function useRemoveFromUnreadList() {
+  const queryClient = useQueryClient()
+
+  return useCallback(
+    (idsToRemove: Set<string>) => {
+      const queries = queryClient.getQueriesData<{ pages: { entries: Entry[]; hasMore: boolean }[] }>({
+        queryKey: ['entries'],
+      })
+
+      for (const [queryKey, data] of queries) {
+        // Only process unreadOnly queries
+        const params = queryKey[1] as EntryListParams | undefined
+        if (!params?.unreadOnly || !data) continue
+
+        const updatedData = {
+          ...data,
+          pages: data.pages.map((page) => ({
+            ...page,
+            entries: page.entries.filter((entry) => !idsToRemove.has(entry.id)),
+          })),
+        }
+
+        queryClient.setQueryData(queryKey, updatedData)
+      }
+    },
+    [queryClient]
+  )
 }
 
 export function useMarkAllAsRead() {
