@@ -33,7 +33,7 @@ type GeneralSettings struct {
 // NetworkSettings holds network proxy configuration.
 type NetworkSettings struct {
 	Enabled  bool   `json:"enabled"`
-	Type     string `json:"type"`     // http, socks5
+	Type     string `json:"type"` // http, socks5
 	Host     string `json:"host"`
 	Port     int    `json:"port"`
 	Username string `json:"username"`
@@ -126,9 +126,7 @@ func (s *settingsService) GetAISettings(ctx context.Context) (*AISettings, error
 	if val, err := s.getString(ctx, keyAIModel); err == nil {
 		settings.Model = val
 	}
-	if val, err := s.getString(ctx, keyAIThinking); err == nil && val == "true" {
-		settings.Thinking = true
-	}
+	settings.Thinking = s.getBool(ctx, keyAIThinking)
 	if val, err := s.getInt(ctx, keyAIThinkingBudget); err == nil && val > 0 {
 		settings.ThinkingBudget = val
 	}
@@ -139,12 +137,8 @@ func (s *settingsService) GetAISettings(ctx context.Context) (*AISettings, error
 	if val, err := s.getString(ctx, keyAISummaryLanguage); err == nil && val != "" {
 		settings.SummaryLanguage = val
 	}
-	if val, err := s.getString(ctx, keyAIAutoTranslate); err == nil && val == "true" {
-		settings.AutoTranslate = true
-	}
-	if val, err := s.getString(ctx, keyAIAutoSummary); err == nil && val == "true" {
-		settings.AutoSummary = true
-	}
+	settings.AutoTranslate = s.getBool(ctx, keyAIAutoTranslate)
+	settings.AutoSummary = s.getBool(ctx, keyAIAutoSummary)
 	if val, err := s.getInt(ctx, keyAIRateLimit); err == nil && val > 0 {
 		settings.RateLimit = val
 	} else {
@@ -303,6 +297,12 @@ func (s *settingsService) getInt(ctx context.Context, key string) (int, error) {
 	return result, err
 }
 
+// getBool gets a boolean value from settings.
+func (s *settingsService) getBool(ctx context.Context, key string) bool {
+	val, err := s.getString(ctx, key)
+	return err == nil && val == "true"
+}
+
 // setAPIKey sets an API key.
 // If the value is empty or looks like a masked key, it keeps the existing key.
 func (s *settingsService) setAPIKey(ctx context.Context, key, value string) error {
@@ -319,9 +319,7 @@ func (s *settingsService) GetGeneralSettings(ctx context.Context) (*GeneralSetti
 	if val, err := s.getString(ctx, keyFallbackUserAgent); err == nil {
 		settings.FallbackUserAgent = val
 	}
-	if val, err := s.getString(ctx, keyAutoReadability); err == nil && val == "true" {
-		settings.AutoReadability = true
-	}
+	settings.AutoReadability = s.getBool(ctx, keyAutoReadability)
 
 	return settings, nil
 }
@@ -363,9 +361,7 @@ func (s *settingsService) GetNetworkSettings(ctx context.Context) (*NetworkSetti
 		IPStack: "default", // default
 	}
 
-	if val, err := s.getString(ctx, keyNetworkEnabled); err == nil && val == "true" {
-		settings.Enabled = true
-	}
+	settings.Enabled = s.getBool(ctx, keyNetworkEnabled)
 	if val, err := s.getString(ctx, keyNetworkType); err == nil && val != "" {
 		settings.Type = val
 	}
@@ -445,48 +441,58 @@ func (s *settingsService) GetIPStack(ctx context.Context) string {
 // GetProxyURL returns the formatted proxy URL (e.g., socks5://user:pass@host:port).
 // Returns empty string if proxy is disabled or not configured.
 func (s *settingsService) GetProxyURL(ctx context.Context) string {
-	enabledVal, err := s.getString(ctx, keyNetworkEnabled)
-	if err != nil || enabledVal != "true" {
+	settings, err := s.repo.GetByPrefix(ctx, "network.")
+	if err != nil {
 		return ""
 	}
 
-	host, _ := s.getString(ctx, keyNetworkHost)
+	// Build map for quick lookup
+	m := make(map[string]string, len(settings))
+	for _, setting := range settings {
+		m[setting.Key] = setting.Value
+	}
+
+	if m[keyNetworkEnabled] != "true" {
+		return ""
+	}
+
+	host := m[keyNetworkHost]
 	if host == "" {
 		return ""
 	}
 
-	port, _ := s.getInt(ctx, keyNetworkPort)
+	var port int
+	if portStr := m[keyNetworkPort]; portStr != "" {
+		fmt.Sscanf(portStr, "%d", &port)
+	}
 	if port <= 0 {
 		return ""
 	}
 
-	proxyType, _ := s.getString(ctx, keyNetworkType)
+	proxyType := m[keyNetworkType]
 	if proxyType == "" {
 		proxyType = "http"
 	}
 
-	username, _ := s.getString(ctx, keyNetworkUsername)
-	password, _ := s.getString(ctx, keyNetworkPassword)
+	username := m[keyNetworkUsername]
+	password := m[keyNetworkPassword]
 
-	var proxyURL string
 	if username != "" && password != "" {
-		proxyURL = fmt.Sprintf("%s://%s:%s@%s:%d",
+		return fmt.Sprintf("%s://%s:%s@%s:%d",
 			proxyType,
 			url.QueryEscape(username),
 			url.QueryEscape(password),
 			host,
 			port,
 		)
-	} else if username != "" {
-		proxyURL = fmt.Sprintf("%s://%s@%s:%d",
+	}
+	if username != "" {
+		return fmt.Sprintf("%s://%s@%s:%d",
 			proxyType,
 			url.QueryEscape(username),
 			host,
 			port,
 		)
-	} else {
-		proxyURL = fmt.Sprintf("%s://%s:%d", proxyType, host, port)
 	}
-
-	return proxyURL
+	return fmt.Sprintf("%s://%s:%d", proxyType, host, port)
 }

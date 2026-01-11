@@ -349,10 +349,10 @@ func TestFeedService_HelperFunctions(t *testing.T) {
 		t.Fatalf("expected invalid host")
 	}
 
-	if extractFeedHost("http://example.com/path") != "example.com" {
+	if network.ExtractHost("http://example.com/path") != "example.com" {
 		t.Fatalf("unexpected host")
 	}
-	if extractFeedHost("://invalid") != "" {
+	if network.ExtractHost("://invalid") != "" {
 		t.Fatalf("expected empty host for invalid url")
 	}
 

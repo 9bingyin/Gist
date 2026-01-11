@@ -26,10 +26,10 @@ type IPStackProvider interface {
 
 // ClientFactory creates HTTP clients with proxy configuration.
 type ClientFactory struct {
-	proxyProvider     ProxyProvider
-	ipStackProvider   IPStackProvider
-	testTransport     http.RoundTripper // For testing only
-	testHTTPClient    *http.Client      // For testing only
+	proxyProvider   ProxyProvider
+	ipStackProvider IPStackProvider
+	testTransport   http.RoundTripper // For testing only
+	testHTTPClient  *http.Client      // For testing only
 }
 
 // NewClientFactory creates a new client factory.
@@ -263,4 +263,13 @@ func dialWithPreference(ctx context.Context, addr, primary, fallback string) (ne
 		slog.Debug("fallback dial failed", "network", fallback, "addr", addr, "error", err)
 	}
 	return conn, err
+}
+
+// ExtractHost returns the host from a URL string.
+func ExtractHost(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return ""
+	}
+	return u.Host
 }

@@ -33,9 +33,11 @@ func TestEntryService_ClearEntryCache(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockEntries := testutil.NewMockEntryRepository(ctrl)
-	service := NewEntryService(mockEntries, testutil.NewMockFeedRepository(ctrl), testutil.NewMockFolderRepository(ctrl))
+	mockFeeds := testutil.NewMockFeedRepository(ctrl)
+	service := NewEntryService(mockEntries, mockFeeds, testutil.NewMockFolderRepository(ctrl))
 
 	mockEntries.EXPECT().DeleteUnstarred(context.Background()).Return(int64(3), nil)
+	mockFeeds.EXPECT().ClearAllConditionalGet(context.Background()).Return(int64(2), nil)
 
 	count, err := service.ClearEntryCache(context.Background())
 	if err != nil {

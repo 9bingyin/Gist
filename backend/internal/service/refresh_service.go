@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -105,6 +104,81 @@ func (h *hostRateLimiter) recordRequest(host string) {
 	h.mu.Unlock()
 }
 
+// processParsedFeed handles the common logic after successfully parsing a feed.
+// It clears error messages, updates ETag/LastModified, saves entries, and fetches icons.
+func (s *refreshService) processParsedFeed(ctx context.Context, feed model.Feed, parsed *gofeed.Feed, resp *http.Response) error {
+	// Clear error message on successful refresh
+	_ = s.feeds.UpdateErrorMessage(ctx, feed.ID, nil)
+
+	// Update feed ETag and LastModified (only update non-empty values)
+	newETag := strings.TrimSpace(resp.Header.Get("ETag"))
+	newLastModified := strings.TrimSpace(resp.Header.Get("Last-Modified"))
+	if newETag != "" || newLastModified != "" {
+		if newETag != "" {
+			feed.ETag = &newETag
+		}
+		if newLastModified != "" {
+			feed.LastModified = &newLastModified
+		}
+		if _, err := s.feeds.Update(ctx, feed); err != nil {
+			logger.Warn("update feed etag", "feedID", feed.ID, "error", err)
+		}
+	}
+
+	// Save entries
+	newCount, updatedCount := s.saveEntries(ctx, feed.ID, parsed.Items)
+	if newCount > 0 || updatedCount > 0 {
+		logger.Info("feed refreshed", "feedID", feed.ID, "title", feed.Title, "new", newCount, "updated", updatedCount)
+	}
+
+	// Fetch icon if feed doesn't have one
+	if s.icons != nil && (feed.IconPath == nil || *feed.IconPath == "") {
+		imageURL := ""
+		if parsed.Image != nil {
+			imageURL = strings.TrimSpace(parsed.Image.URL)
+		}
+		siteURL := feed.URL
+		if feed.SiteURL != nil && *feed.SiteURL != "" {
+			siteURL = *feed.SiteURL
+		}
+		if iconPath, err := s.icons.FetchAndSaveIcon(ctx, imageURL, siteURL); err == nil && iconPath != "" {
+			_ = s.feeds.UpdateIconPath(ctx, feed.ID, iconPath)
+		}
+	}
+
+	return nil
+}
+
+// saveEntries saves parsed feed items to the database.
+// Returns the count of new and updated entries.
+func (s *refreshService) saveEntries(ctx context.Context, feedID int64, items []*gofeed.Item) (newCount, updatedCount int) {
+	dynamicTime := hasDynamicTime(items)
+	for _, item := range items {
+		entry := itemToEntry(feedID, item, dynamicTime)
+		if entry.URL == nil || *entry.URL == "" {
+			continue
+		}
+
+		exists, err := s.entries.ExistsByURL(ctx, feedID, *entry.URL)
+		if err != nil {
+			logger.Warn("check entry exists", "error", err)
+			continue
+		}
+
+		if err := s.entries.CreateOrUpdate(ctx, entry); err != nil {
+			logger.Warn("save entry", "error", err)
+			continue
+		}
+
+		if exists {
+			updatedCount++
+		} else {
+			newCount++
+		}
+	}
+	return
+}
+
 var ErrAlreadyRefreshing = errors.New("refresh already in progress")
 
 type RefreshService interface {
@@ -115,15 +189,15 @@ type RefreshService interface {
 }
 
 type refreshService struct {
-	feeds          repository.FeedRepository
-	entries        repository.EntryRepository
-	settings       SettingsService
-	icons          IconService
-	clientFactory  *network.ClientFactory
-	anubis         *anubis.Solver
-	rateLimitSvc   DomainRateLimitService
-	mu             sync.Mutex
-	isRefreshing   bool
+	feeds         repository.FeedRepository
+	entries       repository.EntryRepository
+	settings      SettingsService
+	icons         IconService
+	clientFactory *network.ClientFactory
+	anubis        *anubis.Solver
+	rateLimitSvc  DomainRateLimitService
+	mu            sync.Mutex
+	isRefreshing  bool
 }
 
 func NewRefreshService(feeds repository.FeedRepository, entries repository.EntryRepository, settings SettingsService, icons IconService, clientFactory *network.ClientFactory, anubisSolver *anubis.Solver, rateLimitSvc DomainRateLimitService) RefreshService {
@@ -158,73 +232,8 @@ func (s *refreshService) RefreshAll(ctx context.Context) error {
 		return err
 	}
 
-	// Global concurrency limit for actual network requests
-	globalSem := semaphore.NewWeighted(maxConcurrentRefresh)
-
-	// Per-host rate limiter to avoid overwhelming single servers
-	hl := newHostRateLimiter(func(host string) time.Duration {
-		if s.rateLimitSvc != nil {
-			return s.rateLimitSvc.GetIntervalDuration(ctx, host)
-		}
-		return 0
-	})
-
-	// Use WaitGroup instead of errgroup to allow all goroutines to start immediately.
-	// This prevents different hosts from blocking each other while waiting for rate limits.
-	var wg sync.WaitGroup
-	for _, feed := range feeds {
-		feed := feed // capture loop variable
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-
-			// Extract host for per-host limiting
-			host := extractHost(feed.URL)
-
-			// Step 1: Acquire per-host semaphore (queue for same-host requests)
-			// This does NOT occupy global slots, so different hosts can queue in parallel
-			if host != "" {
-				if err := hl.acquireSemaphore(ctx, host); err != nil {
-					return // context cancelled
-				}
-				defer hl.releaseSemaphore(host)
-
-				// Step 2: Wait for rate limit interval (still not occupying global slots)
-				if err := hl.waitForInterval(ctx, host); err != nil {
-					return // context cancelled
-				}
-			}
-
-			// Step 3: Acquire global concurrency permit (only when actually making request)
-			if err := globalSem.Acquire(ctx, 1); err != nil {
-				return // context cancelled
-			}
-			defer globalSem.Release(1)
-
-			// Step 4: Record request time for rate limiting
-			if host != "" {
-				hl.recordRequest(host)
-			}
-
-			// Step 5: Execute refresh
-			if err := s.refreshFeedInternal(ctx, feed); err != nil {
-				logger.Warn("refresh feed", "feedID", feed.ID, "title", feed.Title, "error", err)
-			}
-		}()
-	}
-
-	// Wait for all goroutines to complete
-	wg.Wait()
+	s.refreshFeedsWithRateLimit(ctx, feeds)
 	return nil
-}
-
-// extractHost returns the host from a URL string.
-func extractHost(rawURL string) string {
-	u, err := url.Parse(rawURL)
-	if err != nil {
-		return ""
-	}
-	return u.Host
 }
 
 func (s *refreshService) IsRefreshing() bool {
@@ -257,10 +266,14 @@ func (s *refreshService) RefreshFeeds(ctx context.Context, feedIDs []int64) erro
 		return nil
 	}
 
-	// Global concurrency limit for actual network requests
+	s.refreshFeedsWithRateLimit(ctx, feeds)
+	return nil
+}
+
+// refreshFeedsWithRateLimit refreshes multiple feeds with rate limiting and concurrency control.
+func (s *refreshService) refreshFeedsWithRateLimit(ctx context.Context, feeds []model.Feed) {
 	globalSem := semaphore.NewWeighted(maxConcurrentRefresh)
 
-	// Per-host rate limiter to avoid overwhelming single servers
 	hl := newHostRateLimiter(func(host string) time.Duration {
 		if s.rateLimitSvc != nil {
 			return s.rateLimitSvc.GetIntervalDuration(ctx, host)
@@ -268,43 +281,35 @@ func (s *refreshService) RefreshFeeds(ctx context.Context, feedIDs []int64) erro
 		return 0
 	})
 
-	// Use WaitGroup instead of errgroup to allow all goroutines to start immediately.
-	// This prevents different hosts from blocking each other while waiting for rate limits.
 	var wg sync.WaitGroup
 	for _, feed := range feeds {
-		feed := feed // capture loop variable
+		feed := feed
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 
-			// Extract host for per-host limiting
-			host := extractHost(feed.URL)
+			host := network.ExtractHost(feed.URL)
 
-			// Step 1: Acquire per-host semaphore (queue for same-host requests)
 			if host != "" {
 				if err := hl.acquireSemaphore(ctx, host); err != nil {
-					return // context cancelled
+					return
 				}
 				defer hl.releaseSemaphore(host)
 
-				// Step 2: Wait for rate limit interval
 				if err := hl.waitForInterval(ctx, host); err != nil {
-					return // context cancelled
+					return
 				}
 			}
 
-			// Step 3: Acquire global concurrency permit
 			if err := globalSem.Acquire(ctx, 1); err != nil {
-				return // context cancelled
+				return
 			}
 			defer globalSem.Release(1)
 
-			// Step 4: Record request time for rate limiting
 			if host != "" {
 				hl.recordRequest(host)
 			}
 
-			// Step 5: Execute refresh
 			if err := s.refreshFeedInternal(ctx, feed); err != nil {
 				logger.Warn("refresh feed", "feedID", feed.ID, "title", feed.Title, "error", err)
 			}
@@ -312,7 +317,6 @@ func (s *refreshService) RefreshFeeds(ctx context.Context, feedIDs []int64) erro
 	}
 
 	wg.Wait()
-	return nil
 }
 
 func (s *refreshService) refreshFeedInternal(ctx context.Context, feed model.Feed) error {
@@ -334,7 +338,7 @@ func (s *refreshService) refreshFeedWithCookie(ctx context.Context, feed model.F
 
 	// Add cached Anubis cookie if available
 	if cookie == "" && s.anubis != nil {
-		host := extractHost(feed.URL)
+		host := network.ExtractHost(feed.URL)
 		if cachedCookie := s.anubis.GetCachedCookie(ctx, host); cachedCookie != "" {
 			cookie = cachedCookie
 		}
@@ -423,78 +427,7 @@ func (s *refreshService) refreshFeedWithCookie(ctx context.Context, feed model.F
 		return parseErr
 	}
 
-	// Clear error message on successful refresh (always clear, not just when feed.ErrorMessage != nil,
-	// because the error might have been set earlier in this refresh cycle)
-	_ = s.feeds.UpdateErrorMessage(ctx, feed.ID, nil)
-	feed.ErrorMessage = nil
-
-	// Update feed ETag and LastModified (only update non-empty values to preserve existing ones)
-	newETag := strings.TrimSpace(resp.Header.Get("ETag"))
-	newLastModified := strings.TrimSpace(resp.Header.Get("Last-Modified"))
-	needsUpdate := false
-	if newETag != "" {
-		feed.ETag = &newETag
-		needsUpdate = true
-	}
-	if newLastModified != "" {
-		feed.LastModified = &newLastModified
-		needsUpdate = true
-	}
-	if needsUpdate {
-		if _, err := s.feeds.Update(ctx, feed); err != nil {
-			logger.Warn("update feed etag", "feedID", feed.ID, "error", err)
-		}
-	}
-
-	// Save entries (CreateOrUpdate handles duplicates via ON CONFLICT)
-	newCount := 0
-	updatedCount := 0
-	dynamicTime := hasDynamicTime(parsed.Items)
-	for _, item := range parsed.Items {
-		entry := itemToEntry(feed.ID, item, dynamicTime)
-		if entry.URL == nil || *entry.URL == "" {
-			continue
-		}
-
-		// Check if entry already exists
-		exists, err := s.entries.ExistsByURL(ctx, feed.ID, *entry.URL)
-		if err != nil {
-			logger.Warn("check entry exists", "error", err)
-			continue
-		}
-
-		if err := s.entries.CreateOrUpdate(ctx, entry); err != nil {
-			logger.Warn("save entry", "error", err)
-			continue
-		}
-
-		if exists {
-			updatedCount++
-		} else {
-			newCount++
-		}
-	}
-
-	if newCount > 0 || updatedCount > 0 {
-		logger.Info("feed refreshed", "feedID", feed.ID, "title", feed.Title, "new", newCount, "updated", updatedCount)
-	}
-
-	// Fetch icon if feed doesn't have one
-	if s.icons != nil && (feed.IconPath == nil || *feed.IconPath == "") {
-		imageURL := ""
-		if parsed.Image != nil {
-			imageURL = strings.TrimSpace(parsed.Image.URL)
-		}
-		siteURL := feed.URL
-		if feed.SiteURL != nil && *feed.SiteURL != "" {
-			siteURL = *feed.SiteURL
-		}
-		if iconPath, err := s.icons.FetchAndSaveIcon(ctx, imageURL, siteURL); err == nil && iconPath != "" {
-			_ = s.feeds.UpdateIconPath(ctx, feed.ID, iconPath)
-		}
-	}
-
-	return nil
+	return s.processParsedFeed(ctx, feed, parsed, resp)
 }
 
 // refreshFeedWithFreshClient creates a new http.Client to avoid connection reuse after Anubis
@@ -554,75 +487,5 @@ func (s *refreshService) refreshFeedWithFreshClient(ctx context.Context, feed mo
 		return parseErr
 	}
 
-	// Clear error message on successful refresh (always clear, not just when feed.ErrorMessage != nil,
-	// because the error might have been set earlier in this refresh cycle)
-	_ = s.feeds.UpdateErrorMessage(ctx, feed.ID, nil)
-	feed.ErrorMessage = nil
-
-	// Update feed ETag and LastModified
-	newETag := strings.TrimSpace(resp.Header.Get("ETag"))
-	newLastModified := strings.TrimSpace(resp.Header.Get("Last-Modified"))
-	needsUpdate := false
-	if newETag != "" {
-		feed.ETag = &newETag
-		needsUpdate = true
-	}
-	if newLastModified != "" {
-		feed.LastModified = &newLastModified
-		needsUpdate = true
-	}
-	if needsUpdate {
-		if _, err := s.feeds.Update(ctx, feed); err != nil {
-			logger.Warn("update feed etag", "feedID", feed.ID, "error", err)
-		}
-	}
-
-	// Save entries
-	newCount := 0
-	updatedCount := 0
-	dynamicTime := hasDynamicTime(parsed.Items)
-	for _, item := range parsed.Items {
-		entry := itemToEntry(feed.ID, item, dynamicTime)
-		if entry.URL == nil || *entry.URL == "" {
-			continue
-		}
-
-		exists, err := s.entries.ExistsByURL(ctx, feed.ID, *entry.URL)
-		if err != nil {
-			logger.Warn("check entry exists", "error", err)
-			continue
-		}
-
-		if err := s.entries.CreateOrUpdate(ctx, entry); err != nil {
-			logger.Warn("save entry", "error", err)
-			continue
-		}
-
-		if exists {
-			updatedCount++
-		} else {
-			newCount++
-		}
-	}
-
-	if newCount > 0 || updatedCount > 0 {
-		logger.Info("feed refreshed", "feedID", feed.ID, "title", feed.Title, "new", newCount, "updated", updatedCount)
-	}
-
-	// Fetch icon if feed doesn't have one
-	if s.icons != nil && (feed.IconPath == nil || *feed.IconPath == "") {
-		imageURL := ""
-		if parsed.Image != nil {
-			imageURL = strings.TrimSpace(parsed.Image.URL)
-		}
-		siteURL := feed.URL
-		if feed.SiteURL != nil && *feed.SiteURL != "" {
-			siteURL = *feed.SiteURL
-		}
-		if iconPath, err := s.icons.FetchAndSaveIcon(ctx, imageURL, siteURL); err == nil && iconPath != "" {
-			_ = s.feeds.UpdateIconPath(ctx, feed.ID, iconPath)
-		}
-	}
-
-	return nil
+	return s.processParsedFeed(ctx, feed, parsed, resp)
 }
