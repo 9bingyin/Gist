@@ -181,25 +181,29 @@ body {
 }
 
 /* AI Summary Box Animation */
-@keyframes summary-fade {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@keyframes summary-expand {
-  from { grid-template-rows: 0fr; }
-  to { grid-template-rows: 1fr; }
+@keyframes summary-reveal {
+  from {
+    opacity: 0;
+    clip-path: inset(0 0 100% 0);
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    clip-path: inset(0);
+    transform: translateY(0);
+  }
 }
 
 .ai-summary-box {
-  animation: summary-fade 0.15s ease-out both;
-  /* Isolate animation to prevent triggering layout recalculation of article content */
-  contain: layout;
+  animation: summary-reveal 0.4s cubic-bezier(0.23, 1, 0.32, 1) both;
+  /* Required for clip-path animation to work smoothly */
+  will-change: clip-path, opacity, transform;
+  /* Isolate animation to prevent affecting parent layout */
+  contain: paint;
 }
 
 .ai-summary-box .ai-summary-grid {
   display: grid;
-  animation: summary-expand 0.4s cubic-bezier(0.23, 1, 0.32, 1) both;
 }
 
 .ai-summary-box .ai-summary-content {
@@ -282,8 +286,6 @@ body {
   min-width: 0;
   max-width: 100%;
   overflow-x: hidden;
-  /* Limit layout recalculation scope to prevent PWA crashes with large tables */
-  contain: layout paint;
 }
 
 .entry-content-body :where(p, ul, ol, pre, blockquote, table, figure, hr, details) {
