@@ -192,6 +192,8 @@ body {
 
 .ai-summary-box {
   animation: summary-fade 0.15s ease-out both;
+  /* Isolate animation to prevent triggering layout recalculation of article content */
+  contain: layout;
 }
 
 .ai-summary-box .ai-summary-grid {
@@ -267,6 +269,11 @@ body {
   --hljs-deletion: #ff7b72;
 }
 
+/* Fix for Radix UI ScrollArea viewport forcing table display which expands width */
+.entry-content-viewport > div {
+  display: block !important;
+}
+
 .entry-content-body {
   color: hsl(var(--foreground));
   font-size: 1.0625rem;
@@ -274,11 +281,8 @@ body {
   min-width: 0;
   max-width: 100%;
   overflow-x: hidden;
-}
-
-/* Fix for Radix UI ScrollArea viewport forcing table display which expands width */
-.entry-content-viewport > div {
-  display: block !important;
+  /* Limit layout recalculation scope to prevent PWA crashes with large tables */
+  contain: layout paint;
 }
 
 .entry-content-body :where(p, ul, ol, pre, blockquote, table, figure, hr, details) {
