@@ -171,6 +171,7 @@ body {
     opacity: 0;
     transform: translate3d(var(--dropdown-x), var(--dropdown-y), 0) scale(0.96);
   }
+
   to {
     opacity: 1;
     transform: translate3d(0, 0, 0) scale(1);
@@ -182,6 +183,7 @@ body {
     opacity: 1;
     transform: translate3d(0, 0, 0) scale(1);
   }
+
   to {
     opacity: 0;
     transform: translate3d(var(--dropdown-x), var(--dropdown-y), 0) scale(0.96);
@@ -189,6 +191,7 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
+
   .dropdown-content[data-state='open'],
   .dropdown-content[data-state='closed'] {
     animation: none;
@@ -200,19 +203,18 @@ body {
   from {
     opacity: 0;
     clip-path: inset(0 0 100% 0);
-    transform: translateY(-4px);
   }
+
   to {
     opacity: 1;
     clip-path: inset(0);
-    transform: translateY(0);
   }
 }
 
 .ai-summary-box {
   animation: summary-reveal 0.4s cubic-bezier(0.23, 1, 0.32, 1) both;
   /* Required for clip-path animation to work smoothly */
-  will-change: clip-path, opacity, transform;
+  will-change: clip-path, opacity;
   /* Isolate animation to prevent affecting parent layout */
   contain: paint;
 }
@@ -225,24 +227,41 @@ body {
   overflow: hidden;
 }
 
+/* AI Summary Shimmer Loading Animation */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.ai-shimmer {
+  background: linear-gradient(90deg,
+      hsl(var(--primary) / 0.06) 0%,
+      hsl(var(--primary) / 0.15) 20%,
+      hsl(var(--primary) / 0.06) 40%,
+      hsl(var(--primary) / 0.06) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
 .dropdown-surface {
-  background-image: linear-gradient(
-    to bottom right,
-    hsl(var(--popover) / 0.98),
-    hsl(var(--popover) / 0.9)
-  );
+  background-image: linear-gradient(to bottom right,
+      hsl(var(--popover) / 0.98),
+      hsl(var(--popover) / 0.9));
   box-shadow:
     0 10px 24px rgba(0, 0, 0, 0.12),
     0 4px 12px rgba(0, 0, 0, 0.08);
 }
 
 .dropdown-surface-glow {
-  background: linear-gradient(
-    to bottom right,
-    hsl(var(--primary) / 0.08),
-    transparent 45%,
-    hsl(var(--primary) / 0.05)
-  );
+  background: linear-gradient(to bottom right,
+      hsl(var(--primary) / 0.08),
+      transparent 45%,
+      hsl(var(--primary) / 0.05));
 }
 
 .entry-content {
@@ -290,7 +309,7 @@ body {
 }
 
 /* Fix for Radix UI ScrollArea viewport forcing table display which expands width */
-.entry-content-viewport > div {
+.entry-content-viewport>div {
   display: block !important;
 }
 
