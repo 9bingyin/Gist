@@ -315,7 +315,7 @@ func (s *feedService) fetchFeedWithCookie(ctx context.Context, feedURL string, u
 
 	// Add cached Anubis cookie if available
 	if cookie == "" && s.anubis != nil {
-		host := extractFeedHost(feedURL)
+		host := network.ExtractHost(feedURL)
 		if cachedCookie := s.anubis.GetCachedCookie(ctx, host); cachedCookie != "" {
 			cookie = cachedCookie
 		}
@@ -486,15 +486,6 @@ func (s *feedService) fetchFeedWithFreshClient(ctx context.Context, feedURL stri
 	}, nil
 }
 
-// extractFeedHost returns the host from a URL string
-func extractFeedHost(rawURL string) string {
-	u, err := url.Parse(rawURL)
-	if err != nil {
-		return ""
-	}
-	return u.Host
-}
-
 // hasDynamicTime checks if all items have the same updated time (dynamic generation)
 func hasDynamicTime(items []*gofeed.Item) bool {
 	if len(items) < 2 {
@@ -635,10 +626,10 @@ func extractThumbnail(item *gofeed.Item) *string {
 }
 
 func optionalString(value string) *string {
-	if strings.TrimSpace(value) == "" {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
 		return nil
 	}
-	trimmed := strings.TrimSpace(value)
 	return &trimmed
 }
 

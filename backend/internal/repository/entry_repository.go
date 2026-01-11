@@ -124,7 +124,7 @@ func (r *entryRepository) List(ctx context.Context, filter EntryListFilter) ([]m
 
 	var entries []model.Entry
 	for rows.Next() {
-		entry, err := scanEntryRows(rows)
+		entry, err := scanEntry(rows)
 		if err != nil {
 			return nil, err
 		}
@@ -225,38 +225,18 @@ func (r *entryRepository) GetAllUnreadCounts(ctx context.Context) ([]UnreadCount
 	return counts, nil
 }
 
-func scanEntry(row *sql.Row) (model.Entry, error) {
-	var e model.Entry
-	var publishedAt sql.NullString
-	var createdAt, updatedAt string
-	var readInt, starredInt int
-
-	err := row.Scan(
-		&e.ID, &e.FeedID, &e.Title, &e.URL, &e.Content, &e.ReadableContent, &e.ThumbnailURL, &e.Author,
-		&publishedAt, &readInt, &starredInt, &createdAt, &updatedAt,
-	)
-	if err != nil {
-		return model.Entry{}, err
-	}
-
-	e.Read = readInt == 1
-	e.Starred = starredInt == 1
-	if publishedAt.Valid {
-		e.PublishedAt = parseTimePtr(publishedAt.String)
-	}
-	e.CreatedAt, _ = parseTime(createdAt)
-	e.UpdatedAt, _ = parseTime(updatedAt)
-
-	return e, nil
+// entryScanner is an interface for scanning entry rows.
+type entryScanner interface {
+	Scan(dest ...interface{}) error
 }
 
-func scanEntryRows(rows *sql.Rows) (model.Entry, error) {
+func scanEntry(s entryScanner) (model.Entry, error) {
 	var e model.Entry
 	var publishedAt sql.NullString
 	var createdAt, updatedAt string
 	var readInt, starredInt int
 
-	err := rows.Scan(
+	err := s.Scan(
 		&e.ID, &e.FeedID, &e.Title, &e.URL, &e.Content, &e.ReadableContent, &e.ThumbnailURL, &e.Author,
 		&publishedAt, &readInt, &starredInt, &createdAt, &updatedAt,
 	)
