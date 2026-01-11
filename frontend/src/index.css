@@ -93,8 +93,9 @@
 }
 
 html {
-  /* Prevent pinch-to-zoom on iOS PWA */
+  /* Prevent pinch-to-zoom and browser default swipe navigation */
   touch-action: pan-x pan-y;
+  overscroll-behavior-x: none;
 }
 
 body {

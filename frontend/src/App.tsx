@@ -15,6 +15,8 @@ import { useMobileLayout } from '@/hooks/useMobileLayout'
 import { useAuth } from '@/hooks/useAuth'
 import { isAddFeedPath } from '@/lib/router'
 import { usePWAHistory } from '@/hooks/usePWAHistory'
+import { useEdgeSwipe } from '@/hooks/useEdgeSwipe'
+import { SwipeBackView } from '@/components/ui/swipe-back-view'
 import type { ContentType } from '@/types/api'
 
 function LoadingScreen() {
@@ -96,6 +98,12 @@ function AuthenticatedApp() {
     setSidebarOpen(true)
   }, [setSidebarOpen])
 
+  // Sidebar gesture for mobile list view
+  const { handlers: sidebarSwipeHandlers } = useEdgeSwipe(handleOpenSidebar, {
+    edgeWidth: 20,
+    threshold: 80,
+  })
+
   // Redirect root to /all with default type (must be after ALL hooks including useCallback)
   if (location === '/') {
     return <Redirect to="/all?type=article" replace />
@@ -128,7 +136,10 @@ function AuthenticatedApp() {
       )
     } else if (contentType === 'picture') {
       mobileContent = (
-        <div className="h-screen flex flex-col overflow-hidden safe-area-top">
+        <div 
+          className="h-screen flex flex-col overflow-hidden safe-area-top touch-pan-y" 
+          {...sidebarSwipeHandlers}
+        >
           <PictureMasonry
             selection={selection}
             contentType={contentType}
@@ -144,24 +155,31 @@ function AuthenticatedApp() {
       mobileContent = (
         <div className="h-screen w-screen max-w-full flex flex-col overflow-hidden safe-area-top">
           {mobileView === 'list' ? (
-            <EntryList
-              selection={selection}
-              selectedEntryId={selectedEntryId}
-              onSelectEntry={handleSelectEntry}
-              onMarkAllRead={handleMarkAllRead}
-              unreadOnly={unreadOnly}
-              onToggleUnreadOnly={toggleUnreadOnly}
-              contentType={contentType}
-              isMobile
-              onMenuClick={handleOpenSidebar}
-            />
+            <div 
+              className="flex-1 flex flex-col overflow-hidden touch-pan-y"
+              {...sidebarSwipeHandlers}
+            >
+              <EntryList
+                selection={selection}
+                selectedEntryId={selectedEntryId}
+                onSelectEntry={handleSelectEntry}
+                onMarkAllRead={handleMarkAllRead}
+                unreadOnly={unreadOnly}
+                onToggleUnreadOnly={toggleUnreadOnly}
+                contentType={contentType}
+                isMobile
+                onMenuClick={handleOpenSidebar}
+              />
+            </div>
           ) : (
-            <EntryContent
-              key={selectedEntryId}
-              entryId={selectedEntryId}
-              isMobile
-              onBack={showList}
-            />
+            <SwipeBackView onBack={showList}>
+              <EntryContent
+                key={selectedEntryId}
+                entryId={selectedEntryId}
+                isMobile
+                onBack={showList}
+              />
+            </SwipeBackView>
           )}
         </div>
       )
