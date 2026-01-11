@@ -6,6 +6,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { isSafeUrl } from '@/lib/url'
 import { ArticleContent } from '@/components/ui/article-content'
 import type { ArticleContentBlock } from '@/components/ui/article-content'
+import { UserIcon, CalendarIcon, ClockIcon } from '@/components/ui/icons'
 import { AiSummaryBox } from './AiSummaryBox'
 import type { Entry } from '@/types/api'
 
@@ -69,57 +70,21 @@ export function EntryContentBody({
           <div className="flex flex-wrap items-center gap-x-6 gap-y-3 text-sm text-muted-foreground">
             {entry.author && (
               <div className="flex items-center gap-1.5">
-                <svg
-                  className="size-4 opacity-70"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-                  />
-                </svg>
+                <UserIcon className="size-4 opacity-70" />
                 <span>{entry.author}</span>
               </div>
             )}
 
             {publishedLong && (
               <div className="flex items-center gap-1.5">
-                <svg
-                  className="size-4 opacity-70"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-                  />
-                </svg>
+                <CalendarIcon className="size-4 opacity-70" />
                 <span className="tabular-nums">{publishedLong}</span>
               </div>
             )}
 
             {readingTime && (
               <div className="flex items-center gap-1.5">
-                <svg
-                  className="size-4 opacity-70"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                  />
-                </svg>
+                <ClockIcon className="size-4 opacity-70" />
                 <span>{readingTime}</span>
               </div>
             )}

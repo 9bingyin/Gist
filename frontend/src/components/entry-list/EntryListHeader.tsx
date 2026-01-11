@@ -1,4 +1,10 @@
 import { useTranslation } from 'react-i18next'
+import {
+  CircleOutlineIcon,
+  CircleFilledIcon,
+  CheckCircleIcon,
+  MenuIcon,
+} from '@/components/ui/icons'
 
 interface EntryListHeaderProps {
   title: string
@@ -8,39 +14,6 @@ interface EntryListHeaderProps {
   onMarkAllRead: () => void
   isMobile?: boolean
   onMenuClick?: () => void
-}
-
-function CircleOutlineIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-      <circle cx="12" cy="12" r="8" />
-    </svg>
-  )
-}
-
-function CircleFilledIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-      <circle cx="12" cy="12" r="8" />
-    </svg>
-  )
-}
-
-function CheckCircleIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-      <polyline points="22 4 12 14.01 9 11.01" />
-    </svg>
-  )
-}
-
-function MenuIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-    </svg>
-  )
 }
 
 export function EntryListHeader({

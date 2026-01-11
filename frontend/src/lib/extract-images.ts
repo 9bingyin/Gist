@@ -1,4 +1,5 @@
 import { getProxiedImageUrl } from './image-proxy'
+import { isSafeUrl } from './url'
 
 /**
  * Extract image URLs from HTML content.
@@ -14,28 +15,12 @@ export function extractImagesFromHtml(html: string): string[] {
 
   for (const img of imgs) {
     const src = img.src || img.getAttribute('data-src') || img.getAttribute('data-lazy-src')
-    if (src && !src.startsWith('data:') && isValidImageUrl(src)) {
+    if (src && !src.startsWith('data:') && isSafeUrl(src)) {
       urls.add(src)
     }
   }
 
   return Array.from(urls)
-}
-
-/**
- * Check if a URL looks like a valid image URL.
- */
-function isValidImageUrl(url: string): boolean {
-  try {
-    const parsed = new URL(url)
-    // Must be http or https
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-      return false
-    }
-    return true
-  } catch {
-    return false
-  }
 }
 
 /**

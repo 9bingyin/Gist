@@ -15,6 +15,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { RssIcon, ErrorIcon } from '@/components/ui/icons'
 import { useContextMenu } from '@/hooks/useContextMenu'
 import { feedItemStyles, sidebarItemIconStyles } from './styles'
 import type { ContentType, Folder } from '@/types/api'
@@ -33,32 +34,6 @@ interface FeedItemProps {
   onDelete?: (feedId: string) => void
   onMoveToFolder?: (feedId: string, folderId: string | null) => void
   onChangeType?: (feedId: string, type: ContentType) => void
-}
-
-function RssIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M4 11a9 9 0 0 1 9 9" />
-      <path d="M4 4a16 16 0 0 1 16 16" />
-      <circle cx="5" cy="19" r="1" />
-    </svg>
-  )
-}
-
-function ErrorIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-      <path d="M12 2C6.47 2 2 6.47 2 12s4.47 10 10 10 10-4.47 10-10S17.53 2 12 2zm5 13.59L15.59 17 12 13.41 8.41 17 7 15.59 10.59 12 7 8.41 8.41 7 12 10.59 15.59 7 17 8.41 13.41 12 17 15.59z" />
-    </svg>
-  )
 }
 
 export function FeedItem({

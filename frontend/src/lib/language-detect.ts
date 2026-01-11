@@ -1,4 +1,5 @@
 import { eld } from 'eld/small'
+import { stripHtml } from './html-utils'
 
 /**
  * Language detection using ELD (Efficient Language Detector)
@@ -23,10 +24,12 @@ const TARGET_TO_ISO: Record<string, string> = {
 }
 
 /**
- * Strip HTML tags from text
+ * Clean text for language detection by removing HTML and URLs
  */
-function stripHtml(html: string): string {
-  return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
+function cleanTextForDetection(text: string): string {
+  return stripHtml(text)
+    .replace(/https?:\/\/\S+/g, '')
+    .trim()
 }
 
 /**
@@ -36,11 +39,7 @@ function stripHtml(html: string): string {
 export function detectLanguage(text: string): string | null {
   if (!text || text.length < 10) return null
 
-  // Clean text for better detection
-  const cleanText = stripHtml(text)
-    .replace(/https?:\/\/\S+/g, '') // Remove URLs
-    .trim()
-
+  const cleanText = cleanTextForDetection(text)
   if (cleanText.length < 10) return null
 
   const result = eld.detect(cleanText)
@@ -87,9 +86,7 @@ export function needsTranslation(
 
   // 1. Priority: Check content language (if available and sufficient)
   if (summary) {
-    const cleanSummary = stripHtml(summary)
-      .replace(/https?:\/\/\S+/g, '')
-      .trim()
+    const cleanSummary = cleanTextForDetection(summary)
 
     if (cleanSummary.length >= 20) {
       const result = eld.detect(cleanSummary)
@@ -108,9 +105,7 @@ export function needsTranslation(
 
   // 2. Fallback: Check title language (if content is insufficient or unreliable)
   if (title) {
-    const cleanTitle = stripHtml(title)
-      .replace(/https?:\/\/\S+/g, '')
-      .trim()
+    const cleanTitle = cleanTextForDetection(title)
 
     if (cleanTitle.length >= 10) {
       const result = eld.detect(cleanTitle)

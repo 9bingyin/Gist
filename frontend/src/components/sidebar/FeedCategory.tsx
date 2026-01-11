@@ -11,6 +11,7 @@ import {
   ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from '@/components/ui/context-menu'
+import { ChevronIcon } from '@/components/ui/icons'
 import { useContextMenu } from '@/hooks/useContextMenu'
 import { useCategoryState } from '@/hooks/useCategoryState'
 import { feedItemStyles, sidebarItemIconStyles } from './styles'
@@ -26,22 +27,6 @@ interface FeedCategoryProps {
   onSelect?: () => void
   onDelete?: (folderId: string) => void
   onChangeType?: (folderId: string, type: ContentType) => void
-}
-
-function ChevronIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M9 18l6-6-6-6" />
-    </svg>
-  )
 }
 
 export function FeedCategory({

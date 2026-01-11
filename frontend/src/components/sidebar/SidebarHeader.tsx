@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
+import { AddIcon } from '@/components/ui/icons'
 import { ProfileButton } from './ProfileButton'
 
 const actionButtonStyles = cn(
@@ -25,22 +26,6 @@ interface SidebarHeaderProps {
 function GistLogo({ className }: { className?: string }) {
   return (
     <img src="/logo.svg" alt="Gist" className={cn(className, 'rounded')} />
-  )
-}
-
-function AddIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M12 5v14M5 12h14" />
-    </svg>
   )
 }
 

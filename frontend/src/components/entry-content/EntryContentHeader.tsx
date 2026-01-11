@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { isSafeUrl } from '@/lib/url'
 import { cn } from '@/lib/utils'
+import { BackIcon } from '@/components/ui/icons'
 import type { Entry } from '@/types/api'
 
 interface EntryContentHeaderProps {
@@ -23,12 +24,36 @@ interface EntryContentHeaderProps {
   onBack?: () => void
 }
 
-function BackIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-    </svg>
-  )
+interface TranslationButtonState {
+  isDisabled: boolean
+  isTranslating: boolean
+  hasTranslation: boolean
+}
+
+function getTranslationButtonTitle(
+  state: TranslationButtonState,
+  t: (key: string) => string
+): string {
+  if (state.isDisabled && !state.hasTranslation && !state.isTranslating) {
+    return t('entry.already_target_language')
+  }
+  if (state.isTranslating) {
+    return t('entry.cancel_translation')
+  }
+  if (state.hasTranslation) {
+    return t('entry.show_original')
+  }
+  return t('entry.translate_article')
+}
+
+function getTranslationButtonClassName(state: TranslationButtonState): string {
+  if (state.isDisabled && !state.hasTranslation && !state.isTranslating) {
+    return 'text-muted-foreground/50 cursor-not-allowed'
+  }
+  if (state.hasTranslation) {
+    return 'bg-muted text-foreground'
+  }
+  return 'text-muted-foreground hover:bg-accent hover:text-foreground'
 }
 
 export function EntryContentHeader({
@@ -156,22 +181,17 @@ export function EntryContentHeader({
               type="button"
               onClick={onToggleTranslation}
               disabled={translationDisabled && !hasTranslation && !isTranslating}
-              title={
-                translationDisabled && !hasTranslation && !isTranslating
-                  ? t('entry.already_target_language')
-                  : isTranslating
-                    ? t('entry.cancel_translation')
-                    : hasTranslation
-                      ? t('entry.show_original')
-                      : t('entry.translate_article')
-              }
+              title={getTranslationButtonTitle(
+                { isDisabled: !!translationDisabled, isTranslating: !!isTranslating, hasTranslation: !!hasTranslation },
+                t
+              )}
               className={cn(
                 'no-drag-region flex size-9 items-center justify-center rounded-lg transition-colors',
-                translationDisabled && !hasTranslation && !isTranslating
-                  ? 'text-muted-foreground/50 cursor-not-allowed'
-                  : hasTranslation
-                    ? 'bg-muted text-foreground'
-                    : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                getTranslationButtonClassName({
+                  isDisabled: !!translationDisabled,
+                  isTranslating: !!isTranslating,
+                  hasTranslation: !!hasTranslation,
+                })
               )}
             >
               {isTranslating ? (
