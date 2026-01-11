@@ -142,7 +142,7 @@ function AuthenticatedApp() {
       )
     } else {
       mobileContent = (
-        <div className="h-screen flex flex-col overflow-hidden safe-area-top">
+        <div className="h-screen w-screen max-w-full flex flex-col overflow-hidden safe-area-top">
           {mobileView === 'list' ? (
             <EntryList
               selection={selection}

@@ -60,7 +60,7 @@ function ArticleTable({
   ...props
 }: React.TableHTMLAttributes<HTMLTableElement>) {
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto max-w-full -webkit-overflow-scrolling-touch">
       <table {...props}>{children}</table>
     </div>
   )

@@ -591,7 +591,7 @@ export function EntryContent({ entryId, isMobile, onBack }: EntryContentProps) {
   }
 
   return (
-    <div className="relative flex h-full flex-col">
+    <div className="relative flex h-full w-full flex-col overflow-hidden">
       <EntryContentHeader
         entry={entry}
         displayTitle={displayTitle}

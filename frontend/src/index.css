@@ -271,8 +271,14 @@ body {
   color: hsl(var(--foreground));
   font-size: 1.0625rem;
   line-height: 1.8;
-  hyphens: auto;
-  word-break: break-word;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+/* Fix for Radix UI ScrollArea viewport forcing table display which expands width */
+.entry-content-viewport > div {
+  display: block !important;
 }
 
 .entry-content-body :where(p, ul, ol, pre, blockquote, table, figure, hr, details) {
@@ -281,6 +287,8 @@ body {
 
 .entry-content-body :where(p) {
   margin: 1.25rem 0;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .entry-content-body :where(h1, h2, h3, h4, h5, h6) {
@@ -288,6 +296,8 @@ body {
   font-weight: 700;
   letter-spacing: -0.025em;
   line-height: 1.3;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .entry-content-body :where(h1) {
@@ -316,6 +326,8 @@ body {
   text-decoration-thickness: 1px;
   text-underline-offset: 3px;
   transition: all 0.2s;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .entry-content-body :where(a:hover) {
@@ -325,10 +337,14 @@ body {
 
 .entry-content-body :where(ul, ol) {
   padding-left: 1.5rem;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .entry-content-body :where(li) {
   margin: 0.5rem 0;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .entry-content-body :where(li)::marker {
@@ -354,10 +370,13 @@ body {
   border: 1px solid var(--entry-code-border);
   background: var(--hljs-background);
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
   tab-size: 2;
   position: relative;
   margin: 2rem 0;
   max-width: 100%;
+  word-break: normal;
+  overflow-wrap: normal;
 }
 
 .entry-content-body :where(pre[data-language]) {
@@ -386,6 +405,9 @@ body {
   color: var(--hljs-foreground);
   padding: 0;
   display: block;
+  white-space: pre;
+  word-break: normal;
+  overflow-wrap: normal;
 }
 
 .entry-content-body :where(:not(pre) > code) {
@@ -401,15 +423,18 @@ body {
 
 .entry-content-body :where(table) {
   width: 100%;
+  max-width: 100%;
   border-collapse: collapse;
   margin: 2rem 0;
   font-size: 0.9375rem;
+  display: table;
 }
 
 .entry-content-body :where(th, td) {
   padding: 0.75rem 1rem;
   border: 1px solid var(--entry-border);
   text-align: left;
+  min-width: 0;
 }
 
 .entry-content-body :where(thead) {
