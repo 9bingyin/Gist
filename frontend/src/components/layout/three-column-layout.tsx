@@ -182,9 +182,7 @@ export function ThreeColumnLayout({
       {/* Sidebar - left column (Feed list) */}
       <aside
         className={cn(
-          'flex h-full shrink-0 flex-col overflow-hidden bg-sidebar',
-          'pt-[env(safe-area-inset-top,0px)]',
-          'pl-[env(safe-area-inset-left,0px)]',
+          'flex h-full shrink-0 flex-col overflow-hidden bg-sidebar safe-area-top safe-area-left',
           !feedColResizable.isDragging && 'transition-[width] duration-200'
         )}
         style={{ width: `calc(${feedColResizable.position}px + env(safe-area-inset-left, 0px))` }}
@@ -204,8 +202,7 @@ export function ThreeColumnLayout({
         <>
           <div
             className={cn(
-              'flex h-full shrink-0 flex-col overflow-hidden bg-background',
-              'pt-[env(safe-area-inset-top,0px)]',
+              'flex h-full shrink-0 flex-col overflow-hidden bg-background safe-area-top',
               !entryColResizable.isDragging && 'transition-[width] duration-200'
             )}
             style={{ width: entryColResizable.position }}
@@ -223,7 +220,7 @@ export function ThreeColumnLayout({
       )}
 
       {/* Content - right column (Entry content) */}
-      <main className="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-background pt-[env(safe-area-inset-top,0px)]">
+      <main className="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-background safe-area-top">
         {content}
       </main>
     </div>

@@ -14,9 +14,7 @@ import { useMarkAllAsRead } from '@/hooks/useEntries'
 import { useMobileLayout } from '@/hooks/useMobileLayout'
 import { useAuth } from '@/hooks/useAuth'
 import { isAddFeedPath } from '@/lib/router'
-import { usePWAHistory } from '@/hooks/usePWAHistory'
-import { useEdgeSwipe } from '@/hooks/useEdgeSwipe'
-import { SwipeBackView } from '@/components/ui/swipe-back-view'
+import { cn } from '@/lib/utils'
 import type { ContentType } from '@/types/api'
 
 function LoadingScreen() {
@@ -37,7 +35,6 @@ function AuthenticatedApp() {
     mobileView,
     sidebarOpen,
     setSidebarOpen,
-    showDetail,
     showList,
     closeSidebar,
   } = useMobileLayout()
@@ -53,7 +50,6 @@ function AuthenticatedApp() {
     unreadOnly,
     toggleUnreadOnly,
     contentType,
-    setContentType,
   } = useSelection()
 
   const { mutate: markAllAsRead } = useMarkAllAsRead()
@@ -77,8 +73,7 @@ function AuthenticatedApp() {
 
   const handleSelectEntry = useCallback((entryId: string) => {
     selectEntry(entryId)
-    if (isMobile) showDetail()
-  }, [selectEntry, isMobile, showDetail])
+  }, [selectEntry])
 
   const handleAddClick = useCallback((ct: ContentType) => {
     setAddFeedContentType(ct)
@@ -98,12 +93,6 @@ function AuthenticatedApp() {
     setSidebarOpen(true)
   }, [setSidebarOpen])
 
-  // Sidebar gesture for mobile list view
-  const { handlers: sidebarSwipeHandlers } = useEdgeSwipe(handleOpenSidebar, {
-    edgeWidth: 20,
-    threshold: 80,
-  })
-
   // Redirect root to /all with default type (must be after ALL hooks including useCallback)
   if (location === '/') {
     return <Redirect to="/all?type=article" replace />
@@ -119,7 +108,6 @@ function AuthenticatedApp() {
       onSelectStarred={handleSelectStarred}
       onSelectAll={selectAll}
       contentType={contentType}
-      onContentTypeChange={setContentType}
     />
   )
 
@@ -130,18 +118,13 @@ function AuthenticatedApp() {
 
     if (isAddFeedPath(location)) {
       mobileContent = (
-        <SwipeBackView onBack={handleCloseAddFeed}>
-          <div className="h-screen safe-area-top">
-            <AddFeedPage onClose={handleCloseAddFeed} contentType={addFeedContentType} />
-          </div>
-        </SwipeBackView>
+        <div className="h-dvh safe-area-top">
+          <AddFeedPage onClose={handleCloseAddFeed} contentType={addFeedContentType} />
+        </div>
       )
     } else if (contentType === 'picture') {
       mobileContent = (
-        <div 
-          className="h-screen flex flex-col overflow-hidden safe-area-top touch-pan-y" 
-          {...sidebarSwipeHandlers}
-        >
+        <div className="h-dvh flex flex-col overflow-hidden safe-area-top">
           <PictureMasonry
             selection={selection}
             contentType={contentType}
@@ -154,35 +137,38 @@ function AuthenticatedApp() {
         </div>
       )
     } else {
+      // List and detail views rendered together, controlled by CSS
       mobileContent = (
-        <div className="h-screen w-screen max-w-full flex flex-col overflow-hidden safe-area-top">
-          {mobileView === 'list' ? (
-            <div 
-              className="flex-1 flex flex-col overflow-hidden touch-pan-y"
-              {...sidebarSwipeHandlers}
-            >
-              <EntryList
-                selection={selection}
-                selectedEntryId={selectedEntryId}
-                onSelectEntry={handleSelectEntry}
-                onMarkAllRead={handleMarkAllRead}
-                unreadOnly={unreadOnly}
-                onToggleUnreadOnly={toggleUnreadOnly}
-                contentType={contentType}
-                isMobile
-                onMenuClick={handleOpenSidebar}
-              />
-            </div>
-          ) : (
-            <SwipeBackView onBack={showList}>
-              <EntryContent
-                key={selectedEntryId}
-                entryId={selectedEntryId}
-                isMobile
-                onBack={showList}
-              />
-            </SwipeBackView>
-          )}
+        <div className="relative h-dvh w-screen max-w-full overflow-hidden safe-area-top">
+          {/* List view - always rendered to preserve scroll position */}
+          <div className={cn(
+            'absolute inset-0 flex flex-col overflow-hidden bg-background',
+            mobileView === 'detail' && 'invisible'
+          )}>
+            <EntryList
+              selection={selection}
+              selectedEntryId={selectedEntryId}
+              onSelectEntry={handleSelectEntry}
+              onMarkAllRead={handleMarkAllRead}
+              unreadOnly={unreadOnly}
+              onToggleUnreadOnly={toggleUnreadOnly}
+              contentType={contentType}
+              isMobile
+              onMenuClick={handleOpenSidebar}
+            />
+          </div>
+          {/* Detail view - slides in from right */}
+          <div className={cn(
+            'absolute inset-0 bg-background transition-transform duration-300 ease-out',
+            mobileView === 'detail' ? 'translate-x-0' : 'translate-x-full'
+          )}>
+            <EntryContent
+              key={selectedEntryId}
+              entryId={selectedEntryId}
+              isMobile
+              onBack={showList}
+            />
+          </div>
         </div>
       )
     }
@@ -277,9 +263,6 @@ function AppContent() {
 }
 
 function App() {
-  // Handle iOS PWA back gesture navigation
-  usePWAHistory()
-
   return (
     <TooltipProvider delayDuration={300}>
       <Router>

@@ -76,13 +76,8 @@ export function Sheet({ open, onOpenChange, children }: SheetProps) {
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
             className={cn(
               'fixed inset-y-0 left-0 z-50 bg-sidebar shadow-xl',
-              // Width includes safe area for landscape mode
-              'w-[calc(280px+env(safe-area-inset-left,0px))]',
-              // Padding for safe area (top for portrait, left for landscape)
-              'pt-[env(safe-area-inset-top,0px)]',
-              'pl-[env(safe-area-inset-left,0px)]',
-              'pb-[env(safe-area-inset-bottom,0px)]',
-              'touch-none' // Disable browser touch handling for drag
+              'w-[280px] safe-area-inset',
+              'touch-none'
             )}
           >
             {children}
