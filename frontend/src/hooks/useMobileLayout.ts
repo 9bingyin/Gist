@@ -1,13 +1,13 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useLocation, useSearch } from 'wouter'
-import { parseRoute } from '@/lib/router'
+import { parseRoute, buildPath } from '@/lib/router'
 
 export type MobileView = 'list' | 'detail'
 
 const MOBILE_BREAKPOINT = 768
 
 export function useMobileLayout() {
-  const [location] = useLocation()
+  const [location, navigate] = useLocation()
   const search = useSearch()
   const [isMobile, setIsMobile] = useState(
     typeof window !== 'undefined' ? window.innerWidth < MOBILE_BREAKPOINT : false
@@ -32,15 +32,16 @@ export function useMobileLayout() {
     return () => window.removeEventListener('resize', handleResize)
   }, [])
 
-  // showDetail is now a no-op - view is controlled by URL (entryId)
-  const showDetail = useCallback(() => {
-    // View changes automatically when entryId is set in URL
-  }, [])
-
-  // showList navigates back to remove entryId from URL
+  // Navigate back to list by removing entryId from URL
   const showList = useCallback(() => {
-    window.history.back()
-  }, [])
+    const routeState = parseRoute(location, search)
+    navigate(buildPath(
+      routeState.selection,
+      null, // Remove entryId
+      routeState.unreadOnly,
+      routeState.contentType
+    ))
+  }, [location, search, navigate])
 
   const openSidebar = useCallback(() => setSidebarOpen(true), [])
   const closeSidebar = useCallback(() => setSidebarOpen(false), [])
@@ -50,7 +51,6 @@ export function useMobileLayout() {
     mobileView,
     sidebarOpen,
     setSidebarOpen,
-    showDetail,
     showList,
     openSidebar,
     closeSidebar,

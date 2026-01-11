@@ -61,7 +61,6 @@ interface SidebarProps {
   onSelectStarred: () => void
   onSelectAll?: (contentType?: ContentType) => void
   contentType: ContentType
-  onContentTypeChange: (contentType: ContentType) => void
 }
 
 interface FolderWithFeeds {
@@ -108,7 +107,6 @@ export function Sidebar({
   onSelectStarred,
   onSelectAll,
   contentType,
-  onContentTypeChange,
 }: SidebarProps) {
   const { t } = useTranslation()
   const { user, logout } = useAuth()
@@ -283,10 +281,7 @@ export function Sidebar({
       <div className="relative mb-2 mt-3">
         <div className="flex h-11 items-center px-1 text-xl text-muted-foreground">
           <button
-            onClick={() => {
-              onContentTypeChange('article')
-              onSelectAll?.('article')
-            }}
+            onClick={() => onSelectAll?.('article')}
             className={cn(
               'flex h-11 w-8 shrink-0 grow flex-col items-center justify-center gap-1 rounded-md transition-colors',
               contentType === 'article'
@@ -301,10 +296,7 @@ export function Sidebar({
             </div>
           </button>
           <button
-            onClick={() => {
-              onContentTypeChange('picture')
-              onSelectAll?.('picture')
-            }}
+            onClick={() => onSelectAll?.('picture')}
             className={cn(
               'flex h-11 w-8 shrink-0 grow flex-col items-center justify-center gap-1 rounded-md transition-colors',
               contentType === 'picture'
@@ -319,10 +311,7 @@ export function Sidebar({
             </div>
           </button>
           <button
-            onClick={() => {
-              onContentTypeChange('notification')
-              onSelectAll?.('notification')
-            }}
+            onClick={() => onSelectAll?.('notification')}
             className={cn(
               'flex h-11 w-8 shrink-0 grow flex-col items-center justify-center gap-1 rounded-md transition-colors',
               contentType === 'notification'

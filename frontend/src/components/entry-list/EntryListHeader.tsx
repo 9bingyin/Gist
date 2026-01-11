@@ -61,7 +61,7 @@ export function EntryListHeader({
           <button
             type="button"
             onClick={onMenuClick}
-            className="flex size-8 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-item-hover"
+            className="flex size-11 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-item-hover -ml-1.5"
           >
             <MenuIcon className="size-5" />
           </button>

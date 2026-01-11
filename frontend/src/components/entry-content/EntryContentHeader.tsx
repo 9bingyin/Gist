@@ -71,7 +71,7 @@ export function EntryContentHeader({
             <button
               type="button"
               onClick={onBack}
-              className="no-drag-region flex size-8 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-item-hover"
+              className="no-drag-region flex size-11 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-item-hover -ml-1.5"
             >
               <BackIcon className="size-5" />
             </button>
