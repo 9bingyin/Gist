@@ -36,6 +36,7 @@ function AuthenticatedApp() {
     sidebarOpen,
     setSidebarOpen,
     showList,
+    openSidebar,
     closeSidebar,
   } = useMobileLayout()
 
@@ -71,10 +72,6 @@ function AuthenticatedApp() {
     closeSidebar()
   }, [selectStarred, closeSidebar])
 
-  const handleSelectEntry = useCallback((entryId: string) => {
-    selectEntry(entryId)
-  }, [selectEntry])
-
   const handleAddClick = useCallback((ct: ContentType) => {
     setAddFeedContentType(ct)
     navigate(`/add-feed?type=${ct}`)
@@ -88,10 +85,6 @@ function AuthenticatedApp() {
   const handleMarkAllRead = useCallback(() => {
     markAllAsRead(selectionToParams(selection, contentType))
   }, [markAllAsRead, selection, contentType])
-
-  const handleOpenSidebar = useCallback(() => {
-    setSidebarOpen(true)
-  }, [setSidebarOpen])
 
   // Redirect root to /all with default type (must be after ALL hooks including useCallback)
   if (location === '/') {
@@ -132,7 +125,7 @@ function AuthenticatedApp() {
             onToggleUnreadOnly={toggleUnreadOnly}
             onMarkAllRead={handleMarkAllRead}
             isMobile
-            onMenuClick={handleOpenSidebar}
+            onMenuClick={openSidebar}
           />
         </div>
       )
@@ -148,13 +141,13 @@ function AuthenticatedApp() {
             <EntryList
               selection={selection}
               selectedEntryId={selectedEntryId}
-              onSelectEntry={handleSelectEntry}
+              onSelectEntry={selectEntry}
               onMarkAllRead={handleMarkAllRead}
               unreadOnly={unreadOnly}
               onToggleUnreadOnly={toggleUnreadOnly}
               contentType={contentType}
               isMobile
-              onMenuClick={handleOpenSidebar}
+              onMenuClick={openSidebar}
             />
           </div>
           {/* Detail view - slides in from right */}
@@ -228,7 +221,7 @@ function AuthenticatedApp() {
         <EntryList
           selection={selection}
           selectedEntryId={selectedEntryId}
-          onSelectEntry={handleSelectEntry}
+          onSelectEntry={selectEntry}
           onMarkAllRead={handleMarkAllRead}
           unreadOnly={unreadOnly}
           onToggleUnreadOnly={toggleUnreadOnly}
