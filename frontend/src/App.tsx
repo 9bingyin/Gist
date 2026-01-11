@@ -132,10 +132,10 @@ function AuthenticatedApp() {
     } else {
       // List and detail views rendered together, controlled by CSS
       mobileContent = (
-        <div className="relative h-dvh w-screen max-w-full overflow-hidden safe-area-top">
+        <div className="relative h-dvh w-screen max-w-full overflow-hidden">
           {/* List view - always rendered to preserve scroll position */}
           <div className={cn(
-            'absolute inset-0 flex flex-col overflow-hidden bg-background',
+            'absolute inset-0 flex flex-col overflow-hidden bg-background safe-area-top',
             mobileView === 'detail' && 'invisible'
           )}>
             <EntryList
@@ -152,7 +152,7 @@ function AuthenticatedApp() {
           </div>
           {/* Detail view - slides in from right */}
           <div className={cn(
-            'absolute inset-0 bg-background transition-transform duration-300 ease-out',
+            'absolute inset-0 bg-background transition-transform duration-300 ease-out safe-area-top',
             mobileView === 'detail' ? 'translate-x-0' : 'translate-x-full'
           )}>
             <EntryContent
