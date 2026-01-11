@@ -51,7 +51,7 @@ export function EntryContentBody({
       viewportClassName="entry-content-viewport"
     >
       <article className="entry-content mx-auto w-full max-w-[720px] min-w-0 overflow-x-hidden px-4 sm:px-6 pb-20 pt-16">
-        <header className="mb-10 space-y-5">
+        <header className="mb-4 space-y-5">
           <h1 className="text-3xl font-bold leading-tight tracking-tight text-foreground sm:text-4xl sm:leading-[1.15]">
             {entry.url && isSafeUrl(entry.url) ? (
               <a

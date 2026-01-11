@@ -15,7 +15,7 @@ export function AiSummaryBox({ content, isLoading, error }: AiSummaryBoxProps) {
   return (
     <div
       className={cn(
-        'ai-summary-box rounded-lg border mb-6 break-words',
+        'ai-summary-box rounded-lg border mb-1.5 break-words',
         error
           ? 'border-destructive/30 bg-destructive/5'
           : 'border-primary/20 bg-primary/5'
@@ -41,9 +41,6 @@ export function AiSummaryBox({ content, isLoading, error }: AiSummaryBoxProps) {
               <h3 className={cn('text-sm font-semibold', error ? 'text-destructive' : 'text-primary')}>
                 {t('entry.ai_summary')}
               </h3>
-              {isLoading && (
-                <div className="size-3 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-              )}
             </div>
 
             {error ? (
@@ -54,9 +51,10 @@ export function AiSummaryBox({ content, isLoading, error }: AiSummaryBoxProps) {
                   <p key={i}>{point.trim()}</p>
                 ))}
                 {isLoading && !content && (
-                  <div className="space-y-2">
-                    <div className="h-4 w-full bg-primary/10 rounded animate-pulse" />
-                    <div className="h-4 w-3/4 bg-primary/10 rounded animate-pulse" />
+                  <div className="space-y-2.5">
+                    <div className="h-4 w-full rounded ai-shimmer" />
+                    <div className="h-4 w-full rounded ai-shimmer" />
+                    <div className="h-4 w-3/5 rounded ai-shimmer" />
                   </div>
                 )}
               </div>
