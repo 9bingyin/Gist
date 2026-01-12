@@ -12,7 +12,7 @@ require (
 	github.com/labstack/echo/v4 v4.14.0
 	github.com/microcosm-cc/bluemonday v1.0.27
 	github.com/mmcdole/gofeed v1.3.0
-	github.com/openai/openai-go v1.12.0
+	github.com/openai/openai-go/v3 v3.16.0
 	github.com/swaggo/echo-swagger v1.4.1
 	github.com/swaggo/swag v1.16.6
 	go.uber.org/mock v0.6.0
