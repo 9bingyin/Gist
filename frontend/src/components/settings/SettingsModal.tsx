@@ -6,7 +6,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { SettingsSidebar } from './SettingsSidebar'
-import { ProfileSettings } from './tabs/ProfileSettings'
 import { GeneralSettings } from './tabs/GeneralSettings'
 import { AppearanceSettings } from './tabs/AppearanceSettings'
 import { DataControl } from './tabs/DataControl'
@@ -17,12 +16,11 @@ import { NetworkSettings } from './tabs/NetworkSettings'
 import { AdvancedSettings } from './tabs/AdvancedSettings'
 import { cn } from '@/lib/utils'
 
-export type SettingsTab = 'profile' | 'general' | 'network' | 'appearance' | 'ai' | 'data' | 'feeds' | 'folders' | 'advanced'
+export type SettingsTab = 'general' | 'network' | 'appearance' | 'ai' | 'data' | 'feeds' | 'folders' | 'advanced'
 
 interface SettingsModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  initialTab?: SettingsTab
 }
 
 const MOBILE_BREAKPOINT = 768
@@ -41,22 +39,20 @@ function useMobileDetect() {
   return isMobile
 }
 
-export function SettingsModal({ open, onOpenChange, initialTab }: SettingsModalProps) {
+export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
   const { t } = useTranslation()
-  const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab ?? 'general')
+  const [activeTab, setActiveTab] = useState<SettingsTab>('general')
   const isMobile = useMobileDetect()
 
-  // Reset to initialTab when modal opens
+  // Reset to general when modal opens
   useEffect(() => {
-    if (open && initialTab) {
-      setActiveTab(initialTab)
+    if (open) {
+      setActiveTab('general')
     }
-  }, [open, initialTab])
+  }, [open])
 
   const renderContent = () => {
     switch (activeTab) {
-      case 'profile':
-        return <ProfileSettings />
       case 'general':
         return <GeneralSettings />
       case 'network':
@@ -80,8 +76,6 @@ export function SettingsModal({ open, onOpenChange, initialTab }: SettingsModalP
 
   const getTitle = () => {
     switch (activeTab) {
-      case 'profile':
-        return t('profile.title')
       case 'general':
         return t('settings.general')
       case 'network':
@@ -104,7 +98,6 @@ export function SettingsModal({ open, onOpenChange, initialTab }: SettingsModalP
   }
 
   const tabs: { id: SettingsTab; label: string }[] = [
-    { id: 'profile', label: t('profile.title') },
     { id: 'general', label: t('settings.general') },
     { id: 'network', label: t('settings.network') },
     { id: 'appearance', label: t('settings.appearance') },

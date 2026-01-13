@@ -13,7 +13,7 @@ import { SidebarHeader } from './SidebarHeader'
 import { FeedCategory } from './FeedCategory'
 import { FeedItem } from './FeedItem'
 import { ContentTypeSwitcher } from './ContentTypeSwitcher'
-import { SettingsModal, type SettingsTab } from '@/components/settings'
+import { SettingsModal, ProfileModal } from '@/components/settings'
 import { useFolders, useDeleteFolder, useUpdateFolderType } from '@/hooks/useFolders'
 import { useFeeds, useDeleteFeed, useUpdateFeed, useUpdateFeedType } from '@/hooks/useFeeds'
 import { useUnreadCounts, useStarredCount } from '@/hooks/useEntries'
@@ -59,7 +59,7 @@ export function Sidebar({
   const { t } = useTranslation()
   const { user, logout } = useAuth()
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
-  const [settingsTab, setSettingsTab] = useState<SettingsTab>('general')
+  const [isProfileOpen, setIsProfileOpen] = useState(false)
   const [sortBy, setSortBy] = useState<SortBy>('name')
 
   // Animation direction tracking
@@ -214,14 +214,8 @@ export function Sidebar({
         starredCount={starredCountData?.count}
         isStarredSelected={isStarredSelected}
         onStarredClick={onSelectStarred}
-        onProfileClick={() => {
-          setSettingsTab('profile')
-          setIsSettingsOpen(true)
-        }}
-        onSettingsClick={() => {
-          setSettingsTab('general')
-          setIsSettingsOpen(true)
-        }}
+        onProfileClick={() => setIsProfileOpen(true)}
+        onSettingsClick={() => setIsSettingsOpen(true)}
         onLogoutClick={logout}
       />
 
@@ -327,7 +321,8 @@ export function Sidebar({
         </AnimatePresence>
       </div>
 
-      <SettingsModal open={isSettingsOpen} onOpenChange={setIsSettingsOpen} initialTab={settingsTab} />
+      <SettingsModal open={isSettingsOpen} onOpenChange={setIsSettingsOpen} />
+      <ProfileModal open={isProfileOpen} onOpenChange={setIsProfileOpen} />
     </div>
   )
 }
