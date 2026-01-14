@@ -16,7 +16,7 @@ import { ContentTypeSwitcher } from './ContentTypeSwitcher'
 import { SettingsModal, ProfileModal } from '@/components/settings'
 import { useFolders, useDeleteFolder, useUpdateFolderType } from '@/hooks/useFolders'
 import { useFeeds, useDeleteFeed, useUpdateFeed, useUpdateFeedType } from '@/hooks/useFeeds'
-import { useUnreadCounts, useStarredCount } from '@/hooks/useEntries'
+import { useUnreadCounts } from '@/hooks/useEntries'
 import { useAuth } from '@/hooks/useAuth'
 import type { SelectionType } from '@/hooks/useSelection'
 import type { Folder, Feed, ContentType } from '@/types/api'
@@ -93,7 +93,6 @@ export function Sidebar({
   )
 
   const { data: unreadCountsData } = useUnreadCounts()
-  const { data: starredCountData } = useStarredCount()
 
   // Handlers for menu actions
   const handleDeleteFeed = useCallback((feedId: string) => {
@@ -211,7 +210,6 @@ export function Sidebar({
         avatarUrl={user?.avatarUrl}
         userName={user?.nickname || user?.username}
         onAddClick={() => onAddClick?.(contentType)}
-        starredCount={starredCountData?.count}
         isStarredSelected={isStarredSelected}
         onStarredClick={onSelectStarred}
         onProfileClick={() => setIsProfileOpen(true)}
