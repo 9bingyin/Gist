@@ -209,7 +209,7 @@ export function Sidebar({
     <div className="flex h-full flex-col bg-sidebar">
       <SidebarHeader
         avatarUrl={user?.avatarUrl}
-        userName={user?.username}
+        userName={user?.nickname || user?.username}
         onAddClick={() => onAddClick?.(contentType)}
         starredCount={starredCountData?.count}
         isStarredSelected={isStarredSelected}
