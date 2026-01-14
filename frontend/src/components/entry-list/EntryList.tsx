@@ -7,7 +7,8 @@ import { useFolders } from '@/hooks/useFolders'
 import { useAISettings } from '@/hooks/useAISettings'
 import { selectionToParams, type SelectionType } from '@/hooks/useSelection'
 import { stripHtml } from '@/lib/html-utils'
-import { ScrollArea } from '@/components/ui/scroll-area'
+import * as ScrollAreaPrimitive from '@radix-ui/react-scroll-area'
+import { ScrollBar } from '@/components/ui/scroll-area'
 import { EntryListItem } from './EntryListItem'
 import { EntryListHeader } from './EntryListHeader'
 import { needsTranslation } from '@/lib/language-detect'
@@ -230,44 +231,48 @@ export function EntryList({
         onMenuClick={onMenuClick}
       />
 
-      <ScrollArea ref={containerRef} className="min-h-0 flex-1">
-        {isLoading ? (
-          <EntryListSkeleton />
-        ) : entries.length === 0 ? (
-          <EntryListEmpty />
-        ) : (
-          <div
-            className="relative w-full"
-            style={{ height: virtualizer.getTotalSize() }}
-          >
-            {virtualItems.map((virtualRow) => {
-              const entry = entries[virtualRow.index]
-              return (
-                <EntryListItem
-                  key={entry.id}
-                  ref={virtualizer.measureElement}
-                  data-index={virtualRow.index}
-                  entry={entry}
-                  feed={feedsMap.get(entry.feedId)}
-                  isSelected={entry.id === selectedEntryId}
-                  onClick={() => onSelectEntry(entry.id)}
-                  autoTranslate={autoTranslate}
-                  targetLanguage={targetLanguage}
-                  style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    width: '100%',
-                    transform: `translateY(${virtualRow.start}px)`,
-                  }}
-                />
-              )
-            })}
-          </div>
-        )}
+      <ScrollAreaPrimitive.Root className="relative min-h-0 flex-1 overflow-hidden">
+        <div ref={containerRef} className="h-full overflow-y-auto">
+          {isLoading ? (
+            <EntryListSkeleton />
+          ) : entries.length === 0 ? (
+            <EntryListEmpty />
+          ) : (
+            <div
+              className="relative w-full"
+              style={{ height: virtualizer.getTotalSize() }}
+            >
+              {virtualItems.map((virtualRow) => {
+                const entry = entries[virtualRow.index]
+                return (
+                  <EntryListItem
+                    key={entry.id}
+                    ref={virtualizer.measureElement}
+                    data-index={virtualRow.index}
+                    entry={entry}
+                    feed={feedsMap.get(entry.feedId)}
+                    isSelected={entry.id === selectedEntryId}
+                    onClick={() => onSelectEntry(entry.id)}
+                    autoTranslate={autoTranslate}
+                    targetLanguage={targetLanguage}
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      transform: `translateY(${virtualRow.start}px)`,
+                    }}
+                  />
+                )
+              })}
+            </div>
+          )}
 
-        {isFetchingNextPage && <LoadingMore />}
-      </ScrollArea>
+          {isFetchingNextPage && <LoadingMore />}
+        </div>
+        <ScrollBar />
+        <ScrollAreaPrimitive.Corner />
+      </ScrollAreaPrimitive.Root>
     </div>
   )
 }
