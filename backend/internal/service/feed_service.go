@@ -556,7 +556,9 @@ func extractPublishedAt(item *gofeed.Item, ignoreDynamicTime bool) *time.Time {
 		return &t
 	}
 
-	return nil
+	// Fallback to current time when no date is available
+	now := time.Now().UTC()
+	return &now
 }
 
 var filedDateRegex = regexp.MustCompile(`Filed:.*?(\d{4}-\d{2}-\d{2})`)
