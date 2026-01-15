@@ -112,7 +112,7 @@ export function useAITranslation({
     }))
   }, [entry, isTranslationForCurrentMode, translatedContent, originalBlocks, translatedBlocks])
 
-  const hasTranslation = isTranslationForCurrentMode && !!(translatedContent || originalBlocks.length > 0)
+  const hasTranslation = !isTranslating && isTranslationForCurrentMode && !!(translatedContent || originalBlocks.length > 0)
 
   const generateTranslation = useCallback(async (forReadability: boolean) => {
     if (!entry) return
