@@ -195,6 +195,7 @@
     "o1_grok_models": "(o1/Grok models)",
     "anthropic_gemini_models": "(Anthropic/Gemini models)",
     "o1_series": "(o1/o3/o4/gpt-5 series)",
+    "openai_thinking_default_hint": "When disabled, uses API endpoint default behavior",
     "rate_limit_label": "Rate Limit (QPS)",
     "rate_limit_hint": "Maximum API requests per second (1-100, default: 10)",
     "summary_language_hint": "The language used for AI-generated summaries and translations",

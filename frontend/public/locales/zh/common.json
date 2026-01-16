@@ -194,6 +194,7 @@
     "o1_grok_models": "(o1/Grok 模型)",
     "anthropic_gemini_models": "(Anthropic/Gemini 模型)",
     "o1_series": "(o1/o3/o4/gpt-5 系列)",
+    "openai_thinking_default_hint": "关闭后将使用 API 端点默认行为",
     "rate_limit_label": "速率限制 (QPS)",
     "rate_limit_hint": "每秒最大 API 请求数 (1-100, 默认: 10)",
     "summary_language_hint": "AI 生成摘要和翻译使用的语言",

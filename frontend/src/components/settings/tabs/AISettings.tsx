@@ -272,8 +272,8 @@ export function AISettings() {
           <span className="text-sm font-medium">
             {settings.provider === 'anthropic' ? t('ai_settings.extended_thinking') : t('ai_settings.enable_reasoning')}
           </span>
-          {settings.provider === 'openai' && (
-            <span className="ml-2 text-xs text-muted-foreground">{t('ai_settings.o1_series')}</span>
+          {settings.provider === 'openai' && !settings.thinking && (
+            <p className="text-xs text-muted-foreground">{t('ai_settings.openai_thinking_default_hint')}</p>
           )}
         </div>
         <Switch
