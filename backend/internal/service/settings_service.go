@@ -15,6 +15,7 @@ type AISettings struct {
 	APIKey          string `json:"apiKey"`
 	BaseURL         string `json:"baseUrl"`
 	Model           string `json:"model"`
+	Endpoint        string `json:"endpoint"`
 	Thinking        bool   `json:"thinking"`
 	ThinkingBudget  int    `json:"thinkingBudget"`
 	ReasoningEffort string `json:"reasoningEffort"`
@@ -47,6 +48,7 @@ const (
 	keyAIAPIKey          = "ai.api_key"
 	keyAIBaseURL         = "ai.base_url"
 	keyAIModel           = "ai.model"
+	keyAIEndpoint        = "ai.openai_endpoint"
 	keyAIThinking        = "ai.thinking"
 	keyAIThinkingBudget  = "ai.thinking_budget"
 	keyAIReasoningEffort = "ai.reasoning_effort"
@@ -75,7 +77,7 @@ type SettingsService interface {
 	// If apiKey is empty string, it keeps the existing key.
 	SetAISettings(ctx context.Context, settings *AISettings) error
 	// TestAI tests the AI connection with the given configuration.
-	TestAI(ctx context.Context, provider, apiKey, baseURL, model string, thinking bool, thinkingBudget int, reasoningEffort string) (string, error)
+	TestAI(ctx context.Context, provider, apiKey, baseURL, model, endpoint string, thinking bool, thinkingBudget int, reasoningEffort string) (string, error)
 	// GetGeneralSettings returns the general settings.
 	GetGeneralSettings(ctx context.Context) (*GeneralSettings, error)
 	// SetGeneralSettings updates the general settings.
@@ -109,6 +111,7 @@ func NewSettingsService(repo repository.SettingsRepository, rateLimiter *ai.Rate
 func (s *settingsService) GetAISettings(ctx context.Context) (*AISettings, error) {
 	settings := &AISettings{
 		Provider:        ai.ProviderOpenAI, // default
+		Endpoint:        "responses",       // default endpoint
 		ThinkingBudget:  10000,             // default budget
 		ReasoningEffort: "medium",          // default effort
 		SummaryLanguage: "zh-CN",           // default language
@@ -125,6 +128,9 @@ func (s *settingsService) GetAISettings(ctx context.Context) (*AISettings, error
 	}
 	if val, err := s.getString(ctx, keyAIModel); err == nil {
 		settings.Model = val
+	}
+	if val, err := s.getString(ctx, keyAIEndpoint); err == nil && val != "" {
+		settings.Endpoint = val
 	}
 	settings.Thinking = s.getBool(ctx, keyAIThinking)
 	if val, err := s.getInt(ctx, keyAIThinkingBudget); err == nil && val > 0 {
@@ -163,6 +169,9 @@ func (s *settingsService) SetAISettings(ctx context.Context, settings *AISetting
 	}
 	if err := s.repo.Set(ctx, keyAIModel, settings.Model); err != nil {
 		return fmt.Errorf("set model: %w", err)
+	}
+	if err := s.repo.Set(ctx, keyAIEndpoint, settings.Endpoint); err != nil {
+		return fmt.Errorf("set endpoint: %w", err)
 	}
 	thinkingVal := "false"
 	if settings.Thinking {
@@ -246,7 +255,7 @@ func isMaskedKey(key string) bool {
 }
 
 // TestAI tests the AI connection with the given configuration.
-func (s *settingsService) TestAI(ctx context.Context, provider, apiKey, baseURL, model string, thinking bool, thinkingBudget int, reasoningEffort string) (string, error) {
+func (s *settingsService) TestAI(ctx context.Context, provider, apiKey, baseURL, model, endpoint string, thinking bool, thinkingBudget int, reasoningEffort string) (string, error) {
 	// If apiKey looks like a masked key, try to get the stored key
 	if isMaskedKey(apiKey) {
 		storedKey, err := s.getString(ctx, keyAIAPIKey)
@@ -261,6 +270,7 @@ func (s *settingsService) TestAI(ctx context.Context, provider, apiKey, baseURL,
 		APIKey:          apiKey,
 		BaseURL:         baseURL,
 		Model:           model,
+		Endpoint:        endpoint,
 		Thinking:        thinking,
 		ThinkingBudget:  thinkingBudget,
 		ReasoningEffort: reasoningEffort,

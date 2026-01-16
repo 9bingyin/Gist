@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { getAISettings, updateAISettings, testAIConnection, ApiError } from '@/api'
 import { cn } from '@/lib/utils'
 import { Switch } from '@/components/ui/switch'
-import type { AIProvider, AISettings as AISettingsType, ReasoningEffort } from '@/types/settings'
+import type { AIProvider, AISettings as AISettingsType, OpenAIEndpoint, ReasoningEffort } from '@/types/settings'
 
 export function AISettings() {
   const { t } = useTranslation()
@@ -37,6 +37,14 @@ export function AISettings() {
       { value: 'low', label: t('ai_settings.effort_low_percent') },
       { value: 'minimal', label: t('ai_settings.effort_minimal_percent') },
       { value: 'none', label: t('ai_settings.effort_none') },
+    ],
+    [t]
+  )
+
+  const ENDPOINT_OPTIONS: { value: OpenAIEndpoint; label: string }[] = useMemo(
+    () => [
+      { value: 'responses', label: t('ai_settings.endpoint_responses') },
+      { value: 'chat/completions', label: t('ai_settings.endpoint_chat') },
     ],
     [t]
   )
@@ -86,7 +94,12 @@ export function AISettings() {
 
   const handleChange = (field: keyof AISettingsType, value: string | boolean | number) => {
     if (!settings) return
-    setSettings({ ...settings, [field]: value })
+    // Reset endpoint to default when switching away from OpenAI
+    if (field === 'provider' && value !== 'openai') {
+      setSettings({ ...settings, provider: value as AIProvider, endpoint: 'responses' })
+    } else {
+      setSettings({ ...settings, [field]: value } as AISettingsType)
+    }
     setSuccessMessage(null)
     setTestResult(null)
   }
@@ -108,6 +121,7 @@ export function AISettings() {
         apiKey: settings.apiKey,
         baseUrl: settings.baseUrl,
         model: settings.model,
+        endpoint: settings.endpoint,
         thinking: settings.thinking,
         thinkingBudget: settings.thinkingBudget,
         reasoningEffort: settings.reasoningEffort,
@@ -230,6 +244,22 @@ export function AISettings() {
           className={cn(inputClass, 'shrink-0')}
         />
       </div>
+
+      {/* OpenAI Endpoint */}
+      {settings.provider === 'openai' && (
+        <div className="flex flex-wrap items-center justify-between gap-2 py-2">
+          <span className="text-sm font-medium">{t('ai_settings.endpoint_label')}</span>
+          <select
+            value={settings.endpoint}
+            onChange={(e) => handleChange('endpoint', e.target.value as OpenAIEndpoint)}
+            className={cn(selectClass, 'shrink-0')}
+          >
+            {ENDPOINT_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {/* Reasoning Section */}
       <div className="pb-1 pt-4 text-xs font-medium uppercase tracking-wider text-muted-foreground">

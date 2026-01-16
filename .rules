@@ -153,6 +153,7 @@
 - `ai.api_key` - API 密钥
 - `ai.base_url` - 自定义 Base URL
 - `ai.model` - 模型名称
+- `ai.openai_endpoint` - OpenAI API 端点 (responses/chat/completions，默认 responses，仅 OpenAI 生效)
 - `ai.thinking` - 启用思考/推理 (true/false)
 - `ai.thinking_budget` - 思考 token 预算 (Anthropic/Compatible)
 - `ai.reasoning_effort` - 推理强度 (OpenAI/Compatible: none/minimal/low/medium/high/xhigh)

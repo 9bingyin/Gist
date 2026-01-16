@@ -2023,6 +2023,13 @@ const docTemplate = `{
                 "baseUrl": {
                     "type": "string"
                 },
+                "endpoint": {
+                    "type": "string",
+                    "enum": [
+                        "responses",
+                        "chat/completions"
+                    ]
+                },
                 "model": {
                     "type": "string"
                 },
@@ -2061,6 +2068,13 @@ const docTemplate = `{
                 "baseUrl": {
                     "type": "string"
                 },
+                "endpoint": {
+                    "type": "string",
+                    "enum": [
+                        "responses",
+                        "chat/completions"
+                    ]
+                },
                 "model": {
                     "type": "string"
                 },
@@ -2092,6 +2106,13 @@ const docTemplate = `{
                 },
                 "baseUrl": {
                     "type": "string"
+                },
+                "endpoint": {
+                    "type": "string",
+                    "enum": [
+                        "responses",
+                        "chat/completions"
+                    ]
                 },
                 "model": {
                     "type": "string"

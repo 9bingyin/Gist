@@ -52,6 +52,11 @@ definitions:
         type: boolean
       baseUrl:
         type: string
+      endpoint:
+        enum:
+        - responses
+        - chat/completions
+        type: string
       model:
         type: string
       provider:
@@ -77,6 +82,11 @@ definitions:
         type: boolean
       baseUrl:
         type: string
+      endpoint:
+        enum:
+        - responses
+        - chat/completions
+        type: string
       model:
         type: string
       provider:
@@ -97,6 +107,11 @@ definitions:
       apiKey:
         type: string
       baseUrl:
+        type: string
+      endpoint:
+        enum:
+        - responses
+        - chat/completions
         type: string
       model:
         type: string

@@ -25,6 +25,7 @@ type Config struct {
 	APIKey          string
 	BaseURL         string // optional for openai, required for compatible
 	Model           string
+	Endpoint        string // OpenAI only: responses or chat/completions
 	Thinking        bool   // enable thinking/reasoning
 	ThinkingBudget  int    // Anthropic/Compatible budget_tokens
 	ReasoningEffort string // OpenAI/Compatible effort: low/medium/high/xhigh/minimal/none
@@ -55,7 +56,7 @@ func NewProvider(cfg Config) (Provider, error) {
 
 	switch cfg.Provider {
 	case ProviderOpenAI:
-		return NewOpenAIProvider(cfg.APIKey, cfg.BaseURL, cfg.Model, cfg.Thinking, cfg.ReasoningEffort)
+		return NewOpenAIProvider(cfg.APIKey, cfg.BaseURL, cfg.Model, cfg.Endpoint, cfg.Thinking, cfg.ReasoningEffort)
 	case ProviderAnthropic:
 		return NewAnthropicProvider(cfg.APIKey, cfg.BaseURL, cfg.Model, cfg.Thinking, cfg.ThinkingBudget)
 	case ProviderCompatible:

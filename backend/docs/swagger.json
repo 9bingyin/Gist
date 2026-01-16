@@ -2016,6 +2016,13 @@
                 "baseUrl": {
                     "type": "string"
                 },
+                "endpoint": {
+                    "type": "string",
+                    "enum": [
+                        "responses",
+                        "chat/completions"
+                    ]
+                },
                 "model": {
                     "type": "string"
                 },
@@ -2054,6 +2061,13 @@
                 "baseUrl": {
                     "type": "string"
                 },
+                "endpoint": {
+                    "type": "string",
+                    "enum": [
+                        "responses",
+                        "chat/completions"
+                    ]
+                },
                 "model": {
                     "type": "string"
                 },
@@ -2085,6 +2099,13 @@
                 },
                 "baseUrl": {
                     "type": "string"
+                },
+                "endpoint": {
+                    "type": "string",
+                    "enum": [
+                        "responses",
+                        "chat/completions"
+                    ]
                 },
                 "model": {
                     "type": "string"
