@@ -1,10 +1,15 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"image"
+	_ "image/gif"
+	_ "image/jpeg"
+	_ "image/png"
 	"io"
 	"net/http"
 	"net/url"
@@ -31,7 +36,7 @@ const (
 
 type IconService interface {
 	// FetchAndSaveIcon downloads and saves the icon locally
-	// Returns relative path like "example.com.png" based on domain
+	// Returns relative path like "example.com.ico" or "example.com.png" based on domain and detected format
 	FetchAndSaveIcon(ctx context.Context, feedImageURL, siteURL string) (string, error)
 	// EnsureIcon checks if the icon file exists, re-downloads if missing
 	EnsureIcon(ctx context.Context, iconPath, siteURL string) error
@@ -61,28 +66,100 @@ func NewIconService(dataDir string, feeds repository.FeedRepository, clientFacto
 	}
 }
 
+// supportedIconExts lists all supported icon extensions
+var supportedIconExts = []string{".png", ".ico", ".svg", ".jpg", ".jpeg", ".gif"}
+
+// findExistingIcon checks if an icon already exists for the given base name (without extension)
+// Returns the full filename if found, empty string otherwise
+func (s *iconService) findExistingIcon(baseName string) string {
+	for _, ext := range supportedIconExts {
+		filename := baseName + ext
+		fullPath := filepath.Join(s.dataDir, "icons", filename)
+		if _, err := os.Stat(fullPath); err == nil {
+			return filename
+		}
+	}
+	return ""
+}
+
 func (s *iconService) FetchAndSaveIcon(ctx context.Context, feedImageURL, siteURL string) (string, error) {
 	feedImageURL = strings.TrimSpace(feedImageURL)
 
-	// Determine icon filename:
-	// - If feed has its own image (e.g., user avatar), use URL hash for unique filename
-	// - Otherwise, use domain-based filename (shared favicon)
-	var iconPath string
-	var iconURL string
+	// Check if icon already exists before downloading
+	// For RSS image: check hash-based filename
+	// For favicon: check domain-based filename
+	if feedImageURL != "" {
+		hash := sha256.Sum256([]byte(feedImageURL))
+		baseName := hex.EncodeToString(hash[:8])
+		if existing := s.findExistingIcon(baseName); existing != "" {
+			return existing, nil
+		}
+	} else if siteURL != "" {
+		if parsed, err := url.Parse(siteURL); err == nil && parsed.Hostname() != "" {
+			baseName := filepath.Clean(parsed.Hostname())
+			if existing := s.findExistingIcon(baseName); existing != "" {
+				return existing, nil
+			}
+		}
+	}
+
+	// Build list of URLs to try (in order):
+	// 1. RSS feed image (if provided)
+	// 2. Local /favicon.ico
+	// 3. Google Favicon API
+	var urlsToTry []string
+	var isRSSImage bool
 
 	if feedImageURL != "" {
-		// Feed has its own image, use hash-based filename
-		hash := sha256.Sum256([]byte(feedImageURL))
-		iconPath = hex.EncodeToString(hash[:8]) + ".png" // Use first 8 bytes (16 chars)
-		iconURL = feedImageURL
-	} else {
-		// Use domain-based filename for shared favicon
-		iconPath = iconFilename(siteURL)
-		if iconPath == "" {
-			return "", nil
+		urlsToTry = append(urlsToTry, feedImageURL)
+		isRSSImage = true
+	}
+
+	// Add local favicon.ico
+	if localURL := s.buildLocalFaviconURL(siteURL); localURL != "" {
+		urlsToTry = append(urlsToTry, localURL)
+	}
+
+	// Add Google Favicon API as final fallback
+	if googleURL := s.buildFaviconURL(siteURL); googleURL != "" {
+		urlsToTry = append(urlsToTry, googleURL)
+	}
+
+	if len(urlsToTry) == 0 {
+		return "", nil
+	}
+
+	// Try each URL until one succeeds
+	var result *iconDownloadResult
+	var successURL string
+	var lastErr error
+
+	for _, iconURL := range urlsToTry {
+		result, lastErr = s.downloadIconWithFormat(ctx, iconURL)
+		if lastErr == nil {
+			successURL = iconURL
+			break
 		}
-		iconURL = s.buildFaviconURL(siteURL)
-		if iconURL == "" {
+		logger.Debug("icon download failed, trying next", "url", iconURL, "error", lastErr)
+	}
+
+	if result == nil {
+		logger.Debug("all icon download attempts failed", "lastError", lastErr)
+		return "", nil // All attempts failed, icon is optional
+	}
+
+	// Determine filename based on source:
+	// - RSS image: use URL hash + detected extension
+	// - Favicon: use domain + detected extension
+	var iconPath string
+	if isRSSImage && successURL == feedImageURL {
+		// RSS image: hash-based filename
+		hash := sha256.Sum256([]byte(feedImageURL))
+		iconPath = hex.EncodeToString(hash[:8]) + "." + result.format.ext
+	} else {
+		// Favicon: domain-based filename
+		iconPath = iconFilename(siteURL, result.format.ext)
+		if iconPath == "" {
 			return "", nil
 		}
 	}
@@ -94,42 +171,16 @@ func (s *iconService) FetchAndSaveIcon(ctx context.Context, feedImageURL, siteUR
 		return iconPath, nil
 	}
 
-	// Download icon with fallback:
-	// 1. Feed's own image URL (if provided)
-	// 2. Google Favicon API (which already tries /favicon.ico internally)
-	iconData, err := s.downloadIcon(ctx, iconURL)
-	if err != nil {
-		logger.Debug("icon download failed, trying fallback", "url", iconURL, "error", err)
-		// Try Google Favicon API as fallback
-		googleURL := s.buildFaviconURL(siteURL)
-		if googleURL != "" && googleURL != iconURL {
-			iconData, err = s.downloadIcon(ctx, googleURL)
-			if err == nil {
-				// Switch to domain-based filename since we're using favicon
-				iconPath = iconFilename(siteURL)
-				if iconPath == "" {
-					return "", nil
-				}
-				fullPath = filepath.Join(s.dataDir, "icons", iconPath)
-			} else {
-				logger.Debug("icon fallback also failed", "url", googleURL, "error", err)
-				return "", nil // All attempts failed, icon is optional
-			}
-		} else {
-			return "", nil // No valid Google Favicon URL available
-		}
-	}
-
 	// Save to file
 	if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
 		return "", fmt.Errorf("create icons dir: %w", err)
 	}
 
-	if err := os.WriteFile(fullPath, iconData, 0644); err != nil {
+	if err := os.WriteFile(fullPath, result.data, 0644); err != nil {
 		return "", fmt.Errorf("write icon file: %w", err)
 	}
 
-	logger.Info("icon saved", "path", iconPath, "site", siteURL)
+	logger.Info("icon saved", "path", iconPath, "site", siteURL, "format", result.format.ext)
 	return iconPath, nil
 }
 
@@ -152,21 +203,36 @@ func (s *iconService) EnsureIcon(ctx context.Context, iconPath, siteURL string) 
 		return nil // File exists
 	}
 
-	// Check if this is a hash-based filename (16 hex chars + .png)
+	// Check if this is a hash-based filename (16 hex chars + image extension)
 	// Hash-based icons (e.g., user avatars) cannot be recovered without the original URL
 	if isHashFilename(iconPath) {
 		return nil // Cannot recover, skip
 	}
 
-	// File missing, re-download using Google Favicon API
-	iconURL := s.buildFaviconURL(siteURL)
-	if iconURL == "" {
-		return nil
+	// File missing, try to re-download:
+	// 1. Local /favicon.ico
+	// 2. Google Favicon API
+	var iconData []byte
+	var err error
+
+	// Try local favicon.ico first
+	if localURL := s.buildLocalFaviconURL(siteURL); localURL != "" {
+		iconData, err = s.downloadIcon(ctx, localURL)
+		if err != nil {
+			logger.Debug("local favicon.ico download failed, trying Google API", "url", localURL, "error", err)
+		}
 	}
 
-	iconData, err := s.downloadIcon(ctx, iconURL)
-	if err != nil {
-		return nil // Silently fail
+	// Fallback to Google Favicon API
+	if iconData == nil {
+		googleURL := s.buildFaviconURL(siteURL)
+		if googleURL == "" {
+			return nil
+		}
+		iconData, err = s.downloadIcon(ctx, googleURL)
+		if err != nil {
+			return nil // Silently fail
+		}
 	}
 
 	if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
@@ -180,15 +246,26 @@ func (s *iconService) EnsureIcon(ctx context.Context, iconPath, siteURL string) 
 	return nil
 }
 
-// isHashFilename checks if the filename is a hash-based name (16 hex chars + .png)
+// isHashFilename checks if the filename is a hash-based name (16 hex chars + image extension)
 func isHashFilename(filename string) bool {
-	if !strings.HasSuffix(filename, ".png") {
+	var name string
+	hasValidExt := false
+	for _, ext := range supportedIconExts {
+		if strings.HasSuffix(filename, ext) {
+			name = strings.TrimSuffix(filename, ext)
+			hasValidExt = true
+			break
+		}
+	}
+
+	if !hasValidExt {
 		return false
 	}
-	name := strings.TrimSuffix(filename, ".png")
+
 	if len(name) != 16 {
 		return false
 	}
+
 	for _, c := range name {
 		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
 			return false
@@ -360,8 +437,33 @@ func (s *iconService) buildFaviconURL(siteURL string) string {
 	return fmt.Sprintf("https://www.google.com/s2/favicons?domain=%s&sz=128", url.QueryEscape(domain))
 }
 
-// iconFilename generates a filename based on the domain
-func iconFilename(siteURL string) string {
+// buildLocalFaviconURL constructs the URL for the site's /favicon.ico
+func (s *iconService) buildLocalFaviconURL(siteURL string) string {
+	if siteURL == "" {
+		return ""
+	}
+
+	parsed, err := url.Parse(siteURL)
+	if err != nil {
+		return ""
+	}
+
+	if parsed.Hostname() == "" {
+		return ""
+	}
+
+	// Construct https://{host}/favicon.ico
+	scheme := parsed.Scheme
+	if scheme == "" {
+		scheme = "https"
+	}
+
+	return fmt.Sprintf("%s://%s/favicon.ico", scheme, parsed.Host)
+}
+
+// iconFilename generates a filename based on the domain and extension
+// ext should include the dot, e.g., ".png", ".ico", ".svg"
+func iconFilename(siteURL, ext string) string {
 	if siteURL == "" {
 		return ""
 	}
@@ -371,15 +473,40 @@ func iconFilename(siteURL string) string {
 		return ""
 	}
 
+	// Default to .png if no extension provided
+	if ext == "" {
+		ext = ".png"
+	}
+
+	// Ensure extension starts with dot
+	if !strings.HasPrefix(ext, ".") {
+		ext = "." + ext
+	}
+
 	// Clean to prevent path traversal
-	return filepath.Clean(parsed.Hostname()) + ".png"
+	return filepath.Clean(parsed.Hostname()) + ext
+}
+
+// iconDownloadResult holds the downloaded icon data and format info
+type iconDownloadResult struct {
+	data   []byte
+	format *iconFormat
 }
 
 func (s *iconService) downloadIcon(ctx context.Context, iconURL string) ([]byte, error) {
+	result, err := s.downloadIconWithFormat(ctx, iconURL)
+	if err != nil {
+		return nil, err
+	}
+	return result.data, nil
+}
+
+// downloadIconWithFormat downloads icon and detects its format
+func (s *iconService) downloadIconWithFormat(ctx context.Context, iconURL string) (*iconDownloadResult, error) {
 	return s.downloadIconWithRetry(ctx, iconURL, "", 0)
 }
 
-func (s *iconService) downloadIconWithRetry(ctx context.Context, iconURL string, cookie string, retryCount int) ([]byte, error) {
+func (s *iconService) downloadIconWithRetry(ctx context.Context, iconURL string, cookie string, retryCount int) (*iconDownloadResult, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, iconURL, nil)
 	if err != nil {
 		return nil, err
@@ -433,16 +560,20 @@ func (s *iconService) downloadIconWithRetry(ctx context.Context, iconURL string,
 		return s.downloadIconWithFreshClient(ctx, iconURL, newCookie, retryCount+1)
 	}
 
-	// Check minimum size (avoid empty/broken images)
-	if len(data) < 100 {
-		return nil, fmt.Errorf("icon too small")
+	// Detect format and validate dimensions (besticon approach)
+	format, err := detectImageFormat(data)
+	if err != nil {
+		return nil, fmt.Errorf("invalid icon format: %w", err)
 	}
 
-	return data, nil
+	return &iconDownloadResult{
+		data:   data,
+		format: format,
+	}, nil
 }
 
 // downloadIconWithFreshClient creates a new http.Client to avoid connection reuse after Anubis
-func (s *iconService) downloadIconWithFreshClient(ctx context.Context, iconURL string, cookie string, retryCount int) ([]byte, error) {
+func (s *iconService) downloadIconWithFreshClient(ctx context.Context, iconURL string, cookie string, retryCount int) (*iconDownloadResult, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, iconURL, nil)
 	if err != nil {
 		return nil, err
@@ -477,12 +608,16 @@ func (s *iconService) downloadIconWithFreshClient(ctx context.Context, iconURL s
 		return nil, fmt.Errorf("anubis challenge persists after %d retries", retryCount)
 	}
 
-	// Check minimum size
-	if len(data) < 100 {
-		return nil, fmt.Errorf("icon too small")
+	// Detect format and validate dimensions (besticon approach)
+	format, err := detectImageFormat(data)
+	if err != nil {
+		return nil, fmt.Errorf("invalid icon format: %w", err)
 	}
 
-	return data, nil
+	return &iconDownloadResult{
+		data:   data,
+		format: format,
+	}, nil
 }
 
 func (s *iconService) ClearAllIcons(ctx context.Context) (int64, error) {
@@ -511,4 +646,99 @@ func (s *iconService) ClearAllIcons(ctx context.Context) (int64, error) {
 	}
 
 	return deletedFiles, nil
+}
+
+// isSVG detects if the data is an SVG image (similar to besticon's approach)
+func isSVG(data []byte) bool {
+	// Check minimum length
+	if len(data) < 10 {
+		return false
+	}
+
+	// Check if it starts with something reasonable
+	switch {
+	case bytes.HasPrefix(data, []byte("<!")):
+	case bytes.HasPrefix(data, []byte("<?")):
+	case bytes.HasPrefix(data, []byte("<svg")):
+	default:
+		return false
+	}
+
+	// Check if there's an <svg tag in the first 300 bytes
+	searchLen := len(data)
+	if searchLen > 300 {
+		searchLen = 300
+	}
+	if off := bytes.Index(data[:searchLen], []byte("<svg")); off == -1 {
+		return false
+	}
+
+	return true
+}
+
+// isICO detects if the data is an ICO image
+// ICO format: first 4 bytes are 0x00 0x00 0x01 0x00 (or 0x02 0x00 for CUR)
+func isICO(data []byte) bool {
+	if len(data) < 6 {
+		return false
+	}
+	// Check ICO magic number: 0x00 0x00 0x01 0x00
+	// CUR files use 0x00 0x00 0x02 0x00, we accept both
+	if data[0] == 0x00 && data[1] == 0x00 && (data[2] == 0x01 || data[2] == 0x02) && data[3] == 0x00 {
+		// Additional check: bytes 4-5 contain the number of images (should be > 0)
+		numImages := int(data[4]) | int(data[5])<<8
+		return numImages > 0
+	}
+	return false
+}
+
+// iconFormat holds detected format information
+type iconFormat struct {
+	ext    string // e.g., "png", "ico", "svg", "jpg", "gif"
+	width  int
+	height int
+}
+
+// detectImageFormat detects the format and dimensions of image data
+// Returns format info or error if format is unrecognized or dimensions are invalid
+func detectImageFormat(data []byte) (*iconFormat, error) {
+	// Special handling for SVG (golang can't decode with image.DecodeConfig)
+	if isSVG(data) {
+		return &iconFormat{
+			ext:    "svg",
+			width:  9999, // SVG is vector, use large value like besticon
+			height: 9999,
+		}, nil
+	}
+
+	// Special handling for ICO (golang standard library doesn't support ICO)
+	if isICO(data) {
+		return &iconFormat{
+			ext:    "ico",
+			width:  32, // Default size, actual size varies
+			height: 32,
+		}, nil
+	}
+
+	// Try to decode as raster image
+	cfg, format, err := image.DecodeConfig(bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("unknown image format: %w", err)
+	}
+
+	// Normalize format name (jpeg -> jpg)
+	if format == "jpeg" {
+		format = "jpg"
+	}
+
+	// Filter out invalid dimensions (like 1x1 tracking pixels)
+	if cfg.Width <= 1 || cfg.Height <= 1 {
+		return nil, fmt.Errorf("icon dimensions too small: %dx%d", cfg.Width, cfg.Height)
+	}
+
+	return &iconFormat{
+		ext:    format,
+		width:  cfg.Width,
+		height: cfg.Height,
+	}, nil
 }
