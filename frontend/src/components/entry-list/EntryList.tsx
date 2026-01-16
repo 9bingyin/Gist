@@ -242,29 +242,28 @@ export function EntryList({
               className="relative w-full"
               style={{ height: virtualizer.getTotalSize() }}
             >
-              {virtualItems.map((virtualRow) => {
-                const entry = entries[virtualRow.index]
-                return (
-                  <EntryListItem
-                    key={entry.id}
-                    ref={virtualizer.measureElement}
-                    data-index={virtualRow.index}
-                    entry={entry}
-                    feed={feedsMap.get(entry.feedId)}
-                    isSelected={entry.id === selectedEntryId}
-                    onClick={() => onSelectEntry(entry.id)}
-                    autoTranslate={autoTranslate}
-                    targetLanguage={targetLanguage}
-                    style={{
-                      position: 'absolute',
-                      top: 0,
-                      left: 0,
-                      width: '100%',
-                      transform: `translateY(${virtualRow.start}px)`,
-                    }}
-                  />
-                )
-              })}
+              <div
+                style={{
+                  transform: `translateY(${virtualItems[0]?.start ?? 0}px)`,
+                }}
+              >
+                {virtualItems.map((virtualRow) => {
+                  const entry = entries[virtualRow.index]
+                  return (
+                    <EntryListItem
+                      key={entry.id}
+                      ref={virtualizer.measureElement}
+                      data-index={virtualRow.index}
+                      entry={entry}
+                      feed={feedsMap.get(entry.feedId)}
+                      isSelected={entry.id === selectedEntryId}
+                      onClick={() => onSelectEntry(entry.id)}
+                      autoTranslate={autoTranslate}
+                      targetLanguage={targetLanguage}
+                    />
+                  )
+                })}
+              </div>
             </div>
           )}
 
