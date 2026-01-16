@@ -233,6 +233,20 @@ func (mr *MockFeedRepositoryMockRecorder) UpdateIconPath(ctx, id, iconPath any) 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateIconPath", reflect.TypeOf((*MockFeedRepository)(nil).UpdateIconPath), ctx, id, iconPath)
 }
 
+// UpdateSiteURL mocks base method.
+func (m *MockFeedRepository) UpdateSiteURL(ctx context.Context, id int64, siteURL string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateSiteURL", ctx, id, siteURL)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateSiteURL indicates an expected call of UpdateSiteURL.
+func (mr *MockFeedRepositoryMockRecorder) UpdateSiteURL(ctx, id, siteURL any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateSiteURL", reflect.TypeOf((*MockFeedRepository)(nil).UpdateSiteURL), ctx, id, siteURL)
+}
+
 // UpdateType mocks base method.
 func (m *MockFeedRepository) UpdateType(ctx context.Context, id int64, feedType string) error {
 	m.ctrl.T.Helper()

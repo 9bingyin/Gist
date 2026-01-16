@@ -132,6 +132,15 @@ func (s *refreshService) processParsedFeed(ctx context.Context, feed model.Feed,
 		logger.Info("feed refreshed", "feedID", feed.ID, "title", feed.Title, "new", newCount, "updated", updatedCount)
 	}
 
+	// Backfill siteURL if empty (for feeds added before siteURL was implemented)
+	if (feed.SiteURL == nil || *feed.SiteURL == "") && parsed.Link != "" {
+		newSiteURL := strings.TrimSpace(parsed.Link)
+		if newSiteURL != "" {
+			_ = s.feeds.UpdateSiteURL(ctx, feed.ID, newSiteURL)
+			feed.SiteURL = &newSiteURL
+		}
+	}
+
 	// Fetch icon if feed doesn't have one
 	if s.icons != nil && (feed.IconPath == nil || *feed.IconPath == "") {
 		imageURL := ""

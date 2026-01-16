@@ -107,6 +107,7 @@ func (s *iconService) FetchAndSaveIcon(ctx context.Context, feedImageURL, siteUR
 	// 1. RSS feed image (if provided)
 	// 2. Local /favicon.ico
 	// 3. Google Favicon API
+	// 4. DuckDuckGo Favicon API
 	var urlsToTry []string
 	var isRSSImage bool
 
@@ -120,9 +121,14 @@ func (s *iconService) FetchAndSaveIcon(ctx context.Context, feedImageURL, siteUR
 		urlsToTry = append(urlsToTry, localURL)
 	}
 
-	// Add Google Favicon API as final fallback
+	// Add Google Favicon API
 	if googleURL := s.buildFaviconURL(siteURL); googleURL != "" {
 		urlsToTry = append(urlsToTry, googleURL)
+	}
+
+	// Add DuckDuckGo Favicon API as final fallback
+	if ddgURL := s.buildDDGFaviconURL(siteURL); ddgURL != "" {
+		urlsToTry = append(urlsToTry, ddgURL)
 	}
 
 	if len(urlsToTry) == 0 {
@@ -459,6 +465,25 @@ func (s *iconService) buildLocalFaviconURL(siteURL string) string {
 	}
 
 	return fmt.Sprintf("%s://%s/favicon.ico", scheme, parsed.Host)
+}
+
+// buildDDGFaviconURL constructs the DuckDuckGo favicon API URL
+func (s *iconService) buildDDGFaviconURL(siteURL string) string {
+	if siteURL == "" {
+		return ""
+	}
+
+	parsed, err := url.Parse(siteURL)
+	if err != nil {
+		return ""
+	}
+
+	domain := parsed.Hostname()
+	if domain == "" {
+		return ""
+	}
+
+	return fmt.Sprintf("https://icons.duckduckgo.com/ip3/%s.ico", domain)
 }
 
 // iconFilename generates a filename based on the domain and extension

@@ -28,6 +28,7 @@ type FeedRepository interface {
 	DeleteBatch(ctx context.Context, ids []int64) (int64, error)
 	ClearAllIconPaths(ctx context.Context) (int64, error)
 	ClearAllConditionalGet(ctx context.Context) (int64, error)
+	UpdateSiteURL(ctx context.Context, id int64, siteURL string) error
 }
 
 type feedRepository struct {
@@ -193,6 +194,17 @@ func (r *feedRepository) UpdateIconPath(ctx context.Context, id int64, iconPath 
 		ctx,
 		`UPDATE feeds SET icon_path = ?, updated_at = ? WHERE id = ?`,
 		iconPath,
+		formatTime(time.Now()),
+		id,
+	)
+	return err
+}
+
+func (r *feedRepository) UpdateSiteURL(ctx context.Context, id int64, siteURL string) error {
+	_, err := r.db.ExecContext(
+		ctx,
+		`UPDATE feeds SET site_url = ?, updated_at = ? WHERE id = ?`,
+		siteURL,
 		formatTime(time.Now()),
 		id,
 	)
