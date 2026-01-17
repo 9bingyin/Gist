@@ -13,6 +13,7 @@ interface LightboxState {
   setIndex: (index: number) => void
   next: () => void
   prev: () => void
+  updateEntryStarred: (starred: boolean) => void
 }
 
 const initialState = {
@@ -58,6 +59,13 @@ export const useLightboxStore = create<LightboxState>((set, get) => ({
     const { currentIndex } = get()
     if (currentIndex > 0) {
       set({ currentIndex: currentIndex - 1 })
+    }
+  },
+
+  updateEntryStarred: (starred) => {
+    const { entry } = get()
+    if (entry) {
+      set({ entry: { ...entry, starred } })
     }
   },
 }))

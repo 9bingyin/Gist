@@ -7,15 +7,16 @@ import { cn } from '@/lib/utils'
 import { isVideoThumbnail } from '@/lib/media-utils'
 import { formatRelativeTime } from '@/lib/date-utils'
 import { stripHtml } from '@/lib/html-utils'
-import { useMarkAsRead, useRemoveFromUnreadList } from '@/hooks/useEntries'
+import { useMarkAsRead, useMarkAsStarred, useRemoveFromUnreadList } from '@/hooks/useEntries'
 import { useLightboxStore } from '@/stores/lightbox-store'
 import { FeedIcon } from '@/components/ui/feed-icon'
 
 export function Lightbox() {
   const { t } = useTranslation()
-  const { isOpen, entry, feed, images, currentIndex, close, setIndex, next, prev } =
+  const { isOpen, entry, feed, images, currentIndex, close, setIndex, next, prev, updateEntryStarred } =
     useLightboxStore()
   const { mutate: markAsRead } = useMarkAsRead()
+  const { mutate: markAsStarred } = useMarkAsStarred()
   const removeFromUnreadList = useRemoveFromUnreadList()
 
   // Motion values for swipe to close
@@ -114,6 +115,20 @@ export function Lightbox() {
     close()
   }, [close])
 
+  const handleToggleStarred = useCallback(() => {
+    if (entry) {
+      const newStarred = !entry.starred
+      markAsStarred(
+        { id: entry.id, starred: newStarred },
+        {
+          onSuccess: () => {
+            updateEntryStarred(newStarred)
+          },
+        }
+      )
+    }
+  }, [entry, markAsStarred, updateEntryStarred])
+
   const publishedAt = entry?.publishedAt ? formatRelativeTime(entry.publishedAt, t) : null
 
   // Strip HTML for content preview
@@ -146,6 +161,33 @@ export function Lightbox() {
           >
             {/* Top right buttons */}
           <div className="absolute right-[calc(1rem+env(safe-area-inset-right,0px))] top-[calc(1rem+env(safe-area-inset-top,0px))] z-10 flex gap-2">
+            {/* Star button */}
+            <button
+              type="button"
+              className={cn(
+                'flex size-10 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20',
+                entry?.starred && 'bg-amber-500/20 text-amber-500 hover:bg-amber-500/30'
+              )}
+              onClick={(e) => {
+                e.stopPropagation()
+                handleToggleStarred()
+              }}
+              title={entry?.starred ? t('entry.remove_from_starred') : t('entry.add_to_starred')}
+            >
+              <svg
+                className="size-5"
+                viewBox="0 0 24 24"
+                fill={entry?.starred ? 'currentColor' : 'none'}
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"
+                />
+              </svg>
+            </button>
             {/* Open original page */}
             {entry?.url && (
               <a
