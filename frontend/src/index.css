@@ -135,6 +135,25 @@ body {
   padding-left: env(safe-area-inset-left);
 }
 
+.safe-area-x {
+  padding-left: max(0px, env(safe-area-inset-left, 0px));
+  padding-right: max(0px, env(safe-area-inset-right, 0px));
+}
+
+@media (min-width: 640px) {
+  .safe-area-x {
+    padding-left: max(1rem, env(safe-area-inset-left, 0px));
+    padding-right: max(1rem, env(safe-area-inset-right, 0px));
+  }
+}
+
+@media (min-width: 1024px) {
+  .safe-area-x {
+    padding-left: max(3rem, env(safe-area-inset-left, 0px));
+    padding-right: max(3rem, env(safe-area-inset-right, 0px));
+  }
+}
+
 .dropdown-content {
   --dropdown-x: 0px;
   --dropdown-y: 0px;

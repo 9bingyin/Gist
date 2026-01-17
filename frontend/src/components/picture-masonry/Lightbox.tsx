@@ -128,7 +128,7 @@ export function Lightbox() {
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.2 }}
-          className="fixed inset-0 z-50 flex flex-col bg-black/90"
+          className="fixed inset-0 z-50 flex flex-col bg-black/90 h-dvh"
           onClick={handleOverlayClick}
         >
           {/* Draggable container for content */}
@@ -142,7 +142,7 @@ export function Lightbox() {
                 close()
               }
             }}
-            className="flex flex-1 flex-col"
+            className="flex min-h-0 flex-1 flex-col"
           >
             {/* Top right buttons */}
           <div className="absolute right-[calc(1rem+env(safe-area-inset-right,0px))] top-[calc(1rem+env(safe-area-inset-top,0px))] z-10 flex gap-2">
@@ -183,15 +183,14 @@ export function Lightbox() {
           </div>
 
           {/* Image carousel */}
-          <div className="flex min-h-0 flex-1 items-center justify-center px-12">
+          <div className="flex min-h-0 flex-1 items-center justify-center safe-area-x">
             {images.length === 1 ? (
               <motion.div
                 initial={{ scale: 0.9, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.9, opacity: 0 }}
                 transition={{ duration: 0.2 }}
-                className="relative"
-                onClick={(e) => e.stopPropagation()}
+                className="relative flex size-full items-center justify-center"
               >
                 <img
                   src={images[0]}
@@ -213,20 +212,20 @@ export function Lightbox() {
             ) : (
               <div
                 ref={emblaRef}
-                className="size-full overflow-hidden"
+                className="size-full min-h-0 overflow-hidden"
+                onClick={(e) => e.stopPropagation()}
               >
-                <div className="flex size-full">
+                <div className="flex size-full min-h-0">
                   {images.map((src, index) => (
                     <div
                       key={src}
-                      className="flex min-w-0 flex-[0_0_100%] items-center justify-center px-4"
+                      className="flex min-h-0 min-w-0 flex-[0_0_100%] items-center justify-center px-0 sm:px-2 lg:px-4"
                     >
                       <img
                         src={src}
                         alt=""
                         className="max-h-full max-w-full object-contain"
                         loading={Math.abs(index - currentIndex) <= 1 ? 'eager' : 'lazy'}
-                        onClick={(e) => e.stopPropagation()}
                       />
                     </div>
                   ))}
@@ -285,7 +284,7 @@ export function Lightbox() {
 
           {/* Bottom info bar */}
           <div
-            className="shrink-0 bg-black/50 px-6 py-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))] backdrop-blur-sm"
+            className="absolute bottom-0 left-0 right-0 z-10 bg-gradient-to-t from-black/80 via-black/50 to-black/0 px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))] backdrop-blur-sm sm:bg-black/50 sm:px-6"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mx-auto max-w-3xl">
