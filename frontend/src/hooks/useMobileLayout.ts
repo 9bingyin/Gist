@@ -5,12 +5,18 @@ import { parseRoute, buildPath } from '@/lib/router'
 export type MobileView = 'list' | 'detail'
 
 const MOBILE_BREAKPOINT = 768
+const TABLET_BREAKPOINT = 1366
 
 export function useMobileLayout() {
   const [location, navigate] = useLocation()
   const search = useSearch()
   const [isMobile, setIsMobile] = useState(
     typeof window !== 'undefined' ? window.innerWidth < MOBILE_BREAKPOINT : false
+  )
+  const [isTablet, setIsTablet] = useState(
+    typeof window !== 'undefined' 
+      ? window.innerWidth >= MOBILE_BREAKPOINT && window.innerWidth < TABLET_BREAKPOINT 
+      : false
   )
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
@@ -23,7 +29,9 @@ export function useMobileLayout() {
   useEffect(() => {
     const handleResize = () => {
       const mobile = window.innerWidth < MOBILE_BREAKPOINT
+      const tablet = window.innerWidth >= MOBILE_BREAKPOINT && window.innerWidth < TABLET_BREAKPOINT
       setIsMobile(mobile)
+      setIsTablet(tablet)
       if (!mobile) {
         setSidebarOpen(false)
       }
@@ -69,6 +77,7 @@ export function useMobileLayout() {
 
   return {
     isMobile,
+    isTablet,
     mobileView,
     sidebarOpen,
     setSidebarOpen,

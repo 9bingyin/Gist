@@ -3,6 +3,7 @@ import { useCallback, useSyncExternalStore } from 'react'
 interface UISettings {
   feedColWidth: number
   entryColWidth: number
+  sidebarVisible: boolean
 }
 
 const STORAGE_KEY = 'gist-ui-settings'
@@ -10,6 +11,7 @@ const STORAGE_KEY = 'gist-ui-settings'
 export const defaultUISettings: UISettings = {
   feedColWidth: 256,
   entryColWidth: 356,
+  sidebarVisible: true,
 }
 
 function getStoredSettings(): UISettings {
@@ -36,6 +38,20 @@ function emitChange() {
 
 export function getUISettings(): UISettings {
   return cachedSettings
+}
+
+export function hasSidebarVisibilitySetting(): boolean {
+  if (typeof window === 'undefined') return false
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY)
+    if (stored) {
+      const parsed = JSON.parse(stored)
+      return 'sidebarVisible' in parsed
+    }
+  } catch {
+    // ignore parse errors
+  }
+  return false
 }
 
 export function setUISetting<K extends keyof UISettings>(
@@ -78,14 +94,26 @@ export function useUISettingActions() {
     setUISetting('entryColWidth', width)
   }, [])
 
+  const setSidebarVisible = useCallback((visible: boolean) => {
+    setUISetting('sidebarVisible', visible)
+  }, [])
+
+  const toggleSidebarVisible = useCallback(() => {
+    const current = getUISettings().sidebarVisible
+    setUISetting('sidebarVisible', !current)
+  }, [])
+
   const resetToDefaults = useCallback(() => {
     setUISetting('feedColWidth', defaultUISettings.feedColWidth)
     setUISetting('entryColWidth', defaultUISettings.entryColWidth)
+    setUISetting('sidebarVisible', defaultUISettings.sidebarVisible)
   }, [])
 
   return {
     setFeedColWidth,
     setEntryColWidth,
+    setSidebarVisible,
+    toggleSidebarVisible,
     resetToDefaults,
   }
 }

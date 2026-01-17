@@ -30,7 +30,9 @@
     "confirm": "Confirm",
     "import": "Import",
     "export": "Export",
-    "test": "Test"
+    "test": "Test",
+    "show_sidebar": "Show Sidebar",
+    "hide_sidebar": "Hide Sidebar"
   },
   "folders": {
     "delete": "Delete Folder",

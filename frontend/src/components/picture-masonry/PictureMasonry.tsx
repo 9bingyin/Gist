@@ -19,6 +19,9 @@ interface PictureMasonryProps {
   onMarkAllRead: () => void
   isMobile?: boolean
   onMenuClick?: () => void
+  isTablet?: boolean
+  onToggleSidebar?: () => void
+  sidebarVisible?: boolean
 }
 
 interface MasonryItem {
@@ -38,6 +41,9 @@ export function PictureMasonry({
   onMarkAllRead,
   isMobile,
   onMenuClick,
+  isTablet,
+  onToggleSidebar,
+  sidebarVisible,
 }: PictureMasonryProps) {
   const { t } = useTranslation()
   const params = selectionToParams(selection, contentType)
@@ -215,6 +221,9 @@ export function PictureMasonry({
         onMarkAllRead={onMarkAllRead}
         isMobile={isMobile}
         onMenuClick={onMenuClick}
+        isTablet={isTablet}
+        onToggleSidebar={onToggleSidebar}
+        sidebarVisible={sidebarVisible}
       />
 
       {/* Masonry container */}

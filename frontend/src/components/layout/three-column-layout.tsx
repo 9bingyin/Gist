@@ -127,6 +127,7 @@ interface ThreeColumnLayoutProps {
   content?: ReactNode
   className?: string
   hideList?: boolean
+  showSidebar?: boolean
 }
 
 export function ThreeColumnLayout({
@@ -135,6 +136,7 @@ export function ThreeColumnLayout({
   content,
   className,
   hideList = false,
+  showSidebar = true,
 }: ThreeColumnLayoutProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [windowWidth, setWindowWidth] = useState(
@@ -148,8 +150,10 @@ export function ThreeColumnLayout({
   const entryColMax = useMemo(() => {
     // (windowWidth - feedColWidth - splitters) / 2
     // This ensures content area always has at least half the remaining space
-    return Math.max(ENTRY_COL_MIN, Math.floor((windowWidth - storedFeedColWidth - 12) / 2))
-  }, [windowWidth, storedFeedColWidth])
+    // When sidebar is hidden, don't subtract its width
+    const sidebarWidth = showSidebar ? storedFeedColWidth : 0
+    return Math.max(ENTRY_COL_MIN, Math.floor((windowWidth - sidebarWidth - 12) / 2))
+  }, [windowWidth, storedFeedColWidth, showSidebar])
 
   // Track window resize
   useEffect(() => {
@@ -208,24 +212,48 @@ export function ThreeColumnLayout({
         '--feed-col-width': `${feedColResizable.position}px`,
       } as React.CSSProperties}
     >
-      {/* Sidebar - left column (Feed list) */}
+      {/* Sidebar - left column (Feed list) - always rendered but animated in/out */}
       <aside
         className={cn(
           'flex h-full shrink-0 flex-col overflow-hidden bg-sidebar safe-area-top safe-area-left',
-          !feedColResizable.isDragging && 'transition-[width] duration-200'
+          // Transition only when not dragging
+          !feedColResizable.isDragging && 'motion-reduce:transition-none',
+          !feedColResizable.isDragging && showSidebar && 'transition-[width,opacity,transform]',
+          !feedColResizable.isDragging && !showSidebar && 'transition-[width,opacity,transform]',
+          // Show/hide animation states
+          showSidebar ? 'opacity-100 translate-x-0' : 'w-0 opacity-0 -translate-x-2 pointer-events-none overflow-hidden'
         )}
-        style={{ width: `calc(${feedColResizable.position}px + env(safe-area-inset-left, 0px))` }}
+        style={{
+          width: showSidebar ? `calc(${feedColResizable.position}px + env(safe-area-inset-left, 0px))` : '0',
+          transitionDuration: showSidebar ? 'var(--duration-sidebar-expand)' : 'var(--duration-sidebar-collapse)',
+          transitionTimingFunction: 'var(--ease-ios)',
+        }}
       >
         {sidebar}
       </aside>
 
-      {/* First splitter */}
-      <PanelSplitter
-        isDragging={feedColResizable.isDragging}
-        onPointerDown={feedColResizable.separatorProps.onPointerDown}
-        onTouchStart={feedColResizable.separatorProps.onTouchStart}
-        onDoubleClick={handleFeedColDoubleClick}
-      />
+      {/* First splitter - also animated */}
+      <div
+        className={cn(
+          'relative h-full shrink-0 z-30',
+          !feedColResizable.isDragging && 'motion-reduce:transition-none',
+          !feedColResizable.isDragging && 'transition-[width,opacity]',
+          showSidebar ? 'w-0 opacity-100' : 'w-0 opacity-0 pointer-events-none'
+        )}
+        style={{
+          transitionDuration: showSidebar ? 'var(--duration-sidebar-expand)' : 'var(--duration-sidebar-collapse)',
+          transitionTimingFunction: 'var(--ease-ios)',
+        }}
+      >
+        {showSidebar && (
+          <PanelSplitter
+            isDragging={feedColResizable.isDragging}
+            onPointerDown={feedColResizable.separatorProps.onPointerDown}
+            onTouchStart={feedColResizable.separatorProps.onTouchStart}
+            onDoubleClick={handleFeedColDoubleClick}
+          />
+        )}
+      </div>
 
       {/* List - middle column (Entry list) - hidden when hideList is true */}
       {!hideList && (

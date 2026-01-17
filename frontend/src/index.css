@@ -59,6 +59,11 @@
   --sidebar-foreground: 240 5.9% 10%;
   --item-active: color-mix(in oklch, hsl(var(--foreground)) 12%, transparent);
   --item-hover: color-mix(in oklch, hsl(var(--foreground)) 8%, transparent);
+  
+  /* iOS-style easing curves */
+  --ease-ios: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --duration-sidebar-expand: 260ms;
+  --duration-sidebar-collapse: 220ms;
 }
 
 .dark {

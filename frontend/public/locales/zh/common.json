@@ -30,7 +30,9 @@
     "confirm": "确认",
     "import": "导入",
     "export": "导出",
-    "test": "测试"
+    "test": "测试",
+    "show_sidebar": "显示侧边栏",
+    "hide_sidebar": "隐藏侧边栏"
   },
   "folders": {
     "delete": "删除文件夹",

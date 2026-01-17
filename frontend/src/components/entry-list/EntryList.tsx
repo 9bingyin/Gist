@@ -26,6 +26,9 @@ interface EntryListProps {
   contentType: ContentType
   isMobile?: boolean
   onMenuClick?: () => void
+  isTablet?: boolean
+  onToggleSidebar?: () => void
+  sidebarVisible?: boolean
 }
 
 const ESTIMATED_ITEM_HEIGHT = 100
@@ -40,6 +43,9 @@ export function EntryList({
   contentType,
   isMobile,
   onMenuClick,
+  isTablet,
+  onToggleSidebar,
+  sidebarVisible,
 }: EntryListProps) {
   const { t } = useTranslation()
   const params = selectionToParams(selection, contentType)
@@ -229,6 +235,9 @@ export function EntryList({
         onMarkAllRead={onMarkAllRead}
         isMobile={isMobile}
         onMenuClick={onMenuClick}
+        isTablet={isTablet}
+        onToggleSidebar={onToggleSidebar}
+        sidebarVisible={sidebarVisible}
       />
 
       <ScrollAreaPrimitive.Root className="relative min-h-0 flex-1 overflow-hidden">

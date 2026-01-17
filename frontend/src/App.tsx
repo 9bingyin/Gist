@@ -1,4 +1,4 @@
-import { useCallback, useState, useMemo } from 'react'
+import { useCallback, useState, useMemo, useEffect } from 'react'
 import { Router, useLocation, Redirect } from 'wouter'
 import { useTranslation } from 'react-i18next'
 import { ThreeColumnLayout } from '@/components/layout/three-column-layout'
@@ -17,6 +17,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { useFeeds } from '@/hooks/useFeeds'
 import { useFolders } from '@/hooks/useFolders'
 import { useTitle, buildTitle } from '@/hooks/useTitle'
+import { useUISettingKey, useUISettingActions, hasSidebarVisibilitySetting, setUISetting } from '@/hooks/useUISettings'
 import { isAddFeedPath } from '@/lib/router'
 import { cn } from '@/lib/utils'
 import type { ContentType, Feed, Folder } from '@/types/api'
@@ -37,6 +38,7 @@ function AuthenticatedApp() {
   const [location, navigate] = useLocation()
   const {
     isMobile,
+    isTablet,
     mobileView,
     sidebarOpen,
     setSidebarOpen,
@@ -60,6 +62,28 @@ function AuthenticatedApp() {
 
   const { mutate: markAllAsRead } = useMarkAllAsRead()
   const [addFeedContentType, setAddFeedContentType] = useState<ContentType>('article')
+
+  // Sidebar visibility for tablet/desktop
+  const sidebarVisible = useUISettingKey('sidebarVisible')
+  const { toggleSidebarVisible } = useUISettingActions()
+
+  // Initialize sidebar visibility for tablet on first visit
+  useEffect(() => {
+    // Only run on tablet, and only if sidebarVisible has never been set
+    if (isTablet && !hasSidebarVisibilitySetting()) {
+      setUISetting('sidebarVisible', false)
+    }
+  }, [isTablet])
+
+  // Calculate whether to show sidebar based on breakpoint
+  // Desktop (>= 1366): always show
+  // Tablet (768-1366): user preference (default false on first visit)
+  // Mobile (< 768): use Sheet overlay
+  const showSidebar = useMemo(() => {
+    if (isMobile) return false // Mobile uses Sheet
+    if (isTablet) return sidebarVisible // Tablet respects user preference
+    return true // Desktop always shows sidebar
+  }, [isMobile, isTablet, sidebarVisible])
 
   // Dynamic title management
   const { t } = useTranslation()
@@ -231,6 +255,7 @@ function AuthenticatedApp() {
         list={null}
         content={<AddFeedPage onClose={handleCloseAddFeed} contentType={addFeedContentType} />}
         hideList
+        showSidebar={showSidebar}
       />
     )
   }
@@ -249,9 +274,13 @@ function AuthenticatedApp() {
               unreadOnly={unreadOnly}
               onToggleUnreadOnly={toggleUnreadOnly}
               onMarkAllRead={handleMarkAllRead}
+              isTablet={isTablet}
+              onToggleSidebar={toggleSidebarVisible}
+              sidebarVisible={sidebarVisible}
             />
           }
           hideList
+          showSidebar={showSidebar}
         />
         <Lightbox />
       </>
@@ -270,9 +299,13 @@ function AuthenticatedApp() {
           unreadOnly={unreadOnly}
           onToggleUnreadOnly={toggleUnreadOnly}
           contentType={contentType}
+          isTablet={isTablet}
+          onToggleSidebar={toggleSidebarVisible}
+          sidebarVisible={sidebarVisible}
         />
       }
       content={<EntryContent key={selectedEntryId} entryId={selectedEntryId} />}
+      showSidebar={showSidebar}
     />
   )
 }

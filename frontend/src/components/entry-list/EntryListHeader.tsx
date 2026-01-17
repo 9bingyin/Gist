@@ -14,6 +14,9 @@ interface EntryListHeaderProps {
   onMarkAllRead: () => void
   isMobile?: boolean
   onMenuClick?: () => void
+  isTablet?: boolean
+  onToggleSidebar?: () => void
+  sidebarVisible?: boolean
 }
 
 export function EntryListHeader({
@@ -24,6 +27,9 @@ export function EntryListHeader({
   onMarkAllRead,
   isMobile,
   onMenuClick,
+  isTablet,
+  onToggleSidebar,
+  sidebarVisible,
 }: EntryListHeaderProps) {
   const { t } = useTranslation()
 
@@ -35,6 +41,19 @@ export function EntryListHeader({
             type="button"
             onClick={onMenuClick}
             className="flex size-11 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-item-hover -ml-1.5"
+          >
+            <MenuIcon className="size-5" />
+          </button>
+        )}
+        {isTablet && onToggleSidebar && (
+          <button
+            type="button"
+            onClick={onToggleSidebar}
+            title={sidebarVisible ? t('actions.hide_sidebar') : t('actions.show_sidebar')}
+            className="flex size-11 shrink-0 items-center justify-center rounded-md transition-all duration-200 hover:bg-item-hover active:scale-95 -ml-1.5"
+            style={{
+              transitionTimingFunction: 'var(--ease-ios)',
+            }}
           >
             <MenuIcon className="size-5" />
           </button>
