@@ -175,7 +175,7 @@ function AuthenticatedApp() {
   if (location === '/') {
     // 等待 appearanceSettings 加载完成再跳转，避免先跳 article 再跳正确类型
     if (isAppearanceLoading) {
-      return null
+      return <div className="h-dvh bg-background" />
     }
     const defaultType = visibleContentTypes[0] ?? 'article'
     return <Redirect to={`/all?type=${defaultType}`} replace />
@@ -183,7 +183,7 @@ function AuthenticatedApp() {
 
   // 等待 appearanceSettings 加载完成，避免显示默认三视图的闪烁
   if (isAppearanceLoading) {
-    return null
+    return <div className="h-dvh bg-background" />
   }
 
   // Sidebar component (shared between mobile and desktop)
