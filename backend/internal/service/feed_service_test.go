@@ -425,7 +425,7 @@ func (s *settingsServiceStub) SetAISettings(ctx context.Context, settings *AISet
 	return nil
 }
 
-func (s *settingsServiceStub) TestAI(ctx context.Context, provider, apiKey, baseURL, model string, thinking bool, thinkingBudget int, reasoningEffort string) (string, error) {
+func (s *settingsServiceStub) TestAI(ctx context.Context, provider, apiKey, baseURL, model, endpoint string, thinking bool, thinkingBudget int, reasoningEffort string) (string, error) {
 	return "", nil
 }
 
@@ -459,4 +459,12 @@ func (s *settingsServiceStub) GetProxyURL(ctx context.Context) string {
 
 func (s *settingsServiceStub) GetIPStack(ctx context.Context) string {
 	return "default"
+}
+
+func (s *settingsServiceStub) GetAppearanceSettings(ctx context.Context) (*AppearanceSettings, error) {
+	return &AppearanceSettings{ContentTypes: append([]string(nil), defaultAppearanceContentTypes...)}, nil
+}
+
+func (s *settingsServiceStub) SetAppearanceSettings(ctx context.Context, settings *AppearanceSettings) error {
+	return nil
 }

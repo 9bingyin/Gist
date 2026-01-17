@@ -94,7 +94,13 @@
     "advanced_edit": "Edit",
     "advanced_delete": "Delete",
     "advanced_edit_domain": "Edit Domain Rate Limit",
-    "confirm_delete": "Are you sure?"
+    "confirm_delete": "Are you sure?",
+    "appearance_categories": "Category Views",
+    "appearance_categories_description": "Drag to reorder or hide categories in the sidebar switcher",
+    "appearance_hide": "Hide",
+    "appearance_hidden": "Hidden",
+    "appearance_keep_one": "Keep at least one category view",
+    "appearance_drag": "Draggable"
   },
   "theme": {
     "system": "Follow System",

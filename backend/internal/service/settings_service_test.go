@@ -159,13 +159,13 @@ func TestSettingsService_TestAI_InvalidConfig(t *testing.T) {
 	repo := newSettingsRepoStub()
 	svc := NewSettingsService(repo, ai.NewRateLimiter(0))
 
-	_, err := svc.TestAI(context.Background(), ai.ProviderOpenAI, "", "", "", false, 0, "")
+	_, err := svc.TestAI(context.Background(), ai.ProviderOpenAI, "", "", "", "responses", false, 0, "")
 	if err == nil {
 		t.Fatalf("expected error for missing api key and model")
 	}
 
 	repo.data[keyAIAPIKey] = ""
-	_, err = svc.TestAI(context.Background(), ai.ProviderOpenAI, "***", "", "gpt-4", false, 0, "")
+	_, err = svc.TestAI(context.Background(), ai.ProviderOpenAI, "***", "", "gpt-4", "responses", false, 0, "")
 	if err == nil || !errors.Is(err, ai.ErrMissingAPIKey) {
 		t.Fatalf("expected missing api key error, got %v", err)
 	}
@@ -206,6 +206,46 @@ func TestSettingsService_GetNetworkSettings_Defaults(t *testing.T) {
 	}
 	if settings.Port != 0 {
 		t.Fatalf("expected default port to be 0")
+	}
+}
+
+func TestSettingsService_AppearanceSettings_Defaults(t *testing.T) {
+	repo := newSettingsRepoStub()
+	svc := NewSettingsService(repo, ai.NewRateLimiter(0))
+
+	settings, err := svc.GetAppearanceSettings(context.Background())
+	if err != nil {
+		t.Fatalf("GetAppearanceSettings failed: %v", err)
+	}
+	if len(settings.ContentTypes) != len(defaultAppearanceContentTypes) {
+		t.Fatalf("expected %d content types, got %d", len(defaultAppearanceContentTypes), len(settings.ContentTypes))
+	}
+	if settings.ContentTypes[0] != defaultAppearanceContentTypes[0] {
+		t.Fatalf("expected default content types to start with %s", defaultAppearanceContentTypes[0])
+	}
+}
+
+func TestSettingsService_AppearanceSettings_Validate(t *testing.T) {
+	repo := newSettingsRepoStub()
+	svc := NewSettingsService(repo, ai.NewRateLimiter(0))
+
+	if err := svc.SetAppearanceSettings(context.Background(), &AppearanceSettings{ContentTypes: []string{}}); err == nil {
+		t.Fatalf("expected error for empty content types")
+	}
+
+	if err := svc.SetAppearanceSettings(context.Background(), &AppearanceSettings{ContentTypes: []string{"picture", "picture", "invalid", "article"}}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	settings, err := svc.GetAppearanceSettings(context.Background())
+	if err != nil {
+		t.Fatalf("GetAppearanceSettings failed: %v", err)
+	}
+	if len(settings.ContentTypes) != 2 {
+		t.Fatalf("expected 2 content types, got %d", len(settings.ContentTypes))
+	}
+	if settings.ContentTypes[0] != "picture" || settings.ContentTypes[1] != "article" {
+		t.Fatalf("unexpected content types order")
 	}
 }
 
@@ -304,14 +344,14 @@ func TestSettingsService_SetNetworkSettings_MaskedPassword(t *testing.T) {
 
 func TestSettingsService_GetProxyURL(t *testing.T) {
 	tests := []struct {
-		name     string
-		enabled  string
+		name      string
+		enabled   string
 		proxyType string
-		host     string
-		port     string
-		username string
-		password string
-		expected string
+		host      string
+		port      string
+		username  string
+		password  string
+		expected  string
 	}{
 		{
 			name:     "disabled proxy",

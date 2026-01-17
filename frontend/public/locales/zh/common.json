@@ -94,7 +94,13 @@
     "advanced_edit": "编辑",
     "advanced_delete": "删除",
     "advanced_edit_domain": "编辑域名限速",
-    "confirm_delete": "确认删除？"
+    "confirm_delete": "确认删除？",
+    "appearance_categories": "分类视图",
+    "appearance_categories_description": "拖拽排序或隐藏侧边栏中的分类切换",
+    "appearance_hide": "隐藏",
+    "appearance_hidden": "已隐藏",
+    "appearance_keep_one": "至少保留一个分类视图",
+    "appearance_drag": "可拖拽"
   },
   "theme": {
     "system": "跟随系统",

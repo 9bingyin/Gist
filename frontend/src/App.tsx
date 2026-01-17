@@ -16,11 +16,14 @@ import { useMobileLayout } from '@/hooks/useMobileLayout'
 import { useAuth } from '@/hooks/useAuth'
 import { useFeeds } from '@/hooks/useFeeds'
 import { useFolders } from '@/hooks/useFolders'
+import { useAppearanceSettings } from '@/hooks/useAppearanceSettings'
 import { useTitle, buildTitle } from '@/hooks/useTitle'
 import { useUISettingKey, useUISettingActions, hasSidebarVisibilitySetting, setUISetting } from '@/hooks/useUISettings'
 import { isAddFeedPath } from '@/lib/router'
 import { cn } from '@/lib/utils'
 import type { ContentType, Feed, Folder } from '@/types/api'
+
+const defaultContentTypes: ContentType[] = ['article', 'picture', 'notification']
 
 function LoadingScreen() {
   const { t } = useTranslation()
@@ -89,6 +92,7 @@ function AuthenticatedApp() {
   const { t } = useTranslation()
   const { data: feeds = [] } = useFeeds()
   const { data: folders = [] } = useFolders()
+  const { data: appearanceSettings, isLoading: isAppearanceLoading } = useAppearanceSettings()
   const { data: entry } = useEntry(selectedEntryId)
 
   const feedsMap = useMemo(() => {
@@ -154,9 +158,32 @@ function AuthenticatedApp() {
     selectAll(type, { replace: true })
   }, [selectAll, closeSidebar])
 
-  // Redirect root to /all with default type (must be after ALL hooks including useCallback)
+  const visibleContentTypes = useMemo(() => {
+    const current = appearanceSettings?.contentTypes
+    if (!current || current.length === 0) return defaultContentTypes
+    return current.filter((item) => item === 'article' || item === 'picture' || item === 'notification')
+  }, [appearanceSettings])
+
+  useEffect(() => {
+    if (!visibleContentTypes.includes(contentType)) {
+      const next = visibleContentTypes[0] ?? 'article'
+      selectAll(next, { replace: true })
+    }
+  }, [visibleContentTypes, contentType, selectAll])
+
+  // Redirect root to /all with first visible type (must be after ALL hooks including useCallback)
   if (location === '/') {
-    return <Redirect to="/all?type=article" replace />
+    // 等待 appearanceSettings 加载完成再跳转，避免先跳 article 再跳正确类型
+    if (isAppearanceLoading) {
+      return null
+    }
+    const defaultType = visibleContentTypes[0] ?? 'article'
+    return <Redirect to={`/all?type=${defaultType}`} replace />
+  }
+
+  // 等待 appearanceSettings 加载完成，避免显示默认三视图的闪烁
+  if (isAppearanceLoading) {
+    return null
   }
 
   // Sidebar component (shared between mobile and desktop)
@@ -169,6 +196,7 @@ function AuthenticatedApp() {
       onSelectStarred={handleSelectStarred}
       onSelectAll={handleSelectAll}
       contentType={contentType}
+      appearanceSettings={appearanceSettings}
     />
   )
 

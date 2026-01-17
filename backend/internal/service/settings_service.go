@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/url"
 
@@ -42,6 +43,11 @@ type NetworkSettings struct {
 	IPStack  string `json:"ipStack"` // default, ipv4, ipv6
 }
 
+// AppearanceSettings holds appearance configuration.
+type AppearanceSettings struct {
+	ContentTypes []string `json:"contentTypes"`
+}
+
 // Setting keys
 const (
 	keyAIProvider        = "ai.provider"
@@ -67,6 +73,8 @@ const (
 	keyNetworkUsername = "network.proxy_username"
 	keyNetworkPassword = "network.proxy_password"
 	keyNetworkIPStack  = "network.ip_stack"
+
+	keyAppearanceContentTypes = "appearance.content_types"
 )
 
 // SettingsService provides settings management.
@@ -95,6 +103,10 @@ type SettingsService interface {
 	GetProxyURL(ctx context.Context) string
 	// GetIPStack returns the IP stack preference (default, ipv4, ipv6).
 	GetIPStack(ctx context.Context) string
+	// GetAppearanceSettings returns appearance settings.
+	GetAppearanceSettings(ctx context.Context) (*AppearanceSettings, error)
+	// SetAppearanceSettings updates appearance settings.
+	SetAppearanceSettings(ctx context.Context, settings *AppearanceSettings) error
 }
 
 type settingsService struct {
@@ -505,4 +517,67 @@ func (s *settingsService) GetProxyURL(ctx context.Context) string {
 		)
 	}
 	return fmt.Sprintf("%s://%s:%d", proxyType, host, port)
+}
+
+func (s *settingsService) GetAppearanceSettings(ctx context.Context) (*AppearanceSettings, error) {
+	settings := &AppearanceSettings{
+		ContentTypes: append([]string(nil), defaultAppearanceContentTypes...),
+	}
+	raw, err := s.getString(ctx, keyAppearanceContentTypes)
+	if err != nil || raw == "" {
+		return settings, err
+	}
+
+	var contentTypes []string
+	if err := json.Unmarshal([]byte(raw), &contentTypes); err != nil {
+		return settings, nil
+	}
+	contentTypes = normalizeContentTypes(contentTypes)
+	if len(contentTypes) == 0 {
+		return settings, nil
+	}
+	settings.ContentTypes = contentTypes
+	return settings, nil
+}
+
+func (s *settingsService) SetAppearanceSettings(ctx context.Context, settings *AppearanceSettings) error {
+	contentTypes := normalizeContentTypes(settings.ContentTypes)
+	if len(contentTypes) == 0 {
+		return ErrInvalid
+	}
+	payload, err := json.Marshal(contentTypes)
+	if err != nil {
+		return fmt.Errorf("marshal content types: %w", err)
+	}
+	if err := s.repo.Set(ctx, keyAppearanceContentTypes, string(payload)); err != nil {
+		return fmt.Errorf("set appearance content types: %w", err)
+	}
+	return nil
+}
+
+func normalizeContentTypes(values []string) []string {
+	seen := make(map[string]struct{}, len(values))
+	ordered := make([]string, 0, len(values))
+	for _, value := range values {
+		if !isValidAppearanceContentType(value) {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		ordered = append(ordered, value)
+	}
+	return ordered
+}
+
+var defaultAppearanceContentTypes = []string{"article", "picture", "notification"}
+
+func isValidAppearanceContentType(value string) bool {
+	switch value {
+	case "article", "picture", "notification":
+		return true
+	default:
+		return false
+	}
 }

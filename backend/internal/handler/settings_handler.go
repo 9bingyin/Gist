@@ -106,6 +106,14 @@ type networkTestResponse struct {
 	Error   string `json:"error,omitempty"`
 }
 
+type appearanceSettingsResponse struct {
+	ContentTypes []string `json:"contentTypes"`
+}
+
+type appearanceSettingsRequest struct {
+	ContentTypes []string `json:"contentTypes"`
+}
+
 type SettingsHandler struct {
 	service       service.SettingsService
 	clientFactory *network.ClientFactory
@@ -143,6 +151,8 @@ func (h *SettingsHandler) RegisterRoutes(g *echo.Group) {
 	g.GET("/settings/network", h.GetNetworkSettings)
 	g.PUT("/settings/network", h.UpdateNetworkSettings)
 	g.POST("/settings/network/test", h.TestNetworkProxy)
+	g.GET("/settings/appearance", h.GetAppearanceSettings)
+	g.PUT("/settings/appearance", h.UpdateAppearanceSettings)
 	g.DELETE("/settings/anubis-cookies", h.ClearAnubisCookies)
 }
 
@@ -391,6 +401,49 @@ func (h *SettingsHandler) UpdateNetworkSettings(c echo.Context) error {
 	}
 
 	return h.GetNetworkSettings(c)
+}
+
+// GetAppearanceSettings returns the appearance settings.
+// @Summary Get appearance settings
+// @Description Get appearance settings including visible content types
+// @Tags settings
+// @Produce json
+// @Success 200 {object} appearanceSettingsResponse
+// @Failure 500 {object} errorResponse
+// @Router /settings/appearance [get]
+func (h *SettingsHandler) GetAppearanceSettings(c echo.Context) error {
+	settings, err := h.service.GetAppearanceSettings(c.Request().Context())
+	if err != nil {
+		c.Logger().Error(err)
+		return c.JSON(http.StatusInternalServerError, errorResponse{Error: "failed to get settings"})
+	}
+
+	return c.JSON(http.StatusOK, appearanceSettingsResponse{ContentTypes: settings.ContentTypes})
+}
+
+// UpdateAppearanceSettings updates the appearance settings.
+// @Summary Update appearance settings
+// @Description Update appearance settings including visible content types
+// @Tags settings
+// @Accept json
+// @Produce json
+// @Param settings body appearanceSettingsRequest true "Appearance settings"
+// @Success 200 {object} appearanceSettingsResponse
+// @Failure 400 {object} errorResponse
+// @Failure 500 {object} errorResponse
+// @Router /settings/appearance [put]
+func (h *SettingsHandler) UpdateAppearanceSettings(c echo.Context) error {
+	var req appearanceSettingsRequest
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, errorResponse{Error: "invalid request"})
+	}
+
+	settings := &service.AppearanceSettings{ContentTypes: req.ContentTypes}
+	if err := h.service.SetAppearanceSettings(c.Request().Context(), settings); err != nil {
+		return writeServiceError(c, err)
+	}
+
+	return h.GetAppearanceSettings(c)
 }
 
 // TestNetworkProxy tests the network proxy connection.

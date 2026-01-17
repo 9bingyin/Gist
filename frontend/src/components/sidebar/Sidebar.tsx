@@ -20,6 +20,9 @@ import { useUnreadCounts } from '@/hooks/useEntries'
 import { useAuth } from '@/hooks/useAuth'
 import type { SelectionType } from '@/hooks/useSelection'
 import type { Folder, Feed, ContentType } from '@/types/api'
+import type { AppearanceSettings } from '@/types/settings'
+
+const defaultContentTypes: ContentType[] = ['article', 'picture', 'notification']
 
 type SortBy = 'name' | 'date'
 
@@ -40,6 +43,7 @@ interface SidebarProps {
   onSelectStarred: () => void
   onSelectAll?: (contentType?: ContentType) => void
   contentType: ContentType
+  appearanceSettings?: AppearanceSettings
 }
 
 interface FolderWithFeeds {
@@ -55,6 +59,7 @@ export function Sidebar({
   onSelectStarred,
   onSelectAll,
   contentType,
+  appearanceSettings,
 }: SidebarProps) {
   const { t } = useTranslation()
   const { user, logout } = useAuth()
@@ -62,14 +67,19 @@ export function Sidebar({
   const [isProfileOpen, setIsProfileOpen] = useState(false)
   const [sortBy, setSortBy] = useState<SortBy>('name')
 
+  const visibleContentTypes = useMemo(() => {
+    const current = appearanceSettings?.contentTypes
+    if (!current || current.length === 0) return defaultContentTypes
+    return current.filter((type) => type === 'article' || type === 'picture' || type === 'notification')
+  }, [appearanceSettings])
+
   // Animation direction tracking
-  const contentTypeList: ContentType[] = ['article', 'picture', 'notification']
-  const orderIndex = contentTypeList.indexOf(contentType)
+  const orderIndex = visibleContentTypes.indexOf(contentType)
   const prevOrderIndexRef = useRef(orderIndex)
   const directionRef = useRef<1 | -1>(1)
 
   // Calculate direction synchronously before render
-  if (prevOrderIndexRef.current !== orderIndex) {
+  if (orderIndex !== -1 && prevOrderIndexRef.current !== orderIndex) {
     directionRef.current = orderIndex > prevOrderIndexRef.current ? 1 : -1
     prevOrderIndexRef.current = orderIndex
   }
@@ -133,8 +143,13 @@ export function Sidebar({
     for (const feed of allFeeds) {
       counts[feed.type] += unreadCounts.get(feed.id) || 0
     }
+    for (const type of Object.keys(counts) as ContentType[]) {
+      if (!visibleContentTypes.includes(type)) {
+        counts[type] = 0
+      }
+    }
     return counts
-  }, [allFeeds, unreadCounts])
+  }, [allFeeds, unreadCounts, visibleContentTypes])
 
   const folderUnreadCounts = useMemo(() => {
     const map = new Map<string, number>()
@@ -221,6 +236,7 @@ export function Sidebar({
         contentType={contentType}
         counts={contentTypeCounts}
         onSelect={(type) => onSelectAll?.(type)}
+        visibleContentTypes={visibleContentTypes}
       />
 
       {/* Content */}

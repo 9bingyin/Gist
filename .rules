@@ -172,6 +172,7 @@
 - `network.proxy_username` - 代理用户名 (可选)
 - `network.proxy_password` - 代理密码 (可选)
 - `network.ip_stack` - IP 栈优先级 (default/ipv4/ipv6，默认 default)
+- `appearance.content_types` - 分类视图显示顺序 (article/picture/notification)
 
 **ai_summaries** - AI 摘要缓存表
 | 列名 | 类型 | 约束 | 说明 |

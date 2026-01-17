@@ -1,3 +1,5 @@
+import type { ContentType } from './api'
+
 export type AIProvider = 'openai' | 'anthropic' | 'compatible';
 
 export type ReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'minimal' | 'none' | '';
@@ -78,4 +80,8 @@ export interface DomainRateLimit {
 
 export interface DomainRateLimitListResponse {
   items: DomainRateLimit[];
+}
+
+export interface AppearanceSettings {
+  contentTypes: ContentType[];
 }
