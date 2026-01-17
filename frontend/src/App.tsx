@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useState, useMemo } from 'react'
 import { Router, useLocation, Redirect } from 'wouter'
 import { useTranslation } from 'react-i18next'
 import { ThreeColumnLayout } from '@/components/layout/three-column-layout'
@@ -11,12 +11,15 @@ import { EntryContent } from '@/components/entry-content'
 import { PictureMasonry, Lightbox } from '@/components/picture-masonry'
 import { LoginPage, RegisterPage } from '@/components/auth'
 import { useSelection, selectionToParams } from '@/hooks/useSelection'
-import { useMarkAllAsRead } from '@/hooks/useEntries'
+import { useMarkAllAsRead, useEntry } from '@/hooks/useEntries'
 import { useMobileLayout } from '@/hooks/useMobileLayout'
 import { useAuth } from '@/hooks/useAuth'
+import { useFeeds } from '@/hooks/useFeeds'
+import { useFolders } from '@/hooks/useFolders'
+import { useTitle, buildTitle } from '@/hooks/useTitle'
 import { isAddFeedPath } from '@/lib/router'
 import { cn } from '@/lib/utils'
-import type { ContentType } from '@/types/api'
+import type { ContentType, Feed, Folder } from '@/types/api'
 
 function LoadingScreen() {
   const { t } = useTranslation()
@@ -57,6 +60,39 @@ function AuthenticatedApp() {
 
   const { mutate: markAllAsRead } = useMarkAllAsRead()
   const [addFeedContentType, setAddFeedContentType] = useState<ContentType>('article')
+
+  // Dynamic title management
+  const { t } = useTranslation()
+  const { data: feeds = [] } = useFeeds()
+  const { data: folders = [] } = useFolders()
+  const { data: entry } = useEntry(selectedEntryId)
+
+  const feedsMap = useMemo(() => {
+    const map = new Map<string, Feed>()
+    for (const feed of feeds) {
+      map.set(feed.id, feed)
+    }
+    return map
+  }, [feeds])
+
+  const foldersMap = useMemo(() => {
+    const map = new Map<string, Folder>()
+    for (const folder of folders) {
+      map.set(folder.id, folder)
+    }
+    return map
+  }, [folders])
+
+  const title = buildTitle({
+    selection,
+    contentType,
+    entryTitle: entry?.title,
+    feedsMap,
+    foldersMap,
+    t,
+  })
+
+  useTitle(title)
 
   // Mobile-aware selection handlers (all hooks must be before any conditional returns)
   // Use replace to avoid creating history entries for sidebar navigation
