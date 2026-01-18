@@ -17,8 +17,8 @@ import (
 	"github.com/Noooste/azuretls-client"
 
 	"gist/backend/internal/config"
-	"gist/backend/internal/logger"
-	"gist/backend/internal/network"
+	"gist/backend/pkg/logger"
+	"gist/backend/pkg/network"
 )
 
 const solverTimeout = 30 * time.Second

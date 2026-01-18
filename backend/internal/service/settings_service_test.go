@@ -1,77 +1,60 @@
-package service
+package service_test
 
 import (
+	"gist/backend/internal/service"
 	"context"
-	"errors"
 	"testing"
 
 	"gist/backend/internal/service/ai"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestSettingsService_GetAISettings_Defaults(t *testing.T) {
 	repo := newSettingsRepoStub()
-	svc := NewSettingsService(repo, ai.NewRateLimiter(0))
+	svc := service.NewSettingsService(repo, ai.NewRateLimiter(0))
 
 	settings, err := svc.GetAISettings(context.Background())
-	if err != nil {
-		t.Fatalf("GetAISettings failed: %v", err)
-	}
-	if settings.Provider != ai.ProviderOpenAI {
-		t.Fatalf("expected default provider, got %s", settings.Provider)
-	}
-	if settings.ThinkingBudget != 10000 {
-		t.Fatalf("expected default thinking budget, got %d", settings.ThinkingBudget)
-	}
-	if settings.ReasoningEffort != "medium" {
-		t.Fatalf("expected default reasoning effort, got %s", settings.ReasoningEffort)
-	}
-	if settings.SummaryLanguage != "zh-CN" {
-		t.Fatalf("expected default summary language, got %s", settings.SummaryLanguage)
-	}
-	if settings.RateLimit != ai.DefaultRateLimit {
-		t.Fatalf("expected default rate limit, got %d", settings.RateLimit)
-	}
+	require.NoError(t, err)
+	require.Equal(t, ai.ProviderOpenAI, settings.Provider)
+	require.Equal(t, 10000, settings.ThinkingBudget)
+	require.Equal(t, "medium", settings.ReasoningEffort)
+	require.Equal(t, "zh-CN", settings.SummaryLanguage)
+	require.Equal(t, ai.DefaultRateLimit, settings.RateLimit)
 }
 
 func TestSettingsService_GetAISettings_MaskedKey(t *testing.T) {
 	repo := newSettingsRepoStub()
-	repo.data[keyAIProvider] = ai.ProviderOpenAI
-	repo.data[keyAIAPIKey] = "sk-test-1234567890"
-	repo.data[keyAIBaseURL] = "https://api.example.com"
-	repo.data[keyAIModel] = "gpt-4"
-	repo.data[keyAIThinking] = "true"
-	repo.data[keyAIThinkingBudget] = "9000"
-	repo.data[keyAIReasoningEffort] = "high"
-	repo.data[keyAISummaryLanguage] = "en-US"
-	repo.data[keyAIAutoTranslate] = "true"
-	repo.data[keyAIAutoSummary] = "true"
-	repo.data[keyAIRateLimit] = "5"
+	repo.data[service.KeyAIProvider] = ai.ProviderOpenAI
+	repo.data[service.KeyAIAPIKey] = "sk-test-1234567890"
+	repo.data[service.KeyAIBaseURL] = "https://api.example.com"
+	repo.data[service.KeyAIModel] = "gpt-4"
+	repo.data[service.KeyAIThinking] = "true"
+	repo.data[service.KeyAIThinkingBudget] = "9000"
+	repo.data[service.KeyAIReasoningEffort] = "high"
+	repo.data[service.KeyAISummaryLanguage] = "en-US"
+	repo.data[service.KeyAIAutoTranslate] = "true"
+	repo.data[service.KeyAIAutoSummary] = "true"
+	repo.data[service.KeyAIRateLimit] = "5"
 
-	svc := NewSettingsService(repo, ai.NewRateLimiter(0))
+	svc := service.NewSettingsService(repo, ai.NewRateLimiter(0))
 	settings, err := svc.GetAISettings(context.Background())
-	if err != nil {
-		t.Fatalf("GetAISettings failed: %v", err)
-	}
-	if settings.APIKey == "sk-test-1234567890" || settings.APIKey == "" {
-		t.Fatalf("expected masked api key, got %s", settings.APIKey)
-	}
-	if settings.Provider != ai.ProviderOpenAI || settings.Model != "gpt-4" {
-		t.Fatalf("unexpected provider/model")
-	}
-	if !settings.Thinking || settings.ThinkingBudget != 9000 {
-		t.Fatalf("unexpected thinking settings")
-	}
-	if settings.RateLimit != 5 {
-		t.Fatalf("unexpected rate limit: %d", settings.RateLimit)
-	}
+	require.NoError(t, err)
+	require.NotEqual(t, "sk-test-1234567890", settings.APIKey)
+	require.NotEmpty(t, settings.APIKey)
+	require.Equal(t, ai.ProviderOpenAI, settings.Provider)
+	require.Equal(t, "gpt-4", settings.Model)
+	require.True(t, settings.Thinking)
+	require.Equal(t, 9000, settings.ThinkingBudget)
+	require.Equal(t, 5, settings.RateLimit)
 }
 
 func TestSettingsService_SetAISettings_StoresAndUpdatesLimiter(t *testing.T) {
 	repo := newSettingsRepoStub()
 	limiter := ai.NewRateLimiter(1)
-	svc := NewSettingsService(repo, limiter)
+	svc := service.NewSettingsService(repo, limiter)
 
-	settings := &AISettings{
+	settings := &service.AISettings{
 		Provider:        ai.ProviderOpenAI,
 		APIKey:          "sk-realkey-123",
 		BaseURL:         "https://api.example.com",
@@ -85,54 +68,37 @@ func TestSettingsService_SetAISettings_StoresAndUpdatesLimiter(t *testing.T) {
 		RateLimit:       20,
 	}
 
-	if err := svc.SetAISettings(context.Background(), settings); err != nil {
-		t.Fatalf("SetAISettings failed: %v", err)
-	}
-	if repo.data[keyAIAPIKey] != "sk-realkey-123" {
-		t.Fatalf("expected api key to be stored")
-	}
-	if limiter.GetLimit() != 20 {
-		t.Fatalf("expected rate limiter to update")
-	}
+	err := svc.SetAISettings(context.Background(), settings)
+	require.NoError(t, err)
+	require.Equal(t, "sk-realkey-123", repo.data[service.KeyAIAPIKey])
+	require.Equal(t, 20, limiter.GetLimit())
 
-	repo.data[keyAIAPIKey] = "sk-existing"
+	repo.data[service.KeyAIAPIKey] = "sk-existing"
 	settings.APIKey = "***"
 	settings.RateLimit = 0
-	if err := svc.SetAISettings(context.Background(), settings); err != nil {
-		t.Fatalf("SetAISettings with masked key failed: %v", err)
-	}
-	if repo.data[keyAIAPIKey] != "sk-existing" {
-		t.Fatalf("masked api key should not overwrite existing key")
-	}
-	if limiter.GetLimit() != ai.DefaultRateLimit {
-		t.Fatalf("expected default rate limit when value <= 0")
-	}
+	err = svc.SetAISettings(context.Background(), settings)
+	require.NoError(t, err)
+	require.Equal(t, "sk-existing", repo.data[service.KeyAIAPIKey])
+	require.Equal(t, ai.DefaultRateLimit, limiter.GetLimit())
 }
 
 func TestSettingsService_GeneralSettings(t *testing.T) {
 	repo := newSettingsRepoStub()
-	svc := NewSettingsService(repo, ai.NewRateLimiter(0))
+	svc := service.NewSettingsService(repo, ai.NewRateLimiter(0))
 
-	err := svc.SetGeneralSettings(context.Background(), &GeneralSettings{
+	err := svc.SetGeneralSettings(context.Background(), &service.GeneralSettings{
 		FallbackUserAgent: "UA-Test",
 		AutoReadability:   true,
 	})
-	if err != nil {
-		t.Fatalf("SetGeneralSettings failed: %v", err)
-	}
+	require.NoError(t, err)
 
 	settings, err := svc.GetGeneralSettings(context.Background())
-	if err != nil {
-		t.Fatalf("GetGeneralSettings failed: %v", err)
-	}
-	if settings.FallbackUserAgent != "UA-Test" || !settings.AutoReadability {
-		t.Fatalf("unexpected general settings")
-	}
+	require.NoError(t, err)
+	require.Equal(t, "UA-Test", settings.FallbackUserAgent)
+	require.True(t, settings.AutoReadability)
 
 	ua := svc.GetFallbackUserAgent(context.Background())
-	if ua != "UA-Test" {
-		t.Fatalf("unexpected fallback user agent: %s", ua)
-	}
+	require.Equal(t, "UA-Test", ua)
 }
 
 func TestSettingsService_ClearAnubisCookies(t *testing.T) {
@@ -141,154 +107,100 @@ func TestSettingsService_ClearAnubisCookies(t *testing.T) {
 	repo.data["anubis.cookie.test.com"] = "cookie"
 	repo.data["other.key"] = "value"
 
-	svc := NewSettingsService(repo, ai.NewRateLimiter(0))
+	svc := service.NewSettingsService(repo, ai.NewRateLimiter(0))
 
 	deleted, err := svc.ClearAnubisCookies(context.Background())
-	if err != nil {
-		t.Fatalf("ClearAnubisCookies failed: %v", err)
-	}
-	if deleted != 2 {
-		t.Fatalf("expected 2 cookies deleted, got %d", deleted)
-	}
-	if _, ok := repo.data["other.key"]; !ok {
-		t.Fatalf("unexpected deletion of non-cookie key")
-	}
+	require.NoError(t, err)
+	require.Equal(t, int64(2), deleted)
+	require.Contains(t, repo.data, "other.key")
 }
 
 func TestSettingsService_TestAI_InvalidConfig(t *testing.T) {
 	repo := newSettingsRepoStub()
-	svc := NewSettingsService(repo, ai.NewRateLimiter(0))
+	svc := service.NewSettingsService(repo, ai.NewRateLimiter(0))
 
 	_, err := svc.TestAI(context.Background(), ai.ProviderOpenAI, "", "", "", "responses", false, 0, "")
-	if err == nil {
-		t.Fatalf("expected error for missing api key and model")
-	}
+	require.Error(t, err)
 
-	repo.data[keyAIAPIKey] = ""
+	repo.data[service.KeyAIAPIKey] = ""
 	_, err = svc.TestAI(context.Background(), ai.ProviderOpenAI, "***", "", "gpt-4", "responses", false, 0, "")
-	if err == nil || !errors.Is(err, ai.ErrMissingAPIKey) {
-		t.Fatalf("expected missing api key error, got %v", err)
-	}
+	require.ErrorIs(t, err, ai.ErrMissingAPIKey)
 }
 
 func TestMaskAPIKey(t *testing.T) {
-	if maskAPIKey("") != "" {
-		t.Fatalf("empty key should return empty mask")
-	}
-	if maskAPIKey("short") != "***" {
-		t.Fatalf("short key should be fully masked")
-	}
-	masked := maskAPIKey("sk-test-1234567890")
-	if masked == "sk-test-1234567890" || masked == "" {
-		t.Fatalf("expected masked key")
-	}
-	if !isMaskedKey(masked) {
-		t.Fatalf("expected masked key to be detected")
-	}
+	require.Empty(t, service.MaskAPIKey(""))
+	require.Equal(t, "***", service.MaskAPIKey("short"))
+	masked := service.MaskAPIKey("sk-test-1234567890")
+	require.NotEqual(t, "sk-test-1234567890", masked)
+	require.NotEmpty(t, masked)
+	require.True(t, service.IsMaskedKey(masked))
 }
 
 func TestSettingsService_GetNetworkSettings_Defaults(t *testing.T) {
 	repo := newSettingsRepoStub()
-	svc := NewSettingsService(repo, ai.NewRateLimiter(0))
+	svc := service.NewSettingsService(repo, ai.NewRateLimiter(0))
 
 	settings, err := svc.GetNetworkSettings(context.Background())
-	if err != nil {
-		t.Fatalf("GetNetworkSettings failed: %v", err)
-	}
-	if settings.Enabled {
-		t.Fatalf("expected default enabled to be false")
-	}
-	if settings.Type != "http" {
-		t.Fatalf("expected default type to be http, got %s", settings.Type)
-	}
-	if settings.Host != "" {
-		t.Fatalf("expected default host to be empty")
-	}
-	if settings.Port != 0 {
-		t.Fatalf("expected default port to be 0")
-	}
+	require.NoError(t, err)
+	require.False(t, settings.Enabled)
+	require.Equal(t, "http", settings.Type)
+	require.Empty(t, settings.Host)
+	require.Zero(t, settings.Port)
 }
 
 func TestSettingsService_AppearanceSettings_Defaults(t *testing.T) {
 	repo := newSettingsRepoStub()
-	svc := NewSettingsService(repo, ai.NewRateLimiter(0))
+	svc := service.NewSettingsService(repo, ai.NewRateLimiter(0))
 
 	settings, err := svc.GetAppearanceSettings(context.Background())
-	if err != nil {
-		t.Fatalf("GetAppearanceSettings failed: %v", err)
-	}
-	if len(settings.ContentTypes) != len(defaultAppearanceContentTypes) {
-		t.Fatalf("expected %d content types, got %d", len(defaultAppearanceContentTypes), len(settings.ContentTypes))
-	}
-	if settings.ContentTypes[0] != defaultAppearanceContentTypes[0] {
-		t.Fatalf("expected default content types to start with %s", defaultAppearanceContentTypes[0])
-	}
+	require.NoError(t, err)
+	require.Len(t, settings.ContentTypes, len(service.DefaultAppearanceContentTypes))
+	require.Equal(t, service.DefaultAppearanceContentTypes[0], settings.ContentTypes[0])
 }
 
 func TestSettingsService_AppearanceSettings_Validate(t *testing.T) {
 	repo := newSettingsRepoStub()
-	svc := NewSettingsService(repo, ai.NewRateLimiter(0))
+	svc := service.NewSettingsService(repo, ai.NewRateLimiter(0))
 
-	if err := svc.SetAppearanceSettings(context.Background(), &AppearanceSettings{ContentTypes: []string{}}); err == nil {
-		t.Fatalf("expected error for empty content types")
-	}
+	err := svc.SetAppearanceSettings(context.Background(), &service.AppearanceSettings{ContentTypes: []string{}})
+	require.Error(t, err)
 
-	if err := svc.SetAppearanceSettings(context.Background(), &AppearanceSettings{ContentTypes: []string{"picture", "picture", "invalid", "article"}}); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	err = svc.SetAppearanceSettings(context.Background(), &service.AppearanceSettings{ContentTypes: []string{"picture", "picture", "invalid", "article"}})
+	require.NoError(t, err)
 
 	settings, err := svc.GetAppearanceSettings(context.Background())
-	if err != nil {
-		t.Fatalf("GetAppearanceSettings failed: %v", err)
-	}
-	if len(settings.ContentTypes) != 2 {
-		t.Fatalf("expected 2 content types, got %d", len(settings.ContentTypes))
-	}
-	if settings.ContentTypes[0] != "picture" || settings.ContentTypes[1] != "article" {
-		t.Fatalf("unexpected content types order")
-	}
+	require.NoError(t, err)
+	require.Len(t, settings.ContentTypes, 2)
+	require.Equal(t, "picture", settings.ContentTypes[0])
+	require.Equal(t, "article", settings.ContentTypes[1])
 }
 
 func TestSettingsService_GetNetworkSettings_StoredValues(t *testing.T) {
 	repo := newSettingsRepoStub()
-	repo.data[keyNetworkEnabled] = "true"
-	repo.data[keyNetworkType] = "socks5"
-	repo.data[keyNetworkHost] = "127.0.0.1"
-	repo.data[keyNetworkPort] = "7890"
-	repo.data[keyNetworkUsername] = "user"
-	repo.data[keyNetworkPassword] = "secret123"
+	repo.data[service.KeyNetworkEnabled] = "true"
+	repo.data[service.KeyNetworkType] = "socks5"
+	repo.data[service.KeyNetworkHost] = "127.0.0.1"
+	repo.data[service.KeyNetworkPort] = "7890"
+	repo.data[service.KeyNetworkUsername] = "user"
+	repo.data[service.KeyNetworkPassword] = "secret123"
 
-	svc := NewSettingsService(repo, ai.NewRateLimiter(0))
+	svc := service.NewSettingsService(repo, ai.NewRateLimiter(0))
 	settings, err := svc.GetNetworkSettings(context.Background())
-	if err != nil {
-		t.Fatalf("GetNetworkSettings failed: %v", err)
-	}
-	if !settings.Enabled {
-		t.Fatalf("expected enabled to be true")
-	}
-	if settings.Type != "socks5" {
-		t.Fatalf("expected type to be socks5, got %s", settings.Type)
-	}
-	if settings.Host != "127.0.0.1" {
-		t.Fatalf("expected host to be 127.0.0.1, got %s", settings.Host)
-	}
-	if settings.Port != 7890 {
-		t.Fatalf("expected port to be 7890, got %d", settings.Port)
-	}
-	if settings.Username != "user" {
-		t.Fatalf("expected username to be user, got %s", settings.Username)
-	}
-	// Password should be masked
-	if settings.Password == "secret123" || settings.Password == "" {
-		t.Fatalf("expected password to be masked, got %s", settings.Password)
-	}
+	require.NoError(t, err)
+	require.True(t, settings.Enabled)
+	require.Equal(t, "socks5", settings.Type)
+	require.Equal(t, "127.0.0.1", settings.Host)
+	require.Equal(t, 7890, settings.Port)
+	require.Equal(t, "user", settings.Username)
+	require.NotEqual(t, "secret123", settings.Password)
+	require.NotEmpty(t, settings.Password)
 }
 
 func TestSettingsService_SetNetworkSettings(t *testing.T) {
 	repo := newSettingsRepoStub()
-	svc := NewSettingsService(repo, ai.NewRateLimiter(0))
+	svc := service.NewSettingsService(repo, ai.NewRateLimiter(0))
 
-	settings := &NetworkSettings{
+	settings := &service.NetworkSettings{
 		Enabled:  true,
 		Type:     "socks5",
 		Host:     "proxy.example.com",
@@ -297,34 +209,22 @@ func TestSettingsService_SetNetworkSettings(t *testing.T) {
 		Password: "password123",
 	}
 
-	if err := svc.SetNetworkSettings(context.Background(), settings); err != nil {
-		t.Fatalf("SetNetworkSettings failed: %v", err)
-	}
-
-	if repo.data[keyNetworkEnabled] != "true" {
-		t.Fatalf("expected enabled to be stored as true")
-	}
-	if repo.data[keyNetworkType] != "socks5" {
-		t.Fatalf("expected type to be stored as socks5")
-	}
-	if repo.data[keyNetworkHost] != "proxy.example.com" {
-		t.Fatalf("expected host to be stored")
-	}
-	if repo.data[keyNetworkPort] != "1080" {
-		t.Fatalf("expected port to be stored as 1080")
-	}
-	if repo.data[keyNetworkPassword] != "password123" {
-		t.Fatalf("expected password to be stored")
-	}
+	err := svc.SetNetworkSettings(context.Background(), settings)
+	require.NoError(t, err)
+	require.Equal(t, "true", repo.data[service.KeyNetworkEnabled])
+	require.Equal(t, "socks5", repo.data[service.KeyNetworkType])
+	require.Equal(t, "proxy.example.com", repo.data[service.KeyNetworkHost])
+	require.Equal(t, "1080", repo.data[service.KeyNetworkPort])
+	require.Equal(t, "password123", repo.data[service.KeyNetworkPassword])
 }
 
 func TestSettingsService_SetNetworkSettings_MaskedPassword(t *testing.T) {
 	repo := newSettingsRepoStub()
-	repo.data[keyNetworkPassword] = "existing-password"
+	repo.data[service.KeyNetworkPassword] = "existing-password"
 
-	svc := NewSettingsService(repo, ai.NewRateLimiter(0))
+	svc := service.NewSettingsService(repo, ai.NewRateLimiter(0))
 
-	settings := &NetworkSettings{
+	settings := &service.NetworkSettings{
 		Enabled:  true,
 		Type:     "http",
 		Host:     "proxy.example.com",
@@ -332,14 +232,9 @@ func TestSettingsService_SetNetworkSettings_MaskedPassword(t *testing.T) {
 		Password: "***", // masked password
 	}
 
-	if err := svc.SetNetworkSettings(context.Background(), settings); err != nil {
-		t.Fatalf("SetNetworkSettings failed: %v", err)
-	}
-
-	// Password should not be overwritten when masked
-	if repo.data[keyNetworkPassword] != "existing-password" {
-		t.Fatalf("masked password should not overwrite existing password")
-	}
+	err := svc.SetNetworkSettings(context.Background(), settings)
+	require.NoError(t, err)
+	require.Equal(t, "existing-password", repo.data[service.KeyNetworkPassword])
 }
 
 func TestSettingsService_GetProxyURL(t *testing.T) {
@@ -421,30 +316,27 @@ func TestSettingsService_GetProxyURL(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			repo := newSettingsRepoStub()
 			if tt.enabled != "" {
-				repo.data[keyNetworkEnabled] = tt.enabled
+				repo.data[service.KeyNetworkEnabled] = tt.enabled
 			}
 			if tt.proxyType != "" {
-				repo.data[keyNetworkType] = tt.proxyType
+				repo.data[service.KeyNetworkType] = tt.proxyType
 			}
 			if tt.host != "" {
-				repo.data[keyNetworkHost] = tt.host
+				repo.data[service.KeyNetworkHost] = tt.host
 			}
 			if tt.port != "" {
-				repo.data[keyNetworkPort] = tt.port
+				repo.data[service.KeyNetworkPort] = tt.port
 			}
 			if tt.username != "" {
-				repo.data[keyNetworkUsername] = tt.username
+				repo.data[service.KeyNetworkUsername] = tt.username
 			}
 			if tt.password != "" {
-				repo.data[keyNetworkPassword] = tt.password
+				repo.data[service.KeyNetworkPassword] = tt.password
 			}
 
-			svc := NewSettingsService(repo, ai.NewRateLimiter(0))
+			svc := service.NewSettingsService(repo, ai.NewRateLimiter(0))
 			result := svc.GetProxyURL(context.Background())
-
-			if result != tt.expected {
-				t.Errorf("GetProxyURL() = %q, want %q", result, tt.expected)
-			}
+			require.Equal(t, tt.expected, result)
 		})
 	}
 }

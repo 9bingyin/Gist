@@ -7,7 +7,7 @@ import (
 
 	_ "gist/backend/docs"
 	"gist/backend/internal/handler"
-	"gist/backend/internal/logger"
+	"gist/backend/pkg/logger"
 	"gist/backend/internal/service"
 )
 

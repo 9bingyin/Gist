@@ -10,7 +10,7 @@ import (
 
 	"gist/backend/internal/db"
 	"gist/backend/internal/model"
-	"gist/backend/internal/snowflake"
+	"gist/backend/pkg/snowflake"
 
 	_ "modernc.org/sqlite"
 )
@@ -32,7 +32,8 @@ func NewTestDB(t *testing.T) *sql.DB {
 
 	// 使用共享缓存模式以支持内存数据库的并发访问
 	// 每个测试使用唯一的数据库名称以避免冲突
-	dbName := fmt.Sprintf("file:test_%d?mode=memory&cache=shared&_pragma=foreign_keys(1)", time.Now().UnixNano())
+	// 使用更可靠的唯一标识符
+	dbName := fmt.Sprintf("file:%s_%d?mode=memory&cache=shared&_pragma=foreign_keys(1)", t.Name(), time.Now().UnixNano())
 	database, err := sql.Open("sqlite", dbName)
 	if err != nil {
 		t.Fatalf("failed to open test database: %v", err)

@@ -1,3 +1,4 @@
+//go:generate mockgen -source=$GOFILE -destination=mock/$GOFILE -package=mock
 package service
 
 import (
@@ -22,11 +23,11 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"gist/backend/internal/config"
-	"gist/backend/internal/logger"
 	"gist/backend/internal/model"
-	"gist/backend/internal/network"
 	"gist/backend/internal/repository"
 	"gist/backend/internal/service/anubis"
+	"gist/backend/pkg/logger"
+	"gist/backend/pkg/network"
 )
 
 const (
@@ -273,7 +274,7 @@ func isHashFilename(filename string) bool {
 	}
 
 	for _, c := range name {
-		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') && (c < 'A' || c > 'F') {
 			return false
 		}
 	}

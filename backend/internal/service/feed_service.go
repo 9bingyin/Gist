@@ -1,3 +1,4 @@
+//go:generate mockgen -source=$GOFILE -destination=mock/$GOFILE -package=mock
 package service
 
 import (
@@ -16,9 +17,9 @@ import (
 	"github.com/mmcdole/gofeed"
 
 	"gist/backend/internal/config"
-	"gist/backend/internal/logger"
+	"gist/backend/pkg/logger"
 	"gist/backend/internal/model"
-	"gist/backend/internal/network"
+	"gist/backend/pkg/network"
 	"gist/backend/internal/repository"
 	"gist/backend/internal/service/anubis"
 )

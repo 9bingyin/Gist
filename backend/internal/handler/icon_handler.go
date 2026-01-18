@@ -7,8 +7,8 @@ import (
 
 	"github.com/labstack/echo/v4"
 
-	"gist/backend/internal/logger"
 	"gist/backend/internal/service"
+	"gist/backend/pkg/logger"
 )
 
 type IconHandler struct {

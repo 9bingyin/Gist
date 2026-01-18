@@ -14,14 +14,14 @@ import (
 	"gist/backend/internal/db"
 	"gist/backend/internal/handler"
 	transport "gist/backend/internal/http"
-	"gist/backend/internal/logger"
-	"gist/backend/internal/network"
+	"gist/backend/pkg/logger"
+	"gist/backend/pkg/network"
 	"gist/backend/internal/repository"
 	"gist/backend/internal/scheduler"
 	"gist/backend/internal/service"
 	"gist/backend/internal/service/ai"
 	"gist/backend/internal/service/anubis"
-	"gist/backend/internal/snowflake"
+	"gist/backend/pkg/snowflake"
 )
 
 // @title Gist API

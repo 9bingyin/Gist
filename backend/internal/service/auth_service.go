@@ -1,3 +1,4 @@
+//go:generate mockgen -source=$GOFILE -destination=mock/$GOFILE -package=mock
 package service
 
 import (
@@ -14,7 +15,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 
-	"gist/backend/internal/logger"
+	"gist/backend/pkg/logger"
 	"gist/backend/internal/repository"
 )
 

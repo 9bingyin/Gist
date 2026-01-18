@@ -11,7 +11,7 @@ import (
 	"github.com/Noooste/azuretls-client"
 	"golang.org/x/net/proxy"
 
-	"gist/backend/internal/logger"
+	"gist/backend/pkg/logger"
 )
 
 // ProxyProvider provides proxy configuration.

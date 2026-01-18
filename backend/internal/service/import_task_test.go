@@ -1,52 +1,40 @@
-package service
+package service_test
 
 import (
+	"gist/backend/internal/service"
 	"context"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestImportTaskService_Lifecycle(t *testing.T) {
-	service := NewImportTaskService()
+	svc := service.NewImportTaskService()
 
-	id, ctx := service.Start(3)
-	if id == "" {
-		t.Fatal("expected non-empty task id")
-	}
+	id, ctx := svc.Start(3)
+	require.NotEmpty(t, id)
 
-	service.Update(1, "Feed A")
-	current := service.Get()
-	if current == nil {
-		t.Fatal("expected task to exist")
-	}
-	if current.Status != "running" {
-		t.Fatalf("expected status running, got %s", current.Status)
-	}
-	if current.Total != 3 || current.Current != 1 {
-		t.Fatalf("unexpected progress: total=%d current=%d", current.Total, current.Current)
-	}
-	if current.Feed != "Feed A" {
-		t.Fatalf("expected feed name Feed A, got %s", current.Feed)
-	}
+	svc.Update(1, "Feed A")
+	current := svc.Get()
+	require.NotNil(t, current)
+	require.Equal(t, "running", current.Status)
+	require.Equal(t, 3, current.Total)
+	require.Equal(t, 1, current.Current)
+	require.Equal(t, "Feed A", current.Feed)
 
-	result := ImportResult{FeedsCreated: 2, FeedsSkipped: 1}
-	service.Complete(result)
-	completed := service.Get()
-	if completed.Status != "done" {
-		t.Fatalf("expected status done, got %s", completed.Status)
-	}
-	if completed.Result == nil || completed.Result.FeedsCreated != 2 {
-		t.Fatalf("expected result to be set")
-	}
-	if completed.Feed != "" {
-		t.Fatalf("expected feed to be cleared on completion")
-	}
+	result := service.ImportResult{FeedsCreated: 2, FeedsSkipped: 1}
+	svc.Complete(result)
+	completed := svc.Get()
+	require.Equal(t, "done", completed.Status)
+	require.NotNil(t, completed.Result)
+	require.Equal(t, 2, completed.Result.FeedsCreated)
+	require.Empty(t, completed.Feed)
 
-	service.Update(2, "Feed B")
-	afterComplete := service.Get()
-	if afterComplete.Current != completed.Current || afterComplete.Feed != "" {
-		t.Fatalf("update should not mutate completed task")
-	}
+	svc.Update(2, "Feed B")
+	afterComplete := svc.Get()
+	require.Equal(t, completed.Current, afterComplete.Current)
+	require.Empty(t, afterComplete.Feed)
 
 	select {
 	case <-ctx.Done():
@@ -56,74 +44,52 @@ func TestImportTaskService_Lifecycle(t *testing.T) {
 }
 
 func TestImportTaskService_FailAndCancel(t *testing.T) {
-	service := NewImportTaskService()
+	svc := service.NewImportTaskService()
 
-	_, ctx := service.Start(2)
-	service.Update(1, "Feed A")
+	_, ctx := svc.Start(2)
+	svc.Update(1, "Feed A")
 
-	service.Fail(context.Canceled)
-	failed := service.Get()
-	if failed.Status != "error" {
-		t.Fatalf("expected status error, got %s", failed.Status)
-	}
-	if failed.Error == "" {
-		t.Fatalf("expected error string to be set")
-	}
-	if failed.Feed != "" {
-		t.Fatalf("expected feed to be cleared on failure")
-	}
+	svc.Fail(context.Canceled)
+	failed := svc.Get()
+	require.Equal(t, "error", failed.Status)
+	require.NotEmpty(t, failed.Error)
+	require.Empty(t, failed.Feed)
 
-	cancelled := service.Cancel()
-	if cancelled {
-		t.Fatalf("cancel should return false when task is not running")
-	}
+	require.False(t, svc.Cancel(), "cancel should return false when task is not running")
 
-	_, ctx2 := service.Start(1)
-	service.Update(1, "Feed B")
+	_, ctx2 := svc.Start(1)
+	svc.Update(1, "Feed B")
 
-	if !service.Cancel() {
-		t.Fatal("expected cancel to return true")
-	}
-	canceledTask := service.Get()
-	if canceledTask.Status != "cancelled" {
-		t.Fatalf("expected status cancelled, got %s", canceledTask.Status)
-	}
-	if canceledTask.Feed != "" {
-		t.Fatalf("expected feed to be cleared on cancel")
-	}
+	require.True(t, svc.Cancel())
+	canceledTask := svc.Get()
+	require.Equal(t, "cancelled", canceledTask.Status)
+	require.Empty(t, canceledTask.Feed)
 
 	select {
 	case <-ctx2.Done():
-		if ctx2.Err() != context.Canceled {
-			t.Fatalf("expected context canceled, got %v", ctx2.Err())
-		}
+		require.ErrorIs(t, ctx2.Err(), context.Canceled)
 	case <-time.After(200 * time.Millisecond):
 		t.Fatal("expected context to be cancelled")
 	}
 
 	select {
 	case <-ctx.Done():
-		if ctx.Err() != context.Canceled {
-			t.Fatalf("expected previous context canceled, got %v", ctx.Err())
-		}
+		require.ErrorIs(t, ctx.Err(), context.Canceled)
 	default:
 		t.Fatal("expected previous context to be cancelled by new task")
 	}
 }
 
 func TestImportTaskService_GetReturnsCopy(t *testing.T) {
-	service := NewImportTaskService()
-	service.Start(1)
-	service.Complete(ImportResult{FeedsCreated: 1})
+	svc := service.NewImportTaskService()
+	svc.Start(1)
+	svc.Complete(service.ImportResult{FeedsCreated: 1})
 
-	first := service.Get()
-	if first == nil || first.Result == nil {
-		t.Fatal("expected task result")
-	}
+	first := svc.Get()
+	require.NotNil(t, first)
+	require.NotNil(t, first.Result)
 	first.Result.FeedsCreated = 99
 
-	second := service.Get()
-	if second.Result == nil || second.Result.FeedsCreated != 1 {
-		t.Fatal("expected internal result to remain unchanged")
-	}
+	second := svc.Get()
+	require.Equal(t, 1, second.Result.FeedsCreated)
 }

@@ -16,49 +16,6 @@ type Block struct {
 	NeedTranslate bool   // Whether translation is needed
 }
 
-// blockElements are HTML elements that should be treated as separate blocks.
-var blockElements = map[string]bool{
-	"p":          true,
-	"h1":         true,
-	"h2":         true,
-	"h3":         true,
-	"h4":         true,
-	"h5":         true,
-	"h6":         true,
-	"ul":         true,
-	"ol":         true,
-	"li":         true,
-	"blockquote": true,
-	"div":        true,
-	"section":    true,
-	"article":    true,
-	"header":     true,
-	"footer":     true,
-	"nav":        true,
-	"aside":      true,
-	"main":       true,
-	"table":      true,
-	"thead":      true,
-	"tbody":      true,
-	"tr":         true,
-	"td":         true,
-	"th":         true,
-	"dl":         true,
-	"dt":         true,
-	"dd":         true,
-	"hr":         true,
-	"br":         true,
-	"figure":     true,
-	"figcaption": true,
-	"pre":        true,
-	"address":    true,
-	"form":       true,
-	"fieldset":   true,
-	"legend":     true,
-	"details":    true,
-	"summary":    true,
-}
-
 // skipElements are elements that should not be translated.
 var skipElements = map[string]bool{
 	"img":      true,
@@ -349,8 +306,8 @@ var (
 	audioPattern = regexp.MustCompile(`(?s)<audio[^>]*>.*?</audio>`)
 )
 
-// mediaPlaceholderPrefix is the prefix for media placeholders.
-const mediaPlaceholderPrefix = "{{__MEDIA_PLACEHOLDER_"
+// MediaPlaceholderPrefix is the prefix for media placeholders.
+const MediaPlaceholderPrefix = "{{__MEDIA_PLACEHOLDER_"
 
 // ReplaceMediaWithPlaceholders replaces img/picture/video/audio elements with placeholders.
 // This prevents AI from modifying media element attributes (like img alt) during translation.
@@ -366,7 +323,7 @@ func ReplaceMediaWithPlaceholders(htmlContent string) (string, []string) {
 		result = pattern.ReplaceAllStringFunc(result, func(match string) string {
 			index := len(elements)
 			elements = append(elements, match)
-			return fmt.Sprintf("%s%d__}}", mediaPlaceholderPrefix, index)
+			return fmt.Sprintf("%s%d__}}", MediaPlaceholderPrefix, index)
 		})
 	}
 
@@ -378,7 +335,7 @@ func RestoreMediaFromPlaceholders(htmlContent string, elements []string) string 
 	result := htmlContent
 
 	for i, element := range elements {
-		placeholder := fmt.Sprintf("%s%d__}}", mediaPlaceholderPrefix, i)
+		placeholder := fmt.Sprintf("%s%d__}}", MediaPlaceholderPrefix, i)
 		result = strings.Replace(result, placeholder, element, 1)
 	}
 

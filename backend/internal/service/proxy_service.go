@@ -1,3 +1,4 @@
+//go:generate mockgen -source=$GOFILE -destination=mock/$GOFILE -package=mock
 package service
 
 import (
@@ -10,8 +11,8 @@ import (
 	"github.com/Noooste/azuretls-client"
 
 	"gist/backend/internal/config"
-	"gist/backend/internal/logger"
-	"gist/backend/internal/network"
+	"gist/backend/pkg/logger"
+	"gist/backend/pkg/network"
 	"gist/backend/internal/service/anubis"
 )
 

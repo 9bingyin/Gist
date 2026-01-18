@@ -6,7 +6,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 
-	"gist/backend/internal/logger"
+	"gist/backend/pkg/logger"
 	"gist/backend/internal/service"
 )
 

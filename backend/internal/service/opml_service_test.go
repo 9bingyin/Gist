@@ -1,17 +1,18 @@
-package service
+package service_test
 
 import (
 	"bytes"
 	"context"
-	"errors"
 	"strings"
 	"testing"
 	"time"
 
 	"gist/backend/internal/model"
-	"gist/backend/internal/opml"
-	"gist/backend/internal/service/testutil"
+	mock_repo "gist/backend/internal/repository/mock"
+	"gist/backend/internal/service"
+	"gist/backend/pkg/opml"
 
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
 
@@ -29,18 +30,16 @@ func TestOPMLService_Import_Invalid(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	svc := NewOPMLService(nil, nil, nil, nil, testutil.NewMockFolderRepository(ctrl), testutil.NewMockFeedRepository(ctrl))
+	svc := service.NewOPMLService(nil, nil, nil, nil, mock_repo.NewMockFolderRepository(ctrl), mock_repo.NewMockFeedRepository(ctrl))
 	_, err := svc.Import(context.Background(), strings.NewReader("<invalid"), nil)
-	if !errors.Is(err, ErrInvalid) {
-		t.Fatalf("expected ErrInvalid, got %v", err)
-	}
+	require.ErrorIs(t, err, service.ErrInvalid)
 }
 
 func TestOPMLService_Import_CreatesFoldersAndFeeds(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	folderRepo := testutil.NewMockFolderRepository(ctrl)
+	folderRepo := mock_repo.NewMockFolderRepository(ctrl)
 	folderService := &folderServiceStub{nextID: 10}
 	feedService := &feedServiceStub{nextID: 100}
 	refreshSvc := &refreshServiceStub{done: make(chan []int64, 1)}
@@ -48,44 +47,30 @@ func TestOPMLService_Import_CreatesFoldersAndFeeds(t *testing.T) {
 
 	folderRepo.EXPECT().FindByName(gomock.Any(), "Tech", (*int64)(nil)).Return(nil, nil)
 
-	progressEvents := make([]ImportProgress, 0, 3)
-	onProgress := func(p ImportProgress) {
+	progressEvents := make([]service.ImportProgress, 0, 3)
+	onProgress := func(p service.ImportProgress) {
 		progressEvents = append(progressEvents, p)
 	}
 
-	svc := NewOPMLService(folderService, feedService, refreshSvc, iconSvc, folderRepo, nil)
+	svc := service.NewOPMLService(folderService, feedService, refreshSvc, iconSvc, folderRepo, nil)
 	result, err := svc.Import(context.Background(), strings.NewReader(sampleOPML), onProgress)
-	if err != nil {
-		t.Fatalf("Import failed: %v", err)
-	}
-	if result.FoldersCreated != 1 || result.FeedsCreated != 2 {
-		t.Fatalf("unexpected import result: %+v", result)
-	}
-	if len(progressEvents) < 3 {
-		t.Fatalf("expected progress events, got %d", len(progressEvents))
-	}
-	if progressEvents[0].Status != "started" || progressEvents[0].Total != 2 {
-		t.Fatalf("unexpected start progress: %+v", progressEvents[0])
-	}
+	require.NoError(t, err)
+	require.Equal(t, 1, result.FoldersCreated)
+	require.Equal(t, 2, result.FeedsCreated)
+	require.GreaterOrEqual(t, len(progressEvents), 3)
+	require.Equal(t, "started", progressEvents[0].Status)
+	require.Equal(t, 2, progressEvents[0].Total)
 
-	if len(feedService.calls) != 2 {
-		t.Fatalf("expected 2 feed imports, got %d", len(feedService.calls))
-	}
-	if feedService.calls[0].url != "https://a.com/rss" || feedService.calls[1].url != "https://b.com/rss" {
-		t.Fatalf("unexpected feed urls: %+v", feedService.calls)
-	}
-	if feedService.calls[0].folderID == nil || *feedService.calls[0].folderID != 10 {
-		t.Fatalf("expected folder id for Feed A")
-	}
-	if feedService.calls[1].folderID != nil {
-		t.Fatalf("expected root feed to have nil folder id")
-	}
+	require.Len(t, feedService.calls, 2)
+	require.Equal(t, "https://a.com/rss", feedService.calls[0].url)
+	require.Equal(t, "https://b.com/rss", feedService.calls[1].url)
+	require.NotNil(t, feedService.calls[0].folderID)
+	require.Equal(t, int64(10), *feedService.calls[0].folderID)
+	require.Nil(t, feedService.calls[1].folderID)
 
 	select {
 	case ids := <-refreshSvc.done:
-		if len(ids) != 2 {
-			t.Fatalf("expected 2 refresh ids, got %v", ids)
-		}
+		require.Len(t, ids, 2)
 	case <-time.After(500 * time.Millisecond):
 		t.Fatal("expected refresh to run")
 	}
@@ -101,7 +86,7 @@ func TestOPMLService_Import_EmptyFolderNameUsesUntitled(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	folderRepo := testutil.NewMockFolderRepository(ctrl)
+	folderRepo := mock_repo.NewMockFolderRepository(ctrl)
 	folderService := &folderServiceStub{nextID: 1}
 	feedService := &feedServiceStub{nextID: 1}
 
@@ -116,22 +101,19 @@ func TestOPMLService_Import_EmptyFolderNameUsesUntitled(t *testing.T) {
   </body>
 </opml>`
 
-	svc := NewOPMLService(folderService, feedService, nil, nil, folderRepo, nil)
+	svc := service.NewOPMLService(folderService, feedService, nil, nil, folderRepo, nil)
 	_, err := svc.Import(context.Background(), strings.NewReader(input), nil)
-	if err != nil {
-		t.Fatalf("Import failed: %v", err)
-	}
-	if len(folderService.created) == 0 || folderService.created[0].Name != "Untitled" {
-		t.Fatalf("expected Untitled folder, got %+v", folderService.created)
-	}
+	require.NoError(t, err)
+	require.NotEmpty(t, folderService.created)
+	require.Equal(t, "Untitled", folderService.created[0].Name)
 }
 
 func TestOPMLService_Export_SortsAndBuildsOutlines(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	folderRepo := testutil.NewMockFolderRepository(ctrl)
-	feedRepo := testutil.NewMockFeedRepository(ctrl)
+	folderRepo := mock_repo.NewMockFolderRepository(ctrl)
+	feedRepo := mock_repo.NewMockFeedRepository(ctrl)
 
 	folders := []model.Folder{
 		{ID: 1, Name: "B Folder"},
@@ -146,31 +128,23 @@ func TestOPMLService_Export_SortsAndBuildsOutlines(t *testing.T) {
 	folderRepo.EXPECT().List(gomock.Any()).Return(folders, nil)
 	feedRepo.EXPECT().List(gomock.Any(), (*int64)(nil)).Return(feeds, nil)
 
-	svc := NewOPMLService(nil, nil, nil, nil, folderRepo, feedRepo)
+	svc := service.NewOPMLService(nil, nil, nil, nil, folderRepo, feedRepo)
 	data, err := svc.Export(context.Background())
-	if err != nil {
-		t.Fatalf("Export failed: %v", err)
-	}
+	require.NoError(t, err)
 
 	doc, err := opml.Parse(bytes.NewReader(data))
-	if err != nil {
-		t.Fatalf("failed to parse exported opml: %v", err)
-	}
+	require.NoError(t, err)
 
-	if len(doc.Body.Outlines) != 4 {
-		t.Fatalf("expected 4 outlines, got %d", len(doc.Body.Outlines))
-	}
-	if doc.Body.Outlines[0].Text != "a folder" || doc.Body.Outlines[1].Text != "B Folder" {
-		t.Fatalf("unexpected folder order")
-	}
-	if doc.Body.Outlines[2].Text != "A Feed" || doc.Body.Outlines[3].Text != "Z Feed" {
-		t.Fatalf("unexpected feed order")
-	}
+	require.Len(t, doc.Body.Outlines, 4)
+	require.Equal(t, "a folder", doc.Body.Outlines[0].Text)
+	require.Equal(t, "B Folder", doc.Body.Outlines[1].Text)
+	require.Equal(t, "A Feed", doc.Body.Outlines[2].Text)
+	require.Equal(t, "Z Feed", doc.Body.Outlines[3].Text)
 
 	child := doc.Body.Outlines[1].Outlines
-	if len(child) != 1 || child[0].XMLURL != "https://c.com/rss" || child[0].HTMLURL != "https://c.com" {
-		t.Fatalf("unexpected child feed outline")
-	}
+	require.Len(t, child, 1)
+	require.Equal(t, "https://c.com/rss", child[0].XMLURL)
+	require.Equal(t, "https://c.com", child[0].HTMLURL)
 }
 
 type folderServiceStub struct {
@@ -222,8 +196,8 @@ func (s *feedServiceStub) AddWithoutFetch(ctx context.Context, feedURL string, f
 	return feed, true, nil
 }
 
-func (s *feedServiceStub) Preview(ctx context.Context, feedURL string) (FeedPreview, error) {
-	return FeedPreview{}, nil
+func (s *feedServiceStub) Preview(ctx context.Context, feedURL string) (service.FeedPreview, error) {
+	return service.FeedPreview{}, nil
 }
 
 func (s *feedServiceStub) List(ctx context.Context, folderID *int64) ([]model.Feed, error) {

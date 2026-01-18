@@ -7,10 +7,10 @@ import (
 
 	"github.com/labstack/echo/v4"
 
-	"gist/backend/internal/logger"
-	"gist/backend/internal/network"
 	"gist/backend/internal/service"
 	"gist/backend/internal/service/ai"
+	"gist/backend/pkg/logger"
+	"gist/backend/pkg/network"
 )
 
 // Request/Response types

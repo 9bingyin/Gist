@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"gist/backend/internal/logger"
+	"gist/backend/pkg/logger"
 	"gist/backend/internal/service"
 )
 

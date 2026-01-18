@@ -1,12 +1,14 @@
-package service
+package service_test
 
 import (
 	"context"
 	"errors"
 	"testing"
 
-	"gist/backend/internal/service/testutil"
+	"gist/backend/internal/repository/mock"
+	"gist/backend/internal/service"
 
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
 
@@ -14,57 +16,47 @@ func TestEntryService_ClearReadabilityCache(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockEntries := testutil.NewMockEntryRepository(ctrl)
-	service := NewEntryService(mockEntries, testutil.NewMockFeedRepository(ctrl), testutil.NewMockFolderRepository(ctrl))
+	mockEntries := mock.NewMockEntryRepository(ctrl)
+	svc := service.NewEntryService(mockEntries, mock.NewMockFeedRepository(ctrl), mock.NewMockFolderRepository(ctrl))
 
 	mockEntries.EXPECT().ClearAllReadableContent(context.Background()).Return(int64(5), nil)
 
-	count, err := service.ClearReadabilityCache(context.Background())
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if count != 5 {
-		t.Fatalf("expected 5, got %d", count)
-	}
+	count, err := svc.ClearReadabilityCache(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, int64(5), count)
 }
 
 func TestEntryService_ClearEntryCache(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockEntries := testutil.NewMockEntryRepository(ctrl)
-	mockFeeds := testutil.NewMockFeedRepository(ctrl)
-	service := NewEntryService(mockEntries, mockFeeds, testutil.NewMockFolderRepository(ctrl))
+	mockEntries := mock.NewMockEntryRepository(ctrl)
+	mockFeeds := mock.NewMockFeedRepository(ctrl)
+	svc := service.NewEntryService(mockEntries, mockFeeds, mock.NewMockFolderRepository(ctrl))
 
 	mockEntries.EXPECT().DeleteUnstarred(context.Background()).Return(int64(3), nil)
 	mockFeeds.EXPECT().ClearAllConditionalGet(context.Background()).Return(int64(2), nil)
 
-	count, err := service.ClearEntryCache(context.Background())
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if count != 3 {
-		t.Fatalf("expected 3, got %d", count)
-	}
+	count, err := svc.ClearEntryCache(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, int64(3), count)
 }
 
 func TestEntryService_ClearCaches_RepositoryError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockEntries := testutil.NewMockEntryRepository(ctrl)
-	service := NewEntryService(mockEntries, testutil.NewMockFeedRepository(ctrl), testutil.NewMockFolderRepository(ctrl))
+	mockEntries := mock.NewMockEntryRepository(ctrl)
+	svc := service.NewEntryService(mockEntries, mock.NewMockFeedRepository(ctrl), mock.NewMockFolderRepository(ctrl))
 
 	errReadability := errors.New("clear readability failed")
 	errEntries := errors.New("clear entries failed")
 
 	mockEntries.EXPECT().ClearAllReadableContent(context.Background()).Return(int64(0), errReadability)
-	if _, err := service.ClearReadabilityCache(context.Background()); !errors.Is(err, errReadability) {
-		t.Fatalf("expected readability error, got %v", err)
-	}
+	_, err := svc.ClearReadabilityCache(context.Background())
+	require.ErrorIs(t, err, errReadability)
 
 	mockEntries.EXPECT().DeleteUnstarred(context.Background()).Return(int64(0), errEntries)
-	if _, err := service.ClearEntryCache(context.Background()); !errors.Is(err, errEntries) {
-		t.Fatalf("expected entry cache error, got %v", err)
-	}
+	_, err = svc.ClearEntryCache(context.Background())
+	require.ErrorIs(t, err, errEntries)
 }

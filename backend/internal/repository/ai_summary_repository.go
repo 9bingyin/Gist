@@ -1,3 +1,4 @@
+//go:generate mockgen -source=$GOFILE -destination=mock/$GOFILE -package=mock
 package repository
 
 import (
@@ -6,7 +7,7 @@ import (
 	"time"
 
 	"gist/backend/internal/model"
-	"gist/backend/internal/snowflake"
+	"gist/backend/pkg/snowflake"
 )
 
 type AISummaryRepository interface {

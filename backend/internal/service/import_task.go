@@ -1,3 +1,4 @@
+//go:generate mockgen -source=$GOFILE -destination=mock/$GOFILE -package=mock
 package service
 
 import (
@@ -7,7 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"gist/backend/internal/logger"
+	"gist/backend/pkg/logger"
 )
 
 type ImportTask struct {

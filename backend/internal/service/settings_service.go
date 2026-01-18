@@ -1,3 +1,4 @@
+//go:generate mockgen -source=$GOFILE -destination=mock/$GOFILE -package=mock
 package service
 
 import (
@@ -6,7 +7,7 @@ import (
 	"fmt"
 	"net/url"
 
-	"gist/backend/internal/logger"
+	"gist/backend/pkg/logger"
 	"gist/backend/internal/repository"
 	"gist/backend/internal/service/ai"
 )

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"gist/backend/internal/logger"
+	"gist/backend/pkg/logger"
 	"gist/backend/internal/repository"
 )
 

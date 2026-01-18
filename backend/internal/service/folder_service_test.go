@@ -1,4 +1,4 @@
-package service
+package service_test
 
 import (
 	"context"
@@ -9,8 +9,10 @@ import (
 	"time"
 
 	"gist/backend/internal/model"
-	"gist/backend/internal/service/testutil"
+	"gist/backend/internal/service"
+	"gist/backend/internal/repository/mock"
 
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
 
@@ -18,9 +20,9 @@ func TestFolderService_Create_Success(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockFolders := testutil.NewMockFolderRepository(ctrl)
-	mockFeeds := testutil.NewMockFeedRepository(ctrl)
-	service := NewFolderService(mockFolders, mockFeeds)
+	mockFolders := mock.NewMockFolderRepository(ctrl)
+	mockFeeds := mock.NewMockFeedRepository(ctrl)
+	svc := service.NewFolderService(mockFolders, mockFeeds)
 	ctx := context.Background()
 
 	mockFolders.EXPECT().
@@ -35,47 +37,35 @@ func TestFolderService_Create_Success(t *testing.T) {
 			Type: "article",
 		}, nil)
 
-	folder, err := service.Create(ctx, "Tech News", nil, "article")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if folder.ID != 123 {
-		t.Errorf("expected ID 123, got %d", folder.ID)
-	}
-
-	if folder.Name != "Tech News" {
-		t.Errorf("expected name 'Tech News', got %s", folder.Name)
-	}
+	folder, err := svc.Create(ctx, "Tech News", nil, "article")
+	require.NoError(t, err)
+	require.Equal(t, int64(123), folder.ID)
+	require.Equal(t, "Tech News", folder.Name)
 }
 
 func TestFolderService_Create_EmptyName(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockFolders := testutil.NewMockFolderRepository(ctrl)
-	mockFeeds := testutil.NewMockFeedRepository(ctrl)
-	service := NewFolderService(mockFolders, mockFeeds)
+	mockFolders := mock.NewMockFolderRepository(ctrl)
+	mockFeeds := mock.NewMockFeedRepository(ctrl)
+	svc := service.NewFolderService(mockFolders, mockFeeds)
 	ctx := context.Background()
 
-	_, err := service.Create(ctx, "", nil, "article")
-	if !errors.Is(err, ErrInvalid) {
-		t.Errorf("expected ErrInvalid, got %v", err)
-	}
+	_, err := svc.Create(ctx, "", nil, "article")
+	require.ErrorIs(t, err, service.ErrInvalid)
 
-	_, err = service.Create(ctx, "   ", nil, "article")
-	if !errors.Is(err, ErrInvalid) {
-		t.Errorf("expected ErrInvalid for whitespace-only name, got %v", err)
-	}
+	_, err = svc.Create(ctx, "   ", nil, "article")
+	require.ErrorIs(t, err, service.ErrInvalid)
 }
 
 func TestFolderService_Create_DuplicateName(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockFolders := testutil.NewMockFolderRepository(ctrl)
-	mockFeeds := testutil.NewMockFeedRepository(ctrl)
-	service := NewFolderService(mockFolders, mockFeeds)
+	mockFolders := mock.NewMockFolderRepository(ctrl)
+	mockFeeds := mock.NewMockFeedRepository(ctrl)
+	svc := service.NewFolderService(mockFolders, mockFeeds)
 	ctx := context.Background()
 
 	existingFolder := &model.Folder{ID: 1, Name: "Existing"}
@@ -84,19 +74,17 @@ func TestFolderService_Create_DuplicateName(t *testing.T) {
 		FindByName(ctx, "Existing", (*int64)(nil)).
 		Return(existingFolder, nil)
 
-	_, err := service.Create(ctx, "Existing", nil, "article")
-	if !errors.Is(err, ErrConflict) {
-		t.Errorf("expected ErrConflict, got %v", err)
-	}
+	_, err := svc.Create(ctx, "Existing", nil, "article")
+	require.ErrorIs(t, err, service.ErrConflict)
 }
 
 func TestFolderService_Create_ParentNotFound(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockFolders := testutil.NewMockFolderRepository(ctrl)
-	mockFeeds := testutil.NewMockFeedRepository(ctrl)
-	service := NewFolderService(mockFolders, mockFeeds)
+	mockFolders := mock.NewMockFolderRepository(ctrl)
+	mockFeeds := mock.NewMockFeedRepository(ctrl)
+	svc := service.NewFolderService(mockFolders, mockFeeds)
 	ctx := context.Background()
 
 	parentID := int64(999)
@@ -105,19 +93,17 @@ func TestFolderService_Create_ParentNotFound(t *testing.T) {
 		GetByID(ctx, parentID).
 		Return(model.Folder{}, sql.ErrNoRows)
 
-	_, err := service.Create(ctx, "Child", &parentID, "article")
-	if !errors.Is(err, ErrNotFound) {
-		t.Errorf("expected ErrNotFound, got %v", err)
-	}
+	_, err := svc.Create(ctx, "Child", &parentID, "article")
+	require.ErrorIs(t, err, service.ErrNotFound)
 }
 
 func TestFolderService_Create_WithParent(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockFolders := testutil.NewMockFolderRepository(ctrl)
-	mockFeeds := testutil.NewMockFeedRepository(ctrl)
-	service := NewFolderService(mockFolders, mockFeeds)
+	mockFolders := mock.NewMockFolderRepository(ctrl)
+	mockFeeds := mock.NewMockFeedRepository(ctrl)
+	svc := service.NewFolderService(mockFolders, mockFeeds)
 	ctx := context.Background()
 
 	parentID := int64(100)
@@ -134,29 +120,22 @@ func TestFolderService_Create_WithParent(t *testing.T) {
 		Create(ctx, "Child", &parentID, "article").
 		Return(model.Folder{ID: 200, Name: "Child", ParentID: &parentID}, nil)
 
-	folder, err := service.Create(ctx, "Child", &parentID, "article")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if folder.ParentID == nil || *folder.ParentID != parentID {
-		t.Error("expected parent_id to be set")
-	}
+	folder, err := svc.Create(ctx, "Child", &parentID, "article")
+	require.NoError(t, err)
+	require.NotNil(t, folder.ParentID)
+	require.Equal(t, parentID, *folder.ParentID)
 }
 
 func TestFolderService_Update_Success(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockFolders := testutil.NewMockFolderRepository(ctrl)
-	mockFeeds := testutil.NewMockFeedRepository(ctrl)
-	service := NewFolderService(mockFolders, mockFeeds)
+	mockFolders := mock.NewMockFolderRepository(ctrl)
+	mockFeeds := mock.NewMockFeedRepository(ctrl)
+	svc := service.NewFolderService(mockFolders, mockFeeds)
 	ctx := context.Background()
 
 	folderID := int64(123)
-
-	// detectCycle doesn't call GetByID when newParentID is nil
-	// Only Update method calls GetByID once
 
 	mockFolders.EXPECT().
 		GetByID(ctx, folderID).
@@ -170,41 +149,34 @@ func TestFolderService_Update_Success(t *testing.T) {
 		Update(ctx, folderID, "New Name", (*int64)(nil)).
 		Return(model.Folder{ID: folderID, Name: "New Name"}, nil)
 
-	folder, err := service.Update(ctx, folderID, "New Name", nil)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if folder.Name != "New Name" {
-		t.Errorf("expected name 'New Name', got %s", folder.Name)
-	}
+	folder, err := svc.Update(ctx, folderID, "New Name", nil)
+	require.NoError(t, err)
+	require.Equal(t, "New Name", folder.Name)
 }
 
 func TestFolderService_Update_DirectCycle(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockFolders := testutil.NewMockFolderRepository(ctrl)
-	mockFeeds := testutil.NewMockFeedRepository(ctrl)
-	service := NewFolderService(mockFolders, mockFeeds)
+	mockFolders := mock.NewMockFolderRepository(ctrl)
+	mockFeeds := mock.NewMockFeedRepository(ctrl)
+	svc := service.NewFolderService(mockFolders, mockFeeds)
 	ctx := context.Background()
 
 	folderID := int64(123)
 
 	// Attempt to set parent to self
-	_, err := service.Update(ctx, folderID, "Test", &folderID)
-	if !errors.Is(err, ErrInvalid) {
-		t.Errorf("expected ErrInvalid for self-reference, got %v", err)
-	}
+	_, err := svc.Update(ctx, folderID, "Test", &folderID)
+	require.ErrorIs(t, err, service.ErrInvalid)
 }
 
 func TestFolderService_Update_IndirectCycle(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockFolders := testutil.NewMockFolderRepository(ctrl)
-	mockFeeds := testutil.NewMockFeedRepository(ctrl)
-	service := NewFolderService(mockFolders, mockFeeds)
+	mockFolders := mock.NewMockFolderRepository(ctrl)
+	mockFeeds := mock.NewMockFeedRepository(ctrl)
+	svc := service.NewFolderService(mockFolders, mockFeeds)
 	ctx := context.Background()
 
 	// Create hierarchy: A -> B -> C
@@ -215,13 +187,6 @@ func TestFolderService_Update_IndirectCycle(t *testing.T) {
 	folderB := model.Folder{ID: idB, Name: "B", ParentID: &idA}
 	folderC := model.Folder{ID: idC, Name: "C", ParentID: &idB}
 
-	// detectCycle walks up from new parent (C):
-	// visited[1] = true (folderID being updated)
-	// currentID = 3 (newParentID)
-	// Get folder 3 -> visited[3] = true, parentID = 2
-	// Get folder 2 -> visited[2] = true, parentID = 1
-	// visited[1] is already true -> CYCLE DETECTED
-
 	mockFolders.EXPECT().
 		GetByID(ctx, idC).
 		Return(folderC, nil)
@@ -230,23 +195,18 @@ func TestFolderService_Update_IndirectCycle(t *testing.T) {
 		GetByID(ctx, idB).
 		Return(folderB, nil)
 
-	// When we check folder B's parent (idA=1), we find it's already in visited map
-	// So cycle is detected, no need to call GetByID(idA)
-
 	// Try to set A's parent to C (would create cycle: A -> C -> B -> A)
-	_, err := service.Update(ctx, idA, "A", &idC)
-	if !errors.Is(err, ErrInvalid) {
-		t.Errorf("expected ErrInvalid for indirect cycle, got %v", err)
-	}
+	_, err := svc.Update(ctx, idA, "A", &idC)
+	require.ErrorIs(t, err, service.ErrInvalid)
 }
 
 func TestFolderService_UpdateType_CascadeToFeeds(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockFolders := testutil.NewMockFolderRepository(ctrl)
-	mockFeeds := testutil.NewMockFeedRepository(ctrl)
-	service := NewFolderService(mockFolders, mockFeeds)
+	mockFolders := mock.NewMockFolderRepository(ctrl)
+	mockFeeds := mock.NewMockFeedRepository(ctrl)
+	svc := service.NewFolderService(mockFolders, mockFeeds)
 	ctx := context.Background()
 
 	folderID := int64(123)
@@ -259,24 +219,21 @@ func TestFolderService_UpdateType_CascadeToFeeds(t *testing.T) {
 		UpdateType(ctx, folderID, "picture").
 		Return(nil)
 
-	// Feeds should be updated using batch operation
 	mockFeeds.EXPECT().
 		UpdateTypeByFolderID(ctx, folderID, "picture").
 		Return(nil)
 
-	err := service.UpdateType(ctx, folderID, "picture")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	err := svc.UpdateType(ctx, folderID, "picture")
+	require.NoError(t, err)
 }
 
 func TestFolderService_Delete_Success(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockFolders := testutil.NewMockFolderRepository(ctrl)
-	mockFeeds := testutil.NewMockFeedRepository(ctrl)
-	service := NewFolderService(mockFolders, mockFeeds)
+	mockFolders := mock.NewMockFolderRepository(ctrl)
+	mockFeeds := mock.NewMockFeedRepository(ctrl)
+	svc := service.NewFolderService(mockFolders, mockFeeds)
 	ctx := context.Background()
 
 	folderID := int64(123)
@@ -285,7 +242,6 @@ func TestFolderService_Delete_Success(t *testing.T) {
 		GetByID(ctx, folderID).
 		Return(model.Folder{ID: folderID, Name: "Test"}, nil)
 
-	// Return empty feed list
 	mockFeeds.EXPECT().
 		List(ctx, &folderID).
 		Return([]model.Feed{}, nil)
@@ -294,19 +250,17 @@ func TestFolderService_Delete_Success(t *testing.T) {
 		Delete(ctx, folderID).
 		Return(nil)
 
-	err := service.Delete(ctx, folderID)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	err := svc.Delete(ctx, folderID)
+	require.NoError(t, err)
 }
 
 func TestFolderService_Delete_WithFeeds(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockFolders := testutil.NewMockFolderRepository(ctrl)
-	mockFeeds := testutil.NewMockFeedRepository(ctrl)
-	service := NewFolderService(mockFolders, mockFeeds)
+	mockFolders := mock.NewMockFolderRepository(ctrl)
+	mockFeeds := mock.NewMockFeedRepository(ctrl)
+	svc := service.NewFolderService(mockFolders, mockFeeds)
 	ctx := context.Background()
 
 	folderID := int64(123)
@@ -315,7 +269,6 @@ func TestFolderService_Delete_WithFeeds(t *testing.T) {
 		GetByID(ctx, folderID).
 		Return(model.Folder{ID: folderID, Name: "Test"}, nil)
 
-	// Return 2 feeds in this folder
 	feeds := []model.Feed{
 		{ID: 1, FolderID: &folderID, Title: "Feed 1"},
 		{ID: 2, FolderID: &folderID, Title: "Feed 2"},
@@ -325,7 +278,6 @@ func TestFolderService_Delete_WithFeeds(t *testing.T) {
 		List(ctx, &folderID).
 		Return(feeds, nil)
 
-	// Feeds should be deleted using batch operation
 	mockFeeds.EXPECT().
 		DeleteBatch(ctx, []int64{1, 2}).
 		Return(int64(2), nil)
@@ -334,38 +286,34 @@ func TestFolderService_Delete_WithFeeds(t *testing.T) {
 		Delete(ctx, folderID).
 		Return(nil)
 
-	err := service.Delete(ctx, folderID)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	err := svc.Delete(ctx, folderID)
+	require.NoError(t, err)
 }
 
 func TestFolderService_Delete_NotFound(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockFolders := testutil.NewMockFolderRepository(ctrl)
-	mockFeeds := testutil.NewMockFeedRepository(ctrl)
-	service := NewFolderService(mockFolders, mockFeeds)
+	mockFolders := mock.NewMockFolderRepository(ctrl)
+	mockFeeds := mock.NewMockFeedRepository(ctrl)
+	svc := service.NewFolderService(mockFolders, mockFeeds)
 	ctx := context.Background()
 
 	mockFolders.EXPECT().
 		GetByID(ctx, int64(999)).
 		Return(model.Folder{}, sql.ErrNoRows)
 
-	err := service.Delete(ctx, 999)
-	if !errors.Is(err, ErrNotFound) {
-		t.Errorf("expected ErrNotFound, got %v", err)
-	}
+	err := svc.Delete(ctx, 999)
+	require.ErrorIs(t, err, service.ErrNotFound)
 }
 
 func TestFolderService_List_Success(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockFolders := testutil.NewMockFolderRepository(ctrl)
-	mockFeeds := testutil.NewMockFeedRepository(ctrl)
-	service := NewFolderService(mockFolders, mockFeeds)
+	mockFolders := mock.NewMockFolderRepository(ctrl)
+	mockFeeds := mock.NewMockFeedRepository(ctrl)
+	svc := service.NewFolderService(mockFolders, mockFeeds)
 	ctx := context.Background()
 
 	expectedFolders := []model.Folder{
@@ -377,77 +325,57 @@ func TestFolderService_List_Success(t *testing.T) {
 		List(ctx).
 		Return(expectedFolders, nil)
 
-	folders, err := service.List(ctx)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if len(folders) != 2 {
-		t.Errorf("expected 2 folders, got %d", len(folders))
-	}
-
-	if folders[0].Name != "Folder A" {
-		t.Errorf("expected first folder name 'Folder A', got %s", folders[0].Name)
-	}
+	folders, err := svc.List(ctx)
+	require.NoError(t, err)
+	require.Len(t, folders, 2)
+	require.Equal(t, "Folder A", folders[0].Name)
 }
 
 func TestFolderService_Update_NameConflict(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockFolders := testutil.NewMockFolderRepository(ctrl)
-	mockFeeds := testutil.NewMockFeedRepository(ctrl)
-	service := NewFolderService(mockFolders, mockFeeds)
+	mockFolders := mock.NewMockFolderRepository(ctrl)
+	mockFeeds := mock.NewMockFeedRepository(ctrl)
+	svc := service.NewFolderService(mockFolders, mockFeeds)
 	ctx := context.Background()
 
 	folderID := int64(123)
 	parentID := int64(100)
 
-	// detectCycle will get parent
 	mockFolders.EXPECT().
 		GetByID(ctx, parentID).
-		Return(model.Folder{ID: parentID, Name: "Parent"}, nil)
+		Return(model.Folder{ID: parentID, Name: "Parent"}, nil).AnyTimes()
 
-	// Then check parent again
-	mockFolders.EXPECT().
-		GetByID(ctx, parentID).
-		Return(model.Folder{ID: parentID, Name: "Parent"}, nil)
-
-	// Get the folder being updated
 	mockFolders.EXPECT().
 		GetByID(ctx, folderID).
 		Return(model.Folder{ID: folderID, Name: "Old Name"}, nil)
 
-	// Another folder with same name already exists under same parent
 	existingFolder := &model.Folder{ID: 456, Name: "Existing Name", ParentID: &parentID}
 
 	mockFolders.EXPECT().
 		FindByName(ctx, "Existing Name", &parentID).
 		Return(existingFolder, nil)
 
-	_, err := service.Update(ctx, folderID, "Existing Name", &parentID)
-	if !errors.Is(err, ErrConflict) {
-		t.Errorf("expected ErrConflict, got %v", err)
-	}
+	_, err := svc.Update(ctx, folderID, "Existing Name", &parentID)
+	require.ErrorIs(t, err, service.ErrConflict)
 }
 
 func TestFolderService_Update_SameNameOK(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockFolders := testutil.NewMockFolderRepository(ctrl)
-	mockFeeds := testutil.NewMockFeedRepository(ctrl)
-	service := NewFolderService(mockFolders, mockFeeds)
+	mockFolders := mock.NewMockFolderRepository(ctrl)
+	mockFeeds := mock.NewMockFeedRepository(ctrl)
+	svc := service.NewFolderService(mockFolders, mockFeeds)
 	ctx := context.Background()
 
 	folderID := int64(123)
 
-	// GetByID called once by Update method
 	mockFolders.EXPECT().
 		GetByID(ctx, folderID).
 		Return(model.Folder{ID: folderID, Name: "Same Name"}, nil)
 
-	// FindByName returns the same folder (renaming to itself is OK)
 	existingFolder := &model.Folder{ID: folderID, Name: "Same Name"}
 
 	mockFolders.EXPECT().
@@ -458,10 +386,8 @@ func TestFolderService_Update_SameNameOK(t *testing.T) {
 		Update(ctx, folderID, "Same Name", (*int64)(nil)).
 		Return(model.Folder{ID: folderID, Name: "Same Name"}, nil)
 
-	_, err := service.Update(ctx, folderID, "Same Name", nil)
-	if err != nil {
-		t.Errorf("renaming folder to same name should succeed, got error: %v", err)
-	}
+	_, err := svc.Update(ctx, folderID, "Same Name", nil)
+	require.NoError(t, err)
 }
 
 // --- Error Propagation Tests ---
@@ -470,9 +396,9 @@ func TestFolderService_Create_RepositoryError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockFolders := testutil.NewMockFolderRepository(ctrl)
-	mockFeeds := testutil.NewMockFeedRepository(ctrl)
-	service := NewFolderService(mockFolders, mockFeeds)
+	mockFolders := mock.NewMockFolderRepository(ctrl)
+	mockFeeds := mock.NewMockFeedRepository(ctrl)
+	svc := service.NewFolderService(mockFolders, mockFeeds)
 	ctx := context.Background()
 
 	dbError := errors.New("database connection lost")
@@ -481,7 +407,7 @@ func TestFolderService_Create_RepositoryError(t *testing.T) {
 		FindByName(ctx, "Test", (*int64)(nil)).
 		Return(nil, dbError)
 
-	_, err := service.Create(ctx, "Test", nil, "article")
+	_, err := svc.Create(ctx, "Test", nil, "article")
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -495,9 +421,9 @@ func TestFolderService_Create_ParentCheckError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockFolders := testutil.NewMockFolderRepository(ctrl)
-	mockFeeds := testutil.NewMockFeedRepository(ctrl)
-	service := NewFolderService(mockFolders, mockFeeds)
+	mockFolders := mock.NewMockFolderRepository(ctrl)
+	mockFeeds := mock.NewMockFeedRepository(ctrl)
+	svc := service.NewFolderService(mockFolders, mockFeeds)
 	ctx := context.Background()
 
 	parentID := int64(100)
@@ -507,7 +433,7 @@ func TestFolderService_Create_ParentCheckError(t *testing.T) {
 		GetByID(ctx, parentID).
 		Return(model.Folder{}, dbError)
 
-	_, err := service.Create(ctx, "Child", &parentID, "article")
+	_, err := svc.Create(ctx, "Child", &parentID, "article")
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -521,9 +447,9 @@ func TestFolderService_Update_CycleDetectionError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockFolders := testutil.NewMockFolderRepository(ctrl)
-	mockFeeds := testutil.NewMockFeedRepository(ctrl)
-	service := NewFolderService(mockFolders, mockFeeds)
+	mockFolders := mock.NewMockFolderRepository(ctrl)
+	mockFeeds := mock.NewMockFeedRepository(ctrl)
+	svc := service.NewFolderService(mockFolders, mockFeeds)
 	ctx := context.Background()
 
 	folderID := int64(1)
@@ -535,7 +461,7 @@ func TestFolderService_Update_CycleDetectionError(t *testing.T) {
 		GetByID(ctx, parentID).
 		Return(model.Folder{}, dbError)
 
-	_, err := service.Update(ctx, folderID, "Test", &parentID)
+	_, err := svc.Update(ctx, folderID, "Test", &parentID)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -549,9 +475,9 @@ func TestFolderService_List_RepositoryError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockFolders := testutil.NewMockFolderRepository(ctrl)
-	mockFeeds := testutil.NewMockFeedRepository(ctrl)
-	service := NewFolderService(mockFolders, mockFeeds)
+	mockFolders := mock.NewMockFolderRepository(ctrl)
+	mockFeeds := mock.NewMockFeedRepository(ctrl)
+	svc := service.NewFolderService(mockFolders, mockFeeds)
 	ctx := context.Background()
 
 	dbError := errors.New("database unavailable")
@@ -560,7 +486,7 @@ func TestFolderService_List_RepositoryError(t *testing.T) {
 		List(ctx).
 		Return(nil, dbError)
 
-	_, err := service.List(ctx)
+	_, err := svc.List(ctx)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -576,9 +502,9 @@ func TestFolderService_UpdateType_FolderUpdateFails(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockFolders := testutil.NewMockFolderRepository(ctrl)
-	mockFeeds := testutil.NewMockFeedRepository(ctrl)
-	service := NewFolderService(mockFolders, mockFeeds)
+	mockFolders := mock.NewMockFolderRepository(ctrl)
+	mockFeeds := mock.NewMockFeedRepository(ctrl)
+	svc := service.NewFolderService(mockFolders, mockFeeds)
 	ctx := context.Background()
 
 	folderID := int64(123)
@@ -592,7 +518,7 @@ func TestFolderService_UpdateType_FolderUpdateFails(t *testing.T) {
 		UpdateType(ctx, folderID, "picture").
 		Return(dbError)
 
-	err := service.UpdateType(ctx, folderID, "picture")
+	err := svc.UpdateType(ctx, folderID, "picture")
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -606,9 +532,9 @@ func TestFolderService_UpdateType_BatchUpdateFails(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockFolders := testutil.NewMockFolderRepository(ctrl)
-	mockFeeds := testutil.NewMockFeedRepository(ctrl)
-	service := NewFolderService(mockFolders, mockFeeds)
+	mockFolders := mock.NewMockFolderRepository(ctrl)
+	mockFeeds := mock.NewMockFeedRepository(ctrl)
+	svc := service.NewFolderService(mockFolders, mockFeeds)
 	ctx := context.Background()
 
 	folderID := int64(123)
@@ -626,7 +552,7 @@ func TestFolderService_UpdateType_BatchUpdateFails(t *testing.T) {
 		UpdateTypeByFolderID(ctx, folderID, "picture").
 		Return(dbError)
 
-	err := service.UpdateType(ctx, folderID, "picture")
+	err := svc.UpdateType(ctx, folderID, "picture")
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -640,9 +566,9 @@ func TestFolderService_Delete_ListFeedsFails(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockFolders := testutil.NewMockFolderRepository(ctrl)
-	mockFeeds := testutil.NewMockFeedRepository(ctrl)
-	service := NewFolderService(mockFolders, mockFeeds)
+	mockFolders := mock.NewMockFolderRepository(ctrl)
+	mockFeeds := mock.NewMockFeedRepository(ctrl)
+	svc := service.NewFolderService(mockFolders, mockFeeds)
 	ctx := context.Background()
 
 	folderID := int64(123)
@@ -656,7 +582,7 @@ func TestFolderService_Delete_ListFeedsFails(t *testing.T) {
 		List(ctx, &folderID).
 		Return(nil, dbError)
 
-	err := service.Delete(ctx, folderID)
+	err := svc.Delete(ctx, folderID)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -670,9 +596,9 @@ func TestFolderService_Delete_FeedDeleteBatchFails(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockFolders := testutil.NewMockFolderRepository(ctrl)
-	mockFeeds := testutil.NewMockFeedRepository(ctrl)
-	service := NewFolderService(mockFolders, mockFeeds)
+	mockFolders := mock.NewMockFolderRepository(ctrl)
+	mockFeeds := mock.NewMockFeedRepository(ctrl)
+	svc := service.NewFolderService(mockFolders, mockFeeds)
 	ctx := context.Background()
 
 	folderID := int64(123)
@@ -696,7 +622,7 @@ func TestFolderService_Delete_FeedDeleteBatchFails(t *testing.T) {
 		DeleteBatch(ctx, []int64{1, 2}).
 		Return(int64(0), dbError)
 
-	err := service.Delete(ctx, folderID)
+	err := svc.Delete(ctx, folderID)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -710,9 +636,9 @@ func TestFolderService_Delete_FolderDeleteFails(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockFolders := testutil.NewMockFolderRepository(ctrl)
-	mockFeeds := testutil.NewMockFeedRepository(ctrl)
-	service := NewFolderService(mockFolders, mockFeeds)
+	mockFolders := mock.NewMockFolderRepository(ctrl)
+	mockFeeds := mock.NewMockFeedRepository(ctrl)
+	svc := service.NewFolderService(mockFolders, mockFeeds)
 	ctx := context.Background()
 
 	folderID := int64(123)
@@ -730,7 +656,7 @@ func TestFolderService_Delete_FolderDeleteFails(t *testing.T) {
 		Delete(ctx, folderID).
 		Return(dbError)
 
-	err := service.Delete(ctx, folderID)
+	err := svc.Delete(ctx, folderID)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}

@@ -1,10 +1,12 @@
-package service
+package service_test
 
 import (
+	"gist/backend/internal/service"
 	"context"
 	"errors"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 
 	"gist/backend/internal/model"
 	"gist/backend/internal/service/ai"
@@ -12,93 +14,76 @@ import (
 
 func TestAIService_GetSummaryLanguage(t *testing.T) {
 	repo := newSettingsRepoStub()
-	svc := NewAIService(&summaryRepoStub{}, &translationRepoStub{}, &listTranslationRepoStub{}, repo, ai.NewRateLimiter(100))
+	svc := service.NewAIService(&summaryRepoStub{}, &translationRepoStub{}, &listTranslationRepoStub{}, repo, ai.NewRateLimiter(100))
 
-	if lang := svc.GetSummaryLanguage(context.Background()); lang != "zh-CN" {
-		t.Fatalf("expected default language, got %s", lang)
-	}
+	lang := svc.GetSummaryLanguage(context.Background())
+	require.Equal(t, "zh-CN", lang, "expected default language")
 
-	repo.data[keyAISummaryLanguage] = "en-US"
-	if lang := svc.GetSummaryLanguage(context.Background()); lang != "en-US" {
-		t.Fatalf("expected stored language, got %s", lang)
-	}
+	repo.data[service.KeyAISummaryLanguage] = "en-US"
+	lang = svc.GetSummaryLanguage(context.Background())
+	require.Equal(t, "en-US", lang, "expected stored language")
 }
 
 func TestAIService_SaveSummaryAndTranslation_UsesLanguage(t *testing.T) {
 	repo := newSettingsRepoStub()
-	repo.data[keyAISummaryLanguage] = "en-US"
+	repo.data[service.KeyAISummaryLanguage] = "en-US"
 
 	summaryRepo := &summaryRepoStub{}
 	translationRepo := &translationRepoStub{}
-	svc := NewAIService(summaryRepo, translationRepo, &listTranslationRepoStub{}, repo, ai.NewRateLimiter(100))
+	svc := service.NewAIService(summaryRepo, translationRepo, &listTranslationRepoStub{}, repo, ai.NewRateLimiter(100))
 
-	if err := svc.SaveSummary(context.Background(), 1, false, "summary"); err != nil {
-		t.Fatalf("SaveSummary failed: %v", err)
-	}
-	if summaryRepo.lastLanguage != "en-US" {
-		t.Fatalf("expected language en-US, got %s", summaryRepo.lastLanguage)
-	}
+	err := svc.SaveSummary(context.Background(), 1, false, "summary")
+	require.NoError(t, err, "SaveSummary should not fail")
+	require.Equal(t, "en-US", summaryRepo.lastLanguage, "expected language en-US")
 
-	if err := svc.SaveTranslation(context.Background(), 2, true, "content"); err != nil {
-		t.Fatalf("SaveTranslation failed: %v", err)
-	}
-	if translationRepo.lastLanguage != "en-US" {
-		t.Fatalf("expected language en-US, got %s", translationRepo.lastLanguage)
-	}
+	err = svc.SaveTranslation(context.Background(), 2, true, "content")
+	require.NoError(t, err, "SaveTranslation should not fail")
+	require.Equal(t, "en-US", translationRepo.lastLanguage, "expected language en-US")
 }
 
 func TestAIService_ClearAllCache_ErrorPropagation(t *testing.T) {
 	summaryRepo := &summaryRepoStub{deleteAllErr: errors.New("summary delete failed")}
 	translationRepo := &translationRepoStub{}
 	listRepo := &listTranslationRepoStub{}
-	svc := NewAIService(summaryRepo, translationRepo, listRepo, newSettingsRepoStub(), ai.NewRateLimiter(100))
+	svc := service.NewAIService(summaryRepo, translationRepo, listRepo, newSettingsRepoStub(), ai.NewRateLimiter(100))
 
 	_, _, _, err := svc.ClearAllCache(context.Background())
-	if err == nil || !strings.Contains(err.Error(), "clear summaries") {
-		t.Fatalf("expected summary clear error, got %v", err)
-	}
+	require.Error(t, err, "expected summary clear error")
+	require.Contains(t, err.Error(), "clear summaries")
 
 	summaryRepo.deleteAllErr = nil
 	translationRepo.deleteAllErr = errors.New("translation delete failed")
 	_, _, _, err = svc.ClearAllCache(context.Background())
-	if err == nil || !strings.Contains(err.Error(), "clear translations") {
-		t.Fatalf("expected translation clear error, got %v", err)
-	}
+	require.Error(t, err, "expected translation clear error")
+	require.Contains(t, err.Error(), "clear translations")
 
 	translationRepo.deleteAllErr = nil
 	listRepo.deleteAllErr = errors.New("list translation delete failed")
 	_, _, _, err = svc.ClearAllCache(context.Background())
-	if err == nil || !strings.Contains(err.Error(), "clear list translations") {
-		t.Fatalf("expected list translation clear error, got %v", err)
-	}
+	require.Error(t, err, "expected list translation clear error")
+	require.Contains(t, err.Error(), "clear list translations")
 }
 
 func TestAIService_Summarize_MissingConfig(t *testing.T) {
 	repo := newSettingsRepoStub()
-	svc := NewAIService(&summaryRepoStub{}, &translationRepoStub{}, &listTranslationRepoStub{}, repo, ai.NewRateLimiter(100))
+	svc := service.NewAIService(&summaryRepoStub{}, &translationRepoStub{}, &listTranslationRepoStub{}, repo, ai.NewRateLimiter(100))
 
 	_, _, err := svc.Summarize(context.Background(), 1, "content", "title", false)
-	if err == nil {
-		t.Fatalf("expected error for missing config")
-	}
+	require.Error(t, err, "expected error for missing config")
 }
 
 func TestAIService_TranslateBlocks_EmptyContent(t *testing.T) {
-	svc := NewAIService(&summaryRepoStub{}, &translationRepoStub{}, &listTranslationRepoStub{}, newSettingsRepoStub(), ai.NewRateLimiter(100))
+	svc := service.NewAIService(&summaryRepoStub{}, &translationRepoStub{}, &listTranslationRepoStub{}, newSettingsRepoStub(), ai.NewRateLimiter(100))
 
 	_, _, _, err := svc.TranslateBlocks(context.Background(), 1, "", "title", false)
-	if err == nil {
-		t.Fatalf("expected error for empty content")
-	}
+	require.Error(t, err, "expected error for empty content")
 }
 
 func TestAIService_TranslateBatch_EmptyInput(t *testing.T) {
-	svc := NewAIService(&summaryRepoStub{}, &translationRepoStub{}, &listTranslationRepoStub{}, newSettingsRepoStub(), ai.NewRateLimiter(100))
+	svc := service.NewAIService(&summaryRepoStub{}, &translationRepoStub{}, &listTranslationRepoStub{}, newSettingsRepoStub(), ai.NewRateLimiter(100))
 
 	_, _, err := svc.TranslateBatch(context.Background(), nil)
-	if err == nil {
-		t.Fatalf("expected error for empty batch")
-	}
+	require.Error(t, err, "expected error for empty batch")
 }
 
 type summaryRepoStub struct {
