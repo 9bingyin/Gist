@@ -1,6 +1,6 @@
 import { useEffect, useCallback, useState, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import { AnimatePresence, motion, useMotionValue, useTransform } from 'framer-motion'
+import { AnimatePresence, motion } from 'framer-motion'
 import useEmblaCarousel from 'embla-carousel-react'
 import { Play } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -13,19 +13,17 @@ import { FeedIcon } from '@/components/ui/feed-icon'
 
 export function Lightbox() {
   const { t } = useTranslation()
-  const { isOpen, entry, feed, images, currentIndex, close, setIndex, next, prev, updateEntryStarred } =
+  const { isOpen, entry, feed, images, currentIndex, close, reset, setIndex, next, prev, updateEntryStarred } =
     useLightboxStore()
   const { mutate: markAsRead } = useMarkAsRead()
   const { mutate: markAsStarred } = useMarkAsStarred()
   const removeFromUnreadList = useRemoveFromUnreadList()
 
-  // Motion values for swipe to close
-  const dragY = useMotionValue(0)
-  const opacity = useTransform(dragY, [-200, 0, 200], [0.5, 1, 0.5])
-  const scale = useTransform(dragY, [-200, 0, 200], [0.9, 1, 0.9])
-
   // Track which entries have been marked as read to avoid duplicate calls
   const markedAsReadRef = useRef<Set<string>>(new Set())
+
+  // Track pointer position to distinguish click from drag in carousel
+  const pointerDownPos = useRef<{ x: number; y: number } | null>(null)
 
   const [emblaRef, emblaApi] = useEmblaCarousel({
     loop: false,
@@ -111,6 +109,25 @@ export function Lightbox() {
     }
   }, [isOpen])
 
+  const handleCarouselPointerDown = useCallback((e: React.PointerEvent) => {
+    pointerDownPos.current = { x: e.clientX, y: e.clientY }
+  }, [])
+
+  const handleCarouselClick = useCallback(
+    (e: React.MouseEvent) => {
+      // Only close if pointer moved less than 5px (pure click, not drag)
+      if (pointerDownPos.current) {
+        const dx = Math.abs(e.clientX - pointerDownPos.current.x)
+        const dy = Math.abs(e.clientY - pointerDownPos.current.y)
+        if (dx < 5 && dy < 5) {
+          close()
+        }
+      }
+      pointerDownPos.current = null
+    },
+    [close]
+  )
+
   const handleOverlayClick = useCallback(() => {
     close()
   }, [close])
@@ -135,10 +152,9 @@ export function Lightbox() {
   const contentPreview = entry?.content ? stripHtml(entry.content).slice(0, 200) : null
 
   return (
-    <AnimatePresence>
+    <AnimatePresence onExitComplete={reset}>
       {isOpen && (
         <motion.div
-          style={{ opacity }}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -146,19 +162,8 @@ export function Lightbox() {
           className="fixed inset-0 z-50 flex flex-col bg-black/90 h-dvh"
           onClick={handleOverlayClick}
         >
-          {/* Draggable container for content */}
-          <motion.div
-            style={{ y: dragY, scale }}
-            drag="y"
-            dragConstraints={{ top: 0, bottom: 0 }}
-            dragElastic={0.8}
-            onDragEnd={(_, info) => {
-              if (Math.abs(info.offset.y) > 100 || Math.abs(info.velocity.y) > 500) {
-                close()
-              }
-            }}
-            className="flex min-h-0 flex-1 flex-col"
-          >
+          {/* Content container */}
+          <div className="flex min-h-0 flex-1 flex-col">
             {/* Top right buttons */}
           <div className="absolute right-[calc(1rem+env(safe-area-inset-right,0px))] top-[calc(1rem+env(safe-area-inset-top,0px))] z-10 flex gap-2">
             {/* Star button */}
@@ -255,7 +260,8 @@ export function Lightbox() {
               <div
                 ref={emblaRef}
                 className="size-full min-h-0 overflow-hidden"
-                onClick={(e) => e.stopPropagation()}
+                onPointerDown={handleCarouselPointerDown}
+                onClick={handleCarouselClick}
               >
                 <div className="flex size-full min-h-0">
                   {images.map((src, index) => (
@@ -370,7 +376,7 @@ export function Lightbox() {
               )}
             </div>
           </div>
-        </motion.div>
+        </div>
       </motion.div>
     )}
   </AnimatePresence>

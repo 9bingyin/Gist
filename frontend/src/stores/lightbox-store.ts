@@ -10,6 +10,7 @@ interface LightboxState {
 
   open: (entry: Entry, feed: Feed | undefined, images: string[], startIndex?: number) => void
   close: () => void
+  reset: () => void
   setIndex: (index: number) => void
   next: () => void
   prev: () => void
@@ -38,6 +39,10 @@ export const useLightboxStore = create<LightboxState>((set, get) => ({
   },
 
   close: () => {
+    set({ isOpen: false })
+  },
+
+  reset: () => {
     set(initialState)
   },
 
