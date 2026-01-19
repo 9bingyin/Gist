@@ -23,6 +23,15 @@ import (
 
 const solverTimeout = 30 * time.Second
 
+// azureSession is an interface for azuretls session to allow testing
+type azureSession interface {
+	Do(req *azuretls.Request, args ...any) (*azuretls.Response, error)
+	Close()
+}
+
+// newSessionFunc is a function type for creating new azure sessions
+type newSessionFunc func(ctx context.Context, timeout time.Duration) azureSession
+
 // Challenge represents the Anubis challenge structure
 type Challenge struct {
 	Rules struct {
@@ -41,6 +50,7 @@ type Solver struct {
 	store         *Store
 	mu            sync.Mutex
 	solving       map[string]chan struct{} // host -> done channel (prevents concurrent solving)
+	newSession    newSessionFunc           // for testing injection
 }
 
 // NewSolver creates a new Anubis solver
@@ -389,7 +399,12 @@ func (s *Solver) submit(ctx context.Context, originalURL string, challenge *Chal
 	}
 
 	// Create azuretls session with Chrome fingerprint
-	session := s.clientFactory.NewAzureSession(ctx, solverTimeout)
+	var session azureSession
+	if s.newSession != nil {
+		session = s.newSession(ctx, solverTimeout)
+	} else {
+		session = s.clientFactory.NewAzureSession(ctx, solverTimeout)
+	}
 	defer session.Close()
 
 	// Build Chrome headers

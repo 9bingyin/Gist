@@ -1,9 +1,11 @@
 package service_test
 
 import (
-	"gist/backend/internal/service"
 	"context"
+	"errors"
 	"testing"
+
+	"gist/backend/internal/service"
 
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/bcrypt"
@@ -145,4 +147,80 @@ func TestAuthService_ValidateToken_MissingSecret(t *testing.T) {
 	ok, err := svc.ValidateToken("invalid")
 	require.ErrorIs(t, err, service.ErrInvalidTokenHelper)
 	require.False(t, ok, "expected token to be invalid")
+}
+
+func TestAuthService_GetCurrentUser_Success(t *testing.T) {
+	repo := newSettingsRepoStub()
+	repo.data[service.KeyUserUsername] = "alice"
+	repo.data[service.KeyUserNickname] = "Alice Wonder"
+	repo.data[service.KeyUserEmail] = "alice@example.com"
+
+	svc := service.NewAuthService(repo)
+
+	user, err := svc.GetCurrentUser(context.Background())
+	require.NoError(t, err)
+	require.NotNil(t, user)
+	require.Equal(t, "alice", user.Username)
+	require.Equal(t, "Alice Wonder", user.Nickname)
+	require.Equal(t, "alice@example.com", user.Email)
+	require.Contains(t, user.AvatarURL, "gravatar.com/avatar")
+}
+
+func TestAuthService_GetCurrentUser_NicknameDefault(t *testing.T) {
+	repo := newSettingsRepoStub()
+	repo.data[service.KeyUserUsername] = "bob"
+	repo.data[service.KeyUserEmail] = "bob@example.com"
+	// No nickname set
+
+	svc := service.NewAuthService(repo)
+
+	user, err := svc.GetCurrentUser(context.Background())
+	require.NoError(t, err)
+	require.NotNil(t, user)
+	require.Equal(t, "bob", user.Username)
+	require.Equal(t, "bob", user.Nickname, "expected nickname to default to username")
+}
+
+func TestAuthService_GetCurrentUser_NotFound(t *testing.T) {
+	repo := newSettingsRepoStub()
+	svc := service.NewAuthService(repo)
+
+	_, err := svc.GetCurrentUser(context.Background())
+	require.ErrorIs(t, err, service.ErrUserNotFoundHelper)
+}
+
+func TestAuthService_GetCurrentUser_RepoError(t *testing.T) {
+	repo := newSettingsRepoStub()
+	repo.getErr[service.KeyUserUsername] = errors.New("database error")
+
+	svc := service.NewAuthService(repo)
+
+	_, err := svc.GetCurrentUser(context.Background())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "database error")
+}
+
+func TestAuthService_CheckUserExists_Success(t *testing.T) {
+	repo := newSettingsRepoStub()
+	svc := service.NewAuthService(repo)
+
+	exists, err := svc.CheckUserExists(context.Background())
+	require.NoError(t, err)
+	require.False(t, exists)
+
+	repo.data[service.KeyUserUsername] = "alice"
+	exists, err = svc.CheckUserExists(context.Background())
+	require.NoError(t, err)
+	require.True(t, exists)
+}
+
+func TestAuthService_CheckUserExists_RepoError(t *testing.T) {
+	repo := newSettingsRepoStub()
+	repo.getErr[service.KeyUserUsername] = errors.New("database error")
+
+	svc := service.NewAuthService(repo)
+
+	_, err := svc.CheckUserExists(context.Background())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "database error")
 }

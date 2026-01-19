@@ -1,8 +1,8 @@
 package service_test
 
 import (
-	"gist/backend/internal/service"
 	"context"
+	"gist/backend/internal/service"
 	"testing"
 
 	"gist/backend/internal/service/ai"
@@ -216,6 +216,16 @@ func TestSettingsService_SetNetworkSettings(t *testing.T) {
 	require.Equal(t, "proxy.example.com", repo.data[service.KeyNetworkHost])
 	require.Equal(t, "1080", repo.data[service.KeyNetworkPort])
 	require.Equal(t, "password123", repo.data[service.KeyNetworkPassword])
+}
+
+func TestSettingsService_GetIPStack(t *testing.T) {
+	repo := newSettingsRepoStub()
+	svc := service.NewSettingsService(repo, ai.NewRateLimiter(0))
+
+	require.Equal(t, "default", svc.GetIPStack(context.Background()))
+
+	repo.data[service.KeyNetworkIPStack] = "ipv6"
+	require.Equal(t, "ipv6", svc.GetIPStack(context.Background()))
 }
 
 func TestSettingsService_SetNetworkSettings_MaskedPassword(t *testing.T) {

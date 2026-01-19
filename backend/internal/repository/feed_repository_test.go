@@ -1,8 +1,8 @@
 package repository_test
 
 import (
-	"gist/backend/internal/repository"
 	"context"
+	"gist/backend/internal/repository"
 	"testing"
 
 	"gist/backend/internal/model"
@@ -107,4 +107,168 @@ func TestFeedRepository_DeleteBatch(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, feeds, 1)
 	require.Equal(t, id3, feeds[0].ID)
+}
+
+func TestFeedRepository_FindByURL(t *testing.T) {
+	db := testutil.NewTestDB(t)
+	repo := repository.NewFeedRepository(db)
+	ctx := context.Background()
+
+	testutil.SeedFeed(t, db, model.Feed{Title: "Feed", URL: "https://example.com/rss"})
+
+	found, err := repo.FindByURL(ctx, "https://example.com/rss")
+	require.NoError(t, err)
+	require.NotNil(t, found)
+	require.Equal(t, "Feed", found.Title)
+}
+
+func TestFeedRepository_GetByIDs(t *testing.T) {
+	db := testutil.NewTestDB(t)
+	repo := repository.NewFeedRepository(db)
+	ctx := context.Background()
+
+	id1 := testutil.SeedFeed(t, db, model.Feed{Title: "Feed 1", URL: "url1"})
+	id2 := testutil.SeedFeed(t, db, model.Feed{Title: "Feed 2", URL: "url2"})
+
+	feeds, err := repo.GetByIDs(ctx, []int64{id1, id2})
+	require.NoError(t, err)
+	require.Len(t, feeds, 2)
+}
+
+func TestFeedRepository_ListWithoutIcon(t *testing.T) {
+	db := testutil.NewTestDB(t)
+	repo := repository.NewFeedRepository(db)
+	ctx := context.Background()
+
+	icon := "icon.png"
+	testutil.SeedFeed(t, db, model.Feed{Title: "With Icon", URL: "u1", IconPath: &icon})
+	testutil.SeedFeed(t, db, model.Feed{Title: "No Icon", URL: "u2"})
+
+	feeds, err := repo.ListWithoutIcon(ctx)
+	require.NoError(t, err)
+	require.Len(t, feeds, 1)
+	require.Equal(t, "No Icon", feeds[0].Title)
+}
+
+func TestFeedRepository_UpdateIconPath(t *testing.T) {
+	db := testutil.NewTestDB(t)
+	repo := repository.NewFeedRepository(db)
+	ctx := context.Background()
+
+	id := testutil.SeedFeed(t, db, model.Feed{Title: "Feed", URL: "u"})
+
+	err := repo.UpdateIconPath(ctx, id, "icon.png")
+	require.NoError(t, err)
+
+	feed, _ := repo.GetByID(ctx, id)
+	require.NotNil(t, feed.IconPath)
+	require.Equal(t, "icon.png", *feed.IconPath)
+}
+
+func TestFeedRepository_UpdateSiteURL(t *testing.T) {
+	db := testutil.NewTestDB(t)
+	repo := repository.NewFeedRepository(db)
+	ctx := context.Background()
+
+	id := testutil.SeedFeed(t, db, model.Feed{Title: "Feed", URL: "u"})
+
+	err := repo.UpdateSiteURL(ctx, id, "https://example.com")
+	require.NoError(t, err)
+
+	feed, _ := repo.GetByID(ctx, id)
+	require.NotNil(t, feed.SiteURL)
+	require.Equal(t, "https://example.com", *feed.SiteURL)
+}
+
+func TestFeedRepository_UpdateErrorMessage(t *testing.T) {
+	db := testutil.NewTestDB(t)
+	repo := repository.NewFeedRepository(db)
+	ctx := context.Background()
+
+	id := testutil.SeedFeed(t, db, model.Feed{Title: "Feed", URL: "u"})
+
+	msg := "error"
+	err := repo.UpdateErrorMessage(ctx, id, &msg)
+	require.NoError(t, err)
+
+	feed, _ := repo.GetByID(ctx, id)
+	require.NotNil(t, feed.ErrorMessage)
+	require.Equal(t, "error", *feed.ErrorMessage)
+
+	err = repo.UpdateErrorMessage(ctx, id, nil)
+	require.NoError(t, err)
+	feed, _ = repo.GetByID(ctx, id)
+	require.Nil(t, feed.ErrorMessage)
+}
+
+func TestFeedRepository_UpdateType(t *testing.T) {
+	db := testutil.NewTestDB(t)
+	repo := repository.NewFeedRepository(db)
+	ctx := context.Background()
+
+	id := testutil.SeedFeed(t, db, model.Feed{Title: "Feed", URL: "u"})
+
+	err := repo.UpdateType(ctx, id, "picture")
+	require.NoError(t, err)
+
+	feed, _ := repo.GetByID(ctx, id)
+	require.Equal(t, "picture", feed.Type)
+}
+
+func TestFeedRepository_UpdateTypeByFolderID(t *testing.T) {
+	db := testutil.NewTestDB(t)
+	repo := repository.NewFeedRepository(db)
+	ctx := context.Background()
+
+	folderID := testutil.SeedFolder(t, db, "Folder", nil, "article")
+	testutil.SeedFeed(t, db, model.Feed{Title: "Feed 1", URL: "u1", FolderID: &folderID, Type: "article"})
+	testutil.SeedFeed(t, db, model.Feed{Title: "Feed 2", URL: "u2", FolderID: &folderID, Type: "article"})
+
+	err := repo.UpdateTypeByFolderID(ctx, folderID, "picture")
+	require.NoError(t, err)
+
+	feeds, _ := repo.List(ctx, &folderID)
+	for _, feed := range feeds {
+		require.Equal(t, "picture", feed.Type)
+	}
+}
+
+func TestFeedRepository_ClearAllIconPaths(t *testing.T) {
+	db := testutil.NewTestDB(t)
+	repo := repository.NewFeedRepository(db)
+	ctx := context.Background()
+
+	icon := "icon.png"
+	testutil.SeedFeed(t, db, model.Feed{Title: "Feed 1", URL: "u1", IconPath: &icon})
+	testutil.SeedFeed(t, db, model.Feed{Title: "Feed 2", URL: "u2", IconPath: &icon})
+
+	count, err := repo.ClearAllIconPaths(ctx)
+	require.NoError(t, err)
+	require.Equal(t, int64(2), count)
+
+	feeds, _ := repo.List(ctx, nil)
+	for _, feed := range feeds {
+		require.Nil(t, feed.IconPath)
+	}
+}
+
+func TestFeedRepository_ClearAllConditionalGet(t *testing.T) {
+	db := testutil.NewTestDB(t)
+	repo := repository.NewFeedRepository(db)
+	ctx := context.Background()
+
+	etag := "etag"
+	lastModified := "last"
+	testutil.SeedFeed(t, db, model.Feed{Title: "Feed 1", URL: "u1", ETag: &etag, LastModified: &lastModified})
+	testutil.SeedFeed(t, db, model.Feed{Title: "Feed 2", URL: "u2", ETag: &etag, LastModified: &lastModified})
+
+	count, err := repo.ClearAllConditionalGet(ctx)
+	require.NoError(t, err)
+	require.Equal(t, int64(2), count)
+
+	feeds, _ := repo.List(ctx, nil)
+	for _, feed := range feeds {
+		require.Nil(t, feed.ETag)
+		require.Nil(t, feed.LastModified)
+	}
 }

@@ -1,8 +1,8 @@
 package repository_test
 
 import (
-	"gist/backend/internal/repository"
 	"context"
+	"gist/backend/internal/repository"
 	"testing"
 
 	"gist/backend/internal/repository/testutil"
@@ -112,4 +112,27 @@ func TestSettingsRepository_Delete_Success(t *testing.T) {
 	setting, err := repo.Get(ctx, "test.key")
 	require.NoError(t, err)
 	require.Nil(t, setting)
+}
+
+func TestSettingsRepository_DeleteByPrefix(t *testing.T) {
+	t.Parallel()
+	db := testutil.NewTestDB(t)
+	repo := repository.NewSettingsRepository(db)
+	ctx := context.Background()
+
+	testutil.SeedSetting(t, db, "ai.provider", "openai")
+	testutil.SeedSetting(t, db, "ai.model", "gpt-4")
+	testutil.SeedSetting(t, db, "other.key", "value")
+
+	count, err := repo.DeleteByPrefix(ctx, "ai.")
+	require.NoError(t, err)
+	require.Equal(t, int64(2), count)
+
+	setting, err := repo.Get(ctx, "ai.provider")
+	require.NoError(t, err)
+	require.Nil(t, setting)
+
+	setting, err = repo.Get(ctx, "other.key")
+	require.NoError(t, err)
+	require.NotNil(t, setting)
 }

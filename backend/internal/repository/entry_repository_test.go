@@ -1,11 +1,12 @@
 package repository_test
 
 import (
-	"gist/backend/internal/repository"
 	"context"
 	"testing"
+	"time"
 
 	"gist/backend/internal/model"
+	"gist/backend/internal/repository"
 	"gist/backend/internal/repository/testutil"
 
 	"github.com/stretchr/testify/require"
@@ -135,6 +136,64 @@ func TestEntryRepository_ClearCaches(t *testing.T) {
 	entries, _ := repo.List(ctx, repository.EntryListFilter{})
 	require.Len(t, entries, 1)
 	require.True(t, entries[0].Starred)
+}
+
+func TestEntryRepository_ExistsByURL(t *testing.T) {
+	db := testutil.NewTestDB(t)
+	repo := repository.NewEntryRepository(db)
+	ctx := context.Background()
+
+	feedID := testutil.SeedFeed(t, db, model.Feed{Title: "F", URL: "u"})
+	entryURL := "https://example.com/entry"
+	testutil.SeedEntry(t, db, model.Entry{FeedID: feedID, URL: &entryURL})
+
+	exists, err := repo.ExistsByURL(ctx, feedID, entryURL)
+	require.NoError(t, err)
+	require.True(t, exists)
+
+	exists, err = repo.ExistsByURL(ctx, feedID, "https://example.com/missing")
+	require.NoError(t, err)
+	require.False(t, exists)
+}
+
+func TestEntryRepository_UpdateReadableContent(t *testing.T) {
+	db := testutil.NewTestDB(t)
+	repo := repository.NewEntryRepository(db)
+	ctx := context.Background()
+
+	feedID := testutil.SeedFeed(t, db, model.Feed{Title: "F", URL: "u"})
+	entryID := testutil.SeedEntry(t, db, model.Entry{FeedID: feedID})
+
+	err := repo.UpdateReadableContent(ctx, entryID, "<article>readable</article>")
+	require.NoError(t, err)
+
+	entry, err := repo.GetByID(ctx, entryID)
+	require.NoError(t, err)
+	require.NotNil(t, entry.ReadableContent)
+	require.Equal(t, "<article>readable</article>", *entry.ReadableContent)
+}
+
+func TestEntryRepository_GetStarredCount(t *testing.T) {
+	db := testutil.NewTestDB(t)
+	repo := repository.NewEntryRepository(db)
+	ctx := context.Background()
+
+	feedID := testutil.SeedFeed(t, db, model.Feed{Title: "F", URL: "u"})
+	testutil.SeedEntry(t, db, model.Entry{FeedID: feedID, Starred: true})
+	testutil.SeedEntry(t, db, model.Entry{FeedID: feedID, Starred: false})
+
+	count, err := repo.GetStarredCount(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, count)
+}
+
+func TestParseTimePtr(t *testing.T) {
+	require.Nil(t, repository.ParseTimePtr(""))
+
+	ts := "2025-01-04T12:34:56Z"
+	got := repository.ParseTimePtr(ts)
+	require.NotNil(t, got)
+	require.Equal(t, ts, got.UTC().Format(time.RFC3339))
 }
 
 func stringPtr(s string) *string {

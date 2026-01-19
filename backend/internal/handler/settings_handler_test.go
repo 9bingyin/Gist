@@ -1,9 +1,11 @@
 package handler_test
 
 import (
-	"gist/backend/internal/handler"
 	"net/http"
+	"net/http/httptest"
 	"testing"
+
+	"gist/backend/internal/handler"
 
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -269,4 +271,98 @@ func TestSettingsHandler_ClearAnubisCookies_Success(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, http.StatusOK, rec.Code)
+}
+
+func TestSettingsHandler_GetNetworkSettings_Success(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock.NewMockSettingsService(ctrl)
+	h := handler.NewSettingsHandlerHelper(mockService, nil)
+
+	e := newTestEcho()
+	req := newJSONRequest(http.MethodGet, "/settings/network", nil)
+	c, rec := newTestContext(e, req)
+
+	settings := &service.NetworkSettings{
+		Enabled:  true,
+		Type:     "socks5",
+		Host:     "127.0.0.1",
+		Port:     7890,
+		Username: "user",
+		Password: "***",
+		IPStack:  "ipv4",
+	}
+
+	mockService.EXPECT().
+		GetNetworkSettings(gomock.Any()).
+		Return(settings, nil)
+
+	err := h.GetNetworkSettings(c)
+	require.NoError(t, err)
+
+	var resp map[string]interface{}
+	assertJSONResponse(t, rec, http.StatusOK, &resp)
+	require.Equal(t, true, resp["enabled"])
+	require.Equal(t, "socks5", resp["type"])
+	require.Equal(t, "127.0.0.1", resp["host"])
+	require.Equal(t, "ipv4", resp["ipStack"])
+}
+
+func TestSettingsHandler_UpdateNetworkSettings_Success(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock.NewMockSettingsService(ctrl)
+	h := handler.NewSettingsHandlerHelper(mockService, nil)
+
+	e := newTestEcho()
+	reqBody := map[string]interface{}{
+		"enabled":  true,
+		"type":     "http",
+		"host":     "proxy.local",
+		"port":     8080,
+		"username": "user",
+		"password": "secret",
+		"ipStack":  "default",
+	}
+	req := newJSONRequest(http.MethodPut, "/settings/network", reqBody)
+	c, rec := newTestContext(e, req)
+
+	mockService.EXPECT().
+		SetNetworkSettings(gomock.Any(), gomock.Any()).
+		Return(nil)
+
+	mockService.EXPECT().
+		GetNetworkSettings(gomock.Any()).
+		Return(&service.NetworkSettings{
+			Enabled:  true,
+			Type:     "http",
+			Host:     "proxy.local",
+			Port:     8080,
+			Username: "user",
+			Password: "***",
+			IPStack:  "default",
+		}, nil)
+
+	err := h.UpdateNetworkSettings(c)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, rec.Code)
+}
+
+func TestSettingsHandler_UpdateNetworkSettings_InvalidRequest(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock.NewMockSettingsService(ctrl)
+	h := handler.NewSettingsHandlerHelper(mockService, nil)
+
+	e := newTestEcho()
+	req := httptest.NewRequest(http.MethodPut, "/settings/network", newBody(`{"enabled":`))
+	req.Header.Set("Content-Type", "application/json")
+	c, rec := newTestContext(e, req)
+
+	err := h.UpdateNetworkSettings(c)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusBadRequest, rec.Code)
 }

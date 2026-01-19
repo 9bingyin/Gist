@@ -7,6 +7,14 @@ var ExtractDateFromSummary = extractDateFromSummary
 var ExtractPublishedAt = extractPublishedAt
 var ExtractThumbnail = extractThumbnail
 var OptionalString = optionalString
+var ProcessLazyImages = processLazyImages
+var GetNoscriptContent = getNoscriptContent
+var HasRealImageInNodes = hasRealImageInNodes
+var IsRealImage = isRealImage
+var WalkTree = walkTree
+var WalkTreeUntil = walkTreeUntil
+var BuildReferer = buildReferer
+var IsValidHost = isValidHost
 var DefaultAppearanceContentTypes = defaultAppearanceContentTypes
 var MaskAPIKey = maskAPIKey
 var IsMaskedKey = isMaskedKey
@@ -34,6 +42,7 @@ const (
 	KeyNetworkPort       = keyNetworkPort
 	KeyNetworkUsername   = keyNetworkUsername
 	KeyNetworkPassword   = keyNetworkPassword
+	KeyNetworkIPStack    = keyNetworkIPStack
 )
 
 var (
@@ -49,3 +58,10 @@ var (
 	ErrSamePasswordHelper            = ErrSamePassword
 	ErrInvalidTokenHelper            = ErrInvalidToken
 )
+
+// Refresh service helpers for tests.
+func SetRefreshServiceRefreshing(s RefreshService, v bool) {
+	if rs, ok := s.(*refreshService); ok {
+		rs.isRefreshing = v
+	}
+}

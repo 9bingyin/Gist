@@ -1,8 +1,8 @@
 package repository_test
 
 import (
-	"gist/backend/internal/repository"
 	"context"
+	"gist/backend/internal/repository"
 	"testing"
 
 	"gist/backend/internal/model"
@@ -39,6 +39,10 @@ func TestAISummaryRepository(t *testing.T) {
 	count, err := repo.DeleteAll(ctx)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), count)
+
+	// Delete By Entry
+	err = repo.DeleteByEntryID(ctx, entryID)
+	require.NoError(t, err)
 }
 
 func TestAITranslationRepository(t *testing.T) {
@@ -64,6 +68,11 @@ func TestAITranslationRepository(t *testing.T) {
 	require.NoError(t, err)
 	trans, _ = repo.Get(ctx, entryID, false, "en-US")
 	require.Nil(t, trans)
+
+	// Delete All
+	count, err := repo.DeleteAll(ctx)
+	require.NoError(t, err)
+	require.Equal(t, int64(0), count)
 }
 
 func TestAIListTranslationRepository(t *testing.T) {
@@ -88,4 +97,29 @@ func TestAIListTranslationRepository(t *testing.T) {
 	count, err := repo.DeleteAll(ctx)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), count)
+}
+
+func TestAIListTranslationRepository_GetBatchAndDelete(t *testing.T) {
+	db := testutil.NewTestDB(t)
+	repo := repository.NewAIListTranslationRepository(db)
+	ctx := context.Background()
+
+	feedID := testutil.SeedFeed(t, db, model.Feed{Title: "F", URL: "u"})
+	entryID1 := testutil.SeedEntry(t, db, model.Entry{FeedID: feedID})
+	entryID2 := testutil.SeedEntry(t, db, model.Entry{FeedID: feedID})
+
+	err := repo.Save(ctx, entryID1, "en-US", "Title 1", "Summary 1")
+	require.NoError(t, err)
+	err = repo.Save(ctx, entryID2, "en-US", "Title 2", "Summary 2")
+	require.NoError(t, err)
+
+	batch, err := repo.GetBatch(ctx, []int64{entryID1, entryID2}, "en-US")
+	require.NoError(t, err)
+	require.Len(t, batch, 2)
+
+	err = repo.DeleteByEntryID(ctx, entryID1)
+	require.NoError(t, err)
+	remaining, err := repo.GetBatch(ctx, []int64{entryID1, entryID2}, "en-US")
+	require.NoError(t, err)
+	require.Len(t, remaining, 1)
 }

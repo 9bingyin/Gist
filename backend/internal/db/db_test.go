@@ -1,10 +1,14 @@
 package db_test
 
 import (
-	"gist/backend/internal/db"
+	"database/sql"
 	"os"
 	"path/filepath"
 	"testing"
+
+	_ "modernc.org/sqlite"
+
+	"gist/backend/internal/db"
 
 	"github.com/stretchr/testify/require"
 )
@@ -34,4 +38,13 @@ func TestBuildDSN(t *testing.T) {
 	require.Contains(t, dsn, "WAL")
 	require.Contains(t, dsn, "foreign_keys")
 	require.Contains(t, dsn, "ON")
+}
+
+func TestMigrate_ClosedDB(t *testing.T) {
+	database, err := sql.Open("sqlite", "file::memory:?cache=shared")
+	require.NoError(t, err)
+	require.NoError(t, database.Close())
+
+	err = db.Migrate(database)
+	require.Error(t, err)
 }

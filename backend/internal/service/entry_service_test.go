@@ -3,12 +3,13 @@ package service_test
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"testing"
 
 	"gist/backend/internal/model"
 	"gist/backend/internal/repository"
-	"gist/backend/internal/service"
 	"gist/backend/internal/repository/mock"
+	"gist/backend/internal/service"
 
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -164,6 +165,50 @@ func TestEntryService_List_DefaultLimit(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestEntryService_List_FeedCheckError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockEntries := mock.NewMockEntryRepository(ctrl)
+	mockFeeds := mock.NewMockFeedRepository(ctrl)
+	mockFolders := mock.NewMockFolderRepository(ctrl)
+	svc := service.NewEntryService(mockEntries, mockFeeds, mockFolders)
+	ctx := context.Background()
+
+	feedID := int64(100)
+	dbErr := errors.New("db error")
+
+	mockFeeds.EXPECT().
+		GetByID(ctx, feedID).
+		Return(model.Feed{}, dbErr)
+
+	_, err := svc.List(ctx, service.EntryListParams{FeedID: &feedID})
+	require.ErrorIs(t, err, dbErr)
+}
+
+func TestEntryService_List_RepositoryError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockEntries := mock.NewMockEntryRepository(ctrl)
+	mockFeeds := mock.NewMockFeedRepository(ctrl)
+	mockFolders := mock.NewMockFolderRepository(ctrl)
+	svc := service.NewEntryService(mockEntries, mockFeeds, mockFolders)
+	ctx := context.Background()
+
+	dbErr := errors.New("list error")
+
+	mockEntries.EXPECT().
+		List(ctx, repository.EntryListFilter{
+			Limit:  50,
+			Offset: 0,
+		}).
+		Return(nil, dbErr)
+
+	_, err := svc.List(ctx, service.EntryListParams{})
+	require.ErrorIs(t, err, dbErr)
+}
+
 func TestEntryService_GetByID_Success(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -229,6 +274,30 @@ func TestEntryService_MarkAsRead_Success(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestEntryService_MarkAsRead_UpdateError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockEntries := mock.NewMockEntryRepository(ctrl)
+	mockFeeds := mock.NewMockFeedRepository(ctrl)
+	mockFolders := mock.NewMockFolderRepository(ctrl)
+	svc := service.NewEntryService(mockEntries, mockFeeds, mockFolders)
+	ctx := context.Background()
+
+	dbErr := errors.New("update failed")
+
+	mockEntries.EXPECT().
+		GetByID(ctx, int64(123)).
+		Return(model.Entry{ID: 123}, nil)
+
+	mockEntries.EXPECT().
+		UpdateReadStatus(ctx, int64(123), true).
+		Return(dbErr)
+
+	err := svc.MarkAsRead(ctx, 123, true)
+	require.ErrorIs(t, err, dbErr)
+}
+
 func TestEntryService_MarkAsRead_NotFound(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -267,6 +336,48 @@ func TestEntryService_MarkAsStarred_Success(t *testing.T) {
 
 	err := svc.MarkAsStarred(ctx, 123, true)
 	require.NoError(t, err)
+}
+
+func TestEntryService_MarkAsStarred_NotFound(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockEntries := mock.NewMockEntryRepository(ctrl)
+	mockFeeds := mock.NewMockFeedRepository(ctrl)
+	mockFolders := mock.NewMockFolderRepository(ctrl)
+	svc := service.NewEntryService(mockEntries, mockFeeds, mockFolders)
+	ctx := context.Background()
+
+	mockEntries.EXPECT().
+		GetByID(ctx, int64(999)).
+		Return(model.Entry{}, sql.ErrNoRows)
+
+	err := svc.MarkAsStarred(ctx, 999, true)
+	require.ErrorIs(t, err, service.ErrNotFound)
+}
+
+func TestEntryService_MarkAsStarred_UpdateError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockEntries := mock.NewMockEntryRepository(ctrl)
+	mockFeeds := mock.NewMockFeedRepository(ctrl)
+	mockFolders := mock.NewMockFolderRepository(ctrl)
+	svc := service.NewEntryService(mockEntries, mockFeeds, mockFolders)
+	ctx := context.Background()
+
+	dbErr := errors.New("update failed")
+
+	mockEntries.EXPECT().
+		GetByID(ctx, int64(123)).
+		Return(model.Entry{ID: 123}, nil)
+
+	mockEntries.EXPECT().
+		UpdateStarredStatus(ctx, int64(123), true).
+		Return(dbErr)
+
+	err := svc.MarkAsStarred(ctx, 123, true)
+	require.ErrorIs(t, err, dbErr)
 }
 
 func TestEntryService_MarkAllAsRead_ByFeed(t *testing.T) {
@@ -355,6 +466,47 @@ func TestEntryService_MarkAllAsRead_FeedNotFound(t *testing.T) {
 	require.ErrorIs(t, err, service.ErrNotFound)
 }
 
+func TestEntryService_MarkAllAsRead_FolderCheckError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockEntries := mock.NewMockEntryRepository(ctrl)
+	mockFeeds := mock.NewMockFeedRepository(ctrl)
+	mockFolders := mock.NewMockFolderRepository(ctrl)
+	svc := service.NewEntryService(mockEntries, mockFeeds, mockFolders)
+	ctx := context.Background()
+
+	folderID := int64(100)
+	dbErr := errors.New("folder error")
+
+	mockFolders.EXPECT().
+		GetByID(ctx, folderID).
+		Return(model.Folder{}, dbErr)
+
+	err := svc.MarkAllAsRead(ctx, nil, &folderID, nil)
+	require.ErrorIs(t, err, dbErr)
+}
+
+func TestEntryService_MarkAllAsRead_RepositoryError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockEntries := mock.NewMockEntryRepository(ctrl)
+	mockFeeds := mock.NewMockFeedRepository(ctrl)
+	mockFolders := mock.NewMockFolderRepository(ctrl)
+	svc := service.NewEntryService(mockEntries, mockFeeds, mockFolders)
+	ctx := context.Background()
+
+	dbErr := errors.New("mark error")
+
+	mockEntries.EXPECT().
+		MarkAllAsRead(ctx, (*int64)(nil), (*int64)(nil), (*string)(nil)).
+		Return(dbErr)
+
+	err := svc.MarkAllAsRead(ctx, nil, nil, nil)
+	require.ErrorIs(t, err, dbErr)
+}
+
 func TestEntryService_GetUnreadCounts_Success(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -382,6 +534,26 @@ func TestEntryService_GetUnreadCounts_Success(t *testing.T) {
 	require.Equal(t, 10, counts[2])
 }
 
+func TestEntryService_GetUnreadCounts_Error(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockEntries := mock.NewMockEntryRepository(ctrl)
+	mockFeeds := mock.NewMockFeedRepository(ctrl)
+	mockFolders := mock.NewMockFolderRepository(ctrl)
+	svc := service.NewEntryService(mockEntries, mockFeeds, mockFolders)
+	ctx := context.Background()
+
+	dbErr := errors.New("count error")
+
+	mockEntries.EXPECT().
+		GetAllUnreadCounts(ctx).
+		Return(nil, dbErr)
+
+	_, err := svc.GetUnreadCounts(ctx)
+	require.ErrorIs(t, err, dbErr)
+}
+
 func TestEntryService_GetStarredCount_Success(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -399,6 +571,26 @@ func TestEntryService_GetStarredCount_Success(t *testing.T) {
 	count, err := svc.GetStarredCount(ctx)
 	require.NoError(t, err)
 	require.Equal(t, 42, count)
+}
+
+func TestEntryService_GetStarredCount_Error(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockEntries := mock.NewMockEntryRepository(ctrl)
+	mockFeeds := mock.NewMockFeedRepository(ctrl)
+	mockFolders := mock.NewMockFolderRepository(ctrl)
+	svc := service.NewEntryService(mockEntries, mockFeeds, mockFolders)
+	ctx := context.Background()
+
+	dbErr := errors.New("count error")
+
+	mockEntries.EXPECT().
+		GetStarredCount(ctx).
+		Return(0, dbErr)
+
+	_, err := svc.GetStarredCount(ctx)
+	require.ErrorIs(t, err, dbErr)
 }
 
 func TestEntryService_List_WithFilters(t *testing.T) {
@@ -434,6 +626,22 @@ func TestEntryService_List_WithFilters(t *testing.T) {
 		Offset:       10,
 	})
 	require.NoError(t, err)
+}
+
+func TestEntryService_ClearEntryCache_ResetFailureIgnored(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockEntries := mock.NewMockEntryRepository(ctrl)
+	mockFeeds := mock.NewMockFeedRepository(ctrl)
+	svc := service.NewEntryService(mockEntries, mockFeeds, mock.NewMockFolderRepository(ctrl))
+
+	mockEntries.EXPECT().DeleteUnstarred(context.Background()).Return(int64(2), nil)
+	mockFeeds.EXPECT().ClearAllConditionalGet(context.Background()).Return(int64(0), errors.New("reset failed"))
+
+	count, err := svc.ClearEntryCache(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, int64(2), count)
 }
 
 // Helper function

@@ -1,10 +1,10 @@
 package repository_test
 
 import (
-	"gist/backend/internal/repository"
 	"context"
 	"database/sql"
 	"errors"
+	"gist/backend/internal/repository"
 	"sync"
 	"testing"
 
@@ -142,6 +142,22 @@ func TestFolderRepository_Update_Success(t *testing.T) {
 	require.Equal(t, "Updated Name", updated.Name)
 	require.NotNil(t, updated.ParentID)
 	require.Equal(t, newParentID, *updated.ParentID)
+}
+
+func TestFolderRepository_UpdateType(t *testing.T) {
+	t.Parallel()
+	db := testutil.NewTestDB(t)
+	repo := repository.NewFolderRepository(db)
+	ctx := context.Background()
+
+	id := testutil.SeedFolder(t, db, "Folder", nil, "article")
+
+	err := repo.UpdateType(ctx, id, "picture")
+	require.NoError(t, err)
+
+	folder, err := repo.GetByID(ctx, id)
+	require.NoError(t, err)
+	require.Equal(t, "picture", folder.Type)
 }
 
 func TestFolderRepository_Delete_Success(t *testing.T) {

@@ -38,3 +38,7 @@ var NewDomainRateLimitHandlerHelper = NewDomainRateLimitHandler
 var NewOPMLHandlerHelper = NewOPMLHandler
 var NewIconHandlerHelper = NewIconHandler
 var NewProxyHandlerHelper = NewProxyHandler
+
+var WriteServiceError = writeServiceError
+var IDPtrToString = idPtrToString
+var Itoa = itoa

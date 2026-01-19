@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/labstack/echo/v4"
@@ -30,6 +31,18 @@ func newJSONRequest(method, target string, body interface{}) *http.Request {
 		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	}
 	return req
+}
+
+// newJSONRequestRaw creates a new HTTP request with raw string body.
+func newJSONRequestRaw(method, target string, body string) *http.Request {
+	req := httptest.NewRequest(method, target, strings.NewReader(body))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	return req
+}
+
+// newBody creates an io.ReadCloser from string data.
+func newBody(data string) io.ReadCloser {
+	return io.NopCloser(strings.NewReader(data))
 }
 
 // newTestContext creates a new Echo context for testing.

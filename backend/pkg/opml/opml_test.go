@@ -34,3 +34,8 @@ func TestOPML_ParseAndEncode(t *testing.T) {
 	require.Contains(t, string(encoded), "Test OPML")
 	require.Contains(t, string(encoded), "xmlUrl=\"http://example.com/rss\"")
 }
+
+func TestOPML_Parse_InvalidXML(t *testing.T) {
+	_, err := Parse(strings.NewReader("<opml>"))
+	require.Error(t, err)
+}
