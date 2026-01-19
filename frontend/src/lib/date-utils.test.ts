@@ -50,5 +50,29 @@ describe('date-utils', () => {
       const result = formatRelativeTime('2024-01-20T12:00:00Z', mockT)
       expect(result).toMatch(/\d/)
     })
+
+    // BUG regression: #1fe5c05 - RSS future date should show absolute date, not "just now"
+    describe('BUG #1fe5c05: future date handling', () => {
+      it('should NOT return "just now" for future dates (was showing "just now" before fix)', () => {
+        // RSS feeds can have future dates for scheduled maintenance notices
+        const futureDate = '2024-01-16T12:00:00Z' // 1 day in future
+        const result = formatRelativeTime(futureDate, mockT)
+        expect(result).not.toBe('just now')
+        expect(mockT).not.toHaveBeenCalledWith('add_feed.just_now')
+      })
+
+      it('should show absolute date for dates far in the future', () => {
+        const farFuture = '2024-06-01T12:00:00Z' // 5 months in future
+        const result = formatRelativeTime(farFuture, mockT)
+        expect(result).toMatch(/\d/)
+        expect(mockT).not.toHaveBeenCalled()
+      })
+
+      it('should show absolute date for dates just 1 second in the future', () => {
+        const justFuture = '2024-01-15T12:00:01Z' // 1 second in future
+        const result = formatRelativeTime(justFuture, mockT)
+        expect(result).not.toBe('just now')
+      })
+    })
   })
 })

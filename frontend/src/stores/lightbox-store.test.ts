@@ -171,4 +171,49 @@ describe('lightbox-store', () => {
       expect(useLightboxStore.getState().entry).toBeNull()
     })
   })
+
+  // BUG regression: #2853cd4 - close() should NOT reset state, only set isOpen to false
+  describe('BUG #2853cd4: multi-image lightbox close behavior', () => {
+    it('close() should preserve currentIndex for animation (was resetting to 0 causing flash)', () => {
+      // Open lightbox at image index 2
+      useLightboxStore.getState().open(mockEntry, mockFeed, mockImages, 2)
+      expect(useLightboxStore.getState().currentIndex).toBe(2)
+
+      // Close lightbox - should NOT reset index (animation needs current position)
+      useLightboxStore.getState().close()
+
+      const state = useLightboxStore.getState()
+      expect(state.isOpen).toBe(false)
+      // BUG: Before fix, close() would reset to index 0, causing flash to first image
+      expect(state.currentIndex).toBe(2)
+      expect(state.images).toEqual(mockImages)
+    })
+
+    it('reset() should clear all state after animation completes', () => {
+      useLightboxStore.getState().open(mockEntry, mockFeed, mockImages, 2)
+      useLightboxStore.getState().close()
+
+      // After animation, call reset() to clear state
+      useLightboxStore.getState().reset()
+
+      const state = useLightboxStore.getState()
+      expect(state.isOpen).toBe(false)
+      expect(state.currentIndex).toBe(0)
+      expect(state.images).toEqual([])
+      expect(state.entry).toBeNull()
+    })
+
+    it('close() and reset() should be separate operations', () => {
+      useLightboxStore.getState().open(mockEntry, mockFeed, mockImages, 1)
+
+      // close() - only hides, preserves state for animation
+      useLightboxStore.getState().close()
+      expect(useLightboxStore.getState().isOpen).toBe(false)
+      expect(useLightboxStore.getState().entry).not.toBeNull()
+
+      // reset() - clears all state
+      useLightboxStore.getState().reset()
+      expect(useLightboxStore.getState().entry).toBeNull()
+    })
+  })
 })

@@ -63,4 +63,49 @@ describe('image-proxy', () => {
       expect(url).toContain('/api/proxy/image/')
     })
   })
+
+  // BUG regression: #2a1fc58 - Image proxy needs referer for CDN anti-hotlinking
+  describe('BUG #2a1fc58: referer parameter for CDN anti-hotlinking', () => {
+    it('should include ref parameter when articleUrl is provided (was missing before fix)', () => {
+      // Before fix: Image proxy did not pass article URL as referer
+      // CDN anti-hotlinking would block images without proper referer
+      const url = getProxiedImageUrl(
+        'https://cdn.example.com/image.jpg',
+        'https://blog.example.com/post/123'
+      )
+      expect(url).toContain('?ref=')
+    })
+
+    it('should NOT include ref parameter when articleUrl is not provided', () => {
+      const url = getProxiedImageUrl('https://example.com/image.jpg')
+      expect(url).not.toContain('?ref=')
+    })
+
+    it('should properly encode articleUrl in ref parameter', () => {
+      const url = getProxiedImageUrl(
+        'https://example.com/image.jpg',
+        'https://example.com/article?id=123&lang=en'
+      )
+      // ref parameter should be base64 encoded
+      expect(url).toMatch(/\?ref=[A-Za-z0-9_=-]+$/)
+    })
+
+    it('should include ref even for relative images resolved with articleUrl', () => {
+      const url = getProxiedImageUrl(
+        '/images/photo.jpg',
+        'https://example.com/article/post.html'
+      )
+      expect(url).toContain('/api/proxy/image/')
+      expect(url).toContain('?ref=')
+    })
+
+    it('should handle protocol-relative image URLs with referer', () => {
+      const url = getProxiedImageUrl(
+        '//cdn.example.com/image.jpg',
+        'https://example.com/article'
+      )
+      expect(url).toContain('/api/proxy/image/')
+      expect(url).toContain('?ref=')
+    })
+  })
 })

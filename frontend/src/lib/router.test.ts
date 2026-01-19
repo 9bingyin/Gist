@@ -156,6 +156,47 @@ describe('router', () => {
       expect(path).toContain('unread=true')
       expect(path).toContain('type=notification')
     })
+
+    it('should always include contentType in URL when provided', () => {
+      expect(buildPath({ type: 'all' }, null, false, 'article')).toBe('/all?type=article')
+      expect(buildPath({ type: 'feed', feedId: '123' }, null, false, 'picture')).toBe('/feed/123?type=picture')
+      expect(buildPath({ type: 'folder', folderId: '456' }, null, false, 'notification')).toBe('/folder/456?type=notification')
+    })
+
+    it('should include contentType with entry id', () => {
+      expect(buildPath({ type: 'all' }, '789', false, 'picture')).toBe('/all/789?type=picture')
+      expect(buildPath({ type: 'feed', feedId: '123' }, '789', false, 'picture')).toBe('/feed/123/789?type=picture')
+    })
+
+    it('should combine all parameters correctly', () => {
+      const path = buildPath({ type: 'folder', folderId: '111' }, '222', true, 'notification')
+      expect(path).toBe('/folder/111/222?unread=true&type=notification')
+    })
+
+    // BUG regression: #1d95079 - contentType reset when adding feed
+    describe('BUG #1d95079: contentType preservation in navigation', () => {
+      it('should always include type parameter even for article (was omitting article before fix)', () => {
+        // Before fix: buildPath would not include type=article, causing contentType to reset
+        const articlePath = buildPath({ type: 'all' }, null, false, 'article')
+        expect(articlePath).toContain('type=article')
+      })
+
+      it('should preserve picture type when navigating', () => {
+        const path = buildPath({ type: 'feed', feedId: '123' }, null, false, 'picture')
+        expect(path).toBe('/feed/123?type=picture')
+      })
+
+      it('should preserve notification type when navigating', () => {
+        const path = buildPath({ type: 'folder', folderId: '456' }, null, false, 'notification')
+        expect(path).toBe('/folder/456?type=notification')
+      })
+
+      it('should preserve contentType when combined with unread filter', () => {
+        const path = buildPath({ type: 'all' }, null, true, 'picture')
+        expect(path).toContain('type=picture')
+        expect(path).toContain('unread=true')
+      })
+    })
   })
 
   describe('isAddFeedPath', () => {

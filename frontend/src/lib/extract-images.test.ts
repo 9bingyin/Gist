@@ -52,6 +52,55 @@ describe('extract-images', () => {
       expect(result).toHaveLength(1)
       expect(result[0]).toBe('https://example.com/safe.jpg')
     })
+
+    it('should handle nested img tags in complex HTML', () => {
+      const html = `
+        <article>
+          <figure>
+            <img src="https://example.com/figure.jpg" alt="Figure">
+            <figcaption>Caption</figcaption>
+          </figure>
+          <p>Some text <img src="https://example.com/inline.jpg"> more text</p>
+        </article>
+      `
+      const result = extractImagesFromHtml(html)
+      expect(result).toHaveLength(2)
+      expect(result).toContain('https://example.com/figure.jpg')
+      expect(result).toContain('https://example.com/inline.jpg')
+    })
+
+    it('should prefer src over data-src when both exist', () => {
+      const html = '<img src="https://example.com/real.jpg" data-src="https://example.com/lazy.jpg">'
+      const result = extractImagesFromHtml(html)
+      expect(result).toHaveLength(1)
+      expect(result[0]).toBe('https://example.com/real.jpg')
+    })
+
+    it('should handle images with query parameters', () => {
+      const html = '<img src="https://example.com/image.jpg?width=800&quality=90">'
+      const result = extractImagesFromHtml(html)
+      expect(result).toHaveLength(1)
+      expect(result[0]).toBe('https://example.com/image.jpg?width=800&quality=90')
+    })
+
+    it('should handle images with special characters in URL', () => {
+      const html = '<img src="https://example.com/path/to/image%20with%20spaces.jpg">'
+      const result = extractImagesFromHtml(html)
+      expect(result).toHaveLength(1)
+    })
+
+    it('should handle malformed HTML gracefully', () => {
+      const html = '<img src="https://example.com/img.jpg"><p>unclosed tag'
+      const result = extractImagesFromHtml(html)
+      expect(result).toHaveLength(1)
+    })
+
+    it('should ignore images without any src attribute', () => {
+      const html = '<img alt="no source"><img src="https://example.com/valid.jpg">'
+      const result = extractImagesFromHtml(html)
+      expect(result).toHaveLength(1)
+      expect(result[0]).toBe('https://example.com/valid.jpg')
+    })
   })
 
   describe('getEntryImages', () => {

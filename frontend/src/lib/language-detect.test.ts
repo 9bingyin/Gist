@@ -134,5 +134,62 @@ describe('language-detect', () => {
       )
       expect(result).toBe(false)
     })
+
+    // BUG regression: #2055c1b - Language detection should prioritize content over title
+    describe('BUG #2055c1b: content language priority over title', () => {
+      it('should detect content language first, not title (was using title before fix)', () => {
+        // Before fix: Language detection only checked title, causing wrong detection
+        // for articles with English titles but non-English content
+        const result = needsTranslation(
+          'Breaking News Today',  // English title
+          'This is a long enough English summary content that should be reliably detected as English language text.',
+          'en-US'
+        )
+        // Content is English, target is English -> no translation needed
+        expect(result).toBe(false)
+      })
+
+      it('should use content language over title when both are different languages', () => {
+        // English title but we're checking against Chinese target
+        // Content is also English, so translation is needed
+        const result = needsTranslation(
+          'English Title',
+          'This is definitely English content that is long enough for reliable language detection testing.',
+          'zh-CN'
+        )
+        // Content is English, target is Chinese -> translation needed
+        expect(result).toBe(true)
+      })
+
+      it('should fallback to title only when content is too short', () => {
+        const result = needsTranslation(
+          'This is a long enough English title for language detection purposes.',
+          'Short',  // Too short for reliable detection
+          'en-US'
+        )
+        // Falls back to title, which is English matching target
+        expect(result).toBe(false)
+      })
+
+      it('should fallback to title when content is null', () => {
+        const result = needsTranslation(
+          'This is a long enough English title for language detection purposes.',
+          null,
+          'en-US'
+        )
+        // Uses title only, English matches target
+        expect(result).toBe(false)
+      })
+
+      it('should assume translation needed when both title and content are insufficient', () => {
+        const result = needsTranslation(
+          'Short',
+          'Also short',
+          'zh-CN'
+        )
+        // Cannot determine language, default to needing translation
+        expect(result).toBe(true)
+      })
+    })
   })
 })

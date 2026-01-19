@@ -21,18 +21,52 @@ describe('table-utils', () => {
   })
 
   describe('compareStrings', () => {
-    it('should sort ASCII strings before Chinese', () => {
-      expect(compareStrings('Apple', 'ABC')).toBeGreaterThan(0)
+    it('should sort ASCII strings alphabetically', () => {
+      expect(compareStrings('Apple', 'Banana')).toBeLessThan(0)
       expect(compareStrings('abc', 'xyz')).toBeLessThan(0)
+      expect(compareStrings('Zoo', 'Apple')).toBeGreaterThan(0)
     })
 
-    it('should put ASCII before non-ASCII', () => {
-      expect(compareStrings('English', 'Apple')).toBeGreaterThan(0)
+    it('should put ASCII strings before Chinese', () => {
+      expect(compareStrings('Apple', '\u4e2d\u6587')).toBeLessThan(0)
+      expect(compareStrings('Z', '\u963f')).toBeLessThan(0)
+      expect(compareStrings('\u4e2d\u6587', 'Apple')).toBeGreaterThan(0)
     })
 
     it('should sort Chinese strings using locale', () => {
-      const result = compareStrings('ABC', 'XYZ')
-      expect(result).toBeLessThan(0)
+      expect(compareStrings('\u963f', '\u4e2d')).toBeLessThan(0)
+      expect(compareStrings('\u4e2d', '\u963f')).toBeGreaterThan(0)
+    })
+
+    it('should handle ASCII boundary characters (0x20 space to 0x7E tilde)', () => {
+      // Space (0x20) is first printable ASCII
+      expect(compareStrings(' start', '\u4e2d\u6587')).toBeLessThan(0)
+      // Tilde (0x7E) is last printable ASCII
+      expect(compareStrings('~end', '\u4e2d\u6587')).toBeLessThan(0)
+      // Numbers are within ASCII range
+      expect(compareStrings('123', '\u4e2d\u6587')).toBeLessThan(0)
+    })
+
+    it('should treat control characters as non-ASCII', () => {
+      // Control characters (< 0x20) should not be treated as ASCII
+      const controlChar = String.fromCharCode(0x1f) // Unit separator
+      const chineseStr = '\u4e2d\u6587'
+      // Both are non-ASCII, so locale compare is used
+      const result = compareStrings(controlChar, chineseStr)
+      expect(typeof result).toBe('number')
+    })
+
+    it('should handle empty strings', () => {
+      // Empty string is not ASCII (length check)
+      expect(compareStrings('', 'Apple')).toBeGreaterThan(0)
+      expect(compareStrings('Apple', '')).toBeLessThan(0)
+      expect(compareStrings('', '')).toBe(0)
+    })
+
+    it('should handle mixed content strings', () => {
+      // First character determines ASCII status
+      expect(compareStrings('A\u4e2d\u6587', '\u4e2d\u6587')).toBeLessThan(0)
+      expect(compareStrings('\u4e2dA', 'Apple')).toBeGreaterThan(0)
     })
   })
 
