@@ -1,64 +1,62 @@
-version: 2
+version: "2"
 
 run:
   timeout: 5m
   modules-download-mode: readonly
 
 linters:
-  disable-all: true
+  default: none
   enable:
-    - govet         # Go 官方静态分析
-    - ineffassign   # 检查无效赋值
-    - staticcheck   # 高级静态分析
-    - unused        # 检查未使用的代码
-    - misspell      # 拼写检查
-  disable:
-    - errcheck      # 暂时禁用错误检查（defer Close() 等常见模式）
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - misspell
 
-linters-settings:
-  errcheck:
-    exclude-functions:
-      - (io.Closer).Close
-      - (*database/sql.Rows).Close
-      - fmt.Fprintf
-      - (*github.com/labstack/echo/v4.Response).Write
-      - os.Setenv
-      - os.Unsetenv
-      - os.RemoveAll
-  revive:
+  settings:
+    errcheck:
+      exclude-functions:
+        - (io.Closer).Close
+        - (*database/sql.Rows).Close
+        - fmt.Fprintf
+        - (*github.com/labstack/echo/v4.Response).Write
+        - os.Setenv
+        - os.Unsetenv
+        - os.RemoveAll
+    revive:
+      rules:
+        - name: exported
+          disabled: true
+        - name: package-comments
+          disabled: true
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - style
+        - performance
+      disabled-checks:
+        - wrapperFunc
+
+  exclusions:
+    presets:
+      - std-error-handling
     rules:
-      - name: exported
-        disabled: true # We use package_test for black-box testing
-      - name: package-comments
-        disabled: true
-  gocritic:
-    enabled-tags:
-      - diagnostic
-      - style
-      - performance
-    disabled-checks:
-      - wrapperFunc
+      - linters:
+          - errcheck
+        text: "Error return value of.*Close.*is not checked"
+      - linters:
+          - errcheck
+        text: "Error return value of.*os\\.(Setenv|Unsetenv|RemoveAll).*is not checked"
+        path: "_test\\.go"
+      - linters:
+          - errcheck
+        text: "Error return value of.*fmt\\.Fprintf.*is not checked"
+        path: "handler/"
+      - linters:
+          - errcheck
+        text: "Error return value of.*Write.*is not checked"
+        path: "handler/"
 
 issues:
-  exclude-use-default: false
   max-issues-per-linter: 0
   max-same-issues: 0
-  exclude-rules:
-    # 排除 defer 中的 Close() 错误检查
-    - linters:
-        - errcheck
-      text: "Error return value of.*Close.*is not checked"
-    # 排除测试代码中的环境变量操作
-    - linters:
-        - errcheck
-      text: "Error return value of.*os\\.(Setenv|Unsetenv|RemoveAll).*is not checked"
-      path: "_test\\.go"
-    # 排除 SSE 响应中的写入操作
-    - linters:
-        - errcheck
-      text: "Error return value of.*fmt\\.Fprintf.*is not checked"
-      path: "handler/"
-    - linters:
-        - errcheck
-      text: "Error return value of.*Write.*is not checked"
-      path: "handler/"
