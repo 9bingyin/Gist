@@ -100,7 +100,7 @@ export function EntryContentBody({
           error={summaryError}
         />
 
-        <div ref={contentRef} className="entry-content-body">
+        <div ref={contentRef} className="prose dark:prose-invert max-w-none">
           {hasContent ? (
             hasBlocks ? (
               <ArticleContent blocks={displayBlocks ?? []} articleUrl={entry.url} />
