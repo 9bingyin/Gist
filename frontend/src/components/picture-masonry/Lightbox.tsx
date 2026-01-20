@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useState, useRef } from 'react'
+import { useEffect, useCallback, useState, useRef, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AnimatePresence, motion } from 'framer-motion'
 import useEmblaCarousel from 'embla-carousel-react'
@@ -13,7 +13,7 @@ import { FeedIcon } from '@/components/ui/feed-icon'
 
 export function Lightbox() {
   const { t } = useTranslation()
-  const { isOpen, entry, feed, images, currentIndex, close, reset, setIndex, next, prev, updateEntryStarred } =
+  const { isOpen, entry, feed, images, currentIndex, close, reset, setIndex, updateEntryStarred } =
     useLightboxStore()
   const { mutate: markAsRead } = useMarkAsRead()
   const { mutate: markAsStarred } = useMarkAsStarred()
@@ -25,10 +25,30 @@ export function Lightbox() {
   // Track pointer position to distinguish click from drag in carousel
   const pointerDownPos = useRef<{ x: number; y: number } | null>(null)
 
-  const [emblaRef, emblaApi] = useEmblaCarousel({
-    loop: false,
-    startIndex: currentIndex,
-  })
+  // Track if index change is from embla interaction (to avoid scrollTo interrupting animation)
+  const isEmblaNavigatingRef = useRef(false)
+
+  // Capture initial index when lightbox opens to avoid reInit on every currentIndex change
+  const initialIndexRef = useRef(currentIndex)
+  if (!isOpen) {
+    initialIndexRef.current = currentIndex
+  }
+
+  // Memoize options to prevent unnecessary reInit (which would skip animations)
+  // iOS-style animation: smooth, natural deceleration
+  const emblaOptions = useMemo(
+    () => ({
+      loop: false,
+      startIndex: initialIndexRef.current,
+      skipSnaps: false, // Snap to nearest slide (iOS behavior)
+      duration: 25, // iOS-like snap duration (default 25, range 20-60)
+    }),
+    // Only recreate options when lightbox opens (images change)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [images]
+  )
+
+  const [emblaRef, emblaApi] = useEmblaCarousel(emblaOptions)
 
   const [iconError, setIconError] = useState(false)
   const showIcon = feed?.iconPath && !iconError
@@ -58,6 +78,8 @@ export function Lightbox() {
     if (!emblaApi) return
 
     const onSelect = () => {
+      // Mark that this index change is from embla interaction
+      isEmblaNavigatingRef.current = true
       const index = emblaApi.selectedScrollSnap()
       setIndex(index)
     }
@@ -68,8 +90,13 @@ export function Lightbox() {
     }
   }, [emblaApi, setIndex])
 
-  // Scroll to index when store changes
+  // Scroll to index when store changes (from external source, not embla)
   useEffect(() => {
+    // Skip if change is from embla navigation (would interrupt animation)
+    if (isEmblaNavigatingRef.current) {
+      isEmblaNavigatingRef.current = false
+      return
+    }
     if (emblaApi && emblaApi.selectedScrollSnap() !== currentIndex) {
       emblaApi.scrollTo(currentIndex)
     }
@@ -85,17 +112,17 @@ export function Lightbox() {
           close()
           break
         case 'ArrowLeft':
-          prev()
+          emblaApi?.scrollPrev()
           break
         case 'ArrowRight':
-          next()
+          emblaApi?.scrollNext()
           break
       }
     }
 
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [isOpen, close, next, prev])
+  }, [isOpen, close, emblaApi])
 
   // Prevent body scroll when open (iOS Safari requires position: fixed)
   useEffect(() => {
@@ -282,15 +309,15 @@ export function Lightbox() {
               ) : (
                 <div
                   ref={emblaRef}
-                  className="size-full min-h-0 overflow-hidden"
+                  className="size-full min-h-0 overflow-hidden touch-manipulation"
                   onPointerDown={handleCarouselPointerDown}
                   onClick={handleCarouselClick}
                 >
-                  <div className="flex size-full min-h-0">
+                  <div className="flex size-full min-h-0 touch-pan-y will-change-transform">
                     {images.map((src, index) => (
                       <div
                         key={src}
-                        className="flex min-h-0 min-w-0 flex-[0_0_100%] items-center justify-center px-0 sm:px-2 lg:px-4"
+                        className="flex min-h-0 min-w-0 flex-[0_0_100%] items-center justify-center px-0 will-change-transform sm:px-2 lg:px-4"
                       >
                         <img
                           src={src}
@@ -315,7 +342,7 @@ export function Lightbox() {
                     )}
                     onClick={(e) => {
                       e.stopPropagation()
-                      prev()
+                      emblaApi?.scrollPrev()
                     }}
                     disabled={currentIndex === 0}
                   >
@@ -336,7 +363,7 @@ export function Lightbox() {
                     )}
                     onClick={(e) => {
                       e.stopPropagation()
-                      next()
+                      emblaApi?.scrollNext()
                     }}
                     disabled={currentIndex === images.length - 1}
                   >

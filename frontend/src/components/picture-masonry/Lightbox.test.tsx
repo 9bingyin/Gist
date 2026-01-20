@@ -1,9 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent, act } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useLightboxStore } from '@/stores/lightbox-store'
 import { Lightbox } from './Lightbox'
 import type { Entry, Feed } from '@/types/api'
+
+// Mock window.scrollTo (not implemented in jsdom)
+vi.stubGlobal('scrollTo', vi.fn())
 
 // Mock react-i18next
 vi.mock('react-i18next', () => ({
@@ -25,9 +28,26 @@ const createWrapper = () => {
   )
 }
 
-// Mock embla-carousel-react
+// Mock embla-carousel-react with controllable API
+const mockScrollPrev = vi.fn()
+const mockScrollNext = vi.fn()
+const mockScrollTo = vi.fn()
+const mockSelectedScrollSnap = vi.fn(() => 0)
+const mockOn = vi.fn()
+const mockOff = vi.fn()
+
 vi.mock('embla-carousel-react', () => ({
-  default: () => [null, null],
+  default: () => [
+    vi.fn(), // emblaRef
+    {
+      scrollPrev: mockScrollPrev,
+      scrollNext: mockScrollNext,
+      scrollTo: mockScrollTo,
+      selectedScrollSnap: mockSelectedScrollSnap,
+      on: mockOn,
+      off: mockOff,
+    },
+  ],
 }))
 
 // Mock framer-motion to avoid animation issues in tests
@@ -80,8 +100,22 @@ const mockFeed: Feed = {
   updatedAt: '2024-01-15T10:00:00Z',
 }
 
+// Multiple images for carousel tests
+const mockMultipleImages = [
+  'https://example.com/image1.jpg',
+  'https://example.com/image2.jpg',
+  'https://example.com/image3.jpg',
+]
+
 describe('Lightbox', () => {
   beforeEach(() => {
+    // Reset all mocks
+    mockScrollPrev.mockClear()
+    mockScrollNext.mockClear()
+    mockScrollTo.mockClear()
+    mockSelectedScrollSnap.mockClear()
+    mockOn.mockClear()
+    mockOff.mockClear()
     useLightboxStore.getState().reset()
   })
 
@@ -253,9 +287,11 @@ describe('Lightbox', () => {
       // Verify styles are applied when open
       expect(document.body.style.position).toBe('fixed')
 
-      // Close the lightbox
-      useLightboxStore.getState().close()
-      useLightboxStore.getState().reset()
+      // Close the lightbox (wrap in act() to handle state updates)
+      act(() => {
+        useLightboxStore.getState().close()
+        useLightboxStore.getState().reset()
+      })
 
       // Re-render to trigger effect cleanup
       unmount()
@@ -263,6 +299,284 @@ describe('Lightbox', () => {
       // Body styles should be cleared
       expect(document.body.style.position).toBe('')
       expect(document.body.style.overflow).toBe('')
+    })
+  })
+
+  /**
+   * Multi-image carousel navigation tests
+   *
+   * Tests for arrow button navigation with smooth animations.
+   * The key fix was memoizing Embla options to prevent reInit
+   * which would skip animations.
+   */
+  describe('multi-image carousel navigation', () => {
+    it('should show navigation arrows when multiple images', () => {
+      useLightboxStore.getState().open(
+        mockImageEntry,
+        mockFeed,
+        mockMultipleImages
+      )
+
+      render(<Lightbox />, { wrapper: createWrapper() })
+
+      // Should have prev and next buttons
+      const buttons = screen.getAllByRole('button')
+      // Find arrow buttons (they have size-10 class and arrow SVG paths)
+      const arrowButtons = buttons.filter(btn => {
+        const svg = btn.querySelector('svg.size-6')
+        return svg !== null && btn.className.includes('absolute')
+      })
+      expect(arrowButtons.length).toBe(2)
+    })
+
+    it('should NOT show navigation arrows for single image', () => {
+      useLightboxStore.getState().open(
+        mockImageEntry,
+        mockFeed,
+        [mockImageEntry.thumbnailUrl!]
+      )
+
+      render(<Lightbox />, { wrapper: createWrapper() })
+
+      // Find arrow buttons (absolute positioned with size-6 svg)
+      const buttons = screen.getAllByRole('button')
+      const arrowButtons = buttons.filter(btn => {
+        const svg = btn.querySelector('svg.size-6')
+        return svg !== null && btn.className.includes('absolute') && btn.className.includes('left-4')
+      })
+      expect(arrowButtons.length).toBe(0)
+    })
+
+    it('should call emblaApi.scrollNext when clicking next arrow', () => {
+      useLightboxStore.getState().open(
+        mockImageEntry,
+        mockFeed,
+        mockMultipleImages
+      )
+
+      render(<Lightbox />, { wrapper: createWrapper() })
+
+      // Find the next button (right arrow)
+      const buttons = screen.getAllByRole('button')
+      const nextButton = buttons.find(btn =>
+        btn.className.includes('right-4') && btn.className.includes('absolute')
+      )
+      expect(nextButton).toBeDefined()
+
+      fireEvent.click(nextButton!)
+      expect(mockScrollNext).toHaveBeenCalled()
+    })
+
+    it('should call emblaApi.scrollPrev when clicking prev arrow', () => {
+      // Start at index 1 so prev button is visible
+      useLightboxStore.getState().open(
+        mockImageEntry,
+        mockFeed,
+        mockMultipleImages,
+        1
+      )
+
+      render(<Lightbox />, { wrapper: createWrapper() })
+
+      // Find the prev button (left arrow)
+      const buttons = screen.getAllByRole('button')
+      const prevButton = buttons.find(btn =>
+        btn.className.includes('left-4') && btn.className.includes('absolute')
+      )
+      expect(prevButton).toBeDefined()
+
+      fireEvent.click(prevButton!)
+      expect(mockScrollPrev).toHaveBeenCalled()
+    })
+
+    it('should display image counter for multiple images', () => {
+      useLightboxStore.getState().open(
+        mockImageEntry,
+        mockFeed,
+        mockMultipleImages
+      )
+
+      render(<Lightbox />, { wrapper: createWrapper() })
+
+      // Should show "1 / 3" counter
+      expect(screen.getByText('1 / 3')).toBeDefined()
+    })
+
+    it('should NOT display image counter for single image', () => {
+      useLightboxStore.getState().open(
+        mockImageEntry,
+        mockFeed,
+        [mockImageEntry.thumbnailUrl!]
+      )
+
+      render(<Lightbox />, { wrapper: createWrapper() })
+
+      // Should NOT show counter
+      expect(screen.queryByText(/\d+ \/ \d+/)).toBeNull()
+    })
+  })
+
+  /**
+   * Keyboard navigation tests
+   */
+  describe('keyboard navigation', () => {
+    it('should close lightbox on Escape key', () => {
+      useLightboxStore.getState().open(
+        mockImageEntry,
+        mockFeed,
+        mockMultipleImages
+      )
+
+      render(<Lightbox />, { wrapper: createWrapper() })
+
+      // Lightbox should be open
+      expect(screen.getByText('Test Feed')).toBeDefined()
+
+      // Press Escape
+      fireEvent.keyDown(document, { key: 'Escape' })
+
+      // Store should be closed (but content may still render due to AnimatePresence mock)
+      expect(useLightboxStore.getState().isOpen).toBe(false)
+    })
+
+    it('should call scrollNext on ArrowRight key', () => {
+      useLightboxStore.getState().open(
+        mockImageEntry,
+        mockFeed,
+        mockMultipleImages
+      )
+
+      render(<Lightbox />, { wrapper: createWrapper() })
+
+      fireEvent.keyDown(document, { key: 'ArrowRight' })
+
+      expect(mockScrollNext).toHaveBeenCalled()
+    })
+
+    it('should call scrollPrev on ArrowLeft key', () => {
+      useLightboxStore.getState().open(
+        mockImageEntry,
+        mockFeed,
+        mockMultipleImages
+      )
+
+      render(<Lightbox />, { wrapper: createWrapper() })
+
+      fireEvent.keyDown(document, { key: 'ArrowLeft' })
+
+      expect(mockScrollPrev).toHaveBeenCalled()
+    })
+  })
+
+  /**
+   * Star button tests
+   */
+  describe('star button', () => {
+    it('should render star button', () => {
+      useLightboxStore.getState().open(
+        mockImageEntry,
+        mockFeed,
+        [mockImageEntry.thumbnailUrl!]
+      )
+
+      render(<Lightbox />, { wrapper: createWrapper() })
+
+      // Find star button by its SVG path (star shape)
+      const buttons = screen.getAllByRole('button')
+      const starButton = buttons.find(btn => {
+        const svg = btn.querySelector('svg.size-5')
+        const path = svg?.querySelector('path')
+        return path?.getAttribute('d')?.includes('M12 2l3.09')
+      })
+      expect(starButton).toBeDefined()
+    })
+
+    it('should show filled star when entry is starred', () => {
+      const starredEntry = { ...mockImageEntry, starred: true }
+      useLightboxStore.getState().open(
+        starredEntry,
+        mockFeed,
+        [starredEntry.thumbnailUrl!]
+      )
+
+      render(<Lightbox />, { wrapper: createWrapper() })
+
+      // Find star button
+      const buttons = screen.getAllByRole('button')
+      const starButton = buttons.find(btn => {
+        const svg = btn.querySelector('svg.size-5')
+        const path = svg?.querySelector('path')
+        return path?.getAttribute('d')?.includes('M12 2l3.09')
+      })
+
+      // Should have amber color class when starred
+      expect(starButton?.className).toContain('amber')
+    })
+  })
+
+  /**
+   * External link button tests
+   */
+  describe('external link button', () => {
+    it('should render external link button when entry has URL', () => {
+      useLightboxStore.getState().open(
+        mockImageEntry,
+        mockFeed,
+        [mockImageEntry.thumbnailUrl!]
+      )
+
+      render(<Lightbox />, { wrapper: createWrapper() })
+
+      // Find the external link (not the video play link)
+      const links = screen.getAllByRole('link')
+      const externalLink = links.find(link => {
+        const svg = link.querySelector('svg.size-5')
+        // External link has a different path than the play button
+        return svg !== null && !svg.classList.contains('size-20')
+      })
+
+      expect(externalLink).toBeDefined()
+      expect(externalLink?.getAttribute('href')).toBe(mockImageEntry.url)
+      expect(externalLink?.getAttribute('target')).toBe('_blank')
+    })
+  })
+
+  /**
+   * BUG regression test: Embla options causing reInit and skipping animations
+   *
+   * Problem: When currentIndex changed, the Embla options object changed
+   * (due to startIndex: currentIndex), causing Embla to reInit and skip animations.
+   *
+   * Fix: Use useMemo to stabilize options and initialIndexRef to capture
+   * the starting index only when lightbox opens.
+   */
+  describe('BUG: Embla reInit skipping animations', () => {
+    it('should register event listener on emblaApi', () => {
+      useLightboxStore.getState().open(
+        mockImageEntry,
+        mockFeed,
+        mockMultipleImages
+      )
+
+      render(<Lightbox />, { wrapper: createWrapper() })
+
+      // emblaApi.on should be called to register select event
+      expect(mockOn).toHaveBeenCalledWith('select', expect.any(Function))
+    })
+
+    it('should clean up event listener on unmount', () => {
+      useLightboxStore.getState().open(
+        mockImageEntry,
+        mockFeed,
+        mockMultipleImages
+      )
+
+      const { unmount } = render(<Lightbox />, { wrapper: createWrapper() })
+
+      unmount()
+
+      // emblaApi.off should be called to clean up
+      expect(mockOff).toHaveBeenCalledWith('select', expect.any(Function))
     })
   })
 })
