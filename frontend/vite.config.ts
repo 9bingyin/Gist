@@ -139,7 +139,7 @@ export default defineConfig({
             '@radix-ui/react-dropdown-menu',
             '@radix-ui/react-scroll-area',
           ],
-          'highlight-vendor': ['highlight.js'],
+          'shiki-vendor': ['shiki'],
           'motion-vendor': ['motion', 'framer-motion'],
           'i18n-vendor': ['i18next', 'react-i18next'],
           'utils-vendor': ['clsx', 'tailwind-merge', 'class-variance-authority', 'zustand', 'wouter'],
