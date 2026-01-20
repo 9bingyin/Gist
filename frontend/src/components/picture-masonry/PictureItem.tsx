@@ -10,6 +10,7 @@ import { useLightboxStore } from '@/stores/lightbox-store'
 import {
   useImageDimension,
   useImageDimensionsStore,
+  useImageFailed,
 } from '@/stores/image-dimensions-store'
 import { FeedIcon } from '@/components/ui/feed-icon'
 import type { Entry, Feed } from '@/types/api'
@@ -30,15 +31,16 @@ export const PictureItem = memo(function PictureItem({
   const { t } = useTranslation()
   const openLightbox = useLightboxStore((state) => state.open)
   const setDimension = useImageDimensionsStore((state) => state.setDimension)
+  const markFailed = useImageDimensionsStore((state) => state.markFailed)
 
   // Get cached dimension from store
   const thumbnailUrl = entry.thumbnailUrl
   const cachedDimension = useImageDimension(thumbnailUrl)
+  const isFailed = useImageFailed(thumbnailUrl)
   const aspectRatio = cachedDimension?.ratio ?? DEFAULT_RATIO
   const isVideo = isVideoThumbnail(thumbnailUrl)
 
   const [imageLoaded, setImageLoaded] = useState(false)
-  const [imageError, setImageError] = useState(false)
   const [iconError, setIconError] = useState(false)
 
   const showIcon = feed?.iconPath && !iconError
@@ -67,7 +69,7 @@ export const PictureItem = memo(function PictureItem({
 
   const publishedAt = entry.publishedAt ? formatRelativeTime(entry.publishedAt, t) : null
 
-  if (!thumbnailUrl || imageError) {
+  if (!thumbnailUrl || isFailed) {
     return null
   }
 
@@ -91,7 +93,7 @@ export const PictureItem = memo(function PictureItem({
             )}
             loading="lazy"
             onLoad={handleImageLoad}
-            onError={() => setImageError(true)}
+            onError={() => thumbnailUrl && markFailed(thumbnailUrl)}
           />
           {!imageLoaded && (
             <div className="absolute inset-0 flex items-center justify-center">

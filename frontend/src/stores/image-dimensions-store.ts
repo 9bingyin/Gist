@@ -7,17 +7,31 @@ import {
 
 interface ImageDimensionsState {
   dimensions: Record<string, ImageDimension>
+  failedImages: Set<string>
   isLoading: boolean
   getDimension: (src: string) => ImageDimension | undefined
   setDimension: (src: string, width: number, height: number) => void
+  markFailed: (src: string) => void
+  isFailed: (src: string) => boolean
   loadFromDB: (srcs: string[]) => Promise<void>
 }
 
 export const useImageDimensionsStore = create<ImageDimensionsState>((set, get) => ({
   dimensions: {},
+  failedImages: new Set<string>(),
   isLoading: false,
 
   getDimension: (src) => get().dimensions[src],
+
+  markFailed: (src) => {
+    set((state) => {
+      const newSet = new Set(state.failedImages)
+      newSet.add(src)
+      return { failedImages: newSet }
+    })
+  },
+
+  isFailed: (src) => get().failedImages.has(src),
 
   setDimension: (src, width, height) => {
     const dim: ImageDimension = {
@@ -55,5 +69,11 @@ export const useImageDimensionsStore = create<ImageDimensionsState>((set, get) =
 export function useImageDimension(src: string | undefined) {
   return useImageDimensionsStore((state) =>
     src ? state.dimensions[src] : undefined
+  )
+}
+
+export function useImageFailed(src: string | undefined) {
+  return useImageDimensionsStore((state) =>
+    src ? state.failedImages.has(src) : false
   )
 }
