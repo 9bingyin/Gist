@@ -1,4 +1,4 @@
-import type { Element, Parent } from 'hast'
+import type { Element, Parent, Root, Text } from 'hast'
 import type { Schema } from 'hast-util-sanitize'
 import type { Components } from 'hast-util-to-jsx-runtime'
 import { toJsxRuntime } from 'hast-util-to-jsx-runtime'
@@ -7,9 +7,55 @@ import rehypeParse from 'rehype-parse'
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
 import rehypeStringify from 'rehype-stringify'
 import { unified } from 'unified'
+import { visit } from 'unist-util-visit'
 
 export type ParseHtmlOptions = {
   components?: Components
+}
+
+// Emoji image class patterns (WordPress, EmojiOne, Twemoji, etc.)
+const EMOJI_CLASS_PATTERNS = ['wp-smiley', 'emoji', 'emojione', 'emoticon', 'smiley']
+
+// Check if a string contains emoji characters
+function isEmojiChar(str: string): boolean {
+  // Match common emoji ranges:
+  // - Miscellaneous Symbols (U+2600-U+26FF)
+  // - Dingbats (U+2700-U+27BF)
+  // - Miscellaneous Symbols and Arrows (U+2B00-U+2BFF)
+  // - Variation Selectors (U+FE00-U+FEFF)
+  // - Supplemental Symbols (U+1F000-U+1FFFF)
+  const emojiRegex =
+    /[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|[\u{2B00}-\u{2BFF}]|[\u{FE00}-\u{FEFF}]|[\u{1F000}-\u{1FFFF}]/u
+  return emojiRegex.test(str)
+}
+
+/**
+ * Rehype plugin to convert emoji images back to native emoji text.
+ * Handles WordPress wp-smiley, EmojiOne, Twemoji, and similar implementations.
+ */
+function rehypeEmojiImages() {
+  return (tree: Root) => {
+    visit(tree, 'element', (node: Element, index, parent) => {
+      if (node.tagName !== 'img' || !parent || index === undefined) return
+
+      const props = node.properties || {}
+      // className in hast is an array
+      const classNames = Array.isArray(props.className) ? props.className : []
+      const className = classNames.join(' ')
+      const alt = String(props.alt || '')
+
+      // Check if this is an emoji image by class name
+      const isEmojiClass = EMOJI_CLASS_PATTERNS.some((pattern) =>
+        className.toLowerCase().includes(pattern)
+      )
+
+      if (isEmojiClass && alt && isEmojiChar(alt)) {
+        // Replace img with text node containing the emoji
+        const textNode: Text = { type: 'text', value: alt }
+        parent.children.splice(index, 1, textNode)
+      }
+    })
+  }
 }
 
 /**
@@ -58,17 +104,18 @@ export function parseHtml(content: string, options?: ParseHtmlOptions) {
 
   rehypeSchema.attributes = {
     ...rehypeSchema.attributes,
-    '*': [...rehypeSchema.attributes!['*']!, 'style', 'class'],
+    '*': [...rehypeSchema.attributes!['*']!, 'style', 'className'],
     video: ['src', 'poster', 'controls', 'autoplay', 'loop', 'muted', 'width', 'height'],
     audio: ['src', 'controls', 'autoplay', 'loop', 'muted'],
     source: ['src', 'type'],
-    img: ['src', 'alt', 'title', 'width', 'height', 'loading', 'srcset', 'sizes'],
+    img: ['src', 'alt', 'title', 'width', 'height', 'loading', 'srcset', 'sizes', 'className'],
   }
 
   // Build the processing pipeline
   const pipeline = unified()
     .use(rehypeParse, { fragment: true })
     .use(rehypeSanitize, rehypeSchema)
+    .use(rehypeEmojiImages)
     .use(rehypeTrimEndBrElement)
     .use(rehypeStringify)
 

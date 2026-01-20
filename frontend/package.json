@@ -45,11 +45,13 @@
     "tailwindcss": "^4.1.18",
     "tailwindcss-motion": "^1.1.1",
     "unified": "^11.0.5",
+    "unist-util-visit": "^5.0.0",
     "wouter": "^3.9.0",
     "zustand": "^5.0.9"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
+    "@tailwindcss/typography": "^0.5.19",
     "@testing-library/react": "^16.3.2",
     "@types/hast": "^3.0.4",
     "@types/node": "^24.10.1",
