@@ -185,4 +185,84 @@ describe('Lightbox', () => {
       expect(screen.getByText('Image Entry')).toBeDefined()
     })
   })
+
+  /**
+   * BUG regression test: Background page scrollable on mobile touch
+   *
+   * Problem: When lightbox is open, the background page could still be scrolled
+   * on mobile devices (especially iOS Safari) using touch gestures.
+   *
+   * Root cause: Using only `overflow: hidden` on body is insufficient for iOS Safari.
+   * iOS Safari ignores overflow:hidden for touch scroll events.
+   *
+   * Fix: Use `position: fixed` with `top: -scrollY` to lock the body in place,
+   * then restore scroll position when closing. This is the standard solution
+   * for iOS Safari scroll lock.
+   */
+  describe('BUG: background page scrollable on mobile touch', () => {
+    beforeEach(() => {
+      // Reset body styles before each test
+      document.body.style.position = ''
+      document.body.style.top = ''
+      document.body.style.left = ''
+      document.body.style.right = ''
+      document.body.style.overflow = ''
+    })
+
+    it('should use position:fixed to lock body scroll (not just overflow:hidden)', () => {
+      useLightboxStore.getState().open(
+        mockImageEntry,
+        mockFeed,
+        [mockImageEntry.thumbnailUrl!]
+      )
+
+      render(<Lightbox />, { wrapper: createWrapper() })
+
+      // Body should have position: fixed (iOS Safari requirement)
+      expect(document.body.style.position).toBe('fixed')
+      // Body should have overflow: hidden
+      expect(document.body.style.overflow).toBe('hidden')
+      // Body should have left and right set to prevent width change
+      expect(document.body.style.left).toBe('0px')
+      expect(document.body.style.right).toBe('0px')
+    })
+
+    it('should set body top based on scroll position', () => {
+      // Simulate a scroll position (jsdom doesn't support scrollY well, but we test the logic)
+      useLightboxStore.getState().open(
+        mockImageEntry,
+        mockFeed,
+        [mockImageEntry.thumbnailUrl!]
+      )
+
+      render(<Lightbox />, { wrapper: createWrapper() })
+
+      // Body top should be set (even if 0 in jsdom)
+      expect(document.body.style.top).toMatch(/^-?\d+px$/)
+    })
+
+    it('should clear body styles when lightbox closes', () => {
+      useLightboxStore.getState().open(
+        mockImageEntry,
+        mockFeed,
+        [mockImageEntry.thumbnailUrl!]
+      )
+
+      const { unmount } = render(<Lightbox />, { wrapper: createWrapper() })
+
+      // Verify styles are applied when open
+      expect(document.body.style.position).toBe('fixed')
+
+      // Close the lightbox
+      useLightboxStore.getState().close()
+      useLightboxStore.getState().reset()
+
+      // Re-render to trigger effect cleanup
+      unmount()
+
+      // Body styles should be cleared
+      expect(document.body.style.position).toBe('')
+      expect(document.body.style.overflow).toBe('')
+    })
+  })
 })
