@@ -14,14 +14,13 @@ import (
 
 	readability "codeberg.org/readeck/go-readability/v2"
 	"github.com/Noooste/azuretls-client"
-	"github.com/microcosm-cc/bluemonday"
 	"golang.org/x/net/html"
 
 	"gist/backend/internal/config"
-	"gist/backend/pkg/logger"
-	"gist/backend/pkg/network"
 	"gist/backend/internal/repository"
 	"gist/backend/internal/service/anubis"
+	"gist/backend/pkg/logger"
+	"gist/backend/pkg/network"
 )
 
 const readabilityTimeout = 30 * time.Second
@@ -34,22 +33,13 @@ type ReadabilityService interface {
 type readabilityService struct {
 	entries       repository.EntryRepository
 	clientFactory *network.ClientFactory
-	sanitizer     *bluemonday.Policy
 	anubis        *anubis.Solver
 }
 
 func NewReadabilityService(entries repository.EntryRepository, clientFactory *network.ClientFactory, anubisSolver *anubis.Solver) ReadabilityService {
-	// Create a sanitizer policy similar to DOMPurify
-	// This removes scripts and other elements that interfere with readability parsing
-	p := bluemonday.UGCPolicy()
-	p.AllowElements("article", "section", "header", "footer", "nav", "aside", "main", "figure", "figcaption")
-	p.AllowAttrs("id", "class", "lang", "dir").Globally()
-	p.AllowRelativeURLs(true)
-
 	return &readabilityService{
 		entries:       entries,
 		clientFactory: clientFactory,
-		sanitizer:     p,
 		anubis:        anubisSolver,
 	}
 }
@@ -81,15 +71,6 @@ func (s *readabilityService) FetchReadableContent(ctx context.Context, entryID i
 		return "", err
 	}
 
-	// Process lazy-loaded images before sanitization
-	// This converts data-src/data-lazy-src/data-original to src
-	// and removes placeholder SVG images
-	body = processLazyImages(body)
-
-	// Sanitize HTML to remove scripts and other interfering elements
-	// This is similar to what DOMPurify does in JS, which fixes readability parsing issues
-	sanitized := s.sanitizer.Sanitize(string(body))
-
 	// Parse URL for readability
 	parsedURL, err := url.Parse(*entry.URL)
 	if err != nil {
@@ -97,8 +78,10 @@ func (s *readabilityService) FetchReadableContent(ctx context.Context, entryID i
 	}
 
 	// Parse with readability
+	// go-readability handles lazy images (unwrapNoscriptImages, fixLazyImages) and script removal internally
 	parser := readability.NewParser()
-	article, err := parser.Parse(strings.NewReader(sanitized), parsedURL)
+	parser.KeepClasses = true // Preserve class attributes (e.g., language-python on code blocks)
+	article, err := parser.Parse(bytes.NewReader(body), parsedURL)
 	if err != nil {
 		logger.Error("readability parse failed", "module", "service", "action", "fetch", "resource", "entry", "result", "failed", "entry_id", entryID, "host", network.ExtractHost(*entry.URL), "error", err)
 		return "", fmt.Errorf("parse content failed: %w", err)
@@ -110,7 +93,14 @@ func (s *readabilityService) FetchReadableContent(ctx context.Context, entryID i
 		return "", fmt.Errorf("render failed: %w", err)
 	}
 
-	content := buf.String()
+	// Post-process: fix lazy images and remove metadata elements
+	rendered := buf.Bytes()
+
+	// Fix lazy images with data-original that go-readability doesn't handle
+	rendered = fixLazyImages(rendered)
+
+	// Remove date elements (Safari Reader style)
+	content := removeMetadataElements(rendered)
 	if content == "" {
 		return "", ErrInvalid
 	}
@@ -237,62 +227,24 @@ func walkTree(n *html.Node, fn func(*html.Node)) {
 	}
 }
 
-// walkTreeUntil traverses element nodes until fn returns true.
-func walkTreeUntil(n *html.Node, fn func(*html.Node) bool) bool {
-	if n.Type == html.ElementNode && fn(n) {
-		return true
-	}
-	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		if walkTreeUntil(c, fn) {
-			return true
-		}
-	}
-	return false
-}
-
-// processLazyImages handles lazy-loaded images by converting data-* attributes to standard attributes.
-// This must be called BEFORE bluemonday sanitization since bluemonday strips data-* attributes and noscript tags.
-func processLazyImages(htmlContent []byte) []byte {
+// removeMetadataElements removes date elements from HTML content.
+// This implements Safari Reader's approach to filter metadata that Readability doesn't handle:
+// - Elements with class containing "date" (Safari: /date/.test(className))
+// - Elements with itemprop containing "datePublished"
+func removeMetadataElements(htmlContent []byte) string {
 	doc, err := html.Parse(bytes.NewReader(htmlContent))
 	if err != nil {
-		return htmlContent
+		return string(htmlContent)
 	}
 
 	var nodesToRemove []*html.Node
-	var noscriptNodes []*html.Node
-	var noscriptContent [][]*html.Node
 
-	// First pass: collect img nodes and noscript with real images
 	walkTree(doc, func(n *html.Node) {
-		switch n.Data {
-		case "img":
-			processImgNode(n, &nodesToRemove)
-		case "noscript":
-			if content := getNoscriptContent(n); hasRealImageInNodes(content) {
-				noscriptNodes = append(noscriptNodes, n)
-				noscriptContent = append(noscriptContent, content)
-			}
+		if shouldRemoveMetadataElement(n) {
+			nodesToRemove = append(nodesToRemove, n)
 		}
 	})
 
-	// Unwrap noscript: insert parsed content before noscript, then remove it
-	for i, noscript := range noscriptNodes {
-		parent := noscript.Parent
-		if parent == nil {
-			continue
-		}
-		for _, child := range noscriptContent[i] {
-			walkTree(child, func(n *html.Node) {
-				if n.Data == "img" {
-					processImgNode(n, &nodesToRemove)
-				}
-			})
-			parent.InsertBefore(child, noscript)
-		}
-		parent.RemoveChild(noscript)
-	}
-
-	// Remove placeholder images
 	for _, n := range nodesToRemove {
 		if n.Parent != nil {
 			n.Parent.RemoveChild(n)
@@ -301,120 +253,83 @@ func processLazyImages(htmlContent []byte) []byte {
 
 	var buf bytes.Buffer
 	if err := html.Render(&buf, doc); err != nil {
+		return string(htmlContent)
+	}
+	return buf.String()
+}
+
+// shouldRemoveMetadataElement checks if an element should be removed as metadata.
+func shouldRemoveMetadataElement(n *html.Node) bool {
+	if n.Type != html.ElementNode {
+		return false
+	}
+
+	for _, attr := range n.Attr {
+		switch attr.Key {
+		case "class":
+			// Safari Reader: /date/.test(className)
+			if containsDateClass(attr.Val) {
+				return true
+			}
+		case "itemprop":
+			// Safari Reader: /\bdatePublished\b/.test(itemprop)
+			if strings.Contains(attr.Val, "datePublished") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// containsDateClass checks if class string contains a date-related class.
+func containsDateClass(classStr string) bool {
+	for _, class := range strings.Fields(classStr) {
+		if strings.Contains(strings.ToLower(class), "date") {
+			return true
+		}
+	}
+	return false
+}
+
+// fixLazyImages fixes lazy-loaded images that go-readability doesn't handle.
+// go-readability's fixLazyImages only processes images with empty src or "lazy" class.
+// This function handles images with placeholder src and data-original attribute.
+func fixLazyImages(htmlContent []byte) []byte {
+	doc, err := html.Parse(bytes.NewReader(htmlContent))
+	if err != nil {
+		return htmlContent
+	}
+
+	walkTree(doc, func(n *html.Node) {
+		if n.Data != "img" {
+			return
+		}
+
+		var srcIdx = -1
+		var dataOriginal string
+
+		for i, attr := range n.Attr {
+			switch attr.Key {
+			case "src":
+				srcIdx = i
+			case "data-original":
+				dataOriginal = attr.Val
+			}
+		}
+
+		// Replace src with data-original if data-original exists and is a real image URL
+		if dataOriginal != "" && !strings.HasPrefix(dataOriginal, "data:") {
+			if srcIdx >= 0 {
+				n.Attr[srcIdx].Val = dataOriginal
+			} else {
+				n.Attr = append(n.Attr, html.Attribute{Key: "src", Val: dataOriginal})
+			}
+		}
+	})
+
+	var buf bytes.Buffer
+	if err := html.Render(&buf, doc); err != nil {
 		return htmlContent
 	}
 	return buf.Bytes()
-}
-
-// processImgNode handles lazy loading attributes for a single img element.
-func processImgNode(n *html.Node, nodesToRemove *[]*html.Node) {
-	var src, dataSrc, dataLazySrc, dataOriginal string
-	var srcset, dataSrcset string
-	var srcAttrIndex = -1
-
-	// Collect relevant attributes
-	for i, attr := range n.Attr {
-		switch attr.Key {
-		case "src":
-			src = attr.Val
-			srcAttrIndex = i
-		case "data-src":
-			dataSrc = attr.Val
-		case "data-lazy-src":
-			dataLazySrc = attr.Val
-		case "data-original":
-			dataOriginal = attr.Val
-		case "srcset":
-			srcset = attr.Val
-		case "data-srcset":
-			dataSrcset = attr.Val
-		}
-	}
-
-	// Determine the real src (priority: data-src > data-lazy-src > data-original)
-	realSrc := ""
-	if dataSrc != "" && !strings.HasPrefix(dataSrc, "data:") {
-		realSrc = dataSrc
-	} else if dataLazySrc != "" && !strings.HasPrefix(dataLazySrc, "data:") {
-		realSrc = dataLazySrc
-	} else if dataOriginal != "" && !strings.HasPrefix(dataOriginal, "data:") {
-		realSrc = dataOriginal
-	}
-
-	// If we found a real src from data-* attributes, use it
-	if realSrc != "" {
-		if srcAttrIndex >= 0 {
-			n.Attr[srcAttrIndex].Val = realSrc
-		} else {
-			n.Attr = append(n.Attr, html.Attribute{Key: "src", Val: realSrc})
-		}
-	} else if src == "" || strings.HasPrefix(src, "data:") {
-		// No valid src and no lazy loading attributes - mark for removal
-		// This handles: placeholder SVGs, empty src, JS-only images
-		*nodesToRemove = append(*nodesToRemove, n)
-	}
-
-	// Handle data-srcset
-	if dataSrcset != "" && srcset == "" {
-		n.Attr = append(n.Attr, html.Attribute{Key: "srcset", Val: dataSrcset})
-	}
-}
-
-// getNoscriptContent extracts and parses the text content of a noscript node.
-// Go's html.Parse treats noscript content as text nodes, not HTML elements,
-// so we need to re-parse the text to get actual img elements.
-func getNoscriptContent(n *html.Node) []*html.Node {
-	var textContent string
-	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		if c.Type == html.TextNode {
-			textContent += c.Data
-		}
-	}
-	if textContent == "" {
-		return nil
-	}
-
-	doc, err := html.Parse(strings.NewReader(textContent))
-	if err != nil {
-		return nil
-	}
-
-	// Find body and extract its children
-	var nodes []*html.Node
-	walkTreeUntil(doc, func(node *html.Node) bool {
-		if node.Data == "body" {
-			for c := node.FirstChild; c != nil; {
-				next := c.NextSibling
-				node.RemoveChild(c)
-				nodes = append(nodes, c)
-				c = next
-			}
-			return true
-		}
-		return false
-	})
-	return nodes
-}
-
-// hasRealImageInNodes checks if any node in the list contains an img with a real (non-data:) src.
-func hasRealImageInNodes(nodes []*html.Node) bool {
-	for _, n := range nodes {
-		if walkTreeUntil(n, isRealImage) {
-			return true
-		}
-	}
-	return false
-}
-
-// isRealImage returns true if the node is an img with a real (non-data:) src.
-func isRealImage(n *html.Node) bool {
-	if n.Data != "img" {
-		return false
-	}
-	for _, attr := range n.Attr {
-		if attr.Key == "src" && attr.Val != "" && !strings.HasPrefix(attr.Val, "data:") {
-			return true
-		}
-	}
-	return false
 }
