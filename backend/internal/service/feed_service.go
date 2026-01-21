@@ -17,11 +17,12 @@ import (
 	"github.com/mmcdole/gofeed"
 
 	"gist/backend/internal/config"
-	"gist/backend/pkg/logger"
 	"gist/backend/internal/model"
-	"gist/backend/pkg/network"
 	"gist/backend/internal/repository"
 	"gist/backend/internal/service/anubis"
+	"gist/backend/pkg/logger"
+	"gist/backend/pkg/network"
+	"gist/backend/pkg/sanitizer"
 )
 
 const feedTimeout = 30 * time.Second
@@ -580,8 +581,10 @@ func itemToEntry(feedID int64, item *gofeed.Item, ignoreDynamicTime bool) model.
 	entry.ThumbnailURL = extractThumbnail(item)
 
 	if item.Author != nil && item.Author.Name != "" {
-		author := strings.TrimSpace(item.Author.Name)
-		entry.Author = &author
+		author := sanitizer.SanitizeAuthor(item.Author.Name)
+		if author != "" {
+			entry.Author = &author
+		}
 	}
 
 	entry.PublishedAt = extractPublishedAt(item, ignoreDynamicTime)
