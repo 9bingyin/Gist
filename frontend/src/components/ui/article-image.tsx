@@ -1,6 +1,7 @@
 import { memo, useState, useCallback, useContext, createContext, useMemo } from 'react'
 import { cn } from '@/lib/utils'
 import { getProxiedImageUrl } from '@/lib/image-proxy'
+import { ImagePreviewContext } from './article-content'
 
 // Context for passing article URL to resolve relative URLs and set Referer
 // eslint-disable-next-line react-refresh/only-export-components
@@ -50,6 +51,7 @@ export const ArticleImage = memo(function ArticleImage({
   ...props
 }: ArticleImageProps & React.ImgHTMLAttributes<HTMLImageElement>) {
   const articleUrl = useContext(ArticleLinkContext)
+  const imagePreviewContext = useContext(ImagePreviewContext)
 
   // Compute proxied URLs first so we can check the cache
   const proxiedSrc = useMemo(
@@ -73,6 +75,14 @@ export const ArticleImage = memo(function ArticleImage({
   const handleError = useCallback(() => {
     setIsError(true)
   }, [])
+
+  const handleClick = useCallback((e: React.MouseEvent) => {
+    if (src && imagePreviewContext) {
+      e.preventDefault()
+      e.stopPropagation()
+      imagePreviewContext.openPreview(src)
+    }
+  }, [src, imagePreviewContext])
 
   if (!src) return null
 
@@ -120,10 +130,12 @@ export const ArticleImage = memo(function ArticleImage({
       decoding="async"
       onLoad={handleLoad}
       onError={handleError}
+      onClick={handleClick}
       className={cn(
         'max-w-full h-auto rounded transition-opacity duration-200',
         showSkeleton && 'bg-muted/30',
         isLoaded ? 'opacity-100' : 'opacity-70',
+        imagePreviewContext && 'cursor-zoom-in',
         className
       )}
       {...props}

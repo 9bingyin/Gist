@@ -1,6 +1,35 @@
-import { memo, useMemo, createElement } from 'react'
+import { memo, useMemo, createElement, createContext, useCallback } from 'react'
 import { parseHtml } from '@/lib/parse-html'
+import { getProxiedImageUrl } from '@/lib/image-proxy'
+import { useImagePreviewStore } from '@/stores/image-preview-store'
 import { ArticleImage, ArticleLinkContext } from './article-image'
+
+// Context for image preview - provides images list and open function
+export interface ImagePreviewContextValue {
+  images: string[]
+  openPreview: (src: string) => void
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export const ImagePreviewContext = createContext<ImagePreviewContextValue | null>(null)
+
+// Extract image URLs from HTML content
+function extractImagesFromHtml(html: string, articleUrl?: string): string[] {
+  const images: string[] = []
+  // Match img tags and extract src attribute
+  const imgRegex = /<img[^>]+src=["']([^"']+)["'][^>]*>/gi
+  let match
+  while ((match = imgRegex.exec(html)) !== null) {
+    const src = match[1]
+    if (src) {
+      const proxiedSrc = getProxiedImageUrl(src, articleUrl)
+      if (!images.includes(proxiedSrc)) {
+        images.push(proxiedSrc)
+      }
+    }
+  }
+  return images
+}
 
 // Global cache for image elements to prevent re-creation during content updates
 // Key: articleUrl + imageSrc, Value: React element
@@ -119,25 +148,63 @@ const ArticleContentBlockRenderer = memo(function ArticleContentBlockRenderer({
  */
 export function ArticleContent(props: ArticleContentProps) {
   const { articleUrl, className } = props
+  const openImagePreview = useImagePreviewStore((s) => s.open)
+
+  // Extract all images from content upfront
+  const images = useMemo(() => {
+    if ('blocks' in props && props.blocks) {
+      const allImages: string[] = []
+      for (const block of props.blocks) {
+        const blockImages = extractImagesFromHtml(block.html, articleUrl)
+        for (const img of blockImages) {
+          if (!allImages.includes(img)) {
+            allImages.push(img)
+          }
+        }
+      }
+      return allImages
+    } else if ('content' in props && props.content) {
+      return extractImagesFromHtml(props.content, articleUrl)
+    }
+    return []
+  }, [props, articleUrl])
+
+  const openPreview = useCallback((src: string) => {
+    const proxiedSrc = getProxiedImageUrl(src, articleUrl)
+    const index = images.indexOf(proxiedSrc)
+    if (index !== -1) {
+      openImagePreview(images, index)
+    } else {
+      // Fallback: just open the single image
+      openImagePreview([proxiedSrc], 0)
+    }
+  }, [articleUrl, images, openImagePreview])
+
+  const contextValue = useMemo(() => ({
+    images,
+    openPreview,
+  }), [images, openPreview])
 
   return (
-    <ArticleLinkContext.Provider value={articleUrl}>
-      <div className={className}>
-        {'blocks' in props && props.blocks ? (
-          props.blocks.map((block) => (
+    <ImagePreviewContext.Provider value={contextValue}>
+      <ArticleLinkContext.Provider value={articleUrl}>
+        <div className={className}>
+          {'blocks' in props && props.blocks ? (
+            props.blocks.map((block) => (
+              <ArticleContentBlockRenderer
+                key={block.key}
+                content={block.html}
+                articleUrl={articleUrl}
+              />
+            ))
+          ) : 'content' in props ? (
             <ArticleContentBlockRenderer
-              key={block.key}
-              content={block.html}
+              content={props.content}
               articleUrl={articleUrl}
             />
-          ))
-        ) : 'content' in props ? (
-          <ArticleContentBlockRenderer
-            content={props.content}
-            articleUrl={articleUrl}
-          />
-        ) : null}
-      </div>
-    </ArticleLinkContext.Provider>
+          ) : null}
+        </div>
+      </ArticleLinkContext.Provider>
+    </ImagePreviewContext.Provider>
   )
 }

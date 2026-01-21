@@ -9,6 +9,7 @@ import { AddFeedPage } from '@/components/add-feed'
 import { EntryList } from '@/components/entry-list'
 import { EntryContent } from '@/components/entry-content'
 import { PictureMasonry, Lightbox } from '@/components/picture-masonry'
+import { ImagePreview } from '@/components/ui/image-preview'
 import { LoginPage, RegisterPage } from '@/components/auth'
 import { UpdateNotice } from '@/components/update-notice'
 import { useSelection, selectionToParams } from '@/hooks/useSelection'
@@ -268,6 +269,8 @@ function AuthenticatedApp() {
         {mobileContent}
         {/* Lightbox for picture mode */}
         {contentType === 'picture' && <Lightbox />}
+        {/* ImagePreview for article/notification mode */}
+        {contentType !== 'picture' && <ImagePreview />}
         {/* Sheet rendered once to prevent animation flickering on route/mode changes */}
         <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
           {sidebarContent}
@@ -317,25 +320,28 @@ function AuthenticatedApp() {
   }
 
   return (
-    <ThreeColumnLayout
-      sidebar={sidebarContent}
-      list={
-        <EntryList
-          selection={selection}
-          selectedEntryId={selectedEntryId}
-          onSelectEntry={selectEntry}
-          onMarkAllRead={handleMarkAllRead}
-          unreadOnly={unreadOnly}
-          onToggleUnreadOnly={toggleUnreadOnly}
-          contentType={contentType}
-          isTablet={isTablet}
-          onToggleSidebar={toggleSidebarVisible}
-          sidebarVisible={sidebarVisible}
-        />
-      }
-      content={<EntryContent key={selectedEntryId} entryId={selectedEntryId} />}
-      showSidebar={showSidebar}
-    />
+    <>
+      <ThreeColumnLayout
+        sidebar={sidebarContent}
+        list={
+          <EntryList
+            selection={selection}
+            selectedEntryId={selectedEntryId}
+            onSelectEntry={selectEntry}
+            onMarkAllRead={handleMarkAllRead}
+            unreadOnly={unreadOnly}
+            onToggleUnreadOnly={toggleUnreadOnly}
+            contentType={contentType}
+            isTablet={isTablet}
+            onToggleSidebar={toggleSidebarVisible}
+            sidebarVisible={sidebarVisible}
+          />
+        }
+        content={<EntryContent key={selectedEntryId} entryId={selectedEntryId} />}
+        showSidebar={showSidebar}
+      />
+      <ImagePreview />
+    </>
   )
 }
 
