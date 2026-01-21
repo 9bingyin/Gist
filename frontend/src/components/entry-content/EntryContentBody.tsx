@@ -9,12 +9,14 @@ import { ArticleContent } from '@/components/ui/article-content'
 import type { ArticleContentBlock } from '@/components/ui/article-content'
 import { UserIcon, CalendarIcon, ClockIcon } from '@/components/ui/icons'
 import { AiSummaryBox } from './AiSummaryBox'
+import { BackToTopButton } from './BackToTopButton'
 import type { Entry } from '@/types/api'
 
 interface EntryContentBodyProps {
   entry: Entry
   displayTitle?: string | null
   scrollRef: RefCallback<HTMLDivElement>
+  scrollNode?: HTMLDivElement | null
   displayContent: string | null | undefined
   displayBlocks?: ArticleContentBlock[] | null
   highlightContent?: string
@@ -27,6 +29,7 @@ export function EntryContentBody({
   entry,
   displayTitle,
   scrollRef,
+  scrollNode,
   displayContent,
   displayBlocks,
   highlightContent,
@@ -114,6 +117,7 @@ export function EntryContentBody({
           )}
         </div>
       </article>
+      {scrollNode && <BackToTopButton scrollNode={scrollNode} />}
     </ScrollArea>
   )
 }

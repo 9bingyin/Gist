@@ -24,7 +24,7 @@ export function EntryContent({ entryId, isMobile, onBack }: EntryContentProps) {
   const { mutate: markAsRead } = useMarkAsRead()
   const { mutate: markAsStarred } = useMarkAsStarred()
   const removeFromUnreadList = useRemoveFromUnreadList()
-  const { scrollRef, isAtTop } = useEntryContentScroll(entryId)
+  const { scrollRef, isAtTop, scrollNode } = useEntryContentScroll(entryId)
 
   // Track entries marked as read to trigger list removal on switch
   const markedAsReadRef = useRef<Set<string>>(new Set())
@@ -142,6 +142,7 @@ export function EntryContent({ entryId, isMobile, onBack }: EntryContentProps) {
         entry={entry}
         displayTitle={displayTitle}
         scrollRef={scrollRef}
+        scrollNode={scrollNode}
         displayContent={displayContent}
         displayBlocks={translatedContentBlocks}
         highlightContent={highlightContent}

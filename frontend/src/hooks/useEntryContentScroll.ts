@@ -39,5 +39,5 @@ export function useEntryContentScroll(entryId: string | null) {
   // This prevents flash when switching articles (old isAtTop value being used)
   const effectiveIsAtTop = processedEntryIdRef.current !== entryId ? true : isAtTop
 
-  return { scrollRef, isAtTop: effectiveIsAtTop }
+  return { scrollRef, isAtTop: effectiveIsAtTop, scrollNode }
 }
