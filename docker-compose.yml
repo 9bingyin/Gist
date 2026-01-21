@@ -8,4 +8,5 @@ services:
       - ./data:/app/data
     environment:
       - GIST_LOG_LEVEL=info
+      # - GIST_SWAGGER=true  # Enable Swagger API docs at /swagger/index.html
     restart: always

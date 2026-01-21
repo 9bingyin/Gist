@@ -24,6 +24,7 @@ func NewRouter(
 	domainRateLimitHandler *handler.DomainRateLimitHandler,
 	authService service.AuthService,
 	staticDir string,
+	enableSwagger bool,
 ) *echo.Echo {
 	e := echo.New()
 	e.HideBanner = true
@@ -32,7 +33,9 @@ func NewRouter(
 
 	logger.Info("router initialized", "module", "http", "action", "request", "resource", "http", "result", "ok", "static_dir", staticDir)
 
-	e.GET("/swagger/*", echoSwagger.WrapHandler)
+	if enableSwagger {
+		e.GET("/swagger/*", echoSwagger.WrapHandler)
+	}
 
 	// Public API routes (no auth required)
 	publicAPI := e.Group("/api")

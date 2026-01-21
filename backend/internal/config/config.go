@@ -24,11 +24,12 @@ const (
 var DefaultUserAgent = GistUserAgent
 
 type Config struct {
-	Addr      string
-	DBPath    string
-	DataDir   string
-	StaticDir string
-	LogLevel  string
+	Addr          string
+	DBPath        string
+	DataDir       string
+	StaticDir     string
+	LogLevel      string
+	EnableSwagger bool
 }
 
 func Load() Config {
@@ -54,12 +55,15 @@ func Load() Config {
 		logLevel = "info"
 	}
 
+	enableSwagger := os.Getenv("GIST_SWAGGER") == "true"
+
 	return Config{
-		Addr:      addr,
-		DBPath:    filepath.Clean(path),
-		DataDir:   filepath.Clean(dataDir),
-		StaticDir: filepath.Clean(staticDir),
-		LogLevel:  logLevel,
+		Addr:          addr,
+		DBPath:        filepath.Clean(path),
+		DataDir:       filepath.Clean(dataDir),
+		StaticDir:     filepath.Clean(staticDir),
+		LogLevel:      logLevel,
+		EnableSwagger: enableSwagger,
 	}
 }
 
