@@ -494,6 +494,54 @@ body {
   padding: 0 1rem;
 }
 
+/* Line hover effect */
+.entry-content .prose pre code > .line:hover {
+  background: hsl(var(--foreground) / 0.04);
+}
+
+/* Diff and highlight base styles */
+.entry-content .prose pre code > .line.highlighted,
+.entry-content .prose pre code > .line.diff {
+  position: relative;
+}
+
+.entry-content .prose pre code > .line.highlighted::before,
+.entry-content .prose pre code > .line.diff::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  width: 2px;
+}
+
+/* Diff add (+) */
+.entry-content .prose pre code > .line.diff.add {
+  background: hsl(142 76% 36% / 0.15);
+}
+
+.entry-content .prose pre code > .line.diff.add::before {
+  background: hsl(142 76% 36%);
+}
+
+/* Diff remove (-) */
+.entry-content .prose pre code > .line.diff.remove {
+  background: hsl(0 84% 60% / 0.15);
+}
+
+.entry-content .prose pre code > .line.diff.remove::before {
+  background: hsl(0 84% 60%);
+}
+
+/* Line highlight */
+.entry-content .prose pre code > .line.highlighted {
+  background: hsl(var(--primary) / 0.1);
+}
+
+.entry-content .prose pre code > .line.highlighted::before {
+  background: hsl(var(--primary));
+}
+
 /* Custom blockquote styling - minimal left border */
 .entry-content .prose :where(blockquote):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
   background: transparent;

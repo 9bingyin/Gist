@@ -2,6 +2,10 @@ import type { RefObject } from 'react'
 import { useEffect } from 'react'
 import type { HighlighterGeneric, BundledLanguage, BundledTheme } from 'shiki'
 import { createHighlighter } from 'shiki'
+import {
+  transformerNotationDiff,
+  transformerNotationHighlight,
+} from '@shikijs/transformers'
 
 let highlighterPromise: Promise<HighlighterGeneric<BundledLanguage, BundledTheme>> | null = null
 const loadedLanguages = new Set<string>()
@@ -138,6 +142,10 @@ export function useCodeHighlight(
               dark: 'github-dark',
             },
             defaultColor: false,
+            transformers: [
+              transformerNotationDiff(),
+              transformerNotationHighlight(),
+            ],
           })
 
           const temp = document.createElement('div')
