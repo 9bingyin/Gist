@@ -398,6 +398,8 @@ body {
   text-decoration-color: hsl(var(--primary) / 0.3);
   text-underline-offset: 3px;
   transition: text-decoration-color 0.2s ease;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 .entry-content .prose :where(a):not(:where([class~="not-prose"], [class~="not-prose"] *)):hover {
