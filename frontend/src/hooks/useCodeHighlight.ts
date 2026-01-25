@@ -55,7 +55,7 @@ function normalizeLanguage(lang: string): string {
 
 function createCopyButton(code: string): HTMLButtonElement {
   const button = document.createElement('button')
-  button.className = 'code-copy-btn'
+  button.className = 'flex items-center justify-center p-1 bg-transparent text-muted-foreground rounded transition-colors hover:text-foreground hover:bg-foreground/10'
   button.type = 'button'
   button.setAttribute('aria-label', 'Copy code')
   button.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>`
@@ -64,10 +64,10 @@ function createCopyButton(code: string): HTMLButtonElement {
     try {
       await navigator.clipboard.writeText(code)
       button.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`
-      button.classList.add('copied')
+      button.classList.add('!text-green-500')
       setTimeout(() => {
         button.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>`
-        button.classList.remove('copied')
+        button.classList.remove('!text-green-500')
       }, 2000)
     } catch {
       // Fallback for older browsers
@@ -165,13 +165,14 @@ export function useCodeHighlight(
             }
 
             // Add header with language label and copy button
-            if (!pre.querySelector('.code-header')) {
+            if (!pre.querySelector('[data-code-header]')) {
               const header = document.createElement('div')
-              header.className = 'code-header'
+              header.className = 'flex items-center justify-end px-4 py-2 border-b border-border bg-transparent'
+              header.dataset.codeHeader = 'true'
 
               if (rawLang) {
                 const langSpan = document.createElement('span')
-                langSpan.className = 'code-lang'
+                langSpan.className = 'mr-auto font-mono text-xs font-medium uppercase tracking-wide text-muted-foreground'
                 langSpan.textContent = rawLang
                 header.appendChild(langSpan)
               }

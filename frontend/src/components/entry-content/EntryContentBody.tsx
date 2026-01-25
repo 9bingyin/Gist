@@ -103,7 +103,10 @@ export function EntryContentBody({
           error={summaryError}
         />
 
-        <div ref={contentRef} className="prose dark:prose-invert max-w-none hyphens-auto">
+        <div
+          ref={contentRef}
+          className="prose dark:prose-invert max-w-none hyphens-auto text-[1.0625rem] leading-[1.8] break-words prose-img:!max-w-full prose-img:!h-auto prose-img:shadow-[0_4px_20px_rgba(0,0,0,0.08)] prose-video:!max-w-full prose-video:!h-auto prose-video:shadow-[0_4px_20px_rgba(0,0,0,0.08)] prose-figure:!max-w-full prose-a:underline prose-a:decoration-primary/30 prose-a:underline-offset-[3px] prose-a:break-words prose-blockquote:not-italic prose-blockquote:border-l-2 prose-blockquote:border-muted-foreground/30 prose-blockquote:bg-transparent prose-blockquote:text-foreground/85 prose-blockquote:py-1 prose-blockquote:pl-5 prose-blockquote:ml-0 prose-blockquote:rounded-none prose-th:bg-muted/60 prose-code:bg-muted/60 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded-md prose-code:break-all prose-code:before:content-none prose-code:after:content-none prose-pre:p-0 prose-pre:rounded-lg prose-pre:border prose-pre:border-border prose-pre:overflow-hidden"
+        >
           {hasContent ? (
             hasBlocks ? (
               <ArticleContent blocks={displayBlocks ?? []} articleUrl={entry.url} />

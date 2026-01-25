@@ -134,11 +134,10 @@ describe('useCodeHighlight', () => {
     renderHook(() => useCodeHighlight(ref, 'content'))
 
     await waitFor(() => {
-      const header = container.querySelector('.code-header')
+      const header = container.querySelector('[data-code-header="true"]')
       expect(header).not.toBeNull()
-      const copyBtn = header?.querySelector('.code-copy-btn')
+      const copyBtn = header?.querySelector('button[aria-label="Copy code"]')
       expect(copyBtn).not.toBeNull()
-      expect(copyBtn?.getAttribute('aria-label')).toBe('Copy code')
     })
   })
 
@@ -149,7 +148,8 @@ describe('useCodeHighlight', () => {
     renderHook(() => useCodeHighlight(ref, 'content'))
 
     await waitFor(() => {
-      const langSpan = container.querySelector('.code-lang')
+      const header = container.querySelector('[data-code-header="true"]')
+      const langSpan = header?.querySelector('span.font-mono.uppercase')
       expect(langSpan).not.toBeNull()
       expect(langSpan?.textContent).toBe('python')
     })
@@ -162,9 +162,9 @@ describe('useCodeHighlight', () => {
     renderHook(() => useCodeHighlight(ref, 'content'))
 
     await waitFor(() => {
-      const header = container.querySelector('.code-header')
+      const header = container.querySelector('[data-code-header="true"]')
       expect(header).not.toBeNull()
-      const langSpan = container.querySelector('.code-lang')
+      const langSpan = header?.querySelector('span.font-mono.uppercase')
       expect(langSpan).toBeNull()
     })
   })
@@ -311,11 +311,11 @@ describe('useCodeHighlight', () => {
       renderHook(() => useCodeHighlight(ref, 'content'))
 
       await waitFor(() => {
-        const copyBtn = container.querySelector('.code-copy-btn') as HTMLButtonElement
+        const copyBtn = container.querySelector('button[aria-label="Copy code"]') as HTMLButtonElement
         expect(copyBtn).not.toBeNull()
       })
 
-      const copyBtn = container.querySelector('.code-copy-btn') as HTMLButtonElement
+      const copyBtn = container.querySelector('button[aria-label="Copy code"]') as HTMLButtonElement
       await act(async () => {
         copyBtn.click()
       })
@@ -330,16 +330,16 @@ describe('useCodeHighlight', () => {
       renderHook(() => useCodeHighlight(ref, 'content'))
 
       await waitFor(() => {
-        const copyBtn = container.querySelector('.code-copy-btn')
+        const copyBtn = container.querySelector('button[aria-label="Copy code"]')
         expect(copyBtn).not.toBeNull()
       })
 
-      const copyBtn = container.querySelector('.code-copy-btn') as HTMLButtonElement
+      const copyBtn = container.querySelector('button[aria-label="Copy code"]') as HTMLButtonElement
       await act(async () => {
         copyBtn.click()
       })
 
-      expect(copyBtn.classList.contains('copied')).toBe(true)
+      expect(copyBtn.classList.contains('!text-green-500')).toBe(true)
     })
 
     it('should have correct button attributes', async () => {
@@ -349,7 +349,7 @@ describe('useCodeHighlight', () => {
       renderHook(() => useCodeHighlight(ref, 'content'))
 
       await waitFor(() => {
-        const copyBtn = container.querySelector('.code-copy-btn') as HTMLButtonElement
+        const copyBtn = container.querySelector('button[aria-label="Copy code"]') as HTMLButtonElement
         expect(copyBtn).not.toBeNull()
         expect(copyBtn.type).toBe('button')
         expect(copyBtn.getAttribute('aria-label')).toBe('Copy code')
