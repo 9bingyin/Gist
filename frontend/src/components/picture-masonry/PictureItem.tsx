@@ -22,8 +22,6 @@ interface PictureItemProps {
 
 // Default 3:4 vertical aspect ratio for uncached images
 const DEFAULT_RATIO = 3 / 4
-const FOOTER_HEIGHT = 40
-
 export const PictureItem = memo(function PictureItem({
   entry,
   feed,
@@ -110,8 +108,7 @@ export const PictureItem = memo(function PictureItem({
 
         {/* Footer */}
         <div
-          className="flex items-center px-2 text-xs text-muted-foreground"
-          style={{ height: FOOTER_HEIGHT }}
+          className="flex h-10 items-center px-2 text-xs text-muted-foreground"
         >
           {/* Unread indicator */}
           <div

@@ -167,20 +167,6 @@ export function ProfileButton({
   const [isOpen, setIsOpen] = React.useState(false)
   const iconStyles =
     'size-4 text-muted-foreground transition-colors group-data-[highlighted]:text-foreground'
-  const contentStyle: React.CSSProperties = {
-     backgroundImage: "linear-gradient(to bottom right, hsl(var(--background) / 0.98), hsl(var(--background) / 0.95))",
-     boxShadow: `
-       0 6px 20px rgba(0, 0, 0, 0.08), 
-       0 4px 12px rgba(0, 0, 0, 0.05), 
-       0 2px 6px rgba(0, 0, 0, 0.04), 
-       0 4px 16px hsl(var(--primary) / 0.06), 
-       0 2px 8px hsl(var(--primary) / 0.04), 
-       0 1px 3px rgba(0, 0, 0, 0.03)
-     `,
-  }
-  const glowStyle: React.CSSProperties = {
-    background: "linear-gradient(to bottom right, hsl(var(--primary) / 0.02), transparent, hsl(var(--primary) / 0.02))"
-  }
 
   return (
     <DropdownMenu onOpenChange={setIsOpen}>
@@ -197,14 +183,15 @@ export function ProfileButton({
             "backdrop-blur-2xl",
             "motion-scale-in-75 motion-duration-150 motion-ease-out",
             "data-[state=closed]:motion-scale-out-95 data-[state=closed]:motion-opacity-out-0",
-            "border-border/40"
+            "border-border/40",
+            "bg-[linear-gradient(to_bottom_right,_hsl(var(--background)_/_0.98),_hsl(var(--background)_/_0.95))]",
+            "shadow-[0_6px_20px_rgba(0,0,0,0.08),_0_4px_12px_rgba(0,0,0,0.05),_0_2px_6px_rgba(0,0,0,0.04),_0_4px_16px_hsl(var(--primary)_/_0.06),_0_2px_8px_hsl(var(--primary)_/_0.04),_0_1px_3px_rgba(0,0,0,0.03)]"
         )}
-        style={contentStyle}
         side="bottom"
         align="center"
         sideOffset={10}
       >
-        <div className="pointer-events-none absolute inset-0 rounded-md" style={glowStyle} />
+        <div className="pointer-events-none absolute inset-0 rounded-md bg-[linear-gradient(to_bottom_right,_hsl(var(--primary)_/_0.02),_transparent,_hsl(var(--primary)_/_0.02))]" />
 
         {/* User info */}
         <DropdownMenuLabel className="px-2 pb-3 pt-6 relative z-10 text-center">

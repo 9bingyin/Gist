@@ -50,10 +50,7 @@ export function EntryListHeader({
             type="button"
             onClick={onToggleSidebar}
             title={sidebarVisible ? t('actions.hide_sidebar') : t('actions.show_sidebar')}
-            className="flex size-11 shrink-0 items-center justify-center rounded-md transition-all duration-200 hover:bg-item-hover active:scale-95 -ml-1.5"
-            style={{
-              transitionTimingFunction: 'var(--ease-ios)',
-            }}
+            className="flex size-11 shrink-0 items-center justify-center rounded-md transition-all duration-200 ease-[var(--ease-ios)] hover:bg-item-hover active:scale-95 -ml-1.5"
           >
             <MenuIcon className="size-5" />
           </button>

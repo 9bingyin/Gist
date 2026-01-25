@@ -250,7 +250,7 @@ export function PictureMasonry({
             columnCount={currentColumn}
             ItemContent={ItemContent}
             context={context}
-            style={{ height: '100%', padding: '1rem' }}
+            className="h-full p-4"
           />
         ) : null}
         {isFetchingNextPage && <LoadingMore />}
@@ -312,4 +312,3 @@ function LoadingMore() {
     </div>
   )
 }
-
