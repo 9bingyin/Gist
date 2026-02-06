@@ -49,22 +49,36 @@ export function useAITranslation({
   const translateRequestedRef = useRef(false)
   const prevTranslateReadableRef = useRef(false)
   const manuallyDisabledRef = useRef(false)
+  const requestSeqRef = useRef(0)
+  const hasExistingTranslationRef = useRef(false)
+  const isTranslatingRef = useRef(false)
 
-  // Reset state when entry changes
-  useEffect(() => {
+  const clearTranslationState = useCallback(() => {
     setTranslatedContent(null)
     setOriginalBlocks([])
     setTranslatedBlocks(new Map())
-    setIsTranslating(false)
     setTranslationMode(null)
+    hasExistingTranslationRef.current = false
+  }, [])
+
+  const cancelInFlightTranslation = useCallback(() => {
+    requestSeqRef.current += 1
     if (translateAbortRef.current) {
       translateAbortRef.current.abort()
       translateAbortRef.current = null
     }
+    setIsTranslating(false)
+    isTranslatingRef.current = false
+  }, [])
+
+  // Reset state when entry changes
+  useEffect(() => {
+    cancelInFlightTranslation()
+    clearTranslationState()
     translateRequestedRef.current = false
     prevTranslateReadableRef.current = false
     manuallyDisabledRef.current = false
-  }, [entry?.id])
+  }, [entry?.id, cancelInFlightTranslation, clearTranslationState])
 
   // Get cached translations from store
   const cachedTranslation = useTranslationStore((state) =>
@@ -80,6 +94,7 @@ export function useAITranslation({
   )
 
   const isTranslationForCurrentMode = translationMode === isReadableActive
+  const translatedContentForCurrentMode = isTranslationForCurrentMode ? translatedContent : null
 
   const isAlreadyTargetLanguage = useMemo(() => {
     if (!entry) return false
@@ -95,39 +110,44 @@ export function useAITranslation({
 
   const combinedTranslatedContent = useMemo(() => {
     if (!isTranslationForCurrentMode) return null
-    if (translatedContent) return translatedContent
+    if (translatedContentForCurrentMode) return translatedContentForCurrentMode
     if (originalBlocks.length === 0) return null
     return originalBlocks
       .map(block => translatedBlocks.get(block.index) ?? block.html)
       .join('')
-  }, [isTranslationForCurrentMode, translatedContent, originalBlocks, translatedBlocks])
+  }, [isTranslationForCurrentMode, translatedContentForCurrentMode, originalBlocks, translatedBlocks])
 
   const translatedContentBlocks = useMemo(() => {
-    if (!entry || !isTranslationForCurrentMode || translatedContent || originalBlocks.length === 0) {
+    if (!entry || !isTranslationForCurrentMode || translatedContentForCurrentMode || originalBlocks.length === 0) {
       return null
     }
     return originalBlocks.map((block) => ({
       key: `${entry.id}-${block.index}`,
       html: translatedBlocks.get(block.index) ?? block.html,
     }))
-  }, [entry, isTranslationForCurrentMode, translatedContent, originalBlocks, translatedBlocks])
+  }, [entry, isTranslationForCurrentMode, translatedContentForCurrentMode, originalBlocks, translatedBlocks])
 
-  const hasTranslation = !isTranslating && isTranslationForCurrentMode && !!(translatedContent || originalBlocks.length > 0)
+  const hasTranslation = !isTranslating && isTranslationForCurrentMode && !!(translatedContentForCurrentMode || originalBlocks.length > 0)
 
   const generateTranslation = useCallback(async (forReadability: boolean) => {
     if (!entry) return
 
-    if (translateAbortRef.current) {
-      translateAbortRef.current.abort()
-    }
-
     const content = forReadability ? readableContent : entry.content
     if (!content) return
 
+    requestSeqRef.current += 1
+    if (translateAbortRef.current) {
+      translateAbortRef.current.abort()
+      translateAbortRef.current = null
+    }
+    const requestSeq = requestSeqRef.current
+
     setIsTranslating(true)
+    isTranslatingRef.current = true
     setTranslatedContent(null)
     setOriginalBlocks([])
     setTranslatedBlocks(new Map())
+    hasExistingTranslationRef.current = false
     setTranslationMode(forReadability)
     translateRequestedRef.current = true
 
@@ -146,8 +166,14 @@ export function useAITranslation({
       )
 
       for await (const event of stream) {
+        if (requestSeqRef.current !== requestSeq) {
+          return
+        }
+
         if ('cached' in event) {
           setTranslatedContent(event.content)
+          setOriginalBlocks([])
+          setTranslatedBlocks(new Map())
           break
         }
 
@@ -173,26 +199,37 @@ export function useAITranslation({
         }
       }
     } catch (err) {
+      if (requestSeqRef.current !== requestSeq) {
+        return
+      }
       if (err instanceof Error && err.name === 'AbortError') {
         return
       }
-      setIsTranslating(false)
-      translateAbortRef.current = null
       return
+    } finally {
+      if (requestSeqRef.current === requestSeq) {
+        setIsTranslating(false)
+        isTranslatingRef.current = false
+        if (translateAbortRef.current === abortController) {
+          translateAbortRef.current = null
+        }
+      }
     }
-
-    setIsTranslating(false)
-    translateAbortRef.current = null
   }, [entry, readableContent])
+
+  useEffect(() => {
+    hasExistingTranslationRef.current = !!(translatedContent || originalBlocks.length > 0)
+  }, [translatedContent, originalBlocks.length])
+
+  useEffect(() => {
+    isTranslatingRef.current = isTranslating
+  }, [isTranslating])
 
   const handleToggleTranslation = useCallback(async () => {
     if (!entry) return
 
     if (hasTranslation && !isTranslating) {
-      setTranslatedContent(null)
-      setOriginalBlocks([])
-      setTranslatedBlocks(new Map())
-      setTranslationMode(null)
+      clearTranslationState()
       translateRequestedRef.current = false
       manuallyDisabledRef.current = true
       translationActions.disable(entry.id)
@@ -200,12 +237,8 @@ export function useAITranslation({
     }
 
     if (isTranslating && translateAbortRef.current) {
-      translateAbortRef.current.abort()
-      translateAbortRef.current = null
-      setIsTranslating(false)
-      setOriginalBlocks([])
-      setTranslatedBlocks(new Map())
-      setTranslationMode(null)
+      cancelInFlightTranslation()
+      clearTranslationState()
       translateRequestedRef.current = false
       manuallyDisabledRef.current = true
       translationActions.disable(entry.id)
@@ -224,39 +257,38 @@ export function useAITranslation({
     }
 
     await generateTranslation(isReadableActive)
-  }, [entry, hasTranslation, isTranslating, isReadableActive, generateTranslation, targetLanguage])
+  }, [entry, hasTranslation, isTranslating, isReadableActive, clearTranslationState, cancelInFlightTranslation, generateTranslation, targetLanguage])
 
   // Auto-regenerate when readability mode changes
   useEffect(() => {
     if (prevTranslateReadableRef.current !== isReadableActive) {
       prevTranslateReadableRef.current = isReadableActive
-      const hasExistingTranslation = translatedContent || originalBlocks.length > 0
-      if (translateRequestedRef.current && (hasExistingTranslation || isTranslating)) {
+      if (translateRequestedRef.current && (hasExistingTranslationRef.current || isTranslatingRef.current)) {
         if (cachedTranslation?.content) {
+          cancelInFlightTranslation()
+          clearTranslationState()
           setTranslatedContent(cachedTranslation.content)
           setTranslationMode(isReadableActive)
+          translateRequestedRef.current = true
           return
         }
 
         const content = isReadableActive ? readableContent : entry?.content
         const summary = content ? stripHtml(content).slice(0, 200) : null
-        
+
         if (needsTranslation(entry?.title || '', summary, targetLanguage)) {
           generateTranslation(isReadableActive)
         } else {
-          setTranslatedContent(null)
-          setOriginalBlocks([])
-          setTranslatedBlocks(new Map())
-          setTranslationMode(null)
+          cancelInFlightTranslation()
+          clearTranslationState()
           translateRequestedRef.current = false
         }
       }
     }
   }, [
     isReadableActive,
-    translatedContent,
-    originalBlocks.length,
-    isTranslating,
+    cancelInFlightTranslation,
+    clearTranslationState,
     generateTranslation,
     readableContent,
     entry,
@@ -266,9 +298,9 @@ export function useAITranslation({
 
   // Auto-translate when entry is selected
   useEffect(() => {
-    if (!autoTranslate || !entry || isTranslating) return
+    if (!autoTranslate || !entry || isTranslating || isTranslatingRef.current) return
     if (manuallyDisabledRef.current) return
-    if (translatedContent || originalBlocks.length > 0) return
+    if (hasTranslation) return
 
     if (cachedTranslation?.content) {
       setTranslatedContent(cachedTranslation.content)
@@ -291,9 +323,8 @@ export function useAITranslation({
     readableContent,
     targetLanguage,
     cachedTranslation,
-    translatedContent,
-    originalBlocks.length,
     isTranslating,
+    hasTranslation,
     generateTranslation,
   ])
 
@@ -312,7 +343,7 @@ export function useAITranslation({
     hasTranslation,
     translationDisabled: isAlreadyTargetLanguage,
     displayTitle,
-    translatedContent,
+    translatedContent: translatedContentForCurrentMode,
     translatedContentBlocks,
     combinedTranslatedContent,
     handleToggleTranslation,

@@ -63,7 +63,6 @@ export function EntryContent({ entryId, isMobile, onBack }: EntryContentProps) {
     hasTranslation,
     translationDisabled,
     displayTitle,
-    translatedContent,
     translatedContentBlocks,
     combinedTranslatedContent,
     handleToggleTranslation,
@@ -102,7 +101,7 @@ export function EntryContent({ entryId, isMobile, onBack }: EntryContentProps) {
   }, [entry, markAsStarred])
 
   // Determine display content
-  const displayContent = translatedContent ?? baseContent
+  const displayContent = combinedTranslatedContent ?? baseContent
   const highlightContent = combinedTranslatedContent ?? baseContent ?? ''
 
   if (entryId === null) {
