@@ -171,17 +171,27 @@ export function EntryList({
     [autoTranslate, targetLanguage, triggerBatchTranslation]
   )
 
-  // Trigger translation for visible items
+  // Trigger translation for visible items and selected entry
   useEffect(() => {
     if (!autoTranslate) return
 
+    const visibleEntryIds = new Set<string>()
     for (const virtualRow of virtualItems) {
       const entry = entries[virtualRow.index]
       if (entry) {
+        visibleEntryIds.add(entry.id)
         scheduleTranslation(entry)
       }
     }
-  }, [virtualItems, entries, autoTranslate, scheduleTranslation])
+
+    // Selected entry may be outside the visible range, still needs translation
+    if (selectedEntryId && !visibleEntryIds.has(selectedEntryId)) {
+      const selectedEntry = entries.find((e) => e.id === selectedEntryId)
+      if (selectedEntry) {
+        scheduleTranslation(selectedEntry)
+      }
+    }
+  }, [virtualItems, entries, autoTranslate, scheduleTranslation, selectedEntryId])
 
   const title = useMemo(() => {
     switch (selection.type) {
