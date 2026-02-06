@@ -7,10 +7,13 @@ const {
   mockGetVirtualItems,
   mockTranslateArticlesBatch,
   mockCancelAllBatchTranslations,
+  mockTranslationActionsGet,
 } = vi.hoisted(() => ({
   mockGetVirtualItems: vi.fn(),
   mockTranslateArticlesBatch: vi.fn(() => Promise.resolve()),
   mockCancelAllBatchTranslations: vi.fn(),
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  mockTranslationActionsGet: vi.fn((): any => undefined),
 }))
 
 // --- Module mocks ---
@@ -62,6 +65,7 @@ vi.mock('@/services/translation-service', () => ({
 
 vi.mock('@/stores/translation-store', () => ({
   translationActions: {
+    get: mockTranslationActionsGet,
     isDisabled: () => false,
   },
 }))
@@ -129,6 +133,7 @@ describe('EntryList translation scheduling', () => {
     vi.clearAllMocks()
 
     mockGetVirtualItems.mockReturnValue(visibleVirtualItems)
+    mockTranslationActionsGet.mockReturnValue(undefined)
 
     vi.mocked(useEntriesInfinite).mockReturnValue({
       data: { pages: [{ entries: allEntries, hasMore: false }] },
@@ -136,12 +141,12 @@ describe('EntryList translation scheduling', () => {
       hasNextPage: false,
       isFetchingNextPage: false,
       isLoading: false,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any)
 
     vi.mocked(useAISettings).mockReturnValue({
       data: { autoTranslate: true, summaryLanguage: 'zh-CN' },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any)
   })
 
@@ -200,7 +205,7 @@ describe('EntryList translation scheduling', () => {
   it('should not schedule any translation when autoTranslate is off', () => {
     vi.mocked(useAISettings).mockReturnValue({
       data: { autoTranslate: false, summaryLanguage: 'zh-CN' },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any)
 
     render(<EntryList {...defaultProps} selectedEntryId="4" />)
@@ -210,5 +215,73 @@ describe('EntryList translation scheduling', () => {
     })
 
     expect(mockTranslateArticlesBatch).not.toHaveBeenCalled()
+  })
+
+  it('should retry entries that failed to translate after batch completes', async () => {
+    // No translations in store (simulating backend partial/total failure)
+    mockTranslationActionsGet.mockReturnValue(undefined)
+
+    const { rerender } = render(<EntryList {...defaultProps} selectedEntryId={null} />)
+
+    // First batch fires
+    await act(async () => {
+      vi.advanceTimersByTime(500)
+    })
+
+    expect(mockTranslateArticlesBatch).toHaveBeenCalledTimes(1)
+    mockTranslateArticlesBatch.mockClear()
+
+    // Trigger re-scheduling by changing selectedEntryId (causes useEffect to re-fire)
+    rerender(<EntryList {...defaultProps} selectedEntryId="3" />)
+
+    await act(async () => {
+      vi.advanceTimersByTime(500)
+    })
+
+    expect(mockTranslateArticlesBatch).toHaveBeenCalledTimes(1)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const calledArticles = (mockTranslateArticlesBatch.mock.calls[0] as any[])[0] as Array<{ id: string }>
+    const ids = calledArticles.map((a) => a.id)
+    // Entries 1 and 2 should be retried (removed from tracking by .finally())
+    expect(ids).toContain('1')
+    expect(ids).toContain('2')
+    // Entry 3 is newly scheduled
+    expect(ids).toContain('3')
+  })
+
+  it('should not retry entries that were successfully translated', async () => {
+    // Translations exist in store for entries 1 and 2
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(mockTranslationActionsGet as any).mockImplementation((id: string) => {
+      if (id === '1' || id === '2') return { title: 'translated', summary: 'sum', content: null }
+      return undefined
+    })
+
+    const { rerender } = render(<EntryList {...defaultProps} selectedEntryId={null} />)
+
+    // First batch fires
+    await act(async () => {
+      vi.advanceTimersByTime(500)
+    })
+
+    expect(mockTranslateArticlesBatch).toHaveBeenCalledTimes(1)
+    mockTranslateArticlesBatch.mockClear()
+
+    // Trigger re-scheduling
+    rerender(<EntryList {...defaultProps} selectedEntryId="3" />)
+
+    await act(async () => {
+      vi.advanceTimersByTime(500)
+    })
+
+    expect(mockTranslateArticlesBatch).toHaveBeenCalledTimes(1)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const calledArticles = (mockTranslateArticlesBatch.mock.calls[0] as any[])[0] as Array<{ id: string }>
+    const ids = calledArticles.map((a) => a.id)
+    // Entries 1 and 2 should NOT be retried (translations exist in store)
+    expect(ids).not.toContain('1')
+    expect(ids).not.toContain('2')
+    // Entry 3 is newly scheduled
+    expect(ids).toContain('3')
   })
 })

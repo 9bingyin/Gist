@@ -135,10 +135,13 @@ export function EntryList({
     pendingTranslation.current.clear()
 
     if (articlesToTranslate.length > 0) {
-      translateArticlesBatch(articlesToTranslate, targetLanguage).catch(() => {
-        // On error, allow retry
+      translateArticlesBatch(articlesToTranslate, targetLanguage).finally(() => {
+        // Remove entries that didn't actually get translated (cancelled, partial failure, etc.)
         for (const article of articlesToTranslate) {
-          translatedEntries.current.delete(article.id)
+          const cached = translationActions.get(article.id, targetLanguage)
+          if (!cached?.title && !cached?.summary) {
+            translatedEntries.current.delete(article.id)
+          }
         }
       })
     }
@@ -148,7 +151,12 @@ export function EntryList({
   const scheduleTranslation = useCallback(
     (entry: Entry) => {
       if (!autoTranslate) return
-      if (translatedEntries.current.has(entry.id)) return
+      if (translatedEntries.current.has(entry.id)) {
+        // Verify against store: if marked but no actual translation, allow retry
+        const cached = translationActions.get(entry.id, targetLanguage)
+        if (cached?.title || cached?.summary) return
+        translatedEntries.current.delete(entry.id)
+      }
       // Skip if user manually disabled translation for this article
       if (translationActions.isDisabled(entry.id)) return
 
