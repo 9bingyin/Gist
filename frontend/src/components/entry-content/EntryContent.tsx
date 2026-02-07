@@ -86,10 +86,11 @@ export function EntryContent({ entryId, isMobile, onBack }: EntryContentProps) {
   // Remove read entries from unreadOnly list when component unmounts (switching articles)
   // Note: EntryContent uses key={entryId} in App.tsx, so it unmounts/remounts on switch
   useEffect(() => {
+    const markedAsReadSet = markedAsReadRef.current
     return () => {
-      if (markedAsReadRef.current.size > 0) {
-        removeFromUnreadList(markedAsReadRef.current)
-        markedAsReadRef.current.clear()
+      if (markedAsReadSet.size > 0) {
+        removeFromUnreadList(markedAsReadSet)
+        markedAsReadSet.clear()
       }
     }
   }, [removeFromUnreadList])

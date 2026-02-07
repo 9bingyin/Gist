@@ -1,13 +1,11 @@
 import type { RefObject } from 'react'
 import { useEffect } from 'react'
 import type { HighlighterGeneric, BundledLanguage, BundledTheme } from 'shiki'
-import { createHighlighter } from 'shiki'
-import {
-  transformerNotationDiff,
-  transformerNotationHighlight,
-} from '@shikijs/transformers'
+
+type TransformerModule = typeof import('@shikijs/transformers')
 
 let highlighterPromise: Promise<HighlighterGeneric<BundledLanguage, BundledTheme>> | null = null
+let transformerModulePromise: Promise<TransformerModule> | null = null
 const loadedLanguages = new Set<string>()
 
 const commonLanguages = [
@@ -27,15 +25,26 @@ const commonLanguages = [
 
 async function getHighlighter() {
   if (!highlighterPromise) {
-    highlighterPromise = createHighlighter({
-      themes: ['github-light', 'github-dark'],
-      langs: [...commonLanguages],
-    })
-    for (const lang of commonLanguages) {
-      loadedLanguages.add(lang)
-    }
+    highlighterPromise = (async () => {
+      const { createHighlighter } = await import('shiki')
+      const highlighter = await createHighlighter({
+        themes: ['github-light', 'github-dark'],
+        langs: [...commonLanguages],
+      })
+      for (const lang of commonLanguages) {
+        loadedLanguages.add(lang)
+      }
+      return highlighter
+    })()
   }
   return highlighterPromise
+}
+
+async function getTransformerModule() {
+  if (!transformerModulePromise) {
+    transformerModulePromise = import('@shikijs/transformers')
+  }
+  return transformerModulePromise
 }
 
 function normalizeLanguage(lang: string): string {
@@ -99,7 +108,10 @@ export function useCodeHighlight(
     let cancelled = false
 
     async function highlightBlocks() {
-      const highlighter = await getHighlighter()
+      const [highlighter, transformerModule] = await Promise.all([
+        getHighlighter(),
+        getTransformerModule(),
+      ])
       if (cancelled) return
 
       for (const block of blocks) {
@@ -143,8 +155,8 @@ export function useCodeHighlight(
             },
             defaultColor: false,
             transformers: [
-              transformerNotationDiff(),
-              transformerNotationHighlight(),
+              transformerModule.transformerNotationDiff(),
+              transformerModule.transformerNotationHighlight(),
             ],
           })
 

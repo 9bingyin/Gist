@@ -49,7 +49,7 @@ export default defineConfig({
       },
       workbox: {
         // Only precache essential files, not all JS chunks (shiki has 300+ language files)
-        globPatterns: ['index.html', 'manifest.webmanifest', 'assets/index-*.js', 'assets/index-*.css', 'assets/*-vendor-*.js', '*.png', '*.svg'],
+        globPatterns: ['index.html', 'manifest.webmanifest', 'assets/app-*.js', 'assets/index-*.css', 'assets/*-vendor-*.js', '*.png', '*.svg'],
         navigateFallback: 'index.html',
         navigateFallbackDenylist: [/^\/api/],
         cleanupOutdatedCaches: true,
@@ -130,6 +130,7 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
+        entryFileNames: 'assets/app-[hash].js',
         manualChunks: {
           'react-vendor': ['react', 'react-dom'],
           'query-vendor': ['@tanstack/react-query', '@tanstack/react-virtual'],
@@ -138,7 +139,7 @@ export default defineConfig({
             '@radix-ui/react-dropdown-menu',
             '@radix-ui/react-scroll-area',
           ],
-          'shiki-vendor': ['shiki'],
+          'syntax-highlighter': ['shiki', '@shikijs/transformers'],
           'motion-vendor': ['motion', 'framer-motion'],
           'i18n-vendor': ['i18next', 'react-i18next'],
           'utils-vendor': ['clsx', 'tailwind-merge', 'class-variance-authority', 'zustand', 'wouter'],

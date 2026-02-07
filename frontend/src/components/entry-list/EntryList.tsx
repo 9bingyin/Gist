@@ -47,6 +47,8 @@ export function EntryList({
   onToggleSidebar,
   sidebarVisible,
 }: EntryListProps) {
+  'use no memo'
+
   const { t } = useTranslation()
   const params = selectionToParams(selection, contentType)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -95,7 +97,10 @@ export function EntryList({
     return map
   }, [folders])
 
-  const entries = data?.pages.flatMap((page) => page.entries) ?? []
+  const entries = useMemo(
+    () => data?.pages.flatMap((page) => page.entries) ?? [],
+    [data]
+  )
 
   const virtualizer = useVirtualizer({
     count: entries.length,

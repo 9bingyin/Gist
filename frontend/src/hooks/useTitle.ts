@@ -58,8 +58,9 @@ export function useTitle(title: string) {
 
   // Restore original title on unmount
   useEffect(() => {
+    const initialTitle = originalTitle.current
     return () => {
-      document.title = originalTitle.current
+      document.title = initialTitle
     }
   }, [])
 }

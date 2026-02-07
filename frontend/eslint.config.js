@@ -20,4 +20,10 @@ export default defineConfig([
       globals: globals.browser,
     },
   },
+  {
+    files: ['src/components/entry-list/EntryList.tsx'],
+    rules: {
+      'react-hooks/incompatible-library': 'off',
+    },
+  },
 ])
