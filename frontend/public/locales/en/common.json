@@ -137,6 +137,7 @@
     "more_options": "More options",
     "subscribing": "Subscribing...",
     "subscribe": "Subscribe",
+    "feed_exists": "This feed URL is already subscribed",
     "just_now": "just now",
     "minutes_ago": "{{count}}m ago",
     "hours_ago": "{{count}}h ago",

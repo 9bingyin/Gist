@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useQueryClient } from '@tanstack/react-query'
-import { createFeed, createFolder, listFolders, previewFeed } from '@/api'
+import { ApiError, createFeed, createFolder, listFolders, previewFeed } from '@/api'
 import { getErrorMessage } from '@/lib/errors'
 import type { ContentType, FeedPreview, Folder } from '@/types/api'
 
@@ -42,6 +43,7 @@ export function useAddFeed(contentType: ContentType = 'article'): UseAddFeedRetu
   const [feedPreview, setFeedPreview] = useState<FeedPreview | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
 
   const clearPreview = useCallback(() => {
@@ -92,12 +94,16 @@ export function useAddFeed(contentType: ContentType = 'article'): UseAddFeedRetu
       await queryClient.invalidateQueries({ queryKey: ['feeds'] })
       return true
     } catch (err) {
-      setError(getErrorMessage(err, 'Failed to subscribe to feed.'))
+      if (err instanceof ApiError && err.message === 'feed_exists') {
+        setError(t('add_feed.feed_exists'))
+      } else {
+        setError(getErrorMessage(err, 'Failed to subscribe to feed.'))
+      }
       return false
     } finally {
       setIsLoading(false)
     }
-  }, [queryClient, contentType])
+  }, [queryClient, contentType, t])
 
   return {
     feedPreview,

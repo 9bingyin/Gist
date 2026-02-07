@@ -137,6 +137,7 @@
     "more_options": "更多选项",
     "subscribing": "订阅中...",
     "subscribe": "订阅",
+    "feed_exists": "该订阅源已存在",
     "just_now": "刚刚",
     "minutes_ago": "{{count}} 分钟前",
     "hours_ago": "{{count}} 小时前",

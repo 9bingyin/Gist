@@ -5,8 +5,20 @@ import { useAddFeed } from './useAddFeed'
 import * as api from '@/api'
 import type { Folder } from '@/types/api'
 
+// Mock i18n
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({ t: (key: string) => key }),
+}))
+
 // Mock API functions
 vi.mock('@/api', () => ({
+  ApiError: class ApiError extends Error {
+    status: number
+    constructor(message: string, status: number) {
+      super(message)
+      this.status = status
+    }
+  },
   createFeed: vi.fn(),
   createFolder: vi.fn(),
   listFolders: vi.fn(),
