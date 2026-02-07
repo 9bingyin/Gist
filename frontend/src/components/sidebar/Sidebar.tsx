@@ -14,6 +14,7 @@ import { FeedCategory } from './FeedCategory'
 import { FeedItem } from './FeedItem'
 import { ContentTypeSwitcher } from './ContentTypeSwitcher'
 import { SettingsModal, ProfileModal } from '@/components/settings'
+import { EditFeedDialog } from '@/components/settings/tabs/EditFeedDialog'
 import { useFolders, useDeleteFolder, useUpdateFolderType } from '@/hooks/useFolders'
 import { useFeeds, useDeleteFeed, useUpdateFeed, useUpdateFeedType } from '@/hooks/useFeeds'
 import { useUnreadCounts } from '@/hooks/useEntries'
@@ -67,6 +68,7 @@ export function Sidebar({
   const { user, logout } = useAuth()
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [isProfileOpen, setIsProfileOpen] = useState(false)
+  const [editingFeed, setEditingFeed] = useState<Feed | null>(null)
   const [sortBy, setSortBy] = useState<SortBy>('name')
 
   const visibleContentTypes = useMemo(() => {
@@ -121,6 +123,11 @@ export function Sidebar({
   const { data: unreadCountsData } = useUnreadCounts()
 
   // Handlers for menu actions
+  const handleEditFeed = useCallback((feedId: string) => {
+    const feed = allFeeds.find((f) => f.id === feedId)
+    if (feed) setEditingFeed(feed)
+  }, [allFeeds])
+
   const handleDeleteFeed = useCallback((feedId: string) => {
     deleteFeed(feedId)
   }, [deleteFeed])
@@ -310,6 +317,7 @@ export function Sidebar({
                       onClick={() => onSelectFeed(feed.id)}
                       className="pl-6"
                       folders={folders}
+                      onEdit={handleEditFeed}
                       onDelete={handleDeleteFeed}
                       onMoveToFolder={handleMoveToFolder}
                       onChangeType={handleChangeFeedType}
@@ -330,6 +338,7 @@ export function Sidebar({
                   onClick={() => onSelectFeed(feed.id)}
                   className="pl-2.5"
                   folders={folders}
+                  onEdit={handleEditFeed}
                   onDelete={handleDeleteFeed}
                   onMoveToFolder={handleMoveToFolder}
                   onChangeType={handleChangeFeedType}
@@ -342,6 +351,11 @@ export function Sidebar({
 
       <SettingsModal open={isSettingsOpen} onOpenChange={setIsSettingsOpen} />
       <ProfileModal open={isProfileOpen} onOpenChange={setIsProfileOpen} />
+      <EditFeedDialog
+        feed={editingFeed}
+        open={editingFeed !== null}
+        onOpenChange={(open) => { if (!open) setEditingFeed(null) }}
+      />
     </div>
   )
 }

@@ -32,7 +32,8 @@
     "export": "导出",
     "test": "测试",
     "show_sidebar": "显示侧边栏",
-    "hide_sidebar": "隐藏侧边栏"
+    "hide_sidebar": "隐藏侧边栏",
+    "edit": "编辑"
   },
   "folders": {
     "delete": "删除文件夹",

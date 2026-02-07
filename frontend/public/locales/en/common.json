@@ -32,7 +32,8 @@
     "export": "Export",
     "test": "Test",
     "show_sidebar": "Show Sidebar",
-    "hide_sidebar": "Hide Sidebar"
+    "hide_sidebar": "Hide Sidebar",
+    "edit": "Edit"
   },
   "folders": {
     "delete": "Delete Folder",

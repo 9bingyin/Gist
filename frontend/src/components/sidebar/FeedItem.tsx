@@ -31,6 +31,7 @@ interface FeedItemProps {
   className?: string
   folders?: Folder[]
   onRefresh?: (feedId: string) => void
+  onEdit?: (feedId: string) => void
   onDelete?: (feedId: string) => void
   onMoveToFolder?: (feedId: string, folderId: string | null) => void
   onChangeType?: (feedId: string, type: ContentType) => void
@@ -47,6 +48,7 @@ export function FeedItem({
   className,
   folders = [],
   onRefresh,
+  onEdit,
   onDelete,
   onMoveToFolder,
   onChangeType,
@@ -121,6 +123,11 @@ export function FeedItem({
         {onRefresh && (
           <ContextMenuItem onClick={() => onRefresh(feedId)}>
             {t('actions.refresh')}
+          </ContextMenuItem>
+        )}
+        {onEdit && (
+          <ContextMenuItem onClick={() => onEdit(feedId)}>
+            {t('actions.edit')}
           </ContextMenuItem>
         )}
         {onMoveToFolder && (
