@@ -7,7 +7,7 @@ on:
     paths:
       - 'frontend/**'
       - 'backend/**'
-      - 'Dockerfile'
+      - 'docker/**'
       - '.dockerignore'
       - '.github/workflows/docker-build.yml'
   workflow_dispatch:
@@ -58,6 +58,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
+          file: docker/Dockerfile
           platforms: ${{ matrix.platform }}
           cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ steps.meta.outputs.image_name }}:buildcache-${{ matrix.arch }}
           cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ steps.meta.outputs.image_name }}:buildcache-${{ matrix.arch }},mode=max
