@@ -2,7 +2,7 @@
 FROM oven/bun:1.3.8 AS frontend-builder
 WORKDIR /app/frontend
 COPY frontend/package.json frontend/bun.lock ./
-RUN bun install
+RUN bun install --frozen-lockfile
 COPY frontend/ ./
 RUN bun run build
 
@@ -17,17 +17,21 @@ RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -v -o gist-server ./cmd/s
 # Stage 3: Final Image
 FROM alpine:latest
 WORKDIR /app
-RUN apk add --no-cache ca-certificates tzdata
+RUN apk add --no-cache ca-certificates tzdata \
+    && addgroup -S gist \
+    && adduser -S -G gist -h /app gist
 
-COPY --from=backend-builder /app/backend/gist-server .
-COPY --from=frontend-builder /app/frontend/dist ./static
-RUN mkdir -p /app/data
+COPY --from=backend-builder --chown=gist:gist /app/backend/gist-server .
+COPY --from=frontend-builder --chown=gist:gist /app/frontend/dist ./static
+RUN mkdir -p /app/data && chown -R gist:gist /app
 
 ENV GIST_ADDR=:8080
 ENV GIST_DATA_DIR=/app/data
 ENV GIST_STATIC_DIR=/app/static
 ENV GIST_LOG_LEVEL=info
 ENV TZ=Asia/Shanghai
+
+USER gist
 
 EXPOSE 8080
 CMD ["./gist-server"]

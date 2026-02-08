@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -14,13 +15,13 @@ import (
 	"gist/backend/internal/db"
 	"gist/backend/internal/handler"
 	transport "gist/backend/internal/http"
-	"gist/backend/pkg/logger"
-	"gist/backend/pkg/network"
 	"gist/backend/internal/repository"
 	"gist/backend/internal/scheduler"
 	"gist/backend/internal/service"
 	"gist/backend/internal/service/ai"
 	"gist/backend/internal/service/anubis"
+	"gist/backend/pkg/logger"
+	"gist/backend/pkg/network"
 	"gist/backend/pkg/snowflake"
 )
 
@@ -77,8 +78,12 @@ func main() {
 	iconService := service.NewIconService(cfg.DataDir, feedRepo, clientFactory, anubisSolver)
 
 	// Backfill icons for existing feeds (run in background)
+	backfillCtx, cancelBackfill := context.WithCancel(context.Background())
+	var backfillWG sync.WaitGroup
+	backfillWG.Add(1)
 	go func() {
-		if err := iconService.BackfillIcons(context.Background()); err != nil {
+		defer backfillWG.Done()
+		if err := iconService.BackfillIcons(backfillCtx); err != nil && !errors.Is(err, context.Canceled) {
 			logger.Warn("backfill icons", "error", err)
 		}
 	}()
@@ -127,6 +132,19 @@ func main() {
 		sched.Stop()
 		readabilityService.Close()
 		proxyService.Close()
+		cancelBackfill()
+
+		// Wait for backfill task to exit within shutdown deadline.
+		backfillDone := make(chan struct{})
+		go func() {
+			backfillWG.Wait()
+			close(backfillDone)
+		}()
+		select {
+		case <-backfillDone:
+		case <-ctx.Done():
+			logger.Warn("backfill stop timeout")
+		}
 
 		// Gracefully shutdown the HTTP server
 		if err := router.Shutdown(ctx); err != nil {
