@@ -421,7 +421,14 @@ entries_ad  -- AFTER DELETE: 同步删除 entries_fts
 
 ---
 
-## 6. API 与交互契约
+## 6. Git 提交规范
+
+*   遵循 [Conventional Commits](https://www.conventionalcommits.org/) 格式。
+*   **格式**：`<type>: <简体中文描述>`
+
+---
+
+## 7. API 与交互契约
 
 *   **一致性**：后端 DTO 修改后，必须同步更新前端 `src/types/`。
 *   **Snowflake ID 序列化**：

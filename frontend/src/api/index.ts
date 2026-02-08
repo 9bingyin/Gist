@@ -398,6 +398,15 @@ export async function refreshAllFeeds(): Promise<void> {
   })
 }
 
+export interface RefreshStatus {
+  isRefreshing: boolean
+  lastRefreshedAt?: string
+}
+
+export async function getRefreshStatus(): Promise<RefreshStatus> {
+  return request<RefreshStatus>('/api/feeds/refresh')
+}
+
 export async function previewFeed(url: string): Promise<FeedPreview> {
   const params = new URLSearchParams({ url })
   return request<FeedPreview>(`/api/feeds/preview?${params.toString()}`)

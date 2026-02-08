@@ -74,6 +74,7 @@ func TestHandler_RegisterRoutes(t *testing.T) {
 
 	assertRoute(t, routes, http.MethodPost, "/feeds")
 	assertRoute(t, routes, http.MethodPost, "/feeds/refresh")
+	assertRoute(t, routes, http.MethodGet, "/feeds/refresh")
 	assertRoute(t, routes, http.MethodGet, "/feeds/preview")
 	assertRoute(t, routes, http.MethodGet, "/feeds")
 	assertRoute(t, routes, http.MethodPut, "/feeds/:id")

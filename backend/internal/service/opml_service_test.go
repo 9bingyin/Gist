@@ -244,6 +244,10 @@ func (s *refreshServiceStub) IsRefreshing() bool {
 	return false
 }
 
+func (s *refreshServiceStub) GetRefreshStatus() service.RefreshStatus {
+	return service.RefreshStatus{}
+}
+
 type iconServiceStub struct {
 	done chan struct{}
 }

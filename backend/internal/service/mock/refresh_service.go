@@ -11,6 +11,7 @@ package mock
 
 import (
 	context "context"
+	service "gist/backend/internal/service"
 	reflect "reflect"
 
 	gomock "go.uber.org/mock/gomock"
@@ -38,6 +39,20 @@ func NewMockRefreshService(ctrl *gomock.Controller) *MockRefreshService {
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockRefreshService) EXPECT() *MockRefreshServiceMockRecorder {
 	return m.recorder
+}
+
+// GetRefreshStatus mocks base method.
+func (m *MockRefreshService) GetRefreshStatus() service.RefreshStatus {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetRefreshStatus")
+	ret0, _ := ret[0].(service.RefreshStatus)
+	return ret0
+}
+
+// GetRefreshStatus indicates an expected call of GetRefreshStatus.
+func (mr *MockRefreshServiceMockRecorder) GetRefreshStatus() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRefreshStatus", reflect.TypeOf((*MockRefreshService)(nil).GetRefreshStatus))
 }
 
 // IsRefreshing mocks base method.

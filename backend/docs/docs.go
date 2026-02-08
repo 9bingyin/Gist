@@ -1080,6 +1080,24 @@ const docTemplate = `{
             }
         },
         "/feeds/refresh": {
+            "get": {
+                "description": "Get the current refresh status including whether a refresh is in progress and when the last refresh completed",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "feeds"
+                ],
+                "summary": "Get refresh status",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.refreshStatusResponse"
+                        }
+                    }
+                }
+            },
             "post": {
                 "description": "Trigger an immediate refresh of all subscribed feeds",
                 "tags": [
@@ -2732,6 +2750,17 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "readableContent": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_handler.refreshStatusResponse": {
+            "type": "object",
+            "properties": {
+                "isRefreshing": {
+                    "type": "boolean"
+                },
+                "lastRefreshedAt": {
                     "type": "string"
                 }
             }

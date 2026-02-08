@@ -21,6 +21,7 @@ import { useFolders } from '@/hooks/useFolders'
 import { useAppearanceSettings } from '@/hooks/useAppearanceSettings'
 import { useTitle, buildTitle } from '@/hooks/useTitle'
 import { useUISettingKey, useUISettingActions, hasSidebarVisibilitySetting, setUISetting } from '@/hooks/useUISettings'
+import { useRefreshStatus } from '@/hooks/useRefreshStatus'
 import { isAddFeedPath } from '@/lib/router'
 import { cn } from '@/lib/utils'
 import type { ContentType, Feed, Folder } from '@/types/api'
@@ -67,6 +68,9 @@ function AuthenticatedApp() {
 
   const { mutate: markAllAsRead } = useMarkAllAsRead()
   const [addFeedContentType, setAddFeedContentType] = useState<ContentType>('article')
+
+  // Poll refresh status and auto-invalidate entries when scheduled refresh completes
+  useRefreshStatus()
 
   // Sidebar visibility for tablet/desktop
   const sidebarVisible = useUISettingKey('sidebarVisible')

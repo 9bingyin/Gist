@@ -192,23 +192,31 @@ func (s *refreshService) saveEntries(ctx context.Context, feedID int64, items []
 
 var ErrAlreadyRefreshing = errors.New("refresh already in progress")
 
+// RefreshStatus holds the current state of the feed refresh process.
+type RefreshStatus struct {
+	IsRefreshing    bool
+	LastRefreshedAt *time.Time
+}
+
 type RefreshService interface {
 	RefreshAll(ctx context.Context) error
 	RefreshFeed(ctx context.Context, feedID int64) error
 	RefreshFeeds(ctx context.Context, feedIDs []int64) error
 	IsRefreshing() bool
+	GetRefreshStatus() RefreshStatus
 }
 
 type refreshService struct {
-	feeds         repository.FeedRepository
-	entries       repository.EntryRepository
-	settings      SettingsService
-	icons         IconService
-	clientFactory *network.ClientFactory
-	anubis        *anubis.Solver
-	rateLimitSvc  DomainRateLimitService
-	mu            sync.Mutex
-	isRefreshing  bool
+	feeds           repository.FeedRepository
+	entries         repository.EntryRepository
+	settings        SettingsService
+	icons           IconService
+	clientFactory   *network.ClientFactory
+	anubis          *anubis.Solver
+	rateLimitSvc    DomainRateLimitService
+	mu              sync.Mutex
+	isRefreshing    bool
+	lastRefreshedAt *time.Time
 }
 
 func NewRefreshService(feeds repository.FeedRepository, entries repository.EntryRepository, settings SettingsService, icons IconService, clientFactory *network.ClientFactory, anubisSolver *anubis.Solver, rateLimitSvc DomainRateLimitService) RefreshService {
@@ -247,6 +255,12 @@ func (s *refreshService) RefreshAll(ctx context.Context) error {
 	logger.Info("refresh started", "module", "service", "action", "refresh", "resource", "feed", "result", "ok", "count", len(feeds))
 	s.refreshFeedsWithRateLimit(ctx, feeds)
 	logger.Info("refresh completed", "module", "service", "action", "refresh", "resource", "feed", "result", "ok", "count", len(feeds))
+
+	now := time.Now()
+	s.mu.Lock()
+	s.lastRefreshedAt = &now
+	s.mu.Unlock()
+
 	return nil
 }
 
@@ -254,6 +268,15 @@ func (s *refreshService) IsRefreshing() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.isRefreshing
+}
+
+func (s *refreshService) GetRefreshStatus() RefreshStatus {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return RefreshStatus{
+		IsRefreshing:    s.isRefreshing,
+		LastRefreshedAt: s.lastRefreshedAt,
+	}
 }
 
 func (s *refreshService) RefreshFeed(ctx context.Context, feedID int64) error {

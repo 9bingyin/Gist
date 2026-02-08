@@ -61,6 +61,11 @@ type feedResponse struct {
 	UpdatedAt    string  `json:"updatedAt"`
 }
 
+type refreshStatusResponse struct {
+	IsRefreshing    bool    `json:"isRefreshing"`
+	LastRefreshedAt *string `json:"lastRefreshedAt,omitempty"`
+}
+
 type feedPreviewResponse struct {
 	URL         string  `json:"url"`
 	Title       string  `json:"title"`
@@ -78,6 +83,7 @@ func NewFeedHandler(service service.FeedService, refreshService service.RefreshS
 func (h *FeedHandler) RegisterRoutes(g *echo.Group) {
 	g.POST("/feeds", h.Create)
 	g.POST("/feeds/refresh", h.RefreshAll)
+	g.GET("/feeds/refresh", h.RefreshStatus)
 	g.GET("/feeds/preview", h.Preview)
 	g.GET("/feeds", h.List)
 	g.PUT("/feeds/:id", h.Update)
@@ -314,6 +320,25 @@ func (h *FeedHandler) DeleteBatch(c echo.Context) error {
 
 	logger.Info("feed batch deleted", "module", "handler", "action", "delete", "resource", "feed", "result", "ok", "count", len(ids))
 	return c.NoContent(http.StatusNoContent)
+}
+
+// RefreshStatus returns the current refresh status.
+// @Summary Get refresh status
+// @Description Get the current refresh status including whether a refresh is in progress and when the last refresh completed
+// @Tags feeds
+// @Produce json
+// @Success 200 {object} refreshStatusResponse
+// @Router /feeds/refresh [get]
+func (h *FeedHandler) RefreshStatus(c echo.Context) error {
+	status := h.refreshService.GetRefreshStatus()
+	resp := refreshStatusResponse{
+		IsRefreshing: status.IsRefreshing,
+	}
+	if status.LastRefreshedAt != nil {
+		t := status.LastRefreshedAt.UTC().Format(time.RFC3339)
+		resp.LastRefreshedAt = &t
+	}
+	return c.JSON(http.StatusOK, resp)
 }
 
 // RefreshAll triggers a refresh of all feeds.

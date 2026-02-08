@@ -75,6 +75,9 @@ export function FeedsSettings() {
     setIsRefreshing(true)
     try {
       await refreshAllFeeds()
+      queryClient.invalidateQueries({ queryKey: ['entries'] })
+      queryClient.invalidateQueries({ queryKey: ['unreadCounts'] })
+      queryClient.invalidateQueries({ queryKey: ['feeds'] })
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
         setError(t('feeds.refresh_in_progress'))

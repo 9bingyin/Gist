@@ -469,6 +469,13 @@ definitions:
       readableContent:
         type: string
     type: object
+  internal_handler.refreshStatusResponse:
+    properties:
+      isRefreshing:
+        type: boolean
+      lastRefreshedAt:
+        type: string
+    type: object
   internal_handler.registerRequest:
     properties:
       email:
@@ -1379,6 +1386,19 @@ paths:
       tags:
       - feeds
   /feeds/refresh:
+    get:
+      description: Get the current refresh status including whether a refresh is in
+        progress and when the last refresh completed
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handler.refreshStatusResponse'
+      summary: Get refresh status
+      tags:
+      - feeds
     post:
       description: Trigger an immediate refresh of all subscribed feeds
       responses:
