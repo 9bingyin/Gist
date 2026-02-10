@@ -312,7 +312,12 @@
     "confirm_password": "Confirm Password",
     "confirm_password_placeholder": "Enter your password again",
     "password_mismatch": "Passwords do not match",
-    "password_too_short": "Password must be at least 6 characters"
+    "password_too_short": "Password must be at least 6 characters",
+    "network_error": "Unable to connect to server. Please check your network connection.",
+    "network_error_title": "Unable to connect to server",
+    "network_error_description": "Please check your network connection or server status and try again",
+    "network_error_hint": "If accessing via reverse proxy, please verify your proxy configuration and that the target port is reachable",
+    "retry": "Retry"
   },
   "profile": {
     "title": "Profile",

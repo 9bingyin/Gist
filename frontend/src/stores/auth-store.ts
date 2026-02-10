@@ -11,8 +11,10 @@ import {
   setOnUnauthorized,
   type AuthUser,
 } from '@/api'
+import { isNetworkError } from '@/lib/errors'
+import i18n from '@/i18n'
 
-export type AuthState = 'loading' | 'unauthenticated' | 'no-user' | 'authenticated'
+export type AuthState = 'loading' | 'unauthenticated' | 'no-user' | 'authenticated' | 'network-error'
 
 interface AuthStore {
   // State
@@ -25,6 +27,7 @@ interface AuthStore {
   login: (identifier: string, password: string) => Promise<void>
   register: (username: string, nickname: string, email: string, password: string) => Promise<void>
   logout: () => Promise<void>
+  retry: () => void
   clearError: () => void
   setUser: (user: AuthUser) => void
 }
@@ -62,12 +65,20 @@ export const useAuthStore = create<AuthStore>((set, get) => {
         try {
           const user = await getCurrentUser()
           set({ state: 'authenticated', user })
-        } catch {
+        } catch (innerErr) {
+          if (isNetworkError(innerErr)) {
+            set({ state: 'network-error', user: null })
+            return
+          }
           // Token invalid, clear it
           clearAuthToken()
           set({ state: 'unauthenticated', user: null })
         }
       } catch (err) {
+        if (isNetworkError(err)) {
+          set({ state: 'network-error', user: null })
+          return
+        }
         console.error('Failed to initialize auth:', err)
         set({ state: 'unauthenticated', user: null })
       }
@@ -80,7 +91,9 @@ export const useAuthStore = create<AuthStore>((set, get) => {
         setAuthToken(response.token)
         set({ state: 'authenticated', user: response.user })
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Login failed'
+        const message = isNetworkError(err)
+          ? i18n.t('auth.network_error')
+          : err instanceof Error ? err.message : 'Login failed'
         set({ error: message })
         throw err
       }
@@ -93,7 +106,9 @@ export const useAuthStore = create<AuthStore>((set, get) => {
         setAuthToken(response.token)
         set({ state: 'authenticated', user: response.user })
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Registration failed'
+        const message = isNetworkError(err)
+          ? i18n.t('auth.network_error')
+          : err instanceof Error ? err.message : 'Registration failed'
         set({ error: message })
         throw err
       }
@@ -107,6 +122,10 @@ export const useAuthStore = create<AuthStore>((set, get) => {
       }
       clearAuthToken()
       set({ state: 'unauthenticated', user: null })
+    },
+
+    retry: () => {
+      set({ state: 'loading', error: null })
     },
 
     clearError: () => {
@@ -126,5 +145,6 @@ export const authActions = {
   register: (username: string, nickname: string, email: string, password: string) =>
     useAuthStore.getState().register(username, nickname, email, password),
   logout: () => useAuthStore.getState().logout(),
+  retry: () => useAuthStore.getState().retry(),
   setUser: (user: AuthUser) => useAuthStore.getState().setUser(user),
 }

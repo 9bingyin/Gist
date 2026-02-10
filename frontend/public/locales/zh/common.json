@@ -312,7 +312,12 @@
     "confirm_password": "确认密码",
     "confirm_password_placeholder": "请再次输入密码",
     "password_mismatch": "两次输入的密码不一致",
-    "password_too_short": "密码至少需要 6 个字符"
+    "password_too_short": "密码至少需要 6 个字符",
+    "network_error": "无法连接到服务器，请检查网络连接",
+    "network_error_title": "无法连接到服务器",
+    "network_error_description": "请检查网络连接或服务器状态后重试",
+    "network_error_hint": "如果你通过反向代理访问，请确认代理配置正确且目标端口可达",
+    "retry": "重试"
   },
   "profile": {
     "title": "个人资料",

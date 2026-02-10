@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { useAuthStore } from '@/stores/auth-store'
 
 export function useAuth() {
-  const { state, user, error, initialize, login, register, logout, clearError } = useAuthStore()
+  const { state, user, error, initialize, login, register, logout, retry, clearError } = useAuthStore()
 
   useEffect(() => {
     if (state === 'loading') {
@@ -16,6 +16,7 @@ export function useAuth() {
     isAuthenticated: state === 'authenticated',
     needsRegistration: state === 'no-user',
     needsLogin: state === 'unauthenticated',
+    isNetworkError: state === 'network-error',
     user,
     error,
 
@@ -23,6 +24,7 @@ export function useAuth() {
     login,
     register,
     logout,
+    retry,
     clearError,
   }
 }

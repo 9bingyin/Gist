@@ -10,7 +10,7 @@ import { EntryList } from '@/components/entry-list'
 import { EntryContent } from '@/components/entry-content'
 import { PictureMasonry, Lightbox } from '@/components/picture-masonry'
 import { ImagePreview } from '@/components/ui/image-preview'
-import { LoginPage, RegisterPage } from '@/components/auth'
+import { LoginPage, RegisterPage, NetworkErrorPage } from '@/components/auth'
 import { UpdateNotice } from '@/components/update-notice'
 import { useSelection, selectionToParams } from '@/hooks/useSelection'
 import { useMarkAllAsRead, useEntry } from '@/hooks/useEntries'
@@ -350,10 +350,14 @@ function AuthenticatedApp() {
 }
 
 function AppContent() {
-  const { isLoading, isAuthenticated, needsRegistration, needsLogin, error, login, register, clearError } = useAuth()
+  const { isLoading, isAuthenticated, needsRegistration, needsLogin, isNetworkError, error, login, register, retry, clearError } = useAuth()
 
   if (isLoading) {
     return <LoadingScreen />
+  }
+
+  if (isNetworkError) {
+    return <NetworkErrorPage onRetry={retry} />
   }
 
   if (needsRegistration) {
