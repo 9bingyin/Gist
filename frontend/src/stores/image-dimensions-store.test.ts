@@ -176,6 +176,55 @@ describe('image-dimensions-store', () => {
     })
   })
 
+  describe('clearFailed', () => {
+    it('should clear all failed images', () => {
+      useImageDimensionsStore.getState().markFailed('https://example.com/broken1.jpg')
+      useImageDimensionsStore.getState().markFailed('https://example.com/broken2.jpg')
+
+      expect(useImageDimensionsStore.getState().failedImages.size).toBe(2)
+
+      useImageDimensionsStore.getState().clearFailed()
+
+      const state = useImageDimensionsStore.getState()
+      expect(state.failedImages.size).toBe(0)
+      expect(state.isFailed('https://example.com/broken1.jpg')).toBe(false)
+      expect(state.isFailed('https://example.com/broken2.jpg')).toBe(false)
+    })
+
+    it('should not affect cached dimensions', () => {
+      useImageDimensionsStore.getState().setDimension('https://example.com/img.jpg', 800, 600)
+      useImageDimensionsStore.getState().markFailed('https://example.com/broken.jpg')
+
+      useImageDimensionsStore.getState().clearFailed()
+
+      const state = useImageDimensionsStore.getState()
+      expect(state.dimensions['https://example.com/img.jpg']).toBeDefined()
+      expect(state.dimensions['https://example.com/img.jpg']?.width).toBe(800)
+    })
+
+    it('should allow previously failed images to be retried', () => {
+      useImageDimensionsStore.getState().markFailed('https://example.com/img.jpg')
+      expect(useImageDimensionsStore.getState().isFailed('https://example.com/img.jpg')).toBe(true)
+
+      useImageDimensionsStore.getState().clearFailed()
+      expect(useImageDimensionsStore.getState().isFailed('https://example.com/img.jpg')).toBe(false)
+
+      // Can be marked failed again if it still fails on retry
+      useImageDimensionsStore.getState().markFailed('https://example.com/img.jpg')
+      expect(useImageDimensionsStore.getState().isFailed('https://example.com/img.jpg')).toBe(true)
+    })
+
+    it('should be a no-op on empty set', () => {
+      const stateBefore = useImageDimensionsStore.getState()
+      expect(stateBefore.failedImages.size).toBe(0)
+
+      useImageDimensionsStore.getState().clearFailed()
+
+      const stateAfter = useImageDimensionsStore.getState()
+      expect(stateAfter.failedImages.size).toBe(0)
+    })
+  })
+
   // BUG regression: iOS PWA - failed images being repeatedly loaded
   describe('BUG: iOS PWA failed image repeated loading', () => {
     it('markFailed should persist across component remounts (simulated by state access)', () => {

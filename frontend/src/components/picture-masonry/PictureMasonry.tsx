@@ -51,6 +51,7 @@ export function PictureMasonry({
 
   const { containerRef, currentColumn, isReady } = useMasonryColumn(isMobile)
   const loadFromDB = useImageDimensionsStore((state) => state.loadFromDB)
+  const clearFailed = useImageDimensionsStore((state) => state.clearFailed)
 
   const { data: feeds = [] } = useFeeds()
   const { data: folders = [] } = useFolders()
@@ -80,6 +81,23 @@ export function PictureMasonry({
   const entries = useMemo(() => {
     return data?.pages.flatMap((page) => page.entries) ?? []
   }, [data])
+
+  // Generate a stable key representing the current filter context
+  const virtuosoKey = useMemo(() => {
+    const selectionKey =
+      selection.type === 'feed'
+        ? selection.feedId
+        : selection.type === 'folder'
+          ? selection.folderId
+          : selection.type
+    return `${selectionKey}-${unreadOnly}`
+  }, [selection, unreadOnly])
+
+  // Clear failed images on mount and when filter context changes,
+  // giving images a fresh chance to load (failures are often transient)
+  useEffect(() => {
+    clearFailed()
+  }, [virtuosoKey, clearFailed])
 
   // Load cached dimensions from IndexedDB
   useEffect(() => {
@@ -199,17 +217,6 @@ export function PictureMasonry({
     },
     []
   )
-
-  // Generate a unique key for virtuoso to force re-render on selection change
-  const virtuosoKey = useMemo(() => {
-    const selectionKey =
-      selection.type === 'feed'
-        ? selection.feedId
-        : selection.type === 'folder'
-          ? selection.folderId
-          : selection.type
-    return `${selectionKey}-${unreadOnly}`
-  }, [selection, unreadOnly])
 
   return (
     <div className="flex h-full flex-col">

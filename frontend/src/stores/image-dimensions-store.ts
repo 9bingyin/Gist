@@ -13,6 +13,7 @@ interface ImageDimensionsState {
   setDimension: (src: string, width: number, height: number) => void
   markFailed: (src: string) => void
   isFailed: (src: string) => boolean
+  clearFailed: () => void
   loadFromDB: (srcs: string[]) => Promise<void>
 }
 
@@ -32,6 +33,11 @@ export const useImageDimensionsStore = create<ImageDimensionsState>((set, get) =
   },
 
   isFailed: (src) => get().failedImages.has(src),
+
+  clearFailed: () => {
+    if (get().failedImages.size === 0) return
+    set({ failedImages: new Set<string>() })
+  },
 
   setDimension: (src, width, height) => {
     const dim: ImageDimension = {
