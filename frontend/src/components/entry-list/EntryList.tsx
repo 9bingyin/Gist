@@ -1,4 +1,4 @@
-import { useEffect, useRef, useMemo, useCallback } from 'react'
+import { useEffect, useLayoutEffect, useRef, useMemo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useEntriesInfinite, useUnreadCounts } from '@/hooks/useEntries'
@@ -14,6 +14,7 @@ import { EntryListHeader } from './EntryListHeader'
 import { needsTranslation } from '@/lib/language-detect'
 import { translateArticlesBatch, cancelAllBatchTranslations } from '@/services/translation-service'
 import { translationActions } from '@/stores/translation-store'
+import { selectionScrollKey, entryListScrollPositions, entryListMeasurementsCache } from './scroll-key'
 import type { Entry, Feed, Folder, ContentType } from '@/types/api'
 
 interface EntryListProps {
@@ -68,6 +69,34 @@ export function EntryList({
   const autoTranslate = aiSettings?.autoTranslate ?? false
   const targetLanguage = aiSettings?.summaryLanguage ?? 'zh-CN'
 
+  // Save/restore scroll position per selection+contentType
+  const scrollKey = selectionScrollKey(selection, contentType)
+
+  // Restore scroll position on same-mount key change (e.g., article -> notification).
+  // On remount (e.g., returning from picture mode), the virtualizer's own
+  // _willUpdate handles restoration via initialOffset.
+  useLayoutEffect(() => {
+    const node = containerRef.current
+    if (!node) return
+
+    const saved = entryListScrollPositions.get(scrollKey)
+    node.scrollTop = saved ?? 0
+  }, [scrollKey])
+
+  useEffect(() => {
+    const node = containerRef.current
+    if (!node) return
+
+    const handleScroll = () => {
+      entryListScrollPositions.set(scrollKey, node.scrollTop)
+    }
+
+    node.addEventListener('scroll', handleScroll, { passive: true })
+    return () => {
+      node.removeEventListener('scroll', handleScroll)
+    }
+  }, [scrollKey])
+
   // Cancel pending translations and reset state when list changes
   useEffect(() => {
     // Cancel any in-flight batch translations
@@ -107,6 +136,14 @@ export function EntryList({
     getScrollElement: () => containerRef.current,
     estimateSize: () => ESTIMATED_ITEM_HEIGHT,
     overscan: 5,
+    // Restore offset and measurements on remount (only used on first mount)
+    initialOffset: entryListScrollPositions.get(scrollKey),
+    initialMeasurementsCache: entryListMeasurementsCache.get(scrollKey),
+    onChange: (instance) => {
+      if (!instance.isScrolling) {
+        entryListMeasurementsCache.set(scrollKey, instance.measurementsCache)
+      }
+    },
   })
 
   const virtualItems = virtualizer.getVirtualItems()

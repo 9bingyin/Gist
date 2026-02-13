@@ -101,6 +101,134 @@ describe('useEntryContentScroll', () => {
   })
 })
 
+// Scroll position save/restore regression tests
+describe('scroll position save/restore', () => {
+  function createScrollableDiv(): HTMLDivElement {
+    const div = document.createElement('div')
+    // jsdom supports scrollTop get/set
+    Object.defineProperty(div, 'scrollTop', {
+      value: 0,
+      writable: true,
+      configurable: true,
+    })
+    return div
+  }
+
+  function simulateScroll(div: HTMLDivElement, scrollTop: number) {
+    div.scrollTop = scrollTop
+    div.dispatchEvent(new Event('scroll'))
+  }
+
+  it('should save scroll position on scroll and restore when returning to same entry', () => {
+    const div = createScrollableDiv()
+    // Use unique IDs to avoid cross-test Map pollution
+    const entryA = `save-restore-A-${Date.now()}`
+    const entryB = `save-restore-B-${Date.now()}`
+
+    const { result, rerender } = renderHook(
+      ({ entryId }) => useEntryContentScroll(entryId),
+      { initialProps: { entryId: entryA } }
+    )
+
+    // Attach the scrollable div
+    act(() => {
+      result.current.scrollRef(div)
+    })
+
+    // Scroll to 200 on entry A
+    act(() => {
+      simulateScroll(div, 200)
+    })
+
+    expect(div.scrollTop).toBe(200)
+
+    // Switch to entry B (detach and reattach to simulate remount)
+    act(() => {
+      result.current.scrollRef(null)
+    })
+    rerender({ entryId: entryB })
+    const divB = createScrollableDiv()
+    act(() => {
+      result.current.scrollRef(divB)
+    })
+
+    // Entry B has no saved position, should be at 0
+    expect(divB.scrollTop).toBe(0)
+
+    // Switch back to entry A
+    act(() => {
+      result.current.scrollRef(null)
+    })
+    rerender({ entryId: entryA })
+    const divA2 = createScrollableDiv()
+    act(() => {
+      result.current.scrollRef(divA2)
+    })
+
+    // Entry A should restore to 200
+    expect(divA2.scrollTop).toBe(200)
+  })
+
+  it('should update isAtTop based on restored position', () => {
+    const div = createScrollableDiv()
+    const entryId = `isAtTop-restore-${Date.now()}`
+
+    const { result } = renderHook(() => useEntryContentScroll(entryId))
+
+    // Attach and scroll past threshold
+    act(() => {
+      result.current.scrollRef(div)
+    })
+    act(() => {
+      simulateScroll(div, 100)
+    })
+
+    expect(result.current.isAtTop).toBe(false)
+
+    // Detach and reattach (simulate remount)
+    act(() => {
+      result.current.scrollRef(null)
+    })
+    const div2 = createScrollableDiv()
+    act(() => {
+      result.current.scrollRef(div2)
+    })
+
+    // Should restore to 100 and isAtTop should be false
+    expect(div2.scrollTop).toBe(100)
+    expect(result.current.isAtTop).toBe(false)
+  })
+
+  it('should not save position when entryId is null', () => {
+    const div = createScrollableDiv()
+    const entryId = `null-entry-${Date.now()}`
+
+    const { result, rerender } = renderHook(
+      ({ entryId }) => useEntryContentScroll(entryId),
+      { initialProps: { entryId: null as string | null } }
+    )
+
+    act(() => {
+      result.current.scrollRef(div)
+    })
+    act(() => {
+      simulateScroll(div, 150)
+    })
+
+    // Switch to a real entry - should start at 0 (null entry's position not leaked)
+    act(() => {
+      result.current.scrollRef(null)
+    })
+    rerender({ entryId })
+    const div2 = createScrollableDiv()
+    act(() => {
+      result.current.scrollRef(div2)
+    })
+
+    expect(div2.scrollTop).toBe(0)
+  })
+})
+
 // Test the scroll threshold logic
 describe('scroll threshold logic', () => {
   const SCROLL_TOP_THRESHOLD = 48
