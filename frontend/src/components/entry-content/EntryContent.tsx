@@ -4,6 +4,7 @@ import { useEntry, useMarkAsRead, useMarkAsStarred, useRemoveFromUnreadList } fr
 import { useAISettings } from '@/hooks/useAISettings'
 import { useGeneralSettings } from '@/hooks/useGeneralSettings'
 import { useEntryContentScroll } from '@/hooks/useEntryContentScroll'
+import { useScrollToTop } from '@/hooks/useScrollToTop'
 import { useReadability } from '@/hooks/useReadability'
 import { useAISummary } from '@/hooks/useAISummary'
 import { useAITranslation } from '@/hooks/useAITranslation'
@@ -25,6 +26,8 @@ export function EntryContent({ entryId, isMobile, onBack }: EntryContentProps) {
   const { mutate: markAsStarred } = useMarkAsStarred()
   const removeFromUnreadList = useRemoveFromUnreadList()
   const { scrollRef, isAtTop, scrollNode } = useEntryContentScroll(entryId)
+
+  useScrollToTop(scrollNode, 'entrycontent')
 
   // Track entries marked as read to trigger list removal on switch
   const markedAsReadRef = useRef<Set<string>>(new Set())

@@ -15,6 +15,7 @@ import { needsTranslation } from '@/lib/language-detect'
 import { translateArticlesBatch, cancelAllBatchTranslations } from '@/services/translation-service'
 import { translationActions } from '@/stores/translation-store'
 import { selectionScrollKey, entryListScrollPositions, entryListMeasurementsCache } from './scroll-key'
+import { useScrollToTop } from '@/hooks/useScrollToTop'
 import type { Entry, Feed, Folder, ContentType } from '@/types/api'
 
 interface EntryListProps {
@@ -53,6 +54,8 @@ export function EntryList({
   const { t } = useTranslation()
   const params = selectionToParams(selection, contentType)
   const containerRef = useRef<HTMLDivElement>(null)
+
+  useScrollToTop(containerRef, 'entrylist')
 
   const { data: feeds = [] } = useFeeds()
   const { data: folders = [] } = useFolders()
@@ -293,6 +296,7 @@ export function EntryList({
         unreadOnly={unreadOnly}
         onToggleUnreadOnly={onToggleUnreadOnly}
         onMarkAllRead={onMarkAllRead}
+        scrollToTopScope="entrylist"
         isMobile={isMobile}
         onMenuClick={onMenuClick}
         isTablet={isTablet}

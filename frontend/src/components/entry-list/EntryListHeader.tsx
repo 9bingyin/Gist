@@ -5,6 +5,7 @@ import {
   CheckCircleIcon,
   MenuIcon,
 } from '@/components/ui/icons'
+import { dispatchScrollToTop } from '@/hooks/useScrollToTop'
 
 interface EntryListHeaderProps {
   title: string
@@ -12,6 +13,7 @@ interface EntryListHeaderProps {
   unreadOnly: boolean
   onToggleUnreadOnly: () => void
   onMarkAllRead: () => void
+  scrollToTopScope?: string
   isMobile?: boolean
   onMenuClick?: () => void
   isTablet?: boolean
@@ -25,6 +27,7 @@ export function EntryListHeader({
   unreadOnly,
   onToggleUnreadOnly,
   onMarkAllRead,
+  scrollToTopScope,
   isMobile,
   onMenuClick,
   isTablet,
@@ -55,7 +58,12 @@ export function EntryListHeader({
             <MenuIcon className="size-5" />
           </button>
         )}
-        <h2 className="truncate text-lg font-bold">{title}</h2>
+        <h2
+          className="truncate text-lg font-bold cursor-pointer active:opacity-70 transition-opacity"
+          onClick={() => dispatchScrollToTop(scrollToTopScope)}
+        >
+          {title}
+        </h2>
         {unreadCount > 0 && (
           <span className="shrink-0 text-xs text-muted-foreground">{t('entry.unread_count', { count: unreadCount })}</span>
         )}
