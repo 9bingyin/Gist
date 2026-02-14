@@ -100,7 +100,7 @@ export function useSwipeGesture(
 
     const deltaX = touchState.current.currentX - touchState.current.startX
     const deltaY = touchState.current.currentY - touchState.current.startY
-    const deltaTime = Date.now() - touchState.current.startTime
+    const deltaTime = Math.max(1, Date.now() - touchState.current.startTime) // Prevent division by zero
 
     const absX = Math.abs(deltaX)
     const absY = Math.abs(deltaY)
