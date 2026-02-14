@@ -5,6 +5,7 @@ import { useEntriesInfinite, useUnreadCounts } from '@/hooks/useEntries'
 import { useFeeds } from '@/hooks/useFeeds'
 import { useFolders } from '@/hooks/useFolders'
 import { useAISettings } from '@/hooks/useAISettings'
+import { useSwipeGesture } from '@/hooks/useSwipeGesture'
 import { selectionToParams, type SelectionType } from '@/hooks/useSelection'
 import { stripHtml } from '@/lib/html-utils'
 import * as ScrollAreaPrimitive from '@radix-ui/react-scroll-area'
@@ -52,6 +53,7 @@ export function EntryList({
   const { t } = useTranslation()
   const params = selectionToParams(selection, contentType)
   const containerRef = useRef<HTMLDivElement>(null)
+  const listWrapperRef = useRef<HTMLDivElement>(null)
 
   const { data: feeds = [] } = useFeeds()
   const { data: folders = [] } = useFolders()
@@ -59,6 +61,18 @@ export function EntryList({
   const { data: unreadCounts } = useUnreadCounts()
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } =
     useEntriesInfinite({ ...params, unreadOnly })
+
+  // Swipe gesture: Right swipe opens sidebar (only on mobile)
+  useSwipeGesture(listWrapperRef, {
+    onSwipeRight: () => {
+      if (isMobile && onMenuClick) {
+        onMenuClick()
+      }
+    },
+    enabledDirections: ['right'],
+    threshold: 100, // Require 100px swipe to trigger
+    preventScroll: true,
+  })
 
   // Track translated entries to avoid re-translating
   const translatedEntries = useRef(new Set<string>())
@@ -249,7 +263,7 @@ export function EntryList({
   }, [unreadCounts, selection, feeds, contentType])
 
   return (
-    <div className="flex h-full flex-col">
+    <div ref={listWrapperRef} className="flex h-full flex-col">
       <EntryListHeader
         title={title}
         unreadCount={unreadCount}
