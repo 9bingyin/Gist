@@ -1,6 +1,7 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
+import { useSwipeGesture } from '@/hooks/useSwipeGesture'
 
 interface SheetProps {
   open: boolean
@@ -9,6 +10,20 @@ interface SheetProps {
 }
 
 export function Sheet({ open, onOpenChange, children }: SheetProps) {
+  const sheetContentRef = useRef<HTMLDivElement>(null)
+
+  // Swipe gesture: Left swipe closes sidebar
+  useSwipeGesture(sheetContentRef, {
+    onSwipeLeft: () => {
+      if (open) {
+        onOpenChange(false)
+      }
+    },
+    enabledDirections: ['left'],
+    threshold: 50, // Require 50px swipe to trigger
+    preventScroll: true,
+  })
+
   // Handle escape key and body scroll lock
   useEffect(() => {
     if (!open) return
@@ -57,6 +72,7 @@ export function Sheet({ open, onOpenChange, children }: SheetProps) {
 
           {/* Sheet content */}
           <motion.div
+            ref={sheetContentRef}
             drag="x"
             dragConstraints={{ left: 0, right: 0 }}
             dragElastic={{ left: 0.1, right: 0 }}
