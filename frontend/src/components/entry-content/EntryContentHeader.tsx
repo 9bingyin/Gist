@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next'
 import { isSafeUrl } from '@/lib/url'
 import { cn } from '@/lib/utils'
 import { BackIcon } from '@/components/ui/icons'
+import { dispatchScrollToTop } from '@/hooks/useScrollToTop'
 import type { Entry } from '@/types/api'
 
 interface EntryContentHeaderProps {
@@ -104,8 +105,11 @@ export function EntryContentHeader({
           <div
             className={cn(
               'truncate text-lg font-bold text-foreground transition-all duration-300 ease-in-out',
-              isAtTop ? 'translate-y-4 opacity-0 pointer-events-none' : 'translate-y-0 opacity-100'
+              isAtTop
+                ? 'translate-y-4 opacity-0 pointer-events-none'
+                : 'translate-y-0 opacity-100 cursor-pointer active:opacity-70'
             )}
+            onClick={isAtTop ? undefined : () => dispatchScrollToTop('entrycontent')}
           >
             {title}
           </div>

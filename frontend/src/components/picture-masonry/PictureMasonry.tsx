@@ -49,6 +49,28 @@ export function PictureMasonry({
   const params = selectionToParams(selection, contentType)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
 
+  // scrollContainerRef points to an overflow-hidden wrapper.
+  // The actual scrollable element is a child: either VirtuosoMasonry's internal
+  // scroller or the overflow-auto div used during loading/empty states.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const eventScope = (e as CustomEvent<string | undefined>).detail
+      if (eventScope && eventScope !== 'picture') return
+      const container = scrollContainerRef.current
+      if (!container) return
+      // Find the first scrollable descendant
+      for (const child of container.querySelectorAll('*')) {
+        const { overflowY } = getComputedStyle(child)
+        if (overflowY === 'auto' || overflowY === 'scroll') {
+          ;(child as HTMLElement).scrollTo({ top: 0, behavior: 'smooth' })
+          return
+        }
+      }
+    }
+    window.addEventListener('scrolltotop', handler)
+    return () => window.removeEventListener('scrolltotop', handler)
+  }, [])
+
   const { containerRef, currentColumn, isReady } = useMasonryColumn(isMobile)
   const loadFromDB = useImageDimensionsStore((state) => state.loadFromDB)
   const clearFailed = useImageDimensionsStore((state) => state.clearFailed)
@@ -226,6 +248,7 @@ export function PictureMasonry({
         unreadOnly={unreadOnly}
         onToggleUnreadOnly={onToggleUnreadOnly}
         onMarkAllRead={onMarkAllRead}
+        scrollToTopScope="picture"
         isMobile={isMobile}
         onMenuClick={onMenuClick}
         isTablet={isTablet}

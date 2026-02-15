@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
@@ -24,6 +24,9 @@ import type { Folder, Feed, ContentType } from '@/types/api'
 import type { AppearanceSettings } from '@/types/settings'
 
 const defaultContentTypes: ContentType[] = ['article', 'picture', 'notification']
+
+// Per-contentType scroll position cache (module-level to survive unmount/remount)
+const sidebarScrollPositions = new Map<string, number>()
 
 type SortBy = 'name' | 'date'
 
@@ -266,85 +269,87 @@ export function Sidebar({
               x: { type: 'spring', stiffness: 300, damping: 30 },
               opacity: { duration: 0.2 },
             }}
-            className="absolute inset-0 overflow-y-auto px-1 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] space-y-1 will-change-[transform,opacity]"
+            className="absolute inset-0 will-change-[transform,opacity]"
           >
-            {/* Feed categories header with sort */}
-            <div className="flex items-center justify-between px-2.5">
-              <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
-                {t('sidebar.feeds')}
-              </span>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button className="flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent/50 hover:text-foreground">
-                    {sortBy === 'name' ? <ArrowDownAZIcon className="size-3.5" /> : <CalendarIcon className="size-3.5" />}
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => setSortBy('name')} className={cn(sortBy === 'name' && 'bg-accent')}>
-                    <ArrowDownAZIcon className="mr-2 size-4" />
-                    {t('sidebar.sort_name')}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setSortBy('date')} className={cn(sortBy === 'date' && 'bg-accent')}>
-                    <CalendarIcon className="mr-2 size-4" />
-                    {t('sidebar.sort_date')}
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
+            <SidebarScrollArea scrollKey={animatedContentType}>
+              {/* Feed categories header with sort */}
+              <div className="flex items-center justify-between px-2.5">
+                <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
+                  {t('sidebar.feeds')}
+                </span>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button className="flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent/50 hover:text-foreground">
+                      {sortBy === 'name' ? <ArrowDownAZIcon className="size-3.5" /> : <CalendarIcon className="size-3.5" />}
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => setSortBy('name')} className={cn(sortBy === 'name' && 'bg-accent')}>
+                      <ArrowDownAZIcon className="mr-2 size-4" />
+                      {t('sidebar.sort_name')}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setSortBy('date')} className={cn(sortBy === 'date' && 'bg-accent')}>
+                      <CalendarIcon className="mr-2 size-4" />
+                      {t('sidebar.sort_date')}
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
 
-            {/* Feed categories */}
-            <div className="space-y-px">
-              {sortedFoldersWithFeeds.map(({ folder, feeds: folderFeeds }) => (
-                <FeedCategory
-                  key={folder.id}
-                  folderId={folder.id}
-                  name={folder.name}
-                  unreadCount={folderUnreadCounts.get(folder.id) || 0}
-                  isSelected={isFolderSelected(folder.id)}
-                  onSelect={() => onSelectFolder(folder.id)}
-                  onDelete={handleDeleteFolder}
-                  onChangeType={handleChangeFolderType}
-                >
-                  {folderFeeds.map((feed) => (
-                    <FeedItem
-                      key={feed.id}
-                      feedId={feed.id}
-                      name={feed.title}
-                      iconPath={feed.iconPath}
-                      unreadCount={unreadCounts.get(feed.id) || 0}
-                      isActive={isFeedSelected(feed.id)}
-                      errorMessage={feed.errorMessage}
-                      onClick={() => onSelectFeed(feed.id)}
-                      className="pl-6"
-                      folders={folders}
-                      onEdit={handleEditFeed}
-                      onDelete={handleDeleteFeed}
-                      onMoveToFolder={handleMoveToFolder}
-                      onChangeType={handleChangeFeedType}
-                    />
-                  ))}
-                </FeedCategory>
-              ))}
+              {/* Feed categories */}
+              <div className="space-y-px">
+                {sortedFoldersWithFeeds.map(({ folder, feeds: folderFeeds }) => (
+                  <FeedCategory
+                    key={folder.id}
+                    folderId={folder.id}
+                    name={folder.name}
+                    unreadCount={folderUnreadCounts.get(folder.id) || 0}
+                    isSelected={isFolderSelected(folder.id)}
+                    onSelect={() => onSelectFolder(folder.id)}
+                    onDelete={handleDeleteFolder}
+                    onChangeType={handleChangeFolderType}
+                  >
+                    {folderFeeds.map((feed) => (
+                      <FeedItem
+                        key={feed.id}
+                        feedId={feed.id}
+                        name={feed.title}
+                        iconPath={feed.iconPath}
+                        unreadCount={unreadCounts.get(feed.id) || 0}
+                        isActive={isFeedSelected(feed.id)}
+                        errorMessage={feed.errorMessage}
+                        onClick={() => onSelectFeed(feed.id)}
+                        className="pl-6"
+                        folders={folders}
+                        onEdit={handleEditFeed}
+                        onDelete={handleDeleteFeed}
+                        onMoveToFolder={handleMoveToFolder}
+                        onChangeType={handleChangeFeedType}
+                      />
+                    ))}
+                  </FeedCategory>
+                ))}
 
-              {sortedUncategorizedFeeds.map((feed) => (
-                <FeedItem
-                  key={feed.id}
-                  feedId={feed.id}
-                  name={feed.title}
-                  iconPath={feed.iconPath}
-                  unreadCount={unreadCounts.get(feed.id) || 0}
-                  isActive={isFeedSelected(feed.id)}
-                  errorMessage={feed.errorMessage}
-                  onClick={() => onSelectFeed(feed.id)}
-                  className="pl-2.5"
-                  folders={folders}
-                  onEdit={handleEditFeed}
-                  onDelete={handleDeleteFeed}
-                  onMoveToFolder={handleMoveToFolder}
-                  onChangeType={handleChangeFeedType}
-                />
-              ))}
-            </div>
+                {sortedUncategorizedFeeds.map((feed) => (
+                  <FeedItem
+                    key={feed.id}
+                    feedId={feed.id}
+                    name={feed.title}
+                    iconPath={feed.iconPath}
+                    unreadCount={unreadCounts.get(feed.id) || 0}
+                    isActive={isFeedSelected(feed.id)}
+                    errorMessage={feed.errorMessage}
+                    onClick={() => onSelectFeed(feed.id)}
+                    className="pl-2.5"
+                    folders={folders}
+                    onEdit={handleEditFeed}
+                    onDelete={handleDeleteFeed}
+                    onMoveToFolder={handleMoveToFolder}
+                    onChangeType={handleChangeFeedType}
+                  />
+                ))}
+              </div>
+            </SidebarScrollArea>
           </motion.div>
         </AnimatePresence>
       </div>
@@ -356,6 +361,42 @@ export function Sidebar({
         open={editingFeed !== null}
         onOpenChange={(open) => { if (!open) setEditingFeed(null) }}
       />
+    </div>
+  )
+}
+
+// Isolated scroll container - each AnimatePresence keyed child creates its own instance,
+// so refs and effects never conflict between entering/exiting elements.
+function SidebarScrollArea({ scrollKey, children }: { scrollKey: string; children: React.ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const node = ref.current
+    if (!node) return
+
+    // Restore saved position
+    const saved = sidebarScrollPositions.get(scrollKey)
+    if (saved) {
+      node.scrollTop = saved
+    }
+
+    // Save on scroll
+    const handleScroll = () => {
+      sidebarScrollPositions.set(scrollKey, node.scrollTop)
+    }
+
+    node.addEventListener('scroll', handleScroll, { passive: true })
+    return () => {
+      node.removeEventListener('scroll', handleScroll)
+    }
+  }, [scrollKey])
+
+  return (
+    <div
+      ref={ref}
+      className="h-full overflow-y-auto px-1 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] space-y-1"
+    >
+      {children}
     </div>
   )
 }

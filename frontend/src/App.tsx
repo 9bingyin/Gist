@@ -9,6 +9,7 @@ import { AddFeedPage } from '@/components/add-feed'
 import { EntryList } from '@/components/entry-list'
 import { EntryContent } from '@/components/entry-content'
 import { PictureMasonry, Lightbox } from '@/components/picture-masonry'
+import { ScrollToTopZone } from '@/components/layout/ScrollToTopZone'
 import { ImagePreview } from '@/components/ui/image-preview'
 import { LoginPage, RegisterPage, NetworkErrorPage } from '@/components/auth'
 import { UpdateNotice } from '@/components/update-notice'
@@ -271,6 +272,7 @@ function AuthenticatedApp() {
     return (
       <>
         {mobileContent}
+        <ScrollToTopZone />
         {/* Lightbox for picture mode */}
         {contentType === 'picture' && <Lightbox />}
         {/* ImagePreview for article/notification mode */}

@@ -2,6 +2,9 @@ import { useCallback, useLayoutEffect, useRef, useState } from 'react'
 
 const SCROLL_TOP_THRESHOLD = 48
 
+// Module-level cache: entryId -> scrollTop
+const entryScrollPositions = new Map<string, number>()
+
 export function useEntryContentScroll(entryId: string | null) {
   const [scrollNode, setScrollNode] = useState<HTMLDivElement | null>(null)
   const [isAtTop, setIsAtTop] = useState(true)
@@ -19,14 +22,25 @@ export function useEntryContentScroll(entryId: string | null) {
     if (!scrollNode) return
 
     const handleScroll = () => {
-      const atTop = scrollNode.scrollTop < SCROLL_TOP_THRESHOLD
+      const top = scrollNode.scrollTop
+      const atTop = top < SCROLL_TOP_THRESHOLD
       setIsAtTop(atTop)
+      // Save position for restoration
+      if (entryId) {
+        entryScrollPositions.set(entryId, top)
+      }
     }
 
-    // Reset scroll and state
-    // eslint-disable-next-line react-hooks/immutability
-    scrollNode.scrollTop = 0
-    setIsAtTop(true)
+    // Restore saved position, or reset to top
+    const saved = entryId ? entryScrollPositions.get(entryId) : undefined
+    if (saved) {
+      // eslint-disable-next-line react-hooks/immutability
+      scrollNode.scrollTop = saved
+      setIsAtTop(saved < SCROLL_TOP_THRESHOLD)
+    } else {
+      scrollNode.scrollTop = 0
+      setIsAtTop(true)
+    }
 
     scrollNode.addEventListener('scroll', handleScroll, { passive: true })
 
