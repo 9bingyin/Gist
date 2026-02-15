@@ -5,6 +5,7 @@ import { useEntriesInfinite, useUnreadCounts } from '@/hooks/useEntries'
 import { useFeeds } from '@/hooks/useFeeds'
 import { useFolders } from '@/hooks/useFolders'
 import { useMasonryColumn } from '@/hooks/useMasonryColumn'
+import { useSwipeGesture } from '@/hooks/useSwipeGesture'
 import { selectionToParams, type SelectionType } from '@/hooks/useSelection'
 import { useImageDimensionsStore } from '@/stores/image-dimensions-store'
 import { PictureItem } from './PictureItem'
@@ -47,7 +48,17 @@ export function PictureMasonry({
 }: PictureMasonryProps) {
   const { t } = useTranslation()
   const params = selectionToParams(selection, contentType)
+  const wrapperRef = useRef<HTMLDivElement>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
+
+  // Swipe gesture: Right swipe opens sidebar (only on mobile)
+  useSwipeGesture(wrapperRef, {
+    onSwipeRight: () => onMenuClick?.(),
+    enabledDirections: ['right'],
+    threshold: 100,
+    preventScroll: true,
+    enabled: Boolean(isMobile && onMenuClick),
+  })
 
   // scrollContainerRef points to an overflow-hidden wrapper.
   // The actual scrollable element is a child: either VirtuosoMasonry's internal
@@ -241,7 +252,7 @@ export function PictureMasonry({
   )
 
   return (
-    <div className="flex h-full flex-col">
+    <div ref={wrapperRef} className="flex h-full flex-col">
       <EntryListHeader
         title={title}
         unreadCount={unreadCount}
