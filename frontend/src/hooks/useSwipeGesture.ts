@@ -12,6 +12,7 @@ interface UseSwipeGestureOptions {
   velocityThreshold?: number // Minimum velocity for a swipe (px/ms)
   enabledDirections?: SwipeDirection[] // Which directions to detect
   preventScroll?: boolean // Prevent default scroll behavior during horizontal swipe
+  enabled?: boolean // Whether to register touch listeners (default true)
 }
 
 interface TouchState {
@@ -24,7 +25,7 @@ interface TouchState {
 }
 
 export function useSwipeGesture(
-  elementRef: React.RefObject<HTMLElement>,
+  elementRef: React.RefObject<HTMLElement | null>,
   options: UseSwipeGestureOptions = {}
 ) {
   const {
@@ -37,6 +38,7 @@ export function useSwipeGesture(
     velocityThreshold = 0.3,
     enabledDirections = ['left', 'right', 'up', 'down'],
     preventScroll = true,
+    enabled = true,
   } = options
 
   const touchState = useRef<TouchState | null>(null)
@@ -151,7 +153,10 @@ export function useSwipeGesture(
 
   useEffect(() => {
     const element = elementRef.current
-    if (!element) return
+    if (!element || !enabled) {
+      touchState.current = null
+      return
+    }
 
     element.addEventListener('touchstart', handleTouchStart, { passive: true })
     element.addEventListener('touchmove', handleTouchMove, { passive: false })
@@ -162,5 +167,5 @@ export function useSwipeGesture(
       element.removeEventListener('touchmove', handleTouchMove)
       element.removeEventListener('touchend', handleTouchEnd)
     }
-  }, [elementRef, handleTouchStart, handleTouchMove, handleTouchEnd])
+  }, [elementRef, enabled, handleTouchStart, handleTouchMove, handleTouchEnd])
 }

@@ -14,6 +14,7 @@ describe('useSwipeGesture', () => {
 
   afterEach(() => {
     document.body.removeChild(element)
+    vi.restoreAllMocks()
   })
 
   const createTouchEvent = (
@@ -60,7 +61,7 @@ describe('useSwipeGesture', () => {
   it('should not trigger swipe if below threshold', () => {
     const onSwipeRight = vi.fn()
 
-    renderHook(() => useSwipeGesture(ref, { onSwipeRight, threshold: 50 }))
+    renderHook(() => useSwipeGesture(ref, { onSwipeRight, threshold: 50, velocityThreshold: Infinity }))
 
     element.dispatchEvent(createTouchEvent('touchstart', 100, 100))
     element.dispatchEvent(createTouchEvent('touchmove', 110, 100))
@@ -111,6 +112,24 @@ describe('useSwipeGesture', () => {
     element.dispatchEvent(createTouchEvent('touchend', 120, 100))
 
     expect(onSwipeLeft).not.toHaveBeenCalled()
+  })
+
+  it('should not register listeners when enabled is false', () => {
+    const addSpy = vi.spyOn(element, 'addEventListener')
+    const onSwipeRight = vi.fn()
+
+    renderHook(() =>
+      useSwipeGesture(ref, { onSwipeRight, enabled: false })
+    )
+
+    expect(addSpy).not.toHaveBeenCalled()
+
+    element.dispatchEvent(createTouchEvent('touchstart', 100, 100))
+    element.dispatchEvent(createTouchEvent('touchmove', 110, 100))
+    element.dispatchEvent(createTouchEvent('touchmove', 180, 100))
+    element.dispatchEvent(createTouchEvent('touchend', 180, 100))
+
+    expect(onSwipeRight).not.toHaveBeenCalled()
   })
 
   it('should call onSwipe with direction', () => {

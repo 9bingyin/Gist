@@ -68,14 +68,11 @@ export function EntryList({
 
   // Swipe gesture: Right swipe opens sidebar (only on mobile)
   useSwipeGesture(listWrapperRef, {
-    onSwipeRight: () => {
-      if (isMobile && onMenuClick) {
-        onMenuClick()
-      }
-    },
+    onSwipeRight: () => onMenuClick?.(),
     enabledDirections: ['right'],
-    threshold: 100, // Require 100px swipe to trigger
+    threshold: 100,
     preventScroll: true,
+    enabled: Boolean(isMobile && onMenuClick),
   })
 
   // Track translated entries to avoid re-translating
