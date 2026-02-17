@@ -252,7 +252,7 @@ func TestSolveFromBody_SubmitNoCookies(t *testing.T) {
 
 	_, err := solver.SolveFromBody(context.Background(), body, "https://example.com/a", nil)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "no anubis cookies")
+	require.Contains(t, err.Error(), "no auth cookies")
 }
 
 func TestSolveFromBody_WaitForOngoingSolve(t *testing.T) {
@@ -476,6 +476,144 @@ func TestSolveFromBody_MultipleAnubisCookies(t *testing.T) {
 	require.Contains(t, cookie, "techaro.lol-anubis=value1")
 	require.Contains(t, cookie, "techaro.lol-anubis-test=value2")
 	require.NotContains(t, cookie, "other-cookie")
+}
+
+func TestSolveFromBody_SubmitCustomAuthCookieName(t *testing.T) {
+	session := &stubSession{
+		doFunc: func(req *azuretls.Request) (*azuretls.Response, error) {
+			return &azuretls.Response{
+				StatusCode: http.StatusFound,
+				Cookies: map[string]string{
+					"custom-prefix-auth":                "auth-value",
+					"custom-prefix-cookie-verification": "test-value",
+				},
+			}, nil
+		},
+	}
+	solver := newSolverWithSession(t, anubis.NewStore(newSettingsRepoStub()), session)
+	body := buildChallengeBody("fast", 0, "id", "data")
+
+	cookie, err := solver.SolveFromBody(context.Background(), body, "https://example.com/a", nil)
+	require.NoError(t, err)
+	require.Equal(t, "custom-prefix-auth=auth-value", cookie)
+}
+
+func TestSolveFromBodyWithHeaders_ReuseRequestFingerprint(t *testing.T) {
+	session := &stubSession{}
+	solver := newSolverWithSession(t, anubis.NewStore(newSettingsRepoStub()), session)
+	body := buildChallengeBody("fast", 0, "id", "data")
+
+	headers := http.Header{
+		"User-Agent":     {"GistFetcher/1.0"},
+		"Accept":         {"application/rss+xml,application/xml;q=0.9,*/*;q=0.8"},
+		"Sec-Fetch-Site": {"cross-site"},
+	}
+
+	_, err := solver.SolveFromBodyWithHeaders(context.Background(), body, "https://example.com/a", nil, headers)
+	require.NoError(t, err)
+
+	req := session.request()
+	require.NotNil(t, req)
+
+	userAgent, ok := findHeader(req.OrderedHeaders, "user-agent")
+	require.True(t, ok)
+	require.Equal(t, "GistFetcher/1.0", userAgent)
+
+	accept, ok := findHeader(req.OrderedHeaders, "accept")
+	require.True(t, ok)
+	require.Equal(t, "application/rss+xml,application/xml;q=0.9,*/*;q=0.8", accept)
+
+	site, ok := findHeader(req.OrderedHeaders, "sec-fetch-site")
+	require.True(t, ok)
+	require.Equal(t, "cross-site", site)
+}
+
+func TestSolveFromBodyWithHeaders_SubmitPrefersInitialCookies(t *testing.T) {
+	session := &stubSession{}
+	solver := newSolverWithSession(t, anubis.NewStore(newSettingsRepoStub()), session)
+	body := buildChallengeBody("fast", 0, "id", "data")
+
+	headers := http.Header{
+		"User-Agent": {"Profile-A/1.0"},
+		"Cookie":     {"stale-auth=old"},
+	}
+	initialCookies := []*http.Cookie{
+		{Name: "challenge-session", Value: "new"},
+	}
+
+	_, err := solver.SolveFromBodyWithHeaders(context.Background(), body, "https://example.com/a", initialCookies, headers)
+	require.NoError(t, err)
+
+	req := session.request()
+	require.NotNil(t, req)
+
+	cookie, ok := findHeader(req.OrderedHeaders, "cookie")
+	require.True(t, ok)
+	require.Equal(t, "challenge-session=new", cookie)
+}
+
+func TestSolveFromBodyWithHeaders_CacheScopedByFingerprint(t *testing.T) {
+	session := &stubSession{
+		doFunc: func(req *azuretls.Request) (*azuretls.Response, error) {
+			userAgent, _ := findHeader(req.OrderedHeaders, "user-agent")
+			value := "default"
+			switch userAgent {
+			case "Profile-A/1.0":
+				value = "cookie-a"
+			case "Profile-B/1.0":
+				value = "cookie-b"
+			}
+			return &azuretls.Response{
+				StatusCode: http.StatusFound,
+				Cookies:    map[string]string{"techaro.lol-anubis": value},
+			}, nil
+		},
+	}
+
+	store := anubis.NewStore(newSettingsRepoStub())
+	solver := newSolverWithSession(t, store, session)
+
+	bodyA := buildChallengeBody("fast", 0, "id-a", "data-a")
+	bodyB := buildChallengeBody("fast", 0, "id-b", "data-b")
+
+	headersA := http.Header{
+		"User-Agent":     {"Profile-A/1.0"},
+		"Sec-Fetch-Site": {"same-origin"},
+	}
+	headersB := http.Header{
+		"User-Agent":     {"Profile-B/1.0"},
+		"Sec-Fetch-Site": {"cross-site"},
+	}
+
+	_, err := solver.SolveFromBodyWithHeaders(context.Background(), bodyA, "https://example.com/a", nil, headersA)
+	require.NoError(t, err)
+
+	_, err = solver.SolveFromBodyWithHeaders(context.Background(), bodyB, "https://example.com/b", nil, headersB)
+	require.NoError(t, err)
+
+	cookieA := solver.GetCachedCookieWithHeaders(context.Background(), "example.com", headersA)
+	cookieB := solver.GetCachedCookieWithHeaders(context.Background(), "example.com", headersB)
+
+	require.Equal(t, "techaro.lol-anubis=cookie-a", cookieA)
+	require.Equal(t, "techaro.lol-anubis=cookie-b", cookieB)
+}
+
+func TestSolveFromBodyWithHeaders_WritesHostFallbackCache(t *testing.T) {
+	store := anubis.NewStore(newSettingsRepoStub())
+	solver := newSolverWithSession(t, store, &stubSession{})
+	body := buildChallengeBody("fast", 0, "id", "data")
+
+	headers := http.Header{
+		"User-Agent":     {"Profile-A/1.0"},
+		"Sec-Fetch-Site": {"same-origin"},
+	}
+
+	cookie, err := solver.SolveFromBodyWithHeaders(context.Background(), body, "https://example.com/a", nil, headers)
+	require.NoError(t, err)
+	require.Equal(t, "techaro.lol-anubis=cookie-value", cookie)
+
+	hostCookie := solver.GetCachedCookie(context.Background(), "example.com")
+	require.Equal(t, "techaro.lol-anubis=cookie-value", hostCookie)
 }
 
 func TestSolveFromBody_NoCookiesInInitialRequest(t *testing.T) {

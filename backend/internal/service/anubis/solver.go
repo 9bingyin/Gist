@@ -7,9 +7,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -21,7 +23,54 @@ import (
 	"gist/backend/pkg/network"
 )
 
-const solverTimeout = 30 * time.Second
+const (
+	solverTimeout = 30 * time.Second
+	logModule     = "service"
+	logResource   = "anubis"
+)
+
+var submitHeaderOrder = []string{
+	"accept",
+	"accept-language",
+	"accept-encoding",
+	"cache-control",
+	"pragma",
+	"priority",
+	"sec-ch-ua",
+	"sec-ch-ua-mobile",
+	"sec-ch-ua-platform",
+	"sec-ch-ua-arch",
+	"sec-ch-ua-model",
+	"sec-ch-ua-platform-version",
+	"sec-fetch-dest",
+	"sec-fetch-mode",
+	"sec-fetch-site",
+	"sec-fetch-user",
+	"upgrade-insecure-requests",
+	"referer",
+	"user-agent",
+}
+
+// cookieProfileHeaders are used to namespace cookies by request fingerprint.
+// This avoids cookie thrashing when multiple request profiles hit the same host.
+var cookieProfileHeaders = []string{
+	"user-agent",
+	"accept",
+	"accept-language",
+	"accept-encoding",
+	"sec-ch-ua",
+	"sec-ch-ua-mobile",
+	"sec-ch-ua-platform",
+	"sec-ch-ua-arch",
+	"sec-ch-ua-model",
+	"sec-ch-ua-platform-version",
+	"sec-fetch-dest",
+	"sec-fetch-mode",
+	"sec-fetch-site",
+	"sec-fetch-user",
+	"upgrade-insecure-requests",
+	"priority",
+}
 
 // azureSession is an interface for azuretls session to allow testing
 type azureSession interface {
@@ -49,7 +98,7 @@ type Solver struct {
 	clientFactory *network.ClientFactory
 	store         *Store
 	mu            sync.Mutex
-	solving       map[string]chan struct{} // host -> done channel (prevents concurrent solving)
+	solving       map[string]chan struct{} // cache_key -> done channel (prevents concurrent solving)
 	newSession    newSessionFunc           // for testing injection
 }
 
@@ -74,34 +123,84 @@ func IsAnubisChallenge(body []byte) bool {
 		return false
 	}
 	// Rejection pages have null challenge, not solvable
-	return !bytes.Contains(body, []byte(`"anubis_challenge" type="application/json">null`))
+	return !nullChallengeRegex.Match(body)
 }
 
 // GetCachedCookie returns the cached cookie for the given host if valid
 func (s *Solver) GetCachedCookie(ctx context.Context, host string) string {
+	return s.GetCachedCookieWithHeaders(ctx, host, nil)
+}
+
+// GetCachedCookieWithHeaders returns cached cookie scoped by host and request fingerprint.
+func (s *Solver) GetCachedCookieWithHeaders(ctx context.Context, host string, requestHeaders http.Header) string {
 	if s.store == nil {
 		return ""
 	}
-	cookie, err := s.store.GetCookie(ctx, host)
-	if err != nil {
-		return ""
+
+	normalizedHost := normalizeHost(host)
+	cacheKey := buildCookieCacheKey(normalizedHost, requestHeaders)
+
+	if cacheKey != "" && cacheKey != normalizedHost {
+		cookie, err := s.store.GetCookie(ctx, cacheKey)
+		if err == nil && cookie != "" {
+			logger.Debug("anubis cookie cache hit",
+				"module", logModule,
+				"action", "fetch",
+				"resource", logResource,
+				"result", "ok",
+				"host", normalizedHost,
+				"scope", "profile",
+			)
+			return cookie
+		}
 	}
-	return cookie
+
+	cookie, err := s.store.GetCookie(ctx, normalizedHost)
+	if err == nil && cookie != "" {
+		logger.Debug("anubis cookie cache hit",
+			"module", logModule,
+			"action", "fetch",
+			"resource", logResource,
+			"result", "ok",
+			"host", normalizedHost,
+			"scope", "host",
+		)
+		return cookie
+	}
+
+	logger.Debug("anubis cookie cache miss",
+		"module", logModule,
+		"action", "fetch",
+		"resource", logResource,
+		"result", "skipped",
+		"host", normalizedHost,
+	)
+	return ""
 }
 
 // SolveFromBody detects and solves Anubis challenge from response body
 // Returns the cookie string if successful, empty string if not an Anubis challenge
 // initialCookies are the cookies received from the initial request (needed for session)
 func (s *Solver) SolveFromBody(ctx context.Context, body []byte, originalURL string, initialCookies []*http.Cookie) (string, error) {
+	return s.SolveFromBodyWithHeaders(ctx, body, originalURL, initialCookies, nil)
+}
+
+// SolveFromBodyWithHeaders detects and solves Anubis challenge from response body.
+// requestHeaders should be the original request headers that triggered the challenge.
+func (s *Solver) SolveFromBodyWithHeaders(ctx context.Context, body []byte, originalURL string, initialCookies []*http.Cookie, requestHeaders http.Header) (string, error) {
 	if !IsAnubisChallenge(body) {
 		return "", nil
 	}
 
-	host := extractHost(originalURL)
+	host := normalizeHost(extractHost(originalURL))
+	cacheKey := buildCookieCacheKey(host, requestHeaders)
+	if cacheKey == "" {
+		cacheKey = host
+	}
 
-	// Check if another goroutine is already solving for this host
+	// Check if another goroutine is already solving for this request profile.
 	s.mu.Lock()
-	if ch, ok := s.solving[host]; ok {
+	if ch, ok := s.solving[cacheKey]; ok {
 		s.mu.Unlock()
 		logger.Debug("anubis waiting for ongoing solve",
 			"module", "service",
@@ -115,7 +214,7 @@ func (s *Solver) SolveFromBody(ctx context.Context, body []byte, originalURL str
 			// Small delay to let the cookie propagate and avoid thundering herd
 			time.Sleep(100 * time.Millisecond)
 			// Solving completed, get cookie from cache
-			if cookie := s.GetCachedCookie(ctx, host); cookie != "" {
+			if cookie := s.GetCachedCookieWithHeaders(ctx, host, requestHeaders); cookie != "" {
 				return cookie, nil
 			}
 			// Cache miss after solve - this shouldn't happen normally
@@ -125,14 +224,14 @@ func (s *Solver) SolveFromBody(ctx context.Context, body []byte, originalURL str
 		}
 	}
 
-	// Mark this host as being solved
+	// Mark this profile as being solved
 	done := make(chan struct{})
-	s.solving[host] = done
+	s.solving[cacheKey] = done
 	s.mu.Unlock()
 
 	defer func() {
 		s.mu.Lock()
-		delete(s.solving, host)
+		delete(s.solving, cacheKey)
 		close(done) // Notify waiting goroutines
 		s.mu.Unlock()
 	}()
@@ -160,39 +259,63 @@ func (s *Solver) SolveFromBody(ctx context.Context, body []byte, originalURL str
 	}
 
 	// Submit the solution (pass initial cookies for session)
-	cookie, expiresAt, err := s.submit(ctx, originalURL, challenge, result, initialCookies)
+	cookie, expiresAt, err := s.submit(ctx, originalURL, challenge, result, initialCookies, requestHeaders)
 	if err != nil {
 		return "", fmt.Errorf("submit anubis solution: %w", err)
 	}
 
-	// Cache the cookie
-	if s.store != nil && host != "" {
-		if err := s.store.SetCookie(ctx, host, cookie, expiresAt); err != nil {
-			logger.Warn("anubis failed to cache cookie",
-				"module", "service",
-				"action", "save",
-				"resource", "anubis",
-				"result", "failed",
-				"host", host,
-				"error", err,
-			)
-		} else {
-			logger.Debug("anubis cached cookie",
-				"module", "service",
-				"action", "save",
-				"resource", "anubis",
-				"result", "ok",
-				"host", host,
-				"expires", expiresAt.Format(time.RFC3339),
-			)
-		}
-	}
+	s.cacheSolvedCookie(ctx, host, cacheKey, cookie, expiresAt)
 
 	return cookie, nil
 }
 
+func (s *Solver) cacheSolvedCookie(ctx context.Context, host, cacheKey, cookie string, expiresAt time.Time) {
+	if s.store == nil || cacheKey == "" {
+		return
+	}
+
+	if err := s.store.SetCookie(ctx, cacheKey, cookie, expiresAt); err != nil {
+		logger.Warn("anubis failed to cache cookie",
+			"module", logModule,
+			"action", "save",
+			"resource", logResource,
+			"result", "failed",
+			"host", host,
+			"error", err,
+		)
+		return
+	}
+
+	logger.Debug("anubis cached cookie",
+		"module", logModule,
+		"action", "save",
+		"resource", logResource,
+		"result", "ok",
+		"host", host,
+		"expires", expiresAt.Format(time.RFC3339),
+	)
+
+	// Keep a host-level fallback entry for callers without a stable header profile.
+	if host == "" || cacheKey == host {
+		return
+	}
+
+	if err := s.store.SetCookie(ctx, host, cookie, expiresAt); err != nil {
+		logger.Warn("anubis failed to cache host fallback",
+			"module", logModule,
+			"action", "save",
+			"resource", logResource,
+			"result", "failed",
+			"host", host,
+			"error", err,
+		)
+	}
+}
+
 // challengeRegex extracts the JSON from the anubis_challenge script tag
 var challengeRegex = regexp.MustCompile(`<script id="anubis_challenge" type="application/json">([^<]+)</script>`)
+
+var nullChallengeRegex = regexp.MustCompile(`(?s)<script id="anubis_challenge" type="application/json">\s*null\s*</script>`)
 
 // parseChallenge extracts the Anubis challenge from HTML body
 func parseChallenge(body []byte) (*Challenge, error) {
@@ -349,7 +472,7 @@ func solveProofOfWork(ctx context.Context, randomData string, difficulty int) (s
 }
 
 // submit sends the solution to Anubis and retrieves the cookie
-func (s *Solver) submit(ctx context.Context, originalURL string, challenge *Challenge, result solveResult, initialCookies []*http.Cookie) (string, time.Time, error) {
+func (s *Solver) submit(ctx context.Context, originalURL string, challenge *Challenge, result solveResult, initialCookies []*http.Cookie, requestHeaders http.Header) (string, time.Time, error) {
 	// Parse the original URL to get the base
 	parsed, err := url.Parse(originalURL)
 	if err != nil {
@@ -407,29 +530,12 @@ func (s *Solver) submit(ctx context.Context, originalURL string, challenge *Chal
 	}
 	defer session.Close()
 
-	// Build Chrome headers
-	headers := azuretls.OrderedHeaders{
-		{"accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"},
-		{"accept-language", "zh-CN,zh;q=0.9"},
-		{"cache-control", "max-age=0"},
-		{"sec-ch-ua", config.ChromeSecChUa},
-		{"sec-ch-ua-mobile", "?0"},
-		{"sec-ch-ua-platform", `"Windows"`},
-		{"sec-fetch-dest", "document"},
-		{"sec-fetch-mode", "navigate"},
-		{"sec-fetch-site", "none"},
-		{"sec-fetch-user", "?1"},
-		{"upgrade-insecure-requests", "1"},
-		{"user-agent", config.ChromeUserAgent},
-	}
+	// Reuse the original request fingerprint to avoid policyRule drift.
+	headers := buildSubmitHeaders(requestHeaders)
 
 	// Add initial cookies from the challenge request (required for session)
-	if len(initialCookies) > 0 {
-		var cookieParts []string
-		for _, c := range initialCookies {
-			cookieParts = append(cookieParts, fmt.Sprintf("%s=%s", c.Name, c.Value))
-		}
-		headers = append(headers, []string{"cookie", strings.Join(cookieParts, "; ")})
+	if cookieHeader := formatCookieHeader(initialCookies); cookieHeader != "" {
+		headers = upsertOrderedHeader(headers, "cookie", cookieHeader)
 	}
 
 	logger.Debug("anubis submitting solution",
@@ -479,15 +585,10 @@ func (s *Solver) submit(ctx context.Context, originalURL string, challenge *Chal
 		return "", time.Time{}, fmt.Errorf("unexpected status %d: %s", resp.StatusCode, string(resp.Body))
 	}
 
-	// Extract cookies from response (azuretls uses map[string]string)
-	var anubisCookieParts []string
-	for name, value := range resp.Cookies {
-		if strings.HasPrefix(name, "techaro.lol-anubis") {
-			anubisCookieParts = append(anubisCookieParts, fmt.Sprintf("%s=%s", name, value))
-		}
-	}
+	// Extract auth cookies from response (azuretls uses map[string]string)
+	authCookieParts := extractAuthCookieParts(resp.Cookies)
 
-	if len(anubisCookieParts) == 0 {
+	if len(authCookieParts) == 0 {
 		logger.Debug("anubis no cookies found",
 			"module", "service",
 			"action", "submit",
@@ -495,14 +596,158 @@ func (s *Solver) submit(ctx context.Context, originalURL string, challenge *Chal
 			"result", "failed",
 			"all_cookies", resp.Cookies,
 		)
-		return "", time.Time{}, fmt.Errorf("no anubis cookies in response")
+		return "", time.Time{}, fmt.Errorf("no auth cookies in response")
 	}
+	sort.Strings(authCookieParts)
 
 	// Default expiry (7 days) - azuretls cookies map doesn't include expiry info
 	expiresAt := time.Now().Add(7 * 24 * time.Hour)
 
-	cookie := strings.Join(anubisCookieParts, "; ")
+	cookie := strings.Join(authCookieParts, "; ")
 	return cookie, expiresAt, nil
+}
+
+func buildSubmitHeaders(requestHeaders http.Header) azuretls.OrderedHeaders {
+	if len(requestHeaders) == 0 {
+		return defaultSubmitHeaders()
+	}
+
+	headers := make(azuretls.OrderedHeaders, 0, len(submitHeaderOrder))
+	for _, key := range submitHeaderOrder {
+		value := strings.TrimSpace(requestHeaders.Get(key))
+		if value == "" {
+			continue
+		}
+		headers = append(headers, []string{key, value})
+	}
+
+	if !hasOrderedHeader(headers, "user-agent") {
+		headers = append(headers, []string{"user-agent", config.ChromeUserAgent})
+	}
+
+	if len(headers) == 0 {
+		return defaultSubmitHeaders()
+	}
+	return headers
+}
+
+func hasOrderedHeader(headers azuretls.OrderedHeaders, key string) bool {
+	for _, header := range headers {
+		if len(header) < 2 {
+			continue
+		}
+		if strings.EqualFold(header[0], key) {
+			return true
+		}
+	}
+	return false
+}
+
+func defaultSubmitHeaders() azuretls.OrderedHeaders {
+	return azuretls.OrderedHeaders{
+		{"accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"},
+		{"accept-language", "zh-CN,zh;q=0.9"},
+		{"cache-control", "max-age=0"},
+		{"sec-ch-ua", config.ChromeSecChUa},
+		{"sec-ch-ua-mobile", "?0"},
+		{"sec-ch-ua-platform", `"Windows"`},
+		{"sec-fetch-dest", "document"},
+		{"sec-fetch-mode", "navigate"},
+		{"sec-fetch-site", "same-origin"},
+		{"sec-fetch-user", "?1"},
+		{"upgrade-insecure-requests", "1"},
+		{"user-agent", config.ChromeUserAgent},
+	}
+}
+
+func upsertOrderedHeader(headers azuretls.OrderedHeaders, key, value string) azuretls.OrderedHeaders {
+	for i := range headers {
+		if len(headers[i]) < 2 {
+			continue
+		}
+		if strings.EqualFold(headers[i][0], key) {
+			headers[i][1] = value
+			return headers
+		}
+	}
+	return append(headers, []string{key, value})
+}
+
+func formatCookieHeader(cookies []*http.Cookie) string {
+	if len(cookies) == 0 {
+		return ""
+	}
+
+	parts := make([]string, 0, len(cookies))
+	for _, c := range cookies {
+		if c == nil || strings.TrimSpace(c.Name) == "" {
+			continue
+		}
+		parts = append(parts, fmt.Sprintf("%s=%s", c.Name, c.Value))
+	}
+	return strings.Join(parts, "; ")
+}
+
+func extractAuthCookieParts(cookies map[string]string) []string {
+	parts := make([]string, 0, len(cookies))
+	for name, value := range cookies {
+		lowerName := strings.ToLower(name)
+		if value == "" || strings.Contains(lowerName, "cookie-verification") {
+			continue
+		}
+		if strings.HasSuffix(lowerName, "-auth") || strings.Contains(lowerName, "anubis") {
+			parts = append(parts, fmt.Sprintf("%s=%s", name, value))
+		}
+	}
+	sort.Strings(parts)
+	return parts
+}
+
+// OrderedHeadersToHTTPHeader converts azuretls ordered headers to canonical http headers.
+func OrderedHeadersToHTTPHeader(headers azuretls.OrderedHeaders) http.Header {
+	result := make(http.Header, len(headers))
+	for _, header := range headers {
+		if len(header) < 2 {
+			continue
+		}
+		key := strings.TrimSpace(header[0])
+		value := strings.TrimSpace(header[1])
+		if key == "" || value == "" {
+			continue
+		}
+		result.Add(key, value)
+	}
+	return result
+}
+
+func buildCookieCacheKey(host string, requestHeaders http.Header) string {
+	host = normalizeHost(host)
+	if host == "" {
+		return ""
+	}
+	if len(requestHeaders) == 0 {
+		return host
+	}
+
+	var keyBuilder strings.Builder
+	for _, key := range cookieProfileHeaders {
+		value := strings.TrimSpace(requestHeaders.Get(key))
+		if value == "" {
+			continue
+		}
+		keyBuilder.WriteString(key)
+		keyBuilder.WriteString("=")
+		keyBuilder.WriteString(value)
+		keyBuilder.WriteString("\n")
+	}
+
+	if keyBuilder.Len() == 0 {
+		return host
+	}
+
+	sum := sha256.Sum256([]byte(keyBuilder.String()))
+	// First 8 bytes are enough as a stable bucket key while keeping settings keys short.
+	return host + "|" + hex.EncodeToString(sum[:8])
 }
 
 // extractHost returns the host from a URL string
@@ -512,6 +757,32 @@ func extractHost(rawURL string) string {
 		return ""
 	}
 	return u.Host
+}
+
+func normalizeHost(host string) string {
+	host = strings.TrimSpace(host)
+	if host == "" {
+		return ""
+	}
+
+	cacheSuffix := ""
+	if parts := strings.SplitN(host, "|", 2); len(parts) == 2 {
+		host = parts[0]
+		cacheSuffix = "|" + parts[1]
+	}
+
+	host = strings.TrimSuffix(host, ".")
+
+	// If host contains a port, split it safely.
+	if strings.Contains(host, ":") {
+		if splitHost, _, err := net.SplitHostPort(host); err == nil {
+			host = splitHost
+		} else if strings.HasPrefix(host, "[") && strings.HasSuffix(host, "]") {
+			host = strings.TrimPrefix(strings.TrimSuffix(host, "]"), "[")
+		}
+	}
+
+	return strings.ToLower(host) + cacheSuffix
 }
 
 // truncateForLog safely truncates a string for logging purposes

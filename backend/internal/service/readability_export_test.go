@@ -60,12 +60,12 @@ func ReadabilityFetchWithFreshSessionForTest(svc ReadabilityService, ctx context
 }
 
 // ReadabilityDoFetchForTest exposes doFetch for tests.
-func ReadabilityDoFetchForTest(svc ReadabilityService, ctx context.Context, targetURL, cookie string, retryCount int, isFresh bool) ([]byte, error) {
+func ReadabilityDoFetchForTest(svc ReadabilityService, ctx context.Context, targetURL, cookie string, retryCount int) ([]byte, error) {
 	impl, ok := svc.(*readabilityService)
 	if !ok {
 		return nil, ErrInvalid
 	}
 	session := impl.clientFactory.NewAzureSession(ctx, readabilityTimeout)
 	defer session.Close()
-	return impl.doFetch(ctx, session, targetURL, cookie, retryCount, isFresh)
+	return impl.doFetch(ctx, session, targetURL, cookie, retryCount)
 }

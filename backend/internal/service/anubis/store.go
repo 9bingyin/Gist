@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"gist/backend/pkg/logger"
 	"gist/backend/internal/repository"
+	"gist/backend/pkg/logger"
 )
 
 const (
@@ -32,6 +32,7 @@ func (s *Store) GetCookie(ctx context.Context, host string) (string, error) {
 	if s.settings == nil {
 		return "", nil
 	}
+	host = normalizeHost(host)
 
 	// Check expiration first
 	expiresKey := cookieKeyPrefix + host + expiresSuffix
@@ -75,6 +76,7 @@ func (s *Store) SetCookie(ctx context.Context, host, cookie string, expiresAt ti
 	if s.settings == nil {
 		return nil
 	}
+	host = normalizeHost(host)
 
 	// Store the cookie value
 	cookieKey := cookieKeyPrefix + host
@@ -98,6 +100,7 @@ func (s *Store) DeleteCookie(ctx context.Context, host string) error {
 	if s.settings == nil {
 		return nil
 	}
+	host = normalizeHost(host)
 
 	cookieKey := cookieKeyPrefix + host
 	expiresKey := cookieKeyPrefix + host + expiresSuffix

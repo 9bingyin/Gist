@@ -11,9 +11,9 @@ import (
 	"github.com/Noooste/azuretls-client"
 
 	"gist/backend/internal/config"
+	"gist/backend/internal/service/anubis"
 	"gist/backend/pkg/logger"
 	"gist/backend/pkg/network"
-	"gist/backend/internal/service/anubis"
 )
 
 const proxyTimeout = 30 * time.Second
@@ -59,18 +59,18 @@ func (s *proxyService) FetchImage(ctx context.Context, imageURL, refererURL stri
 func (s *proxyService) fetchImageWithRetry(ctx context.Context, imageURL, refererURL, cookie string, retryCount int) (*ProxyResult, error) {
 	session := s.clientFactory.NewAzureSession(ctx, proxyTimeout)
 	defer session.Close()
-	return s.doFetch(ctx, session, imageURL, refererURL, cookie, retryCount, false)
+	return s.doFetch(ctx, session, imageURL, refererURL, cookie, retryCount)
 }
 
 // fetchWithFreshSession creates a new azuretls session to avoid connection reuse after Anubis
 func (s *proxyService) fetchWithFreshSession(ctx context.Context, imageURL, refererURL, cookie string, retryCount int) (*ProxyResult, error) {
 	session := s.clientFactory.NewAzureSession(ctx, proxyTimeout)
 	defer session.Close()
-	return s.doFetch(ctx, session, imageURL, refererURL, cookie, retryCount, true)
+	return s.doFetch(ctx, session, imageURL, refererURL, cookie, retryCount)
 }
 
 // doFetch performs the actual HTTP request with the given session
-func (s *proxyService) doFetch(ctx context.Context, session *azuretls.Session, imageURL, refererURL, cookie string, retryCount int, isFreshSession bool) (*ProxyResult, error) {
+func (s *proxyService) doFetch(ctx context.Context, session *azuretls.Session, imageURL, refererURL, cookie string, retryCount int) (*ProxyResult, error) {
 	parsedURL, err := url.Parse(imageURL)
 	if err != nil {
 		return nil, ErrInvalidURL
@@ -100,8 +100,8 @@ func (s *proxyService) doFetch(ctx context.Context, session *azuretls.Session, i
 	// Add cookie
 	if cookie != "" {
 		headers = append(headers, []string{"cookie", cookie})
-	} else if !isFreshSession && s.anubis != nil {
-		if cachedCookie := s.anubis.GetCachedCookie(ctx, parsedURL.Host); cachedCookie != "" {
+	} else if s.anubis != nil {
+		if cachedCookie := s.anubis.GetCachedCookieWithHeaders(ctx, parsedURL.Host, anubis.OrderedHeadersToHTTPHeader(headers)); cachedCookie != "" {
 			headers = append(headers, []string{"cookie", cachedCookie})
 		}
 	}
@@ -135,16 +135,11 @@ func (s *proxyService) doFetch(ctx context.Context, session *azuretls.Session, i
 			logger.Warn("proxy anubis persists", "module", "service", "action", "fetch", "resource", "proxy", "result", "failed", "host", parsedURL.Host, "retry_count", retryCount)
 			return nil, fmt.Errorf("%w: anubis challenge persists after %d retries", ErrFetchFailed, retryCount)
 		}
-		if isFreshSession {
-			// Fresh session still got Anubis, give up
-			logger.Warn("proxy anubis persists", "module", "service", "action", "fetch", "resource", "proxy", "result", "failed", "host", parsedURL.Host, "retry_count", retryCount)
-			return nil, fmt.Errorf("%w: anubis challenge persists after %d retries", ErrFetchFailed, retryCount)
-		}
 		var initialCookies []*http.Cookie
 		for name, value := range resp.Cookies {
 			initialCookies = append(initialCookies, &http.Cookie{Name: name, Value: value})
 		}
-		newCookie, solveErr := s.anubis.SolveFromBody(ctx, data, imageURL, initialCookies)
+		newCookie, solveErr := s.anubis.SolveFromBodyWithHeaders(ctx, data, imageURL, initialCookies, anubis.OrderedHeadersToHTTPHeader(headers))
 		if solveErr != nil {
 			logger.Warn("proxy anubis solve failed", "module", "service", "action", "fetch", "resource", "proxy", "result", "failed", "host", parsedURL.Host, "error", solveErr)
 			return nil, ErrFetchFailed

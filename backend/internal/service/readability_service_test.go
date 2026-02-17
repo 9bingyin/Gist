@@ -78,7 +78,7 @@ func TestReadabilityService_FetchWithFreshSession_InvalidScheme(t *testing.T) {
 func TestReadabilityService_DoFetch_InvalidURL(t *testing.T) {
 	svc := service.NewReadabilityService(nil, network.NewClientFactoryForTest(&http.Client{}), nil)
 
-	_, err := service.ReadabilityDoFetchForTest(svc, context.Background(), "http://[::1", "", 0, false)
+	_, err := service.ReadabilityDoFetchForTest(svc, context.Background(), "http://[::1", "", 0)
 	require.ErrorIs(t, err, service.ErrFeedFetch)
 }
 

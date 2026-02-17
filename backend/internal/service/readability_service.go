@@ -124,18 +124,18 @@ func (s *readabilityService) Close() {
 func (s *readabilityService) fetchWithChrome(ctx context.Context, targetURL string, cookie string, retryCount int) ([]byte, error) {
 	session := s.clientFactory.NewAzureSession(ctx, readabilityTimeout)
 	defer session.Close()
-	return s.doFetch(ctx, session, targetURL, cookie, retryCount, false)
+	return s.doFetch(ctx, session, targetURL, cookie, retryCount)
 }
 
 // fetchWithFreshSession creates a new azuretls session to avoid connection reuse after Anubis
 func (s *readabilityService) fetchWithFreshSession(ctx context.Context, targetURL, cookie string, retryCount int) ([]byte, error) {
 	session := s.clientFactory.NewAzureSession(ctx, readabilityTimeout)
 	defer session.Close()
-	return s.doFetch(ctx, session, targetURL, cookie, retryCount, true)
+	return s.doFetch(ctx, session, targetURL, cookie, retryCount)
 }
 
 // doFetch performs the actual HTTP request with the given session
-func (s *readabilityService) doFetch(ctx context.Context, session *azuretls.Session, targetURL, cookie string, retryCount int, isFreshSession bool) ([]byte, error) {
+func (s *readabilityService) doFetch(ctx context.Context, session *azuretls.Session, targetURL, cookie string, retryCount int) ([]byte, error) {
 	parsedURL, err := url.Parse(targetURL)
 	if err != nil {
 		return nil, ErrFeedFetch
@@ -166,8 +166,8 @@ func (s *readabilityService) doFetch(ctx context.Context, session *azuretls.Sess
 
 	if cookie != "" {
 		headers = append(headers, []string{"cookie", cookie})
-	} else if !isFreshSession && s.anubis != nil {
-		if cachedCookie := s.anubis.GetCachedCookie(ctx, parsedURL.Host); cachedCookie != "" {
+	} else if s.anubis != nil {
+		if cachedCookie := s.anubis.GetCachedCookieWithHeaders(ctx, parsedURL.Host, anubis.OrderedHeadersToHTTPHeader(headers)); cachedCookie != "" {
 			headers = append(headers, []string{"cookie", cachedCookie})
 		}
 	}
@@ -197,7 +197,7 @@ func (s *readabilityService) doFetch(ctx context.Context, session *azuretls.Sess
 			return nil, fmt.Errorf("upstream rejected")
 		}
 		// It's a solvable challenge
-		if retryCount >= 2 || isFreshSession {
+		if retryCount >= 2 {
 			logger.Warn("readability anubis persists", "module", "service", "action", "fetch", "resource", "entry", "result", "failed", "host", parsedURL.Host, "retry_count", retryCount)
 			return nil, fmt.Errorf("anubis challenge persists after %d retries for %s", retryCount, targetURL)
 		}
@@ -206,7 +206,7 @@ func (s *readabilityService) doFetch(ctx context.Context, session *azuretls.Sess
 		for name, value := range resp.Cookies {
 			initialCookies = append(initialCookies, &http.Cookie{Name: name, Value: value})
 		}
-		newCookie, solveErr := s.anubis.SolveFromBody(ctx, body, targetURL, initialCookies)
+		newCookie, solveErr := s.anubis.SolveFromBodyWithHeaders(ctx, body, targetURL, initialCookies, anubis.OrderedHeadersToHTTPHeader(headers))
 		if solveErr != nil {
 			logger.Warn("readability anubis solve failed", "module", "service", "action", "fetch", "resource", "entry", "result", "failed", "host", parsedURL.Host, "error", solveErr)
 			return nil, fmt.Errorf("anubis solve failed: %w", solveErr)

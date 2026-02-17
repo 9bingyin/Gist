@@ -546,22 +546,19 @@ func (s *iconService) downloadIconWithRetry(ctx context.Context, iconURL string,
 	if err != nil {
 		return nil, err
 	}
+	req.Header.Set("User-Agent", config.DefaultUserAgent)
+
 	// Add cookie (either provided or from cache)
 	if cookie == "" && s.anubis != nil {
 		if parsed, err := url.Parse(iconURL); err == nil {
-			if cachedCookie := s.anubis.GetCachedCookie(ctx, parsed.Host); cachedCookie != "" {
+			if cachedCookie := s.anubis.GetCachedCookieWithHeaders(ctx, parsed.Host, req.Header); cachedCookie != "" {
 				cookie = cachedCookie
 			}
 		}
 	}
 
-	// Anubis cookie was issued under Chrome UA policy rule,
-	// must use Chrome UA to match the policyRule hash in JWT
 	if cookie != "" {
-		req.Header.Set("User-Agent", config.ChromeUserAgent)
 		req.Header.Set("Cookie", cookie)
-	} else {
-		req.Header.Set("User-Agent", config.DefaultUserAgent)
 	}
 
 	httpClient := s.clientFactory.NewHTTPClient(ctx, iconTimeout)
@@ -592,7 +589,7 @@ func (s *iconService) downloadIconWithRetry(ctx context.Context, iconURL string,
 			return nil, fmt.Errorf("anubis challenge persists after %d retries", retryCount)
 		}
 		logger.Debug("icon download detected anubis challenge", "module", "service", "action", "fetch", "resource", "icon", "result", "ok", "host", network.ExtractHost(iconURL))
-		newCookie, solveErr := s.anubis.SolveFromBody(ctx, data, iconURL, resp.Cookies())
+		newCookie, solveErr := s.anubis.SolveFromBodyWithHeaders(ctx, data, iconURL, resp.Cookies(), req.Header.Clone())
 		if solveErr != nil {
 			return nil, solveErr
 		}
@@ -618,7 +615,7 @@ func (s *iconService) downloadIconWithFreshClient(ctx context.Context, iconURL s
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", config.ChromeUserAgent)
+	req.Header.Set("User-Agent", config.DefaultUserAgent)
 	if cookie != "" {
 		req.Header.Set("Cookie", cookie)
 	}
@@ -645,7 +642,14 @@ func (s *iconService) downloadIconWithFreshClient(ctx context.Context, iconURL s
 		if !anubis.IsAnubisChallenge(data) {
 			return nil, fmt.Errorf("upstream rejected")
 		}
-		return nil, fmt.Errorf("anubis challenge persists after %d retries", retryCount)
+		if retryCount >= 2 {
+			return nil, fmt.Errorf("anubis challenge persists after %d retries", retryCount)
+		}
+		newCookie, solveErr := s.anubis.SolveFromBodyWithHeaders(ctx, data, iconURL, resp.Cookies(), req.Header.Clone())
+		if solveErr != nil {
+			return nil, solveErr
+		}
+		return s.downloadIconWithFreshClient(ctx, iconURL, newCookie, retryCount+1)
 	}
 
 	// Detect format and validate dimensions (besticon approach)
