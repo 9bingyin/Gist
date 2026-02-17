@@ -203,9 +203,9 @@ func (s *Solver) SolveFromBodyWithHeaders(ctx context.Context, body []byte, orig
 	if ch, ok := s.solving[cacheKey]; ok {
 		s.mu.Unlock()
 		logger.Debug("anubis waiting for ongoing solve",
-			"module", "service",
+			"module", logModule,
 			"action", "solve",
-			"resource", "anubis",
+			"resource", logResource,
 			"result", "ok",
 			"host", host,
 		)
@@ -243,9 +243,9 @@ func (s *Solver) SolveFromBodyWithHeaders(ctx context.Context, body []byte, orig
 	}
 
 	logger.Debug("anubis detected challenge",
-		"module", "service",
+		"module", logModule,
 		"action", "solve",
-		"resource", "anubis",
+		"resource", logResource,
 		"result", "ok",
 		"host", extractHost(originalURL),
 		"algorithm", challenge.Rules.Algorithm,
@@ -598,7 +598,6 @@ func (s *Solver) submit(ctx context.Context, originalURL string, challenge *Chal
 		)
 		return "", time.Time{}, fmt.Errorf("no auth cookies in response")
 	}
-	sort.Strings(authCookieParts)
 
 	// Default expiry (7 days) - azuretls cookies map doesn't include expiry info
 	expiresAt := time.Now().Add(7 * 24 * time.Hour)
@@ -623,10 +622,6 @@ func buildSubmitHeaders(requestHeaders http.Header) azuretls.OrderedHeaders {
 
 	if !hasOrderedHeader(headers, "user-agent") {
 		headers = append(headers, []string{"user-agent", config.ChromeUserAgent})
-	}
-
-	if len(headers) == 0 {
-		return defaultSubmitHeaders()
 	}
 	return headers
 }
@@ -765,6 +760,8 @@ func normalizeHost(host string) string {
 		return ""
 	}
 
+	// Cache keys use "host|hash" format (see buildCookieCacheKey).
+	// Normalize only the host portion and preserve the profile suffix.
 	cacheSuffix := ""
 	if parts := strings.SplitN(host, "|", 2); len(parts) == 2 {
 		host = parts[0]
