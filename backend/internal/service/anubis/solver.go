@@ -698,23 +698,6 @@ func extractAuthCookieParts(cookies map[string]string) []string {
 	return parts
 }
 
-// OrderedHeadersToHTTPHeader converts azuretls ordered headers to canonical http headers.
-func OrderedHeadersToHTTPHeader(headers azuretls.OrderedHeaders) http.Header {
-	result := make(http.Header, len(headers))
-	for _, header := range headers {
-		if len(header) < 2 {
-			continue
-		}
-		key := strings.TrimSpace(header[0])
-		value := strings.TrimSpace(header[1])
-		if key == "" || value == "" {
-			continue
-		}
-		result.Add(key, value)
-	}
-	return result
-}
-
 func buildCookieCacheKey(host string, requestHeaders http.Header) string {
 	host = normalizeHost(host)
 	if host == "" {

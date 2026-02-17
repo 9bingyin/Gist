@@ -18,7 +18,6 @@ import (
 
 	"gist/backend/internal/config"
 	"gist/backend/internal/repository"
-	"gist/backend/internal/service/anubis"
 	"gist/backend/pkg/logger"
 	"gist/backend/pkg/network"
 )
@@ -164,7 +163,7 @@ func (s *readabilityService) doFetch(ctx context.Context, session *azuretls.Sess
 		{"user-agent", config.ChromeUserAgent},
 	}
 
-	requestHeaders := anubis.OrderedHeadersToHTTPHeader(headers)
+	requestHeaders := orderedHeadersToHTTPHeader(headers)
 	if cookie != "" {
 		headers = append(headers, []string{"cookie", cookie})
 	} else {
@@ -195,13 +194,15 @@ func (s *readabilityService) doFetch(ctx context.Context, session *azuretls.Sess
 	case anubisErr == nil:
 		logger.Debug("readability detected anubis challenge", "module", "service", "action", "fetch", "resource", "entry", "result", "ok", "host", parsedURL.Host)
 		return s.fetchWithFreshSession(ctx, targetURL, newCookie, retryCount+1)
+	case errors.Is(anubisErr, errAnubisNotPage):
+		// Not an Anubis page; continue normal readability parsing.
 	case errors.Is(anubisErr, errAnubisRejected):
 		logger.Warn("readability upstream rejected", "module", "service", "action", "fetch", "resource", "entry", "result", "failed", "host", parsedURL.Host)
 		return nil, fmt.Errorf("upstream rejected")
 	case errors.Is(anubisErr, errAnubisRetryExceeded):
 		logger.Warn("readability anubis persists", "module", "service", "action", "fetch", "resource", "entry", "result", "failed", "host", parsedURL.Host, "retry_count", retryCount)
-		return nil, fmt.Errorf("anubis challenge persists after %d retries for %s", retryCount, targetURL)
-	case anubisErr != nil && !errors.Is(anubisErr, errAnubisNotPage):
+		return nil, fmt.Errorf("anubis challenge persists after %d retries", retryCount)
+	default:
 		logger.Warn("readability anubis solve failed", "module", "service", "action", "fetch", "resource", "entry", "result", "failed", "host", parsedURL.Host, "error", anubisErr)
 		return nil, fmt.Errorf("anubis solve failed: %w", anubisErr)
 	}

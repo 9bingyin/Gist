@@ -12,7 +12,6 @@ import (
 	"github.com/Noooste/azuretls-client"
 
 	"gist/backend/internal/config"
-	"gist/backend/internal/service/anubis"
 	"gist/backend/pkg/logger"
 	"gist/backend/pkg/network"
 )
@@ -99,7 +98,7 @@ func (s *proxyService) doFetch(ctx context.Context, session *azuretls.Session, i
 	}
 
 	// Add cookie
-	requestHeaders := anubis.OrderedHeadersToHTTPHeader(headers)
+	requestHeaders := orderedHeadersToHTTPHeader(headers)
 	if cookie != "" {
 		headers = append(headers, []string{"cookie", cookie})
 	} else {
@@ -129,13 +128,15 @@ func (s *proxyService) doFetch(ctx context.Context, session *azuretls.Session, i
 	switch {
 	case anubisErr == nil:
 		return s.fetchWithFreshSession(ctx, imageURL, refererURL, newCookie, retryCount+1)
+	case errors.Is(anubisErr, errAnubisNotPage):
+		// Not an Anubis page; continue normal proxy response handling.
 	case errors.Is(anubisErr, errAnubisRejected):
 		logger.Warn("proxy upstream rejected", "module", "service", "action", "fetch", "resource", "proxy", "result", "failed", "host", parsedURL.Host)
 		return nil, ErrUpstreamRejected
 	case errors.Is(anubisErr, errAnubisRetryExceeded):
 		logger.Warn("proxy anubis persists", "module", "service", "action", "fetch", "resource", "proxy", "result", "failed", "host", parsedURL.Host, "retry_count", retryCount)
 		return nil, fmt.Errorf("%w: anubis challenge persists after %d retries", ErrFetchFailed, retryCount)
-	case anubisErr != nil && !errors.Is(anubisErr, errAnubisNotPage):
+	default:
 		logger.Warn("proxy anubis solve failed", "module", "service", "action", "fetch", "resource", "proxy", "result", "failed", "host", parsedURL.Host, "error", anubisErr)
 		return nil, ErrFetchFailed
 	}

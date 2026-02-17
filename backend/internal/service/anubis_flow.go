@@ -4,8 +4,11 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"sort"
+	"strings"
 
 	anubischallenge "gist/backend/internal/service/anubis"
+	"github.com/Noooste/azuretls-client"
 )
 
 const anubisMaxRetries = 2
@@ -29,6 +32,14 @@ func getCachedAnubisCookie(ctx context.Context, solver AnubisSolver, host string
 	return solver.GetCachedCookieWithHeaders(ctx, host, headers)
 }
 
+// trySolveAnubisChallenge centralizes challenge detection and retry guards.
+//
+// Return contract:
+//   - errAnubisNotPage: body is not an Anubis page, caller should continue normal parsing.
+//   - errAnubisRejected: body is an Anubis rejection page (challenge is not solvable).
+//   - errAnubisRetryExceeded: retry budget exhausted.
+//   - nil error with non-empty cookie: challenge solved successfully.
+//   - other error: solver failed while solving/submitting.
 func trySolveAnubisChallenge(
 	ctx context.Context,
 	solver AnubisSolver,
@@ -50,13 +61,35 @@ func trySolveAnubisChallenge(
 	return solver.SolveFromBodyWithHeaders(ctx, body, originalURL, initialCookies, requestHeaders)
 }
 
+func orderedHeadersToHTTPHeader(headers azuretls.OrderedHeaders) http.Header {
+	result := make(http.Header, len(headers))
+	for _, header := range headers {
+		if len(header) < 2 {
+			continue
+		}
+		key := strings.TrimSpace(header[0])
+		value := strings.TrimSpace(header[1])
+		if key == "" || value == "" {
+			continue
+		}
+		result.Add(key, value)
+	}
+	return result
+}
+
 func cookiesFromMap(cookies map[string]string) []*http.Cookie {
 	if len(cookies) == 0 {
 		return nil
 	}
-	result := make([]*http.Cookie, 0, len(cookies))
-	for name, value := range cookies {
-		result = append(result, &http.Cookie{Name: name, Value: value})
+	names := make([]string, 0, len(cookies))
+	for name := range cookies {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	result := make([]*http.Cookie, 0, len(names))
+	for _, name := range names {
+		result = append(result, &http.Cookie{Name: name, Value: cookies[name]})
 	}
 	return result
 }

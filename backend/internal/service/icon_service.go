@@ -583,11 +583,13 @@ func (s *iconService) downloadIconWithRetry(ctx context.Context, iconURL string,
 		logger.Debug("icon download detected anubis challenge", "module", "service", "action", "fetch", "resource", "icon", "result", "ok", "host", network.ExtractHost(iconURL))
 		// Retry with fresh client to avoid connection reuse
 		return s.downloadIconWithFreshClient(ctx, iconURL, newCookie, retryCount+1)
+	case errors.Is(anubisErr, errAnubisNotPage):
+		// Not an Anubis page; continue normal icon decoding.
 	case errors.Is(anubisErr, errAnubisRejected):
 		return nil, fmt.Errorf("upstream rejected")
 	case errors.Is(anubisErr, errAnubisRetryExceeded):
 		return nil, fmt.Errorf("anubis challenge persists after %d retries", retryCount)
-	case anubisErr != nil && !errors.Is(anubisErr, errAnubisNotPage):
+	default:
 		return nil, anubisErr
 	}
 
@@ -635,11 +637,13 @@ func (s *iconService) downloadIconWithFreshClient(ctx context.Context, iconURL s
 	switch {
 	case anubisErr == nil:
 		return s.downloadIconWithFreshClient(ctx, iconURL, newCookie, retryCount+1)
+	case errors.Is(anubisErr, errAnubisNotPage):
+		// Not an Anubis page; continue normal icon decoding.
 	case errors.Is(anubisErr, errAnubisRejected):
 		return nil, fmt.Errorf("upstream rejected")
 	case errors.Is(anubisErr, errAnubisRetryExceeded):
 		return nil, fmt.Errorf("anubis challenge persists after %d retries", retryCount)
-	case anubisErr != nil && !errors.Is(anubisErr, errAnubisNotPage):
+	default:
 		return nil, anubisErr
 	}
 

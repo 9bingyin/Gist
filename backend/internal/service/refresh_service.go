@@ -443,6 +443,8 @@ func (s *refreshService) refreshFeedWithCookie(ctx context.Context, feed model.F
 		case anubisErr == nil:
 			// Retry with fresh client and same request fingerprint.
 			return s.refreshFeedWithFreshClient(ctx, feed, userAgent, newCookie, retryCount+1)
+		case errors.Is(anubisErr, errAnubisNotPage):
+			// Not an Anubis page; keep original parse error handling.
 		case errors.Is(anubisErr, errAnubisRejected):
 			errMsg := "upstream rejected"
 			_ = s.feeds.UpdateErrorMessage(ctx, feed.ID, &errMsg)
@@ -451,7 +453,7 @@ func (s *refreshService) refreshFeedWithCookie(ctx context.Context, feed model.F
 			errMsg := fmt.Sprintf("anubis challenge persists after %d retries", retryCount)
 			_ = s.feeds.UpdateErrorMessage(ctx, feed.ID, &errMsg)
 			return errors.New(errMsg)
-		case anubisErr != nil && !errors.Is(anubisErr, errAnubisNotPage):
+		default:
 			errMsg := fmt.Sprintf("anubis solve failed: %v", anubisErr)
 			_ = s.feeds.UpdateErrorMessage(ctx, feed.ID, &errMsg)
 			return anubisErr
@@ -506,6 +508,8 @@ func (s *refreshService) refreshFeedWithFreshClient(ctx context.Context, feed mo
 	switch {
 	case anubisErr == nil:
 		return s.refreshFeedWithFreshClient(ctx, feed, userAgent, newCookie, retryCount+1)
+	case errors.Is(anubisErr, errAnubisNotPage):
+		// Not an Anubis page; continue normal parsing.
 	case errors.Is(anubisErr, errAnubisRejected):
 		errMsg := "upstream rejected"
 		_ = s.feeds.UpdateErrorMessage(ctx, feed.ID, &errMsg)
@@ -514,7 +518,7 @@ func (s *refreshService) refreshFeedWithFreshClient(ctx context.Context, feed mo
 		errMsg := fmt.Sprintf("anubis challenge persists after %d retries", retryCount)
 		_ = s.feeds.UpdateErrorMessage(ctx, feed.ID, &errMsg)
 		return errors.New(errMsg)
-	case anubisErr != nil && !errors.Is(anubisErr, errAnubisNotPage):
+	default:
 		errMsg := fmt.Sprintf("anubis solve failed: %v", anubisErr)
 		_ = s.feeds.UpdateErrorMessage(ctx, feed.ID, &errMsg)
 		return anubisErr
