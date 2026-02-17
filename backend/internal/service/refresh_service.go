@@ -18,7 +18,6 @@ import (
 	"gist/backend/internal/config"
 	"gist/backend/internal/model"
 	"gist/backend/internal/repository"
-	"gist/backend/internal/service/anubis"
 	"gist/backend/pkg/logger"
 	"gist/backend/pkg/network"
 )
@@ -212,14 +211,14 @@ type refreshService struct {
 	settings        SettingsService
 	icons           IconService
 	clientFactory   *network.ClientFactory
-	anubis          *anubis.Solver
+	anubis          AnubisSolver
 	rateLimitSvc    DomainRateLimitService
 	mu              sync.Mutex
 	isRefreshing    bool
 	lastRefreshedAt *time.Time
 }
 
-func NewRefreshService(feeds repository.FeedRepository, entries repository.EntryRepository, settings SettingsService, icons IconService, clientFactory *network.ClientFactory, anubisSolver *anubis.Solver, rateLimitSvc DomainRateLimitService) RefreshService {
+func NewRefreshService(feeds repository.FeedRepository, entries repository.EntryRepository, settings SettingsService, icons IconService, clientFactory *network.ClientFactory, anubisSolver AnubisSolver, rateLimitSvc DomainRateLimitService) RefreshService {
 	return &refreshService{
 		feeds:         feeds,
 		entries:       entries,
@@ -377,9 +376,9 @@ func (s *refreshService) refreshFeedWithCookie(ctx context.Context, feed model.F
 	req.Header.Set("User-Agent", userAgent)
 
 	// Add cached Anubis cookie if available
-	if cookie == "" && s.anubis != nil {
+	if cookie == "" {
 		host := network.ExtractHost(feed.URL)
-		if cachedCookie := s.anubis.GetCachedCookieWithHeaders(ctx, host, req.Header); cachedCookie != "" {
+		if cachedCookie := getCachedAnubisCookie(ctx, s.anubis, host, req.Header); cachedCookie != "" {
 			cookie = cachedCookie
 		}
 	}
@@ -439,29 +438,23 @@ func (s *refreshService) refreshFeedWithCookie(ctx context.Context, feed model.F
 	parser := gofeed.NewParser()
 	parsed, parseErr := parser.Parse(bytes.NewReader(body))
 	if parseErr != nil {
-		// Parse failed, check if it's an Anubis page
-		if s.anubis != nil && anubis.IsAnubisPage(body) {
-			// Check if it's a rejection (not solvable)
-			if !anubis.IsAnubisChallenge(body) {
-				errMsg := "upstream rejected"
-				_ = s.feeds.UpdateErrorMessage(ctx, feed.ID, &errMsg)
-				return errors.New(errMsg)
-			}
-			// It's a solvable challenge
-			if retryCount >= 2 {
-				// Too many retries, give up
-				errMsg := fmt.Sprintf("anubis challenge persists after %d retries", retryCount)
-				_ = s.feeds.UpdateErrorMessage(ctx, feed.ID, &errMsg)
-				return errors.New(errMsg)
-			}
-			newCookie, solveErr := s.anubis.SolveFromBodyWithHeaders(ctx, body, feed.URL, resp.Cookies(), req.Header.Clone())
-			if solveErr != nil {
-				errMsg := fmt.Sprintf("anubis solve failed: %v", solveErr)
-				_ = s.feeds.UpdateErrorMessage(ctx, feed.ID, &errMsg)
-				return solveErr
-			}
+		newCookie, anubisErr := trySolveAnubisChallenge(ctx, s.anubis, body, feed.URL, resp.Cookies(), req.Header.Clone(), retryCount)
+		switch {
+		case anubisErr == nil:
 			// Retry with fresh client and same request fingerprint.
 			return s.refreshFeedWithFreshClient(ctx, feed, userAgent, newCookie, retryCount+1)
+		case errors.Is(anubisErr, errAnubisRejected):
+			errMsg := "upstream rejected"
+			_ = s.feeds.UpdateErrorMessage(ctx, feed.ID, &errMsg)
+			return errors.New(errMsg)
+		case errors.Is(anubisErr, errAnubisRetryExceeded):
+			errMsg := fmt.Sprintf("anubis challenge persists after %d retries", retryCount)
+			_ = s.feeds.UpdateErrorMessage(ctx, feed.ID, &errMsg)
+			return errors.New(errMsg)
+		case anubisErr != nil && !errors.Is(anubisErr, errAnubisNotPage):
+			errMsg := fmt.Sprintf("anubis solve failed: %v", anubisErr)
+			_ = s.feeds.UpdateErrorMessage(ctx, feed.ID, &errMsg)
+			return anubisErr
 		}
 		errMsg := parseErr.Error()
 		_ = s.feeds.UpdateErrorMessage(ctx, feed.ID, &errMsg)
@@ -509,25 +502,22 @@ func (s *refreshService) refreshFeedWithFreshClient(ctx context.Context, feed mo
 		return err
 	}
 
-	// Check if still getting Anubis (shouldn't happen with fresh connection)
-	if s.anubis != nil && anubis.IsAnubisPage(body) {
-		if !anubis.IsAnubisChallenge(body) {
-			errMsg := "upstream rejected"
-			_ = s.feeds.UpdateErrorMessage(ctx, feed.ID, &errMsg)
-			return errors.New(errMsg)
-		}
-		if retryCount >= 2 {
-			errMsg := fmt.Sprintf("anubis challenge persists after %d retries", retryCount)
-			_ = s.feeds.UpdateErrorMessage(ctx, feed.ID, &errMsg)
-			return errors.New(errMsg)
-		}
-		newCookie, solveErr := s.anubis.SolveFromBodyWithHeaders(ctx, body, feed.URL, resp.Cookies(), req.Header.Clone())
-		if solveErr != nil {
-			errMsg := fmt.Sprintf("anubis solve failed: %v", solveErr)
-			_ = s.feeds.UpdateErrorMessage(ctx, feed.ID, &errMsg)
-			return solveErr
-		}
+	newCookie, anubisErr := trySolveAnubisChallenge(ctx, s.anubis, body, feed.URL, resp.Cookies(), req.Header.Clone(), retryCount)
+	switch {
+	case anubisErr == nil:
 		return s.refreshFeedWithFreshClient(ctx, feed, userAgent, newCookie, retryCount+1)
+	case errors.Is(anubisErr, errAnubisRejected):
+		errMsg := "upstream rejected"
+		_ = s.feeds.UpdateErrorMessage(ctx, feed.ID, &errMsg)
+		return errors.New(errMsg)
+	case errors.Is(anubisErr, errAnubisRetryExceeded):
+		errMsg := fmt.Sprintf("anubis challenge persists after %d retries", retryCount)
+		_ = s.feeds.UpdateErrorMessage(ctx, feed.ID, &errMsg)
+		return errors.New(errMsg)
+	case anubisErr != nil && !errors.Is(anubisErr, errAnubisNotPage):
+		errMsg := fmt.Sprintf("anubis solve failed: %v", anubisErr)
+		_ = s.feeds.UpdateErrorMessage(ctx, feed.ID, &errMsg)
+		return anubisErr
 	}
 
 	parser := gofeed.NewParser()

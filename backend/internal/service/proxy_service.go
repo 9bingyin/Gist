@@ -3,6 +3,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -38,10 +39,10 @@ type ProxyService interface {
 
 type proxyService struct {
 	clientFactory *network.ClientFactory
-	anubis        *anubis.Solver
+	anubis        AnubisSolver
 }
 
-func NewProxyService(clientFactory *network.ClientFactory, anubisSolver *anubis.Solver) ProxyService {
+func NewProxyService(clientFactory *network.ClientFactory, anubisSolver AnubisSolver) ProxyService {
 	return &proxyService{
 		clientFactory: clientFactory,
 		anubis:        anubisSolver,
@@ -98,10 +99,11 @@ func (s *proxyService) doFetch(ctx context.Context, session *azuretls.Session, i
 	}
 
 	// Add cookie
+	requestHeaders := anubis.OrderedHeadersToHTTPHeader(headers)
 	if cookie != "" {
 		headers = append(headers, []string{"cookie", cookie})
-	} else if s.anubis != nil {
-		if cachedCookie := s.anubis.GetCachedCookieWithHeaders(ctx, parsedURL.Host, anubis.OrderedHeadersToHTTPHeader(headers)); cachedCookie != "" {
+	} else {
+		if cachedCookie := getCachedAnubisCookie(ctx, s.anubis, parsedURL.Host, requestHeaders); cachedCookie != "" {
 			headers = append(headers, []string{"cookie", cachedCookie})
 		}
 	}
@@ -123,28 +125,19 @@ func (s *proxyService) doFetch(ctx context.Context, session *azuretls.Session, i
 
 	data := resp.Body
 
-	// Check for Anubis pages
-	if s.anubis != nil && anubis.IsAnubisPage(data) {
-		// Check if it's a rejection (not a solvable challenge)
-		if !anubis.IsAnubisChallenge(data) {
-			logger.Warn("proxy upstream rejected", "module", "service", "action", "fetch", "resource", "proxy", "result", "failed", "host", parsedURL.Host)
-			return nil, ErrUpstreamRejected
-		}
-		// It's a solvable challenge, try to solve it
-		if retryCount >= 2 {
-			logger.Warn("proxy anubis persists", "module", "service", "action", "fetch", "resource", "proxy", "result", "failed", "host", parsedURL.Host, "retry_count", retryCount)
-			return nil, fmt.Errorf("%w: anubis challenge persists after %d retries", ErrFetchFailed, retryCount)
-		}
-		var initialCookies []*http.Cookie
-		for name, value := range resp.Cookies {
-			initialCookies = append(initialCookies, &http.Cookie{Name: name, Value: value})
-		}
-		newCookie, solveErr := s.anubis.SolveFromBodyWithHeaders(ctx, data, imageURL, initialCookies, anubis.OrderedHeadersToHTTPHeader(headers))
-		if solveErr != nil {
-			logger.Warn("proxy anubis solve failed", "module", "service", "action", "fetch", "resource", "proxy", "result", "failed", "host", parsedURL.Host, "error", solveErr)
-			return nil, ErrFetchFailed
-		}
+	newCookie, anubisErr := trySolveAnubisChallenge(ctx, s.anubis, data, imageURL, cookiesFromMap(resp.Cookies), requestHeaders, retryCount)
+	switch {
+	case anubisErr == nil:
 		return s.fetchWithFreshSession(ctx, imageURL, refererURL, newCookie, retryCount+1)
+	case errors.Is(anubisErr, errAnubisRejected):
+		logger.Warn("proxy upstream rejected", "module", "service", "action", "fetch", "resource", "proxy", "result", "failed", "host", parsedURL.Host)
+		return nil, ErrUpstreamRejected
+	case errors.Is(anubisErr, errAnubisRetryExceeded):
+		logger.Warn("proxy anubis persists", "module", "service", "action", "fetch", "resource", "proxy", "result", "failed", "host", parsedURL.Host, "retry_count", retryCount)
+		return nil, fmt.Errorf("%w: anubis challenge persists after %d retries", ErrFetchFailed, retryCount)
+	case anubisErr != nil && !errors.Is(anubisErr, errAnubisNotPage):
+		logger.Warn("proxy anubis solve failed", "module", "service", "action", "fetch", "resource", "proxy", "result", "failed", "host", parsedURL.Host, "error", anubisErr)
+		return nil, ErrFetchFailed
 	}
 
 	contentType := resp.Header.Get("Content-Type")

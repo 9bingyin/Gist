@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"image"
 	_ "image/gif"
@@ -25,7 +26,6 @@ import (
 	"gist/backend/internal/config"
 	"gist/backend/internal/model"
 	"gist/backend/internal/repository"
-	"gist/backend/internal/service/anubis"
 	"gist/backend/pkg/logger"
 	"gist/backend/pkg/network"
 )
@@ -55,10 +55,10 @@ type iconService struct {
 	dataDir       string
 	feeds         repository.FeedRepository
 	clientFactory *network.ClientFactory
-	anubis        *anubis.Solver
+	anubis        AnubisSolver
 }
 
-func NewIconService(dataDir string, feeds repository.FeedRepository, clientFactory *network.ClientFactory, anubisSolver *anubis.Solver) IconService {
+func NewIconService(dataDir string, feeds repository.FeedRepository, clientFactory *network.ClientFactory, anubisSolver AnubisSolver) IconService {
 	return &iconService{
 		dataDir:       dataDir,
 		feeds:         feeds,
@@ -549,9 +549,9 @@ func (s *iconService) downloadIconWithRetry(ctx context.Context, iconURL string,
 	req.Header.Set("User-Agent", config.DefaultUserAgent)
 
 	// Add cookie (either provided or from cache)
-	if cookie == "" && s.anubis != nil {
+	if cookie == "" {
 		if parsed, err := url.Parse(iconURL); err == nil {
-			if cachedCookie := s.anubis.GetCachedCookieWithHeaders(ctx, parsed.Host, req.Header); cachedCookie != "" {
+			if cachedCookie := getCachedAnubisCookie(ctx, s.anubis, parsed.Host, req.Header); cachedCookie != "" {
 				cookie = cachedCookie
 			}
 		}
@@ -577,24 +577,18 @@ func (s *iconService) downloadIconWithRetry(ctx context.Context, iconURL string,
 		return nil, err
 	}
 
-	// Check if response is Anubis page (challenge or rejection)
-	if s.anubis != nil && anubis.IsAnubisPage(data) {
-		// Check if it's a rejection (not solvable)
-		if !anubis.IsAnubisChallenge(data) {
-			return nil, fmt.Errorf("upstream rejected")
-		}
-		// It's a solvable challenge
-		if retryCount >= 2 {
-			// Too many retries, give up
-			return nil, fmt.Errorf("anubis challenge persists after %d retries", retryCount)
-		}
+	newCookie, anubisErr := trySolveAnubisChallenge(ctx, s.anubis, data, iconURL, resp.Cookies(), req.Header.Clone(), retryCount)
+	switch {
+	case anubisErr == nil:
 		logger.Debug("icon download detected anubis challenge", "module", "service", "action", "fetch", "resource", "icon", "result", "ok", "host", network.ExtractHost(iconURL))
-		newCookie, solveErr := s.anubis.SolveFromBodyWithHeaders(ctx, data, iconURL, resp.Cookies(), req.Header.Clone())
-		if solveErr != nil {
-			return nil, solveErr
-		}
 		// Retry with fresh client to avoid connection reuse
 		return s.downloadIconWithFreshClient(ctx, iconURL, newCookie, retryCount+1)
+	case errors.Is(anubisErr, errAnubisRejected):
+		return nil, fmt.Errorf("upstream rejected")
+	case errors.Is(anubisErr, errAnubisRetryExceeded):
+		return nil, fmt.Errorf("anubis challenge persists after %d retries", retryCount)
+	case anubisErr != nil && !errors.Is(anubisErr, errAnubisNotPage):
+		return nil, anubisErr
 	}
 
 	// Detect format and validate dimensions (besticon approach)
@@ -637,19 +631,16 @@ func (s *iconService) downloadIconWithFreshClient(ctx context.Context, iconURL s
 		return nil, err
 	}
 
-	// Check if still getting Anubis (shouldn't happen with fresh connection)
-	if s.anubis != nil && anubis.IsAnubisPage(data) {
-		if !anubis.IsAnubisChallenge(data) {
-			return nil, fmt.Errorf("upstream rejected")
-		}
-		if retryCount >= 2 {
-			return nil, fmt.Errorf("anubis challenge persists after %d retries", retryCount)
-		}
-		newCookie, solveErr := s.anubis.SolveFromBodyWithHeaders(ctx, data, iconURL, resp.Cookies(), req.Header.Clone())
-		if solveErr != nil {
-			return nil, solveErr
-		}
+	newCookie, anubisErr := trySolveAnubisChallenge(ctx, s.anubis, data, iconURL, resp.Cookies(), req.Header.Clone(), retryCount)
+	switch {
+	case anubisErr == nil:
 		return s.downloadIconWithFreshClient(ctx, iconURL, newCookie, retryCount+1)
+	case errors.Is(anubisErr, errAnubisRejected):
+		return nil, fmt.Errorf("upstream rejected")
+	case errors.Is(anubisErr, errAnubisRetryExceeded):
+		return nil, fmt.Errorf("anubis challenge persists after %d retries", retryCount)
+	case anubisErr != nil && !errors.Is(anubisErr, errAnubisNotPage):
+		return nil, anubisErr
 	}
 
 	// Detect format and validate dimensions (besticon approach)

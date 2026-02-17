@@ -33,10 +33,10 @@ type ReadabilityService interface {
 type readabilityService struct {
 	entries       repository.EntryRepository
 	clientFactory *network.ClientFactory
-	anubis        *anubis.Solver
+	anubis        AnubisSolver
 }
 
-func NewReadabilityService(entries repository.EntryRepository, clientFactory *network.ClientFactory, anubisSolver *anubis.Solver) ReadabilityService {
+func NewReadabilityService(entries repository.EntryRepository, clientFactory *network.ClientFactory, anubisSolver AnubisSolver) ReadabilityService {
 	return &readabilityService{
 		entries:       entries,
 		clientFactory: clientFactory,
@@ -164,10 +164,11 @@ func (s *readabilityService) doFetch(ctx context.Context, session *azuretls.Sess
 		{"user-agent", config.ChromeUserAgent},
 	}
 
+	requestHeaders := anubis.OrderedHeadersToHTTPHeader(headers)
 	if cookie != "" {
 		headers = append(headers, []string{"cookie", cookie})
-	} else if s.anubis != nil {
-		if cachedCookie := s.anubis.GetCachedCookieWithHeaders(ctx, parsedURL.Host, anubis.OrderedHeadersToHTTPHeader(headers)); cachedCookie != "" {
+	} else {
+		if cachedCookie := getCachedAnubisCookie(ctx, s.anubis, parsedURL.Host, requestHeaders); cachedCookie != "" {
 			headers = append(headers, []string{"cookie", cachedCookie})
 		}
 	}
@@ -189,29 +190,20 @@ func (s *readabilityService) doFetch(ctx context.Context, session *azuretls.Sess
 
 	body := resp.Body
 
-	// Check for Anubis page (challenge or rejection)
-	if s.anubis != nil && anubis.IsAnubisPage(body) {
-		// Check if it's a rejection (not solvable)
-		if !anubis.IsAnubisChallenge(body) {
-			logger.Warn("readability upstream rejected", "module", "service", "action", "fetch", "resource", "entry", "result", "failed", "host", parsedURL.Host)
-			return nil, fmt.Errorf("upstream rejected")
-		}
-		// It's a solvable challenge
-		if retryCount >= 2 {
-			logger.Warn("readability anubis persists", "module", "service", "action", "fetch", "resource", "entry", "result", "failed", "host", parsedURL.Host, "retry_count", retryCount)
-			return nil, fmt.Errorf("anubis challenge persists after %d retries for %s", retryCount, targetURL)
-		}
+	newCookie, anubisErr := trySolveAnubisChallenge(ctx, s.anubis, body, targetURL, cookiesFromMap(resp.Cookies), requestHeaders, retryCount)
+	switch {
+	case anubisErr == nil:
 		logger.Debug("readability detected anubis challenge", "module", "service", "action", "fetch", "resource", "entry", "result", "ok", "host", parsedURL.Host)
-		var initialCookies []*http.Cookie
-		for name, value := range resp.Cookies {
-			initialCookies = append(initialCookies, &http.Cookie{Name: name, Value: value})
-		}
-		newCookie, solveErr := s.anubis.SolveFromBodyWithHeaders(ctx, body, targetURL, initialCookies, anubis.OrderedHeadersToHTTPHeader(headers))
-		if solveErr != nil {
-			logger.Warn("readability anubis solve failed", "module", "service", "action", "fetch", "resource", "entry", "result", "failed", "host", parsedURL.Host, "error", solveErr)
-			return nil, fmt.Errorf("anubis solve failed: %w", solveErr)
-		}
 		return s.fetchWithFreshSession(ctx, targetURL, newCookie, retryCount+1)
+	case errors.Is(anubisErr, errAnubisRejected):
+		logger.Warn("readability upstream rejected", "module", "service", "action", "fetch", "resource", "entry", "result", "failed", "host", parsedURL.Host)
+		return nil, fmt.Errorf("upstream rejected")
+	case errors.Is(anubisErr, errAnubisRetryExceeded):
+		logger.Warn("readability anubis persists", "module", "service", "action", "fetch", "resource", "entry", "result", "failed", "host", parsedURL.Host, "retry_count", retryCount)
+		return nil, fmt.Errorf("anubis challenge persists after %d retries for %s", retryCount, targetURL)
+	case anubisErr != nil && !errors.Is(anubisErr, errAnubisNotPage):
+		logger.Warn("readability anubis solve failed", "module", "service", "action", "fetch", "resource", "entry", "result", "failed", "host", parsedURL.Host, "error", anubisErr)
+		return nil, fmt.Errorf("anubis solve failed: %w", anubisErr)
 	}
 
 	return body, nil

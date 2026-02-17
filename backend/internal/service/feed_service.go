@@ -19,7 +19,6 @@ import (
 	"gist/backend/internal/config"
 	"gist/backend/internal/model"
 	"gist/backend/internal/repository"
-	"gist/backend/internal/service/anubis"
 	"gist/backend/pkg/logger"
 	"gist/backend/pkg/network"
 	"gist/backend/pkg/sanitizer"
@@ -55,10 +54,10 @@ type feedService struct {
 	icons         IconService
 	settings      SettingsService
 	clientFactory *network.ClientFactory
-	anubis        *anubis.Solver
+	anubis        AnubisSolver
 }
 
-func NewFeedService(feeds repository.FeedRepository, folders repository.FolderRepository, entries repository.EntryRepository, icons IconService, settings SettingsService, clientFactory *network.ClientFactory, anubisSolver *anubis.Solver) FeedService {
+func NewFeedService(feeds repository.FeedRepository, folders repository.FolderRepository, entries repository.EntryRepository, icons IconService, settings SettingsService, clientFactory *network.ClientFactory, anubisSolver AnubisSolver) FeedService {
 	return &feedService{feeds: feeds, folders: folders, entries: entries, icons: icons, settings: settings, clientFactory: clientFactory, anubis: anubisSolver}
 }
 
@@ -375,9 +374,9 @@ func (s *feedService) fetchFeedWithCookie(ctx context.Context, feedURL string, u
 	req.Header.Set("User-Agent", userAgent)
 
 	// Add cached Anubis cookie if available
-	if cookie == "" && s.anubis != nil {
+	if cookie == "" {
 		host := network.ExtractHost(feedURL)
-		if cachedCookie := s.anubis.GetCachedCookieWithHeaders(ctx, host, req.Header); cachedCookie != "" {
+		if cachedCookie := getCachedAnubisCookie(ctx, s.anubis, host, req.Header); cachedCookie != "" {
 			cookie = cachedCookie
 		}
 	}
@@ -419,26 +418,20 @@ func (s *feedService) fetchFeedWithCookie(ctx context.Context, feedURL string, u
 	parser := gofeed.NewParser()
 	parsed, parseErr := parser.Parse(bytes.NewReader(body))
 	if parseErr != nil {
-		// Parse failed, check if it's an Anubis page
-		if s.anubis != nil && anubis.IsAnubisPage(body) {
-			// Check if it's a rejection (not solvable)
-			if !anubis.IsAnubisChallenge(body) {
-				logger.Warn("feed preview upstream rejected", "module", "service", "action", "fetch", "resource", "feed", "result", "failed", "host", network.ExtractHost(feedURL))
-				return feedFetch{}, fmt.Errorf("upstream rejected")
-			}
-			// It's a solvable challenge
-			if retryCount >= 2 {
-				// Too many retries, give up
-				logger.Warn("feed preview anubis persists", "module", "service", "action", "fetch", "resource", "feed", "result", "failed", "host", network.ExtractHost(feedURL), "retry_count", retryCount)
-				return feedFetch{}, fmt.Errorf("anubis challenge persists after %d retries", retryCount)
-			}
-			newCookie, solveErr := s.anubis.SolveFromBodyWithHeaders(ctx, body, feedURL, resp.Cookies(), req.Header.Clone())
-			if solveErr != nil {
-				logger.Warn("feed preview anubis solve failed", "module", "service", "action", "fetch", "resource", "feed", "result", "failed", "host", network.ExtractHost(feedURL), "error", solveErr)
-				return feedFetch{}, ErrFeedFetch
-			}
+		newCookie, anubisErr := trySolveAnubisChallenge(ctx, s.anubis, body, feedURL, resp.Cookies(), req.Header.Clone(), retryCount)
+		switch {
+		case anubisErr == nil:
 			// Retry with fresh client and same request fingerprint.
 			return s.fetchFeedWithFreshClient(ctx, feedURL, userAgent, newCookie, retryCount+1)
+		case errors.Is(anubisErr, errAnubisRejected):
+			logger.Warn("feed preview upstream rejected", "module", "service", "action", "fetch", "resource", "feed", "result", "failed", "host", network.ExtractHost(feedURL))
+			return feedFetch{}, fmt.Errorf("upstream rejected")
+		case errors.Is(anubisErr, errAnubisRetryExceeded):
+			logger.Warn("feed preview anubis persists", "module", "service", "action", "fetch", "resource", "feed", "result", "failed", "host", network.ExtractHost(feedURL), "retry_count", retryCount)
+			return feedFetch{}, fmt.Errorf("anubis challenge persists after %d retries", retryCount)
+		case anubisErr != nil && !errors.Is(anubisErr, errAnubisNotPage):
+			logger.Warn("feed preview anubis solve failed", "module", "service", "action", "fetch", "resource", "feed", "result", "failed", "host", network.ExtractHost(feedURL), "error", anubisErr)
+			return feedFetch{}, ErrFeedFetch
 		}
 		logger.Error("feed preview parse failed", "module", "service", "action", "fetch", "resource", "feed", "result", "failed", "host", network.ExtractHost(feedURL), "error", parseErr)
 		return feedFetch{}, ErrFeedFetch
@@ -511,22 +504,19 @@ func (s *feedService) fetchFeedWithFreshClient(ctx context.Context, feedURL stri
 		return feedFetch{}, ErrFeedFetch
 	}
 
-	// Check if still getting Anubis (shouldn't happen with fresh connection)
-	if s.anubis != nil && anubis.IsAnubisPage(body) {
-		if !anubis.IsAnubisChallenge(body) {
-			logger.Warn("feed preview upstream rejected", "module", "service", "action", "fetch", "resource", "feed", "result", "failed", "host", network.ExtractHost(feedURL))
-			return feedFetch{}, fmt.Errorf("upstream rejected")
-		}
-		if retryCount >= 2 {
-			logger.Warn("feed preview anubis persists", "module", "service", "action", "fetch", "resource", "feed", "result", "failed", "host", network.ExtractHost(feedURL), "retry_count", retryCount)
-			return feedFetch{}, fmt.Errorf("anubis challenge persists after %d retries", retryCount)
-		}
-		newCookie, solveErr := s.anubis.SolveFromBodyWithHeaders(ctx, body, feedURL, resp.Cookies(), req.Header.Clone())
-		if solveErr != nil {
-			logger.Warn("feed preview anubis solve failed", "module", "service", "action", "fetch", "resource", "feed", "result", "failed", "host", network.ExtractHost(feedURL), "error", solveErr)
-			return feedFetch{}, ErrFeedFetch
-		}
+	newCookie, anubisErr := trySolveAnubisChallenge(ctx, s.anubis, body, feedURL, resp.Cookies(), req.Header.Clone(), retryCount)
+	switch {
+	case anubisErr == nil:
 		return s.fetchFeedWithFreshClient(ctx, feedURL, userAgent, newCookie, retryCount+1)
+	case errors.Is(anubisErr, errAnubisRejected):
+		logger.Warn("feed preview upstream rejected", "module", "service", "action", "fetch", "resource", "feed", "result", "failed", "host", network.ExtractHost(feedURL))
+		return feedFetch{}, fmt.Errorf("upstream rejected")
+	case errors.Is(anubisErr, errAnubisRetryExceeded):
+		logger.Warn("feed preview anubis persists", "module", "service", "action", "fetch", "resource", "feed", "result", "failed", "host", network.ExtractHost(feedURL), "retry_count", retryCount)
+		return feedFetch{}, fmt.Errorf("anubis challenge persists after %d retries", retryCount)
+	case anubisErr != nil && !errors.Is(anubisErr, errAnubisNotPage):
+		logger.Warn("feed preview anubis solve failed", "module", "service", "action", "fetch", "resource", "feed", "result", "failed", "host", network.ExtractHost(feedURL), "error", anubisErr)
+		return feedFetch{}, ErrFeedFetch
 	}
 
 	parser := gofeed.NewParser()
