@@ -1,5 +1,5 @@
 # Stage 1: Frontend Builder
-FROM oven/bun:1.3.8 AS frontend-builder
+FROM oven/bun:1.3.9 AS frontend-builder
 WORKDIR /app/frontend
 COPY frontend/package.json frontend/bun.lock ./
 RUN bun install --frozen-lockfile
@@ -7,7 +7,7 @@ COPY frontend/ ./
 RUN bun run build
 
 # Stage 2: Backend Builder
-FROM golang:1.25.7 AS backend-builder
+FROM golang:1.26.0 AS backend-builder
 WORKDIR /app/backend
 COPY backend/go.mod backend/go.sum ./
 RUN go mod download
