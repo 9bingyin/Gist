@@ -374,8 +374,6 @@ func (s *refreshService) refreshFeedWithCookie(ctx context.Context, feed model.F
 		_ = s.feeds.UpdateErrorMessage(ctx, feed.ID, &errMsg)
 		return err
 	}
-	req.Header.Set("User-Agent", userAgent)
-
 	// Add cached Anubis cookie if available
 	if cookie == "" && s.anubis != nil {
 		host := network.ExtractHost(feed.URL)
@@ -383,8 +381,14 @@ func (s *refreshService) refreshFeedWithCookie(ctx context.Context, feed model.F
 			cookie = cachedCookie
 		}
 	}
+
+	// Anubis cookie was issued under Chrome UA policy rule,
+	// must use Chrome UA to match the policyRule hash in JWT
 	if cookie != "" {
+		req.Header.Set("User-Agent", config.ChromeUserAgent)
 		req.Header.Set("Cookie", cookie)
+	} else {
+		req.Header.Set("User-Agent", userAgent)
 	}
 
 	// Conditional GET
@@ -459,8 +463,8 @@ func (s *refreshService) refreshFeedWithCookie(ctx context.Context, feed model.F
 				_ = s.feeds.UpdateErrorMessage(ctx, feed.ID, &errMsg)
 				return solveErr
 			}
-			// Retry with fresh client to avoid connection reuse
-			return s.refreshFeedWithFreshClient(ctx, feed, userAgent, newCookie, retryCount+1)
+			// Retry with fresh client using Chrome UA to match solver's policyRule hash
+			return s.refreshFeedWithFreshClient(ctx, feed, config.ChromeUserAgent, newCookie, retryCount+1)
 		}
 		errMsg := parseErr.Error()
 		_ = s.feeds.UpdateErrorMessage(ctx, feed.ID, &errMsg)

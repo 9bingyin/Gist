@@ -546,17 +546,22 @@ func (s *iconService) downloadIconWithRetry(ctx context.Context, iconURL string,
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", config.DefaultUserAgent)
-
 	// Add cookie (either provided or from cache)
-	if cookie != "" {
-		req.Header.Set("Cookie", cookie)
-	} else if s.anubis != nil {
+	if cookie == "" && s.anubis != nil {
 		if parsed, err := url.Parse(iconURL); err == nil {
 			if cachedCookie := s.anubis.GetCachedCookie(ctx, parsed.Host); cachedCookie != "" {
-				req.Header.Set("Cookie", cachedCookie)
+				cookie = cachedCookie
 			}
 		}
+	}
+
+	// Anubis cookie was issued under Chrome UA policy rule,
+	// must use Chrome UA to match the policyRule hash in JWT
+	if cookie != "" {
+		req.Header.Set("User-Agent", config.ChromeUserAgent)
+		req.Header.Set("Cookie", cookie)
+	} else {
+		req.Header.Set("User-Agent", config.DefaultUserAgent)
 	}
 
 	httpClient := s.clientFactory.NewHTTPClient(ctx, iconTimeout)
@@ -613,7 +618,7 @@ func (s *iconService) downloadIconWithFreshClient(ctx context.Context, iconURL s
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", config.DefaultUserAgent)
+	req.Header.Set("User-Agent", config.ChromeUserAgent)
 	if cookie != "" {
 		req.Header.Set("Cookie", cookie)
 	}

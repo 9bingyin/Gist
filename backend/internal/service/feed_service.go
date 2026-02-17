@@ -372,8 +372,6 @@ func (s *feedService) fetchFeedWithCookie(ctx context.Context, feedURL string, u
 	if err != nil {
 		return feedFetch{}, ErrFeedFetch
 	}
-	req.Header.Set("User-Agent", userAgent)
-
 	// Add cached Anubis cookie if available
 	if cookie == "" && s.anubis != nil {
 		host := network.ExtractHost(feedURL)
@@ -381,8 +379,14 @@ func (s *feedService) fetchFeedWithCookie(ctx context.Context, feedURL string, u
 			cookie = cachedCookie
 		}
 	}
+
+	// Anubis cookie was issued under Chrome UA policy rule,
+	// must use Chrome UA to match the policyRule hash in JWT
 	if cookie != "" {
+		req.Header.Set("User-Agent", config.ChromeUserAgent)
 		req.Header.Set("Cookie", cookie)
+	} else {
+		req.Header.Set("User-Agent", userAgent)
 	}
 
 	httpClient := s.clientFactory.NewHTTPClient(ctx, feedTimeout)
@@ -436,8 +440,8 @@ func (s *feedService) fetchFeedWithCookie(ctx context.Context, feedURL string, u
 				logger.Warn("feed preview anubis solve failed", "module", "service", "action", "fetch", "resource", "feed", "result", "failed", "host", network.ExtractHost(feedURL), "error", solveErr)
 				return feedFetch{}, ErrFeedFetch
 			}
-			// Retry with fresh client to avoid connection reuse
-			return s.fetchFeedWithFreshClient(ctx, feedURL, userAgent, newCookie, retryCount+1)
+			// Retry with fresh client using Chrome UA to match solver's policyRule hash
+			return s.fetchFeedWithFreshClient(ctx, feedURL, config.ChromeUserAgent, newCookie, retryCount+1)
 		}
 		logger.Error("feed preview parse failed", "module", "service", "action", "fetch", "resource", "feed", "result", "failed", "host", network.ExtractHost(feedURL), "error", parseErr)
 		return feedFetch{}, ErrFeedFetch
