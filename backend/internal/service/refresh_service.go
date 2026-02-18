@@ -169,10 +169,18 @@ func (s *refreshService) saveEntries(ctx context.Context, feedID int64, items []
 			continue
 		}
 
-		exists, err := s.entries.ExistsByURL(ctx, feedID, *entry.URL)
+		exists, err := s.entries.ExistsByHash(ctx, feedID, entry.Hash)
 		if err != nil {
 			logger.Warn("check entry exists failed", "module", "service", "action", "list", "resource", "entry", "result", "failed", "error", err)
 			continue
+		}
+		if !exists {
+			legacyExists, err := s.entries.ExistsByLegacyURL(ctx, feedID, *entry.URL, entry.Hash)
+			if err != nil {
+				logger.Warn("check legacy entry exists failed", "module", "service", "action", "list", "resource", "entry", "result", "failed", "error", err)
+				continue
+			}
+			exists = legacyExists
 		}
 
 		if err := s.entries.CreateOrUpdate(ctx, entry); err != nil {

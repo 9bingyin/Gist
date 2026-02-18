@@ -4,11 +4,13 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"gist/backend/internal/db"
+	"gist/backend/internal/hashutil"
 	"gist/backend/internal/model"
 	"gist/backend/pkg/snowflake"
 
@@ -137,14 +139,17 @@ func SeedEntry(t *testing.T, db *sql.DB, entry model.Entry) int64 {
 	if entry.ID == 0 {
 		entry.ID = snowflake.NextID()
 	}
+	if entry.Hash == "" {
+		entry.Hash = defaultEntryHash(entry)
+	}
 
 	now := time.Now().UTC().Format(time.RFC3339)
 
 	_, err := db.ExecContext(
 		context.Background(),
-		`INSERT INTO entries (id, feed_id, title, url, content, readable_content, thumbnail_url, author, published_at, read, starred, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		entry.ID, entry.FeedID, ptrVal(entry.Title), ptrVal(entry.URL), ptrVal(entry.Content), ptrVal(entry.ReadableContent),
+		`INSERT INTO entries (id, feed_id, hash, title, url, content, readable_content, thumbnail_url, author, published_at, read, starred, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		entry.ID, entry.FeedID, entry.Hash, ptrVal(entry.Title), ptrVal(entry.URL), ptrVal(entry.Content), ptrVal(entry.ReadableContent),
 		ptrVal(entry.ThumbnailURL), ptrVal(entry.Author), timeVal(entry.PublishedAt), boolToInt(entry.Read), boolToInt(entry.Starred), now, now,
 	)
 	if err != nil {
@@ -152,6 +157,27 @@ func SeedEntry(t *testing.T, db *sql.DB, entry model.Entry) int64 {
 	}
 
 	return entry.ID
+}
+
+func defaultEntryHash(entry model.Entry) string {
+	if entry.URL != nil && strings.TrimSpace(*entry.URL) != "" {
+		return hashHex(strings.TrimSpace(*entry.URL))
+	}
+	var title, content string
+	if entry.Title != nil {
+		title = strings.TrimSpace(*entry.Title)
+	}
+	if entry.Content != nil {
+		content = strings.TrimSpace(*entry.Content)
+	}
+	if title != "" || content != "" {
+		return hashHex(title + content)
+	}
+	return hashHex(fmt.Sprintf("seed-entry-id:%d", entry.ID))
+}
+
+func hashHex(input string) string {
+	return hashutil.SHA256Hex(input)
 }
 
 // SeedSetting 插入测试配置数据

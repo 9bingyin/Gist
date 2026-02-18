@@ -166,6 +166,7 @@
 |------|------|------|------|
 | id | INTEGER | PRIMARY KEY | Snowflake ID |
 | feed_id | INTEGER | NOT NULL, FK -> feeds(id) ON DELETE CASCADE | 所属订阅 |
+| hash | TEXT | NOT NULL | 去重哈希 (SHA-256 hex) |
 | title | TEXT | | 文章标题 |
 | url | TEXT | | 文章链接 |
 | content | TEXT | | 原始内容 (HTML) |
@@ -273,7 +274,7 @@ idx_entries_feed_id      ON entries(feed_id)
 idx_entries_read         ON entries(read)
 idx_entries_starred      ON entries(starred)
 idx_entries_feed_read    ON entries(feed_id, read)
-idx_entries_feed_url     ON entries(feed_id, url) UNIQUE
+idx_entries_feed_hash    ON entries(feed_id, hash) UNIQUE
 idx_ai_summaries_entry_mode ON ai_summaries(entry_id, is_readability, language) UNIQUE
 idx_ai_translations_entry_mode ON ai_translations(entry_id, is_readability, language) UNIQUE
 idx_ai_list_translations_entry_lang ON ai_list_translations(entry_id, language) UNIQUE

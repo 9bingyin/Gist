@@ -2,7 +2,10 @@ package service_test
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -119,7 +122,8 @@ func TestRefreshService_RefreshFeed_Success(t *testing.T) {
 	mockIcons.EXPECT().FetchAndSaveIcon(gomock.Any(), "https://example.com/icon.png", "https://example.com").Return("example.com.png", nil)
 	mockFeeds.EXPECT().UpdateIconPath(gomock.Any(), int64(10), "example.com.png").Return(nil)
 
-	mockEntries.EXPECT().ExistsByURL(gomock.Any(), int64(10), "https://example.com/1").Return(false, nil)
+	mockEntries.EXPECT().ExistsByHash(gomock.Any(), int64(10), hashString("https://example.com/1")).Return(false, nil)
+	mockEntries.EXPECT().ExistsByLegacyURL(gomock.Any(), int64(10), "https://example.com/1", hashString("https://example.com/1")).Return(false, nil)
 	mockEntries.EXPECT().CreateOrUpdate(gomock.Any(), gomock.Any()).Return(nil)
 
 	client := &http.Client{
@@ -183,7 +187,8 @@ func TestRefreshService_RefreshFeed_FallbackUserAgent(t *testing.T) {
 		}),
 	}
 
-	mockEntries.EXPECT().ExistsByURL(gomock.Any(), int64(2), "https://example.com/1").Return(false, nil)
+	mockEntries.EXPECT().ExistsByHash(gomock.Any(), int64(2), hashString("https://example.com/1")).Return(false, nil)
+	mockEntries.EXPECT().ExistsByLegacyURL(gomock.Any(), int64(2), "https://example.com/1", hashString("https://example.com/1")).Return(false, nil)
 	mockEntries.EXPECT().CreateOrUpdate(gomock.Any(), gomock.Any()).Return(nil)
 
 	svc := service.NewRefreshService(
@@ -239,12 +244,95 @@ func TestRefreshService_RefreshFeeds_GetByIDsError(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestRefreshService_RefreshFeed_SameGUIDDifferentURL_SecondRefreshCountsAsUpdate(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockFeeds := mock.NewMockFeedRepository(ctrl)
+	mockEntries := mock.NewMockEntryRepository(ctrl)
+
+	feed := model.Feed{ID: 20, URL: "https://example.com/rss", Title: "Feed"}
+	mockFeeds.EXPECT().GetByID(gomock.Any(), int64(20)).Return(feed, nil).Times(2)
+	mockFeeds.EXPECT().UpdateErrorMessage(gomock.Any(), int64(20), nil).Return(nil).Times(2)
+	mockFeeds.EXPECT().UpdateSiteURL(gomock.Any(), int64(20), "https://example.com").Return(nil).Times(2)
+
+	var call int
+	const rssTemplate = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+<channel>
+<title>Test Feed</title>
+<link>https://example.com</link>
+<description>Desc</description>
+<item>
+  <title>Item 1</title>
+  <guid>v2ex-guid-1</guid>
+  <link>%s</link>
+  <description>Content 1</description>
+</item>
+</channel>
+</rss>`
+
+	client := &http.Client{
+		Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+			call++
+			link := "https://www.v2ex.com/t/1193191#reply10"
+			if call == 2 {
+				link = "https://www.v2ex.com/t/1193191#reply20"
+			}
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(strings.NewReader(fmt.Sprintf(rssTemplate, link))),
+				Header:     make(http.Header),
+				Request:    req,
+			}, nil
+		}),
+	}
+
+	seen := make(map[string]bool)
+	existsResults := make([]bool, 0, 2)
+	mockEntries.EXPECT().ExistsByHash(gomock.Any(), int64(20), hashString("v2ex-guid-1")).DoAndReturn(
+		func(_ context.Context, _ int64, hash string) (bool, error) {
+			exists := seen[hash]
+			existsResults = append(existsResults, exists)
+			return exists, nil
+		},
+	).Times(2)
+	mockEntries.EXPECT().ExistsByLegacyURL(gomock.Any(), int64(20), "https://www.v2ex.com/t/1193191#reply10", hashString("v2ex-guid-1")).Return(false, nil).Times(1)
+	mockEntries.EXPECT().CreateOrUpdate(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, entry model.Entry) error {
+			seen[entry.Hash] = true
+			return nil
+		},
+	).Times(2)
+
+	svc := service.NewRefreshService(
+		mockFeeds,
+		mockEntries,
+		nil,
+		nil,
+		network.NewClientFactoryForTest(client),
+		nil,
+		nil,
+	)
+
+	err := svc.RefreshFeed(context.Background(), 20)
+	require.NoError(t, err)
+	err = svc.RefreshFeed(context.Background(), 20)
+	require.NoError(t, err)
+	require.Equal(t, []bool{false, true}, existsResults)
+}
+
 type rateLimitStub struct {
 	interval time.Duration
 }
 
 func (r *rateLimitStub) GetInterval(ctx context.Context, host string) int {
 	return int(r.interval.Seconds())
+}
+
+func hashString(input string) string {
+	sum := sha256.Sum256([]byte(strings.TrimSpace(input)))
+	return hex.EncodeToString(sum[:])
 }
 
 func (r *rateLimitStub) GetIntervalDuration(ctx context.Context, host string) time.Duration {

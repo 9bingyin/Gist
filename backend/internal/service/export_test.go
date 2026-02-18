@@ -6,6 +6,7 @@ var HasDynamicTime = hasDynamicTime
 var ExtractDateFromSummary = extractDateFromSummary
 var ExtractPublishedAt = extractPublishedAt
 var ExtractThumbnail = extractThumbnail
+var ComputeEntryHash = computeEntryHash
 var OptionalString = optionalString
 var WalkTree = walkTree
 var BuildReferer = buildReferer

@@ -5,6 +5,7 @@ import "time"
 type Entry struct {
 	ID              int64
 	FeedID          int64
+	Hash            string
 	Title           *string
 	URL             *string
 	Content         *string

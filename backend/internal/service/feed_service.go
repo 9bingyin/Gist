@@ -17,6 +17,7 @@ import (
 	"github.com/mmcdole/gofeed"
 
 	"gist/backend/internal/config"
+	"gist/backend/internal/hashutil"
 	"gist/backend/internal/model"
 	"gist/backend/internal/repository"
 	"gist/backend/pkg/logger"
@@ -588,20 +589,23 @@ func itemToEntry(feedID int64, item *gofeed.Item, ignoreDynamicTime bool) model.
 		FeedID: feedID,
 	}
 
+	var title string
 	if item.Title != "" {
-		title := strings.TrimSpace(item.Title)
+		title = strings.TrimSpace(item.Title)
 		entry.Title = &title
 	}
 
+	var link string
 	if item.Link != "" {
-		url := strings.TrimSpace(item.Link)
-		entry.URL = &url
+		link = strings.TrimSpace(item.Link)
+		entry.URL = &link
 	}
 
 	content := item.Content
 	if content == "" {
 		content = item.Description
 	}
+	content = strings.TrimSpace(content)
 	if content != "" {
 		entry.Content = &content
 	}
@@ -617,8 +621,23 @@ func itemToEntry(feedID int64, item *gofeed.Item, ignoreDynamicTime bool) model.
 	}
 
 	entry.PublishedAt = extractPublishedAt(item, ignoreDynamicTime)
+	entry.Hash = computeEntryHash(item, title, content)
 
 	return entry
+}
+
+func computeEntryHash(item *gofeed.Item, title string, content string) string {
+	if guid := strings.TrimSpace(item.GUID); guid != "" {
+		return hashToHex(guid)
+	}
+	if link := strings.TrimSpace(item.Link); link != "" {
+		return hashToHex(link)
+	}
+	return hashToHex(strings.TrimSpace(title) + strings.TrimSpace(content))
+}
+
+func hashToHex(input string) string {
+	return hashutil.SHA256Hex(input)
 }
 
 func extractPublishedAt(item *gofeed.Item, ignoreDynamicTime bool) *time.Time {

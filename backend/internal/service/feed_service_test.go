@@ -544,6 +544,32 @@ func TestFeedService_HelperFunctions(t *testing.T) {
 	require.Nil(t, service.OptionalString("  "))
 }
 
+func TestComputeEntryHash_PrioritizesGUID(t *testing.T) {
+	item := &gofeed.Item{
+		GUID: " stable-guid ",
+		Link: "https://example.com/post#reply10",
+	}
+	hash := service.ComputeEntryHash(item, "title", "content")
+	require.Equal(t, hashString("stable-guid"), hash)
+	require.Len(t, hash, 64)
+}
+
+func TestComputeEntryHash_FallbackToLink(t *testing.T) {
+	item := &gofeed.Item{
+		Link: " https://example.com/post?a=1#reply10 ",
+	}
+	hash := service.ComputeEntryHash(item, "title", "content")
+	require.Equal(t, hashString("https://example.com/post?a=1#reply10"), hash)
+	require.Len(t, hash, 64)
+}
+
+func TestComputeEntryHash_FallbackToTitleAndContent(t *testing.T) {
+	item := &gofeed.Item{}
+	hash := service.ComputeEntryHash(item, " title ", " content ")
+	require.Equal(t, hashString("titlecontent"), hash)
+	require.Len(t, hash, 64)
+}
+
 // TestExtractPublishedAt_FallbackToCurrentTime tests the BUG fix:
 // When an RSS item has no pubDate (PublishedParsed) and no UpdatedParsed,
 // extractPublishedAt should return the current time instead of nil.

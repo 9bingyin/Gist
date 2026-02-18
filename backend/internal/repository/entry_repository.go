@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"gist/backend/internal/model"
+	"gist/backend/internal/urlutil"
 	"gist/backend/pkg/snowflake"
 )
 
@@ -37,7 +38,8 @@ type EntryRepository interface {
 	GetAllUnreadCounts(ctx context.Context) ([]UnreadCount, error)
 	GetStarredCount(ctx context.Context) (int, error)
 	CreateOrUpdate(ctx context.Context, entry model.Entry) error
-	ExistsByURL(ctx context.Context, feedID int64, url string) (bool, error)
+	ExistsByHash(ctx context.Context, feedID int64, hash string) (bool, error)
+	ExistsByLegacyURL(ctx context.Context, feedID int64, rawURL string, hash string) (bool, error)
 	ClearAllReadableContent(ctx context.Context) (int64, error)
 	DeleteUnstarred(ctx context.Context) (int64, error)
 }
@@ -53,7 +55,7 @@ func NewEntryRepository(db dbtx) EntryRepository {
 func (r *entryRepository) GetByID(ctx context.Context, id int64) (model.Entry, error) {
 	row := r.db.QueryRowContext(
 		ctx,
-		`SELECT id, feed_id, title, url, content, readable_content, thumbnail_url, author, published_at, read, starred, created_at, updated_at
+		`SELECT id, feed_id, hash, title, url, content, readable_content, thumbnail_url, author, published_at, read, starred, created_at, updated_at
 		 FROM entries WHERE id = ?`,
 		id,
 	)
@@ -63,7 +65,7 @@ func (r *entryRepository) GetByID(ctx context.Context, id int64) (model.Entry, e
 func (r *entryRepository) List(ctx context.Context, filter EntryListFilter) ([]model.Entry, error) {
 	var args []interface{}
 	query := `
-		SELECT e.id, e.feed_id, e.title, e.url, e.content, e.readable_content, e.thumbnail_url, e.author,
+		SELECT e.id, e.feed_id, e.hash, e.title, e.url, e.content, e.readable_content, e.thumbnail_url, e.author,
 		       e.published_at, e.read, e.starred, e.created_at, e.updated_at
 		FROM entries e
 	`
@@ -238,7 +240,7 @@ func scanEntry(s entryScanner) (model.Entry, error) {
 	var readInt, starredInt int
 
 	err := s.Scan(
-		&e.ID, &e.FeedID, &e.Title, &e.URL, &e.Content, &e.ReadableContent, &e.ThumbnailURL, &e.Author,
+		&e.ID, &e.FeedID, &e.Hash, &e.Title, &e.URL, &e.Content, &e.ReadableContent, &e.ThumbnailURL, &e.Author,
 		&publishedAt, &readInt, &starredInt, &createdAt, &updatedAt,
 	)
 	if err != nil {
@@ -273,12 +275,72 @@ func (r *entryRepository) CreateOrUpdate(ctx context.Context, entry model.Entry)
 		publishedAt = formatTime(*entry.PublishedAt)
 	}
 
+	// Compatibility path:
+	// legacy databases might still carry URL-derived hashes after migration.
+	// If we receive the same URL with a new GUID-derived hash, upgrade that row in place
+	// so the first refresh after migration doesn't create duplicates.
+	if entry.URL != nil && *entry.URL != "" && entry.Hash != "" {
+		normalizedURL := urlutil.StripFragment(*entry.URL)
+		result, err := r.db.ExecContext(
+			ctx,
+			`UPDATE entries SET
+			   hash = ?,
+			   title = ?,
+			   url = ?,
+			   content = ?,
+			   thumbnail_url = ?,
+			   author = ?,
+			   published_at = COALESCE(entries.published_at, ?),
+			   updated_at = ?
+			 WHERE id = (
+			   SELECT id
+			   FROM entries
+			   WHERE feed_id = ?
+			     AND hash <> ?
+			     AND (
+			       url = ?
+			       OR (CASE WHEN instr(url, '#') > 0 THEN substr(url, 1, instr(url, '#') - 1) ELSE url END) = ?
+			     )
+			   ORDER BY updated_at DESC, id DESC
+			   LIMIT 1
+			 )
+			   AND NOT EXISTS (
+			     SELECT 1
+			     FROM entries e2
+			     WHERE e2.feed_id = ?
+			       AND e2.hash = ?
+			       AND e2.id <> entries.id
+			   )`,
+			entry.Hash,
+			entry.Title,
+			entry.URL,
+			entry.Content,
+			entry.ThumbnailURL,
+			entry.Author,
+			publishedAt,
+			now,
+			entry.FeedID,
+			entry.Hash,
+			entry.URL,
+			normalizedURL,
+			entry.FeedID,
+			entry.Hash,
+		)
+		if err != nil {
+			return err
+		}
+		if affected, err := result.RowsAffected(); err == nil && affected > 0 {
+			return nil
+		}
+	}
+
 	_, err := r.db.ExecContext(
 		ctx,
-		`INSERT INTO entries (id, feed_id, title, url, content, thumbnail_url, author, published_at, read, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
-		 ON CONFLICT(feed_id, url) DO UPDATE SET
+		`INSERT INTO entries (id, feed_id, hash, title, url, content, thumbnail_url, author, published_at, read, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+		 ON CONFLICT(feed_id, hash) DO UPDATE SET
 		   title = excluded.title,
+		   url = excluded.url,
 		   content = excluded.content,
 		   thumbnail_url = excluded.thumbnail_url,
 		   author = excluded.author,
@@ -286,6 +348,7 @@ func (r *entryRepository) CreateOrUpdate(ctx context.Context, entry model.Entry)
 		   updated_at = excluded.updated_at`,
 		id,
 		entry.FeedID,
+		entry.Hash,
 		entry.Title,
 		entry.URL,
 		entry.Content,
@@ -298,13 +361,41 @@ func (r *entryRepository) CreateOrUpdate(ctx context.Context, entry model.Entry)
 	return err
 }
 
-func (r *entryRepository) ExistsByURL(ctx context.Context, feedID int64, url string) (bool, error) {
+func (r *entryRepository) ExistsByHash(ctx context.Context, feedID int64, hash string) (bool, error) {
 	var count int
 	err := r.db.QueryRowContext(
 		ctx,
-		`SELECT COUNT(*) FROM entries WHERE feed_id = ? AND url = ?`,
+		`SELECT COUNT(*) FROM entries WHERE feed_id = ? AND hash = ?`,
 		feedID,
-		url,
+		hash,
+	).Scan(&count)
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+func (r *entryRepository) ExistsByLegacyURL(ctx context.Context, feedID int64, rawURL string, hash string) (bool, error) {
+	trimmedURL := strings.TrimSpace(rawURL)
+	if trimmedURL == "" {
+		return false, nil
+	}
+	normalizedURL := urlutil.StripFragment(trimmedURL)
+
+	var count int
+	err := r.db.QueryRowContext(
+		ctx,
+		`SELECT COUNT(*) FROM entries
+		 WHERE feed_id = ?
+		   AND hash <> ?
+		   AND (
+		     url = ?
+		     OR (CASE WHEN instr(url, '#') > 0 THEN substr(url, 1, instr(url, '#') - 1) ELSE url END) = ?
+		   )`,
+		feedID,
+		hash,
+		trimmedURL,
+		normalizedURL,
 	).Scan(&count)
 	if err != nil {
 		return false, err

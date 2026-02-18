@@ -80,6 +80,7 @@ func TestReadabilityService_Integration_FetchReadableContent(t *testing.T) {
 				FeedID: feed.ID,
 				URL:    &url,
 				Title:  &title,
+				Hash:   hashString(url),
 			}
 			err := entryRepo.CreateOrUpdate(ctx, entry)
 			require.NoError(t, err)
@@ -147,6 +148,7 @@ func TestReadabilityService_Integration_CachedContent(t *testing.T) {
 		FeedID: feed.ID,
 		URL:    &url,
 		Title:  &title,
+		Hash:   hashString(url),
 	}
 	err = entryRepo.CreateOrUpdate(ctx, entry)
 	require.NoError(t, err)
