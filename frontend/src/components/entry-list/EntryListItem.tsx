@@ -146,17 +146,14 @@ export const EntryListItem = forwardRef<HTMLDivElement, EntryListItemProps>(
           )}
           <span className="truncate">{feed?.title || fallbackFeedName}</span>
           {publishedAt && (
-            <>
-              <span className="text-muted-foreground/50">·</span>
-              <span className="shrink-0">{publishedAt}</span>
-            </>
+            <span className="ml-auto shrink-0">{publishedAt}</span>
           )}
         </div>
 
         {/* Line 2: title */}
         <div
           className={cn(
-            'mt-1 text-sm line-clamp-2',
+            'mt-1 text-sm line-clamp-2 text-left',
             !entry.read ? 'font-semibold' : 'font-medium text-muted-foreground'
           )}
         >

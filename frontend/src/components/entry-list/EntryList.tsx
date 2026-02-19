@@ -9,6 +9,7 @@ import { useGeneralSettings } from '@/hooks/useGeneralSettings'
 import { useSwipeGesture } from '@/hooks/useSwipeGesture'
 import { selectionToParams, type SelectionType } from '@/hooks/useSelection'
 import { stripHtml } from '@/lib/html-utils'
+import { cn } from '@/lib/utils'
 import * as ScrollAreaPrimitive from '@radix-ui/react-scroll-area'
 import { ScrollBar } from '@/components/ui/scroll-area'
 import { EntryListItem } from './EntryListItem'
@@ -25,6 +26,7 @@ interface EntryListProps {
   selectedEntryId: string | null
   onSelectEntry: (entryId: string) => void
   onMarkAllRead: () => void
+  onMarkAllReadAndGoNextFeed?: () => void
   unreadOnly: boolean
   onToggleUnreadOnly: () => void
   contentType: ContentType
@@ -43,6 +45,7 @@ export function EntryList({
   selectedEntryId,
   onSelectEntry,
   onMarkAllRead,
+  onMarkAllReadAndGoNextFeed,
   unreadOnly,
   onToggleUnreadOnly,
   contentType,
@@ -343,6 +346,10 @@ export function EntryList({
     }
   }, [unreadCounts, selection, feeds, contentType])
 
+  const showMarkAllReadFooter = Boolean(
+    onMarkAllReadAndGoNextFeed && (selection.type === 'feed' || selection.type === 'folder')
+  )
+
   return (
     <div ref={listWrapperRef} className="flex h-full flex-col">
       <EntryListHeader
@@ -400,6 +407,21 @@ export function EntryList({
           )}
 
           {isFetchingNextPage && <LoadingMore />}
+
+          {showMarkAllReadFooter && (
+            <button
+              type="button"
+              onClick={onMarkAllReadAndGoNextFeed}
+              className={cn(
+                'w-full px-4 py-3',
+                'text-center text-sm font-medium',
+                'bg-muted',
+                'transition-colors hover:bg-item-hover'
+              )}
+            >
+              {t('entry.mark_all_read')}
+            </button>
+          )}
         </div>
         <ScrollBar />
         <ScrollAreaPrimitive.Corner />

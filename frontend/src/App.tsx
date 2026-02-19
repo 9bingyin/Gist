@@ -14,7 +14,7 @@ import { ImagePreview } from '@/components/ui/image-preview'
 import { LoginPage, RegisterPage, NetworkErrorPage } from '@/components/auth'
 import { UpdateNotice } from '@/components/update-notice'
 import { useSelection, selectionToParams } from '@/hooks/useSelection'
-import { useMarkAllAsRead, useEntry } from '@/hooks/useEntries'
+import { useMarkAllAsRead, useUnreadCounts, useEntry } from '@/hooks/useEntries'
 import { useMobileLayout } from '@/hooks/useMobileLayout'
 import { useAuth } from '@/hooks/useAuth'
 import { useFeeds } from '@/hooks/useFeeds'
@@ -101,6 +101,7 @@ function AuthenticatedApp() {
   const { data: folders = [] } = useFolders()
   const { data: appearanceSettings, isLoading: isAppearanceLoading } = useAppearanceSettings()
   const { data: entry } = useEntry(selectedEntryId)
+  const { data: unreadCounts } = useUnreadCounts()
 
   const feedsMap = useMemo(() => {
     const map = new Map<string, Feed>()
@@ -159,6 +160,81 @@ function AuthenticatedApp() {
   const handleMarkAllRead = useCallback(() => {
     markAllAsRead(selectionToParams(selection, contentType))
   }, [markAllAsRead, selection, contentType])
+
+  const handleMarkAllReadAndGoNextFeed = useCallback(() => {
+    if (selection.type !== 'feed' && selection.type !== 'folder') {
+      handleMarkAllRead()
+      return
+    }
+
+    const candidates = feeds.filter((f) => f.type === contentType)
+    if (candidates.length === 0) {
+      handleMarkAllRead()
+      return
+    }
+
+    const currentFeedId = selection.type === 'feed' ? selection.feedId : null
+
+    let startIndex = 0
+    if (selection.type === 'feed') {
+      const idx = candidates.findIndex((f) => f.id === selection.feedId)
+      startIndex = idx >= 0 ? idx + 1 : 0
+    } else {
+      // folder: start after the last feed belonging to this folder in the current ordering
+      let lastIdx = -1
+      for (let i = 0; i < candidates.length; i += 1) {
+        if (candidates[i].folderId === selection.folderId) {
+          lastIdx = i
+        }
+      }
+      startIndex = lastIdx >= 0 ? lastIdx + 1 : 0
+    }
+
+    const counts = unreadCounts?.counts ?? {}
+    let nextFeedId: string | null = null
+
+    const shouldSkipFeed = (feed: Feed) => {
+      if (selection.type === 'folder') {
+        return feed.folderId === selection.folderId
+      }
+      if (currentFeedId) {
+        return feed.id === currentFeedId
+      }
+      return false
+    }
+
+    // Prefer next feed with unread items
+    for (let offset = 0; offset < candidates.length; offset += 1) {
+      const idx = (startIndex + offset) % candidates.length
+      const feed = candidates[idx]
+      if (!feed) continue
+      if (shouldSkipFeed(feed)) continue
+      if ((counts[feed.id] ?? 0) > 0) {
+        nextFeedId = feed.id
+        break
+      }
+    }
+
+    // Fallback: next in ordering
+    if (!nextFeedId) {
+      for (let offset = 0; offset < candidates.length; offset += 1) {
+        const idx = (startIndex + offset) % candidates.length
+        const feed = candidates[idx]
+        if (!feed) continue
+        if (shouldSkipFeed(feed)) continue
+        nextFeedId = feed.id
+        break
+      }
+    }
+
+    markAllAsRead(selectionToParams(selection, contentType), {
+      onSuccess: () => {
+        if (nextFeedId) {
+          handleSelectFeed(nextFeedId)
+        }
+      },
+    })
+  }, [selection, contentType, feeds, unreadCounts?.counts, markAllAsRead, handleSelectFeed, handleMarkAllRead])
 
   const handleSelectAll = useCallback((type?: ContentType) => {
     closeSidebar()
@@ -246,6 +322,7 @@ function AuthenticatedApp() {
               selectedEntryId={selectedEntryId}
               onSelectEntry={selectEntry}
               onMarkAllRead={handleMarkAllRead}
+              onMarkAllReadAndGoNextFeed={handleMarkAllReadAndGoNextFeed}
               unreadOnly={unreadOnly}
               onToggleUnreadOnly={toggleUnreadOnly}
               contentType={contentType}
@@ -335,6 +412,7 @@ function AuthenticatedApp() {
             selectedEntryId={selectedEntryId}
             onSelectEntry={selectEntry}
             onMarkAllRead={handleMarkAllRead}
+            onMarkAllReadAndGoNextFeed={handleMarkAllReadAndGoNextFeed}
             unreadOnly={unreadOnly}
             onToggleUnreadOnly={toggleUnreadOnly}
             contentType={contentType}

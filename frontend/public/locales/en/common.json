@@ -159,6 +159,8 @@
     "unread_count_other": "{{count}} unread",
     "show_all": "Show all",
     "show_unread_only": "Show unread only",
+    "filter_unread": "Unread",
+    "filter_all": "All",
     "mark_all_read": "Mark all as read",
     "add_to_starred": "Add to starred",
     "remove_from_starred": "Remove from starred",
