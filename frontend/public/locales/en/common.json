@@ -61,6 +61,8 @@
     "advanced": "Advanced",
     "auto_readability": "Auto Readability",
     "auto_readability_description": "Automatically switch to reader mode when viewing articles",
+    "mark_read_on_scroll": "Mark as read on scroll",
+    "mark_read_on_scroll_description": "Automatically mark items as read when scrolling",
     "fallback_ua": "Fallback User-Agent",
     "fallback_ua_description": "Leave empty to disable",
     "fallback_ua_placeholder": "e.g. Mozilla/5.0 (Windows NT 10.0; Win64; x64) ...",

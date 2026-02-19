@@ -1,10 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, useMemo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { useEntriesInfinite, useUnreadCounts } from '@/hooks/useEntries'
+import { useEntriesInfinite, useMarkAsRead, useRemoveFromUnreadList, useUnreadCounts } from '@/hooks/useEntries'
 import { useFeeds } from '@/hooks/useFeeds'
 import { useFolders } from '@/hooks/useFolders'
 import { useAISettings } from '@/hooks/useAISettings'
+import { useGeneralSettings } from '@/hooks/useGeneralSettings'
 import { useSwipeGesture } from '@/hooks/useSwipeGesture'
 import { selectionToParams, type SelectionType } from '@/hooks/useSelection'
 import { stripHtml } from '@/lib/html-utils'
@@ -35,6 +36,7 @@ interface EntryListProps {
 }
 
 const ESTIMATED_ITEM_HEIGHT = 100
+const TOP_BAR_HEIGHT = 56
 
 export function EntryList({
   selection,
@@ -62,7 +64,10 @@ export function EntryList({
   const { data: feeds = [] } = useFeeds()
   const { data: folders = [] } = useFolders()
   const { data: aiSettings } = useAISettings()
+  const { data: generalSettings } = useGeneralSettings()
   const { data: unreadCounts } = useUnreadCounts()
+  const { mutate: markAsRead } = useMarkAsRead()
+  const removeFromUnreadList = useRemoveFromUnreadList()
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } =
     useEntriesInfinite({ ...params, unreadOnly })
 
@@ -85,6 +90,8 @@ export function EntryList({
 
   // Save/restore scroll position per selection+contentType
   const scrollKey = selectionScrollKey(selection, contentType)
+  const lastScrollTopRef = useRef(0)
+  const isScrollingDownRef = useRef(false)
 
   // Restore scroll position on same-mount key change (e.g., article -> notification).
   // On remount (e.g., returning from picture mode), the virtualizer's own
@@ -102,7 +109,10 @@ export function EntryList({
     if (!node) return
 
     const handleScroll = () => {
-      entryListScrollPositions.set(scrollKey, node.scrollTop)
+      const currentTop = node.scrollTop
+      isScrollingDownRef.current = currentTop > lastScrollTopRef.current
+      lastScrollTopRef.current = currentTop
+      entryListScrollPositions.set(scrollKey, currentTop)
     }
 
     node.addEventListener('scroll', handleScroll, { passive: true })
@@ -145,6 +155,14 @@ export function EntryList({
     [data]
   )
 
+  const entryIndexById = useMemo(() => {
+    const map = new Map<string, number>()
+    for (let i = 0; i < entries.length; i += 1) {
+      map.set(entries[i].id, i)
+    }
+    return map
+  }, [entries])
+
   const virtualizer = useVirtualizer({
     count: entries.length,
     getScrollElement: () => containerRef.current,
@@ -161,6 +179,53 @@ export function EntryList({
   })
 
   const virtualItems = virtualizer.getVirtualItems()
+  const lastCoveredEntryIdRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    lastScrollTopRef.current = containerRef.current?.scrollTop ?? 0
+    isScrollingDownRef.current = false
+    lastCoveredEntryIdRef.current = null
+  }, [selection, contentType, unreadOnly])
+
+  useEffect(() => {
+    if (!(generalSettings?.markReadOnScroll ?? false)) return
+    const scrollTop = containerRef.current?.scrollTop ?? 0
+    const topThreshold = scrollTop + TOP_BAR_HEIGHT
+    const firstNotCovered = virtualItems.find((item) => item.start + item.size > topThreshold)
+    if (!firstNotCovered) return
+
+    const coveredIndex = firstNotCovered.index - 1
+    if (coveredIndex < 0) return
+
+    if (!isScrollingDownRef.current) {
+      const coveredEntry = entries[coveredIndex]
+      lastCoveredEntryIdRef.current = coveredEntry ? coveredEntry.id : null
+      return
+    }
+
+    const lastCoveredId = lastCoveredEntryIdRef.current
+    const lastCoveredIndex = lastCoveredId ? entryIndexById.get(lastCoveredId) : undefined
+    const startIndex = typeof lastCoveredIndex === 'number' ? lastCoveredIndex + 1 : coveredIndex
+
+    if (coveredIndex < startIndex) return
+
+    const idsToRemove = new Set<string>()
+    for (let i = startIndex; i <= coveredIndex; i += 1) {
+      const entry = entries[i]
+      if (!entry || entry.read) continue
+      markAsRead({ id: entry.id, read: true, skipInvalidate: true })
+      if (unreadOnly) {
+        idsToRemove.add(entry.id)
+      }
+    }
+
+    if (idsToRemove.size > 0) {
+      removeFromUnreadList(idsToRemove)
+    }
+
+    const lastEntry = entries[coveredIndex]
+    lastCoveredEntryIdRef.current = lastEntry ? lastEntry.id : lastCoveredEntryIdRef.current
+  }, [virtualItems, entries, entryIndexById, generalSettings?.markReadOnScroll, markAsRead, removeFromUnreadList, unreadOnly])
 
   useEffect(() => {
     const lastItem = virtualItems.at(-1)
