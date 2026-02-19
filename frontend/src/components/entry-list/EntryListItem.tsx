@@ -1,4 +1,4 @@
-import { forwardRef, useState, useMemo } from 'react'
+import { forwardRef, useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { formatRelativeTime } from '@/lib/date-utils'
@@ -16,6 +16,10 @@ interface EntryListItemProps {
   targetLanguage?: string
   style?: React.CSSProperties
   'data-index'?: number
+  markReadOnScroll?: boolean
+  scrollRootRef?: React.RefObject<HTMLElement | null>
+  topOffset?: number
+  onMarkRead?: (entryId: string) => void
 }
 
 export const EntryListItem = forwardRef<HTMLDivElement, EntryListItemProps>(
@@ -29,6 +33,10 @@ export const EntryListItem = forwardRef<HTMLDivElement, EntryListItemProps>(
       targetLanguage,
       style,
       'data-index': dataIndex,
+      markReadOnScroll,
+      scrollRootRef,
+      topOffset = 0,
+      onMarkRead,
     },
     ref
   ) {
@@ -38,6 +46,18 @@ export const EntryListItem = forwardRef<HTMLDivElement, EntryListItemProps>(
   const showIcon = feed?.iconPath && !iconError
   const fallbackTitle = t('entry.untitled')
   const fallbackFeedName = t('entry.unknown_feed')
+  const itemRef = useRef<HTMLDivElement | null>(null)
+  const hasBeenVisibleRef = useRef(false)
+
+  const setRefs = useCallback((node: HTMLDivElement | null) => {
+    itemRef.current = node
+    if (!ref) return
+    if (typeof ref === 'function') {
+      ref(node)
+    } else {
+      ref.current = node
+    }
+  }, [ref])
 
 
     // Get translation from store
@@ -57,9 +77,51 @@ export const EntryListItem = forwardRef<HTMLDivElement, EntryListItemProps>(
     const displayTitle = translation?.title ?? entry.title
     const displaySummary = translation?.summary ?? strippedContent
 
+  useEffect(() => {
+    if (!markReadOnScroll || entry.read || !onMarkRead) return
+    const root = scrollRootRef?.current
+    if (!root || !itemRef.current) return
+
+    hasBeenVisibleRef.current = false
+
+    const observer = new IntersectionObserver(
+      (observerEntries) => {
+        observerEntries.forEach((observerEntry) => {
+          const rootBounds = observerEntry.rootBounds
+          if (!rootBounds) return
+
+          if (observerEntry.isIntersecting) {
+            hasBeenVisibleRef.current = true
+            return
+          }
+
+          const cardRect = observerEntry.boundingClientRect
+          if (hasBeenVisibleRef.current && cardRect.top < rootBounds.top) {
+            onMarkRead(entry.id)
+            observer.unobserve(observerEntry.target)
+          }
+        })
+      },
+      {
+        root,
+        threshold: 0.2,
+        rootMargin: `-${topOffset}px 0px 0px 0px`,
+      }
+    )
+
+    observer.observe(itemRef.current)
+
+    return () => {
+      if (itemRef.current) {
+        observer.unobserve(itemRef.current)
+      }
+      observer.disconnect()
+    }
+  }, [entry.id, entry.read, markReadOnScroll, onMarkRead, scrollRootRef, topOffset])
+
     return (
       <div
-        ref={ref}
+        ref={setRefs}
         className={cn(
           'px-4 py-3 cursor-pointer transition-colors',
           'hover:bg-item-hover',
