@@ -10,7 +10,12 @@ import {
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
 } from '@/components/ui/dropdown-menu'
+import { useFeedViewStore, type FeedViewMode } from '@/stores/feed-view-store'
 
 interface EntryListHeaderProps {
   title: string
@@ -18,6 +23,8 @@ interface EntryListHeaderProps {
   unreadOnly: boolean
   onToggleUnreadOnly: () => void
   onMarkAllRead: () => void
+  viewMenuFeedId?: string
+  viewMenuDefaultMode?: FeedViewMode
   scrollToTopScope?: string
   isMobile?: boolean
   onMenuClick?: () => void
@@ -32,6 +39,8 @@ export function EntryListHeader({
   unreadOnly,
   onToggleUnreadOnly,
   onMarkAllRead,
+  viewMenuFeedId,
+  viewMenuDefaultMode,
   scrollToTopScope,
   isMobile,
   onMenuClick,
@@ -40,6 +49,12 @@ export function EntryListHeader({
   sidebarVisible,
 }: EntryListHeaderProps) {
   const { t } = useTranslation()
+
+  const feedViewMode = useFeedViewStore((s) => {
+    if (!viewMenuFeedId) return 'normal'
+    return s.getEffectiveMode(viewMenuFeedId, viewMenuDefaultMode ?? 'normal')
+  })
+  const setFeedViewMode = useFeedViewStore((s) => s.setMode)
 
   return (
     <div className="flex h-14 items-center justify-between gap-4 px-4 shrink-0">
@@ -136,9 +151,77 @@ export function EntryListHeader({
                 {t('entry.filter_all')}
               </span>
             </DropdownMenuItem>
+
+            {viewMenuFeedId && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>
+                    {t('entry.view')}
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent sideOffset={8} alignOffset={-4}>
+                    <ViewModeItem
+                      active={feedViewMode === 'browser'}
+                      label={t('entry.view_browser')}
+                      onSelect={() => setFeedViewMode(viewMenuFeedId, 'browser')}
+                    />
+                    <ViewModeItem
+                      active={feedViewMode === 'readability'}
+                      label={t('entry.view_readability')}
+                      onSelect={() => setFeedViewMode(viewMenuFeedId, 'readability')}
+                    />
+                    <ViewModeItem
+                      active={feedViewMode === 'normal'}
+                      label={t('entry.view_normal')}
+                      onSelect={() => setFeedViewMode(viewMenuFeedId, 'normal')}
+                    />
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+              </>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
     </div>
+  )
+}
+
+function ViewModeItem({
+  active,
+  label,
+  onSelect,
+}: {
+  active: boolean
+  label: string
+  onSelect: () => void
+}) {
+  return (
+    <DropdownMenuItem
+      className={active ? 'font-semibold' : 'font-normal'}
+      onSelect={(e) => {
+        e.preventDefault()
+        onSelect()
+      }}
+    >
+      <span className="flex items-center gap-2">
+        <RadioDotIcon selected={active} />
+        {label}
+      </span>
+    </DropdownMenuItem>
+  )
+}
+
+function RadioDotIcon({ selected }: { selected: boolean }) {
+  return (
+    <svg
+      className="size-4"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+    >
+      <circle cx="12" cy="12" r="10" />
+      {selected && <circle cx="12" cy="12" r="3" fill="currentColor" stroke="none" />}
+    </svg>
   )
 }
