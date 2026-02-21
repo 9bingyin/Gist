@@ -24,7 +24,8 @@ RUN apk add --no-cache ca-certificates tzdata su-exec \
 COPY --from=backend-builder /app/backend/gist-server .
 COPY --from=frontend-builder /app/frontend/dist ./static
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh \
+RUN sed -i 's/\r$//' /usr/local/bin/entrypoint.sh \
+    && chmod +x /usr/local/bin/entrypoint.sh \
     && mkdir -p /app/data && chown -R gist:gist /app
 
 ENV GIST_ADDR=:8080
@@ -34,5 +35,5 @@ ENV GIST_LOG_LEVEL=info
 ENV TZ=Asia/Shanghai
 
 EXPOSE 8080
-ENTRYPOINT ["entrypoint.sh"]
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["./gist-server"]

@@ -1,13 +1,15 @@
-import { useEffect, useLayoutEffect, useRef, useMemo, useCallback } from 'react'
+import { useEffect, useLayoutEffect, useRef, useMemo, useCallback, useState, type PointerEvent as ReactPointerEvent, type MouseEvent as ReactMouseEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { useEntriesInfinite, useUnreadCounts } from '@/hooks/useEntries'
+import { useEntriesInfinite, useMarkAsRead, useRemoveFromUnreadList, useUnreadCounts } from '@/hooks/useEntries'
 import { useFeeds } from '@/hooks/useFeeds'
 import { useFolders } from '@/hooks/useFolders'
 import { useAISettings } from '@/hooks/useAISettings'
+import { useGeneralSettings } from '@/hooks/useGeneralSettings'
 import { useSwipeGesture } from '@/hooks/useSwipeGesture'
 import { selectionToParams, type SelectionType } from '@/hooks/useSelection'
 import { stripHtml } from '@/lib/html-utils'
+import { cn } from '@/lib/utils'
 import * as ScrollAreaPrimitive from '@radix-ui/react-scroll-area'
 import { ScrollBar } from '@/components/ui/scroll-area'
 import { EntryListItem } from './EntryListItem'
@@ -17,6 +19,7 @@ import { translateArticlesBatch, cancelAllBatchTranslations } from '@/services/t
 import { translationActions } from '@/stores/translation-store'
 import { selectionScrollKey, entryListScrollPositions, entryListMeasurementsCache } from './scroll-key'
 import { useScrollToTop } from '@/hooks/useScrollToTop'
+import { useFeedViewStore } from '@/stores/feed-view-store'
 import type { Entry, Feed, Folder, ContentType } from '@/types/api'
 
 interface EntryListProps {
@@ -24,6 +27,7 @@ interface EntryListProps {
   selectedEntryId: string | null
   onSelectEntry: (entryId: string) => void
   onMarkAllRead: () => void
+  onMarkAllReadAndGoNextFeed?: () => void
   unreadOnly: boolean
   onToggleUnreadOnly: () => void
   contentType: ContentType
@@ -35,12 +39,45 @@ interface EntryListProps {
 }
 
 const ESTIMATED_ITEM_HEIGHT = 100
+const TOP_BAR_HEIGHT = 56
+const MARK_READ_BUTTON_STORAGE_KEY = 'gist.markAllReadButtonPos'
+
+type StoredButtonPosition = { xRatio: number; yRatio: number }
+
+function loadStoredButtonPosition(): StoredButtonPosition | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = window.localStorage.getItem(MARK_READ_BUTTON_STORAGE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as unknown
+    if (!parsed || typeof parsed !== 'object') return null
+    const value = parsed as StoredButtonPosition
+    if (typeof value.xRatio !== 'number' || typeof value.yRatio !== 'number') return null
+    if (!Number.isFinite(value.xRatio) || !Number.isFinite(value.yRatio)) return null
+    return {
+      xRatio: Math.min(Math.max(value.xRatio, 0), 1),
+      yRatio: Math.min(Math.max(value.yRatio, 0), 1),
+    }
+  } catch {
+    return null
+  }
+}
+
+function storeButtonPosition(position: StoredButtonPosition) {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(MARK_READ_BUTTON_STORAGE_KEY, JSON.stringify(position))
+  } catch {
+    // ignore storage errors
+  }
+}
 
 export function EntryList({
   selection,
   selectedEntryId,
   onSelectEntry,
   onMarkAllRead,
+  onMarkAllReadAndGoNextFeed,
   unreadOnly,
   onToggleUnreadOnly,
   contentType,
@@ -56,13 +93,29 @@ export function EntryList({
   const params = selectionToParams(selection, contentType)
   const containerRef = useRef<HTMLDivElement>(null)
   const listWrapperRef = useRef<HTMLDivElement>(null)
+  const markReadButtonRef = useRef<HTMLButtonElement>(null)
+  const markReadPositionRef = useRef<{ x: number; y: number } | null>(null)
+  const dragStateRef = useRef<{
+    pointerId: number
+    originX: number
+    originY: number
+    startX: number
+    startY: number
+  } | null>(null)
+  const dragMovedRef = useRef(false)
+  const [markReadPosition, setMarkReadPosition] = useState<{ x: number; y: number } | null>(null)
+
+  const getFeedExplicitViewMode = useFeedViewStore((s) => s.getExplicitMode)
 
   useScrollToTop(containerRef, 'entrylist')
 
   const { data: feeds = [] } = useFeeds()
   const { data: folders = [] } = useFolders()
   const { data: aiSettings } = useAISettings()
+  const { data: generalSettings } = useGeneralSettings()
   const { data: unreadCounts } = useUnreadCounts()
+  const { mutate: markAsRead } = useMarkAsRead()
+  const removeFromUnreadList = useRemoveFromUnreadList()
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } =
     useEntriesInfinite({ ...params, unreadOnly })
 
@@ -145,6 +198,41 @@ export function EntryList({
     [data]
   )
 
+  const unreadCleanupKey = useMemo(() => {
+    switch (selection.type) {
+      case 'feed':
+        return `feed:${selection.feedId}:${contentType}:${unreadOnly ? '1' : '0'}`
+      case 'folder':
+        return `folder:${selection.folderId}:${contentType}:${unreadOnly ? '1' : '0'}`
+      case 'starred':
+        return `starred:${contentType}:${unreadOnly ? '1' : '0'}`
+      case 'all':
+      default:
+        return `all:${contentType}:${unreadOnly ? '1' : '0'}`
+    }
+  }, [selection, contentType, unreadOnly])
+
+  const lastUnreadCleanupKeyRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (!unreadOnly) return
+    if (isLoading) return
+    if (lastUnreadCleanupKeyRef.current === unreadCleanupKey) return
+
+    const idsToRemove = new Set<string>()
+    for (const entry of entries) {
+      if (entry.read) {
+        idsToRemove.add(entry.id)
+      }
+    }
+
+    if (idsToRemove.size > 0) {
+      removeFromUnreadList(idsToRemove)
+    }
+
+    lastUnreadCleanupKeyRef.current = unreadCleanupKey
+  }, [entries, unreadOnly, isLoading, unreadCleanupKey, removeFromUnreadList])
+
   const virtualizer = useVirtualizer({
     count: entries.length,
     getScrollElement: () => containerRef.current,
@@ -161,6 +249,19 @@ export function EntryList({
   })
 
   const virtualItems = virtualizer.getVirtualItems()
+
+  const handleMarkReadOnScroll = useCallback((entryId: string) => {
+    markAsRead({ id: entryId, read: true, skipInvalidate: true })
+  }, [markAsRead])
+
+  const handleEntryClick = useCallback((entry: Entry) => {
+    const viewMode = getFeedExplicitViewMode(entry.feedId)
+    if (viewMode === 'browser' && entry.url) {
+      window.open(entry.url, '_blank', 'noopener,noreferrer')
+      return
+    }
+    onSelectEntry(entry.id)
+  }, [getFeedExplicitViewMode, onSelectEntry])
 
   useEffect(() => {
     const lastItem = virtualItems.at(-1)
@@ -299,14 +400,136 @@ export function EntryList({
     }
   }, [unreadCounts, selection, feeds, contentType])
 
+  const showMarkAllReadFooter = Boolean(
+    onMarkAllReadAndGoNextFeed && (selection.type === 'feed' || selection.type === 'folder')
+  )
+
+  useLayoutEffect(() => {
+    if (!showMarkAllReadFooter) return
+    if (markReadPosition) return
+
+    const wrapper = listWrapperRef.current
+    const button = markReadButtonRef.current
+    if (!wrapper || !button) return
+
+    const wrapperRect = wrapper.getBoundingClientRect()
+    const buttonRect = button.getBoundingClientRect()
+    const padding = 16
+
+    const stored = loadStoredButtonPosition()
+    const maxX = Math.max(padding, wrapperRect.width - buttonRect.width - padding)
+    const maxY = Math.max(padding, wrapperRect.height - buttonRect.height - padding)
+
+    if (stored) {
+      setMarkReadPosition({
+        x: padding + stored.xRatio * Math.max(0, maxX - padding),
+        y: padding + stored.yRatio * Math.max(0, maxY - padding),
+      })
+      return
+    }
+
+    setMarkReadPosition({
+      x: maxX,
+      y: maxY,
+    })
+  }, [showMarkAllReadFooter, markReadPosition])
+
+  useEffect(() => {
+    markReadPositionRef.current = markReadPosition
+  }, [markReadPosition])
+
+  const handleMarkReadPointerMove = useCallback((event: PointerEvent) => {
+    const state = dragStateRef.current
+    const wrapper = listWrapperRef.current
+    const button = markReadButtonRef.current
+    if (!state || !wrapper || !button) return
+
+    const wrapperRect = wrapper.getBoundingClientRect()
+    const buttonRect = button.getBoundingClientRect()
+    const padding = 8
+
+    const nextX = state.originX + (event.clientX - state.startX)
+    const nextY = state.originY + (event.clientY - state.startY)
+
+    if (!dragMovedRef.current) {
+      const deltaX = Math.abs(event.clientX - state.startX)
+      const deltaY = Math.abs(event.clientY - state.startY)
+      if (deltaX > 3 || deltaY > 3) {
+        dragMovedRef.current = true
+      }
+    }
+
+    const maxX = wrapperRect.width - buttonRect.width - padding
+    const maxY = wrapperRect.height - buttonRect.height - padding
+
+    setMarkReadPosition({
+      x: Math.min(Math.max(padding, nextX), Math.max(padding, maxX)),
+      y: Math.min(Math.max(padding, nextY), Math.max(padding, maxY)),
+    })
+  }, [])
+
+  const handleMarkReadPointerUp = useCallback((event: PointerEvent) => {
+    const state = dragStateRef.current
+    if (!state || event.pointerId !== state.pointerId) return
+
+    dragStateRef.current = null
+    const wrapper = listWrapperRef.current
+    const button = markReadButtonRef.current
+    const position = markReadPositionRef.current
+    if (wrapper && button && position) {
+      const wrapperRect = wrapper.getBoundingClientRect()
+      const buttonRect = button.getBoundingClientRect()
+      const padding = 8
+      const maxX = Math.max(0, wrapperRect.width - buttonRect.width - padding * 2)
+      const maxY = Math.max(0, wrapperRect.height - buttonRect.height - padding * 2)
+      storeButtonPosition({
+        xRatio: maxX === 0 ? 0 : (position.x - padding) / maxX,
+        yRatio: maxY === 0 ? 0 : (position.y - padding) / maxY,
+      })
+    }
+    document.removeEventListener('pointermove', handleMarkReadPointerMove)
+    document.removeEventListener('pointerup', handleMarkReadPointerUp)
+  }, [handleMarkReadPointerMove])
+
+  const handleMarkReadPointerDown = useCallback((event: ReactPointerEvent) => {
+    const wrapper = listWrapperRef.current
+    if (!wrapper || !markReadPosition) return
+
+    dragMovedRef.current = false
+    dragStateRef.current = {
+      pointerId: event.pointerId,
+      originX: markReadPosition.x,
+      originY: markReadPosition.y,
+      startX: event.clientX,
+      startY: event.clientY,
+    }
+
+    event.currentTarget.setPointerCapture(event.pointerId)
+    event.preventDefault()
+    document.addEventListener('pointermove', handleMarkReadPointerMove)
+    document.addEventListener('pointerup', handleMarkReadPointerUp)
+  }, [handleMarkReadPointerMove, handleMarkReadPointerUp, markReadPosition])
+
+  const handleMarkReadClick = useCallback((event: ReactMouseEvent) => {
+    if (dragMovedRef.current) {
+      event.preventDefault()
+      event.stopPropagation()
+      dragMovedRef.current = false
+      return
+    }
+    onMarkAllReadAndGoNextFeed?.()
+  }, [onMarkAllReadAndGoNextFeed])
+
   return (
-    <div ref={listWrapperRef} className="flex h-full flex-col">
+    <div ref={listWrapperRef} className="relative flex h-full flex-col">
       <EntryListHeader
         title={title}
         unreadCount={unreadCount}
         unreadOnly={unreadOnly}
         onToggleUnreadOnly={onToggleUnreadOnly}
         onMarkAllRead={onMarkAllRead}
+        viewMenuFeedId={selection.type === 'feed' ? selection.feedId : undefined}
+        viewMenuDefaultMode={(generalSettings?.autoReadability ?? false) ? 'readability' : 'normal'}
         scrollToTopScope="entrylist"
         isMobile={isMobile}
         onMenuClick={onMenuClick}
@@ -341,9 +564,13 @@ export function EntryList({
                       entry={entry}
                       feed={feedsMap.get(entry.feedId)}
                       isSelected={entry.id === selectedEntryId}
-                      onClick={() => onSelectEntry(entry.id)}
+                      onClick={() => handleEntryClick(entry)}
                       autoTranslate={autoTranslate}
                       targetLanguage={targetLanguage}
+                      markReadOnScroll={generalSettings?.markReadOnScroll ?? false}
+                      scrollRootRef={containerRef}
+                      topOffset={TOP_BAR_HEIGHT}
+                      onMarkRead={handleMarkReadOnScroll}
                     />
                   )
                 })}
@@ -352,10 +579,47 @@ export function EntryList({
           )}
 
           {isFetchingNextPage && <LoadingMore />}
+
         </div>
         <ScrollBar />
         <ScrollAreaPrimitive.Corner />
       </ScrollAreaPrimitive.Root>
+
+      {showMarkAllReadFooter && (
+        <button
+          ref={markReadButtonRef}
+          type="button"
+          onClick={handleMarkReadClick}
+          onPointerDown={handleMarkReadPointerDown}
+          title={t('entry.mark_all_read')}
+          aria-label={t('entry.mark_all_read')}
+          className={cn(
+            'absolute z-30 flex size-12 items-center justify-center rounded-full',
+            'bg-muted text-foreground shadow-lg',
+            'transition-colors hover:bg-item-hover active:scale-95',
+            'touch-none'
+          )}
+          style={{
+            left: markReadPosition?.x ?? 16,
+            top: markReadPosition?.y ?? 16,
+            opacity: markReadPosition ? 1 : 0,
+            pointerEvents: markReadPosition ? 'auto' : 'none',
+          }}
+        >
+          <svg
+            className="size-5"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M18 6 7 17l-5-5" />
+            <path d="m22 10-7.5 7.5L13 16" />
+          </svg>
+        </button>
+      )}
     </div>
   )
 }
@@ -385,7 +649,7 @@ function EntryListSkeleton() {
 function EntryListEmpty() {
   const { t } = useTranslation()
   return (
-    <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+    <div className="flex items-center justify-center py-6 text-sm text-muted-foreground">
       {t('entry_list.no_articles')}
     </div>
   )

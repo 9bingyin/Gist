@@ -126,7 +126,9 @@ func TestSettingsHandler_GetGeneralSettings_Success(t *testing.T) {
 	c, rec := newTestContext(e, req)
 
 	settings := &service.GeneralSettings{
-		AutoReadability: true,
+		AutoReadability:   true,
+		MarkReadOnScroll:  true,
+		DefaultShowUnread: true,
 	}
 
 	mockService.EXPECT().
@@ -139,6 +141,8 @@ func TestSettingsHandler_GetGeneralSettings_Success(t *testing.T) {
 	var resp handler.GeneralSettingsResponse
 	assertJSONResponse(t, rec, http.StatusOK, &resp)
 	require.True(t, resp.AutoReadability)
+	require.True(t, resp.MarkReadOnScroll)
+	require.True(t, resp.DefaultShowUnread)
 }
 
 func TestSettingsHandler_UpdateGeneralSettings_Success(t *testing.T) {
@@ -150,7 +154,9 @@ func TestSettingsHandler_UpdateGeneralSettings_Success(t *testing.T) {
 
 	e := newTestEcho()
 	reqBody := map[string]interface{}{
-		"autoReadability": true,
+		"autoReadability":   true,
+		"markReadOnScroll":  true,
+		"defaultShowUnread": true,
 	}
 	req := newJSONRequest(http.MethodPut, "/settings/general", reqBody)
 	c, rec := newTestContext(e, req)
@@ -161,7 +167,7 @@ func TestSettingsHandler_UpdateGeneralSettings_Success(t *testing.T) {
 
 	mockService.EXPECT().
 		GetGeneralSettings(gomock.Any()).
-		Return(&service.GeneralSettings{AutoReadability: true}, nil)
+		Return(&service.GeneralSettings{AutoReadability: true, MarkReadOnScroll: true, DefaultShowUnread: true}, nil)
 
 	err := h.UpdateGeneralSettings(c)
 	require.NoError(t, err)
