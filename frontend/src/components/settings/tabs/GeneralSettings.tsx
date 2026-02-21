@@ -14,6 +14,7 @@ export function GeneralSettings() {
   const [fallbackUA, setFallbackUA] = useState('')
   const [autoReadability, setAutoReadability] = useState(false)
   const [markReadOnScroll, setMarkReadOnScroll] = useState(false)
+  const [defaultShowUnread, setDefaultShowUnread] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle')
 
@@ -22,6 +23,7 @@ export function GeneralSettings() {
       setFallbackUA(settings.fallbackUserAgent || '')
       setAutoReadability(settings.autoReadability || false)
       setMarkReadOnScroll(settings.markReadOnScroll || false)
+      setDefaultShowUnread(settings.defaultShowUnread || false)
     }).catch(() => {
       // ignore
     })
@@ -31,7 +33,7 @@ export function GeneralSettings() {
     setIsSaving(true)
     setSaveStatus('idle')
     try {
-      await updateGeneralSettings({ fallbackUserAgent: fallbackUA, autoReadability, markReadOnScroll })
+      await updateGeneralSettings({ fallbackUserAgent: fallbackUA, autoReadability, markReadOnScroll, defaultShowUnread })
       queryClient.invalidateQueries({ queryKey: ['generalSettings'] })
       setSaveStatus('success')
       setTimeout(() => setSaveStatus('idle'), 2000)
@@ -45,24 +47,35 @@ export function GeneralSettings() {
   const handleAutoReadabilityChange = useCallback(async (checked: boolean) => {
     setAutoReadability(checked)
     try {
-      await updateGeneralSettings({ fallbackUserAgent: fallbackUA, autoReadability: checked, markReadOnScroll })
+      await updateGeneralSettings({ fallbackUserAgent: fallbackUA, autoReadability: checked, markReadOnScroll, defaultShowUnread })
       queryClient.invalidateQueries({ queryKey: ['generalSettings'] })
     } catch {
       // Revert on error
       setAutoReadability(!checked)
     }
-  }, [fallbackUA, markReadOnScroll, queryClient])
+  }, [fallbackUA, markReadOnScroll, defaultShowUnread, queryClient])
 
   const handleMarkReadOnScrollChange = useCallback(async (checked: boolean) => {
     setMarkReadOnScroll(checked)
     try {
-      await updateGeneralSettings({ fallbackUserAgent: fallbackUA, autoReadability, markReadOnScroll: checked })
+      await updateGeneralSettings({ fallbackUserAgent: fallbackUA, autoReadability, markReadOnScroll: checked, defaultShowUnread })
       queryClient.invalidateQueries({ queryKey: ['generalSettings'] })
     } catch {
       // Revert on error
       setMarkReadOnScroll(!checked)
     }
-  }, [fallbackUA, autoReadability, queryClient])
+  }, [fallbackUA, autoReadability, defaultShowUnread, queryClient])
+
+  const handleDefaultShowUnreadChange = useCallback(async (checked: boolean) => {
+    setDefaultShowUnread(checked)
+    try {
+      await updateGeneralSettings({ fallbackUserAgent: fallbackUA, autoReadability, markReadOnScroll, defaultShowUnread: checked })
+      queryClient.invalidateQueries({ queryKey: ['generalSettings'] })
+    } catch {
+      // Revert on error
+      setDefaultShowUnread(!checked)
+    }
+  }, [fallbackUA, autoReadability, markReadOnScroll, queryClient])
 
   const languageOptions = useMemo(() => [
     { value: 'zh' as Language, label: t('language.zh') },
@@ -116,6 +129,20 @@ export function GeneralSettings() {
           <Switch
             checked={markReadOnScroll}
             onCheckedChange={handleMarkReadOnScrollChange}
+          />
+        </div>
+      </section>
+
+      {/* Default Show Unread Section */}
+      <section>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="min-w-0">
+            <div className="text-sm font-medium">{t('settings.default_show_unread')}</div>
+            <div className="text-xs text-muted-foreground">{t('settings.default_show_unread_description')}</div>
+          </div>
+          <Switch
+            checked={defaultShowUnread}
+            onCheckedChange={handleDefaultShowUnreadChange}
           />
         </div>
       </section>

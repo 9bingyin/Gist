@@ -1,6 +1,7 @@
-import { useCallback, useMemo } from 'react'
+import { useCallback, useEffect, useMemo } from 'react'
 import { useLocation, useSearch } from 'wouter'
 import { parseRoute, buildPath } from '@/lib/router'
+import { useGeneralSettings } from '@/hooks/useGeneralSettings'
 import type { ContentType } from '@/types/api'
 
 export type SelectionType =
@@ -31,52 +32,80 @@ export function useSelection(): UseSelectionReturn {
   const [location, navigate] = useLocation()
   const search = useSearch()
 
+  const { data: generalSettings } = useGeneralSettings()
+  const defaultShowUnread = generalSettings?.defaultShowUnread ?? false
+  const unreadParamPresent = useMemo(() => {
+    try {
+      return new URLSearchParams(search).has('unread')
+    } catch {
+      return false
+    }
+  }, [search])
+
   const routeState = useMemo(
     () => parseRoute(location, search),
     [location, search]
   )
 
+  // If user didn't explicitly specify unread filter, apply default from settings.
+  // We write it into the URL so it behaves consistently across navigation.
+  useEffect(() => {
+    if (unreadParamPresent) return
+    if (!defaultShowUnread) return
+    if (routeState.unreadOnly) return
+
+    navigate(
+      buildPath(routeState.selection, routeState.entryId, true, routeState.contentType, { explicitUnreadParam: true }),
+      { replace: true }
+    )
+  }, [unreadParamPresent, defaultShowUnread, routeState.selection, routeState.entryId, routeState.unreadOnly, routeState.contentType, navigate])
+
   const selectAll = useCallback(
     (contentType?: ContentType, options?: NavigateOptions) => {
-      navigate(buildPath({ type: 'all' }, null, routeState.unreadOnly, contentType ?? routeState.contentType), options)
+      navigate(buildPath({ type: 'all' }, null, routeState.unreadOnly, contentType ?? routeState.contentType, { explicitUnreadParam: unreadParamPresent }), options)
     },
-    [navigate, routeState.unreadOnly, routeState.contentType]
+    [navigate, routeState.unreadOnly, routeState.contentType, unreadParamPresent]
   )
 
   const selectFeed = useCallback(
     (feedId: string, options?: NavigateOptions) => {
-      navigate(buildPath({ type: 'feed', feedId }, null, routeState.unreadOnly, routeState.contentType), options)
+      navigate(buildPath({ type: 'feed', feedId }, null, routeState.unreadOnly, routeState.contentType, { explicitUnreadParam: unreadParamPresent }), options)
     },
-    [navigate, routeState.unreadOnly, routeState.contentType]
+    [navigate, routeState.unreadOnly, routeState.contentType, unreadParamPresent]
   )
 
   const selectFolder = useCallback(
     (folderId: string, options?: NavigateOptions) => {
-      navigate(buildPath({ type: 'folder', folderId }, null, routeState.unreadOnly, routeState.contentType), options)
+      navigate(buildPath({ type: 'folder', folderId }, null, routeState.unreadOnly, routeState.contentType, { explicitUnreadParam: unreadParamPresent }), options)
     },
-    [navigate, routeState.unreadOnly, routeState.contentType]
+    [navigate, routeState.unreadOnly, routeState.contentType, unreadParamPresent]
   )
 
   const selectStarred = useCallback((options?: NavigateOptions) => {
-    navigate(buildPath({ type: 'starred' }, null, routeState.unreadOnly, routeState.contentType), options)
-  }, [navigate, routeState.unreadOnly, routeState.contentType])
+    navigate(buildPath({ type: 'starred' }, null, routeState.unreadOnly, routeState.contentType, { explicitUnreadParam: unreadParamPresent }), options)
+  }, [navigate, routeState.unreadOnly, routeState.contentType, unreadParamPresent])
 
   const selectEntry = useCallback(
     (entryId: string | null, options?: NavigateOptions) => {
-      navigate(buildPath(routeState.selection, entryId, routeState.unreadOnly, routeState.contentType), options)
+      navigate(buildPath(routeState.selection, entryId, routeState.unreadOnly, routeState.contentType, { explicitUnreadParam: unreadParamPresent }), options)
     },
-    [navigate, routeState.selection, routeState.unreadOnly, routeState.contentType]
+    [navigate, routeState.selection, routeState.unreadOnly, routeState.contentType, unreadParamPresent]
   )
 
   const toggleUnreadOnly = useCallback(() => {
-    navigate(buildPath(routeState.selection, routeState.entryId, !routeState.unreadOnly, routeState.contentType), { replace: true })
-  }, [navigate, routeState.selection, routeState.entryId, routeState.unreadOnly, routeState.contentType])
+    const nextUnreadOnly = !routeState.unreadOnly
+    const explicitUnreadParam = nextUnreadOnly ? true : (unreadParamPresent || defaultShowUnread)
+    navigate(
+      buildPath(routeState.selection, routeState.entryId, nextUnreadOnly, routeState.contentType, { explicitUnreadParam }),
+      { replace: true }
+    )
+  }, [navigate, routeState.selection, routeState.entryId, routeState.unreadOnly, routeState.contentType, unreadParamPresent, defaultShowUnread])
 
   const setContentType = useCallback(
     (contentType: ContentType) => {
-      navigate(buildPath(routeState.selection, routeState.entryId, routeState.unreadOnly, contentType))
+      navigate(buildPath(routeState.selection, routeState.entryId, routeState.unreadOnly, contentType, { explicitUnreadParam: unreadParamPresent }))
     },
-    [navigate, routeState.selection, routeState.entryId, routeState.unreadOnly]
+    [navigate, routeState.selection, routeState.entryId, routeState.unreadOnly, unreadParamPresent]
   )
 
   return {

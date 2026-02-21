@@ -63,6 +63,8 @@
     "auto_readability_description": "自动切换到阅读模式，仅对未特殊设置视图的订阅生效",
     "mark_read_on_scroll": "滚动时标记为已读",
     "mark_read_on_scroll_description": "滚动浏览时自动标记为已读",
+    "default_show_unread": "默认显示未读",
+    "default_show_unread_description": "关闭时显示全部，开启时显示未读",
     "fallback_ua": "备用 User-Agent",
     "fallback_ua_description": "留空表示不使用",
     "fallback_ua_placeholder": "例如: Mozilla/5.0 (Windows NT 10.0; Win64; x64) ...",

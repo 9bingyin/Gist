@@ -156,8 +156,10 @@ export function EntryListHeader({
               <>
                 <DropdownMenuSeparator />
                 <DropdownMenuSub>
-                  <DropdownMenuSubTrigger>
-                    {t('entry.view')}
+                  <DropdownMenuSubTrigger
+                    className="gap-2 [&>span]:order-2 [&>svg]:order-1 [&>svg]:!ml-0"
+                  >
+                    <span>{t('entry.view')}</span>
                   </DropdownMenuSubTrigger>
                   <DropdownMenuSubContent sideOffset={8} alignOffset={-4}>
                     <ViewModeItem

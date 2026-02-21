@@ -90,6 +90,7 @@ func TestSettingsService_GeneralSettings(t *testing.T) {
 		FallbackUserAgent: "UA-Test",
 		AutoReadability:   true,
 		MarkReadOnScroll:  true,
+		DefaultShowUnread: true,
 	})
 	require.NoError(t, err)
 
@@ -98,6 +99,7 @@ func TestSettingsService_GeneralSettings(t *testing.T) {
 	require.Equal(t, "UA-Test", settings.FallbackUserAgent)
 	require.True(t, settings.AutoReadability)
 	require.True(t, settings.MarkReadOnScroll)
+	require.True(t, settings.DefaultShowUnread)
 
 	ua := svc.GetFallbackUserAgent(context.Background())
 	require.Equal(t, "UA-Test", ua)
