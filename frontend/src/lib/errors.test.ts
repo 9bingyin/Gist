@@ -19,6 +19,18 @@ describe('errors', () => {
       expect(isNetworkError(new TypeError('Network request failed'))).toBe(true)
     })
 
+    it('should return true for AbortError (from AbortController timeout)', () => {
+      expect(isNetworkError(new DOMException('The operation was aborted.', 'AbortError'))).toBe(true)
+    })
+
+    it('should return true for TimeoutError (from AbortSignal.timeout)', () => {
+      expect(isNetworkError(new DOMException('Timed out.', 'TimeoutError'))).toBe(true)
+    })
+
+    it('should return false for non-timeout DOMException', () => {
+      expect(isNetworkError(new DOMException('Not allowed', 'NotAllowedError'))).toBe(false)
+    })
+
     it('should return false for non-TypeError errors', () => {
       expect(isNetworkError(new Error('Failed to fetch'))).toBe(false)
       expect(isNetworkError(new RangeError('Failed to fetch'))).toBe(false)

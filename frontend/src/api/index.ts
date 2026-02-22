@@ -193,6 +193,8 @@ export function setOnUnauthorized(callback: () => void): void {
   onUnauthorized = callback
 }
 
+const REQUEST_TIMEOUT_MS = 15_000
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const url = `${API_BASE_URL}${path}`
   const headers = new Headers(options.headers)
@@ -208,10 +210,26 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     headers.set('Authorization', `Bearer ${token}`)
   }
 
-  const response = await fetch(url, {
-    ...options,
-    headers,
-  })
+  // Apply a timeout so that requests frozen mid-flight (e.g. Android Chrome BFCache
+  // resume with a stale TCP connection) abort after REQUEST_TIMEOUT_MS instead of
+  // hanging forever and leaving auth state stuck at 'loading'.
+  const timeoutController = new AbortController()
+  const timeoutId = setTimeout(() => timeoutController.abort(), REQUEST_TIMEOUT_MS)
+  // Combine the timeout signal with any caller-supplied signal so both can abort the request.
+  const signal = options.signal
+    ? AbortSignal.any([options.signal, timeoutController.signal])
+    : timeoutController.signal
+
+  let response: Response
+  try {
+    response = await fetch(url, {
+      ...options,
+      headers,
+      signal,
+    })
+  } finally {
+    clearTimeout(timeoutId)
+  }
 
   const data = await parseResponse(response)
   if (!response.ok) {
