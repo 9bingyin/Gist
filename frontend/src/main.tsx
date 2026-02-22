@@ -6,6 +6,9 @@ import App from './App.tsx'
 import { queryClient } from '@/lib/queryClient'
 import { I18nProvider } from '@/components/i18n-provider'
 
+// Mark boot as early as possible for the pre-React watchdog in index.html
+document.documentElement.setAttribute('data-gist-booted', '1')
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
