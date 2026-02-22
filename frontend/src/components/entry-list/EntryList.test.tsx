@@ -32,6 +32,8 @@ vi.mock('@tanstack/react-virtual', () => ({
 vi.mock('@/hooks/useEntries', () => ({
   useEntriesInfinite: vi.fn(),
   useUnreadCounts: vi.fn(() => ({ data: undefined })),
+  useMarkAsRead: vi.fn(() => ({ mutate: vi.fn() })),
+  useRemoveFromUnreadList: vi.fn(() => vi.fn()),
 }))
 
 vi.mock('@/hooks/useFeeds', () => ({
@@ -44,6 +46,10 @@ vi.mock('@/hooks/useFolders', () => ({
 
 vi.mock('@/hooks/useAISettings', () => ({
   useAISettings: vi.fn(),
+}))
+
+vi.mock('@/hooks/useGeneralSettings', () => ({
+  useGeneralSettings: vi.fn(() => ({ data: { markReadOnScroll: false } })),
 }))
 
 vi.mock('@/hooks/useSelection', () => ({

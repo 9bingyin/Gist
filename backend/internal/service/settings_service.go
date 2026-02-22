@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"net/url"
 
-	"gist/backend/pkg/logger"
 	"gist/backend/internal/repository"
 	"gist/backend/internal/service/ai"
+	"gist/backend/pkg/logger"
 )
 
 // AISettings holds the AI configuration.
@@ -32,6 +32,8 @@ type AISettings struct {
 type GeneralSettings struct {
 	FallbackUserAgent string `json:"fallbackUserAgent"`
 	AutoReadability   bool   `json:"autoReadability"`
+	MarkReadOnScroll  bool   `json:"markReadOnScroll"`
+	DefaultShowUnread bool   `json:"defaultShowUnread"`
 }
 
 // NetworkSettings holds network proxy configuration.
@@ -67,6 +69,8 @@ const (
 
 	keyFallbackUserAgent = "general.fallback_user_agent"
 	keyAutoReadability   = "general.auto_readability"
+	keyMarkReadOnScroll  = "general.mark_read_on_scroll"
+	keyDefaultShowUnread = "general.default_show_unread"
 
 	keyNetworkEnabled  = "network.proxy_enabled"
 	keyNetworkType     = "network.proxy_type"
@@ -364,6 +368,8 @@ func (s *settingsService) GetGeneralSettings(ctx context.Context) (*GeneralSetti
 		settings.FallbackUserAgent = val
 	}
 	settings.AutoReadability = s.getBool(ctx, keyAutoReadability)
+	settings.MarkReadOnScroll = s.getBool(ctx, keyMarkReadOnScroll)
+	settings.DefaultShowUnread = s.getBool(ctx, keyDefaultShowUnread)
 
 	return settings, nil
 }
@@ -382,7 +388,32 @@ func (s *settingsService) SetGeneralSettings(ctx context.Context, settings *Gene
 		logger.Warn("general settings update auto readability failed", "module", "service", "action", "update", "resource", "settings", "result", "failed", "error", err)
 		return fmt.Errorf("set auto readability: %w", err)
 	}
-	logger.Info("general settings updated", "module", "service", "action", "update", "resource", "settings", "result", "ok", "auto_readability", settings.AutoReadability)
+	markReadOnScrollVal := "false"
+	if settings.MarkReadOnScroll {
+		markReadOnScrollVal = "true"
+	}
+	if err := s.repo.Set(ctx, keyMarkReadOnScroll, markReadOnScrollVal); err != nil {
+		logger.Warn("general settings update mark read on scroll failed", "module", "service", "action", "update", "resource", "settings", "result", "failed", "error", err)
+		return fmt.Errorf("set mark read on scroll: %w", err)
+	}
+	defaultShowUnreadVal := "false"
+	if settings.DefaultShowUnread {
+		defaultShowUnreadVal = "true"
+	}
+	if err := s.repo.Set(ctx, keyDefaultShowUnread, defaultShowUnreadVal); err != nil {
+		logger.Warn("general settings update default show unread failed", "module", "service", "action", "update", "resource", "settings", "result", "failed", "error", err)
+		return fmt.Errorf("set default show unread: %w", err)
+	}
+	logger.Info(
+		"general settings updated",
+		"module", "service",
+		"action", "update",
+		"resource", "settings",
+		"result", "ok",
+		"auto_readability", settings.AutoReadability,
+		"mark_read_on_scroll", settings.MarkReadOnScroll,
+		"default_show_unread", settings.DefaultShowUnread,
+	)
 	return nil
 }
 
