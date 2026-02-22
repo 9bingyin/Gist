@@ -6,6 +6,14 @@ import App from './App.tsx'
 import { queryClient } from '@/lib/queryClient'
 import { I18nProvider } from '@/components/i18n-provider'
 
+// BFCache restore: invalidate all queries to ensure fresh data
+// when the page is restored from back-forward cache (e.g. Android PWA re-enter)
+window.addEventListener('pageshow', (e) => {
+  if (e.persisted) {
+    queryClient.invalidateQueries()
+  }
+})
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
