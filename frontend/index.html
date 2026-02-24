@@ -15,6 +15,139 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      ;(() => {
+        const BOOT_READY_ATTR = 'data-gist-boot-ready'
+        const SOFT_RELOAD_KEY = 'gist.boot.soft_count'
+        const HARD_RECOVER_KEY = 'gist.boot.hard_count'
+        const SOFT_RELOAD_LIMIT = 1
+        const HARD_RECOVER_LIMIT = 1
+        const SOFT_RELOAD_TIMEOUT_MS = 3500
+        const HARD_RECOVER_TIMEOUT_MS = 12000
+        const SOFT_PARAM = '_boot_soft'
+        const HARD_PARAM = '_boot_hard'
+
+        const isStandalone =
+          (typeof window.matchMedia === 'function' &&
+            window.matchMedia('(display-mode: standalone)').matches) ||
+          window.navigator.standalone === true
+
+        if (!isStandalone) return
+
+        const bootLog = (...args) => console.info('[boot-guard]', ...args)
+        const bootWarn = (...args) => console.warn('[boot-guard]', ...args)
+
+        const isBootReady = () =>
+          document.documentElement.getAttribute(BOOT_READY_ATTR) === '1' ||
+          window.__GIST_BOOT_READY__ === true
+
+        const hasSessionStorage = (() => {
+          try {
+            const probeKey = '__gist_boot_probe__'
+            sessionStorage.setItem(probeKey, '1')
+            sessionStorage.removeItem(probeKey)
+            return true
+          } catch {
+            return false
+          }
+        })()
+
+        const readCount = (key, param) => {
+          if (hasSessionStorage) {
+            const raw = sessionStorage.getItem(key)
+            if (!raw) return 0
+            const count = Number.parseInt(raw, 10)
+            return Number.isFinite(count) ? count : 0
+          }
+
+          const raw = new URL(window.location.href).searchParams.get(param)
+          if (!raw) return 0
+          const count = Number.parseInt(raw, 10)
+          return Number.isFinite(count) ? count : 0
+        }
+
+        const writeCount = (key, param, count) => {
+          if (hasSessionStorage) {
+            sessionStorage.setItem(key, String(count))
+            return
+          }
+
+          const url = new URL(window.location.href)
+          url.searchParams.set(param, String(count))
+          history.replaceState(history.state, '', url.toString())
+        }
+
+        const tryIncrement = (key, param, limit) => {
+          const count = readCount(key, param)
+          if (count >= limit) return false
+          writeCount(key, param, count + 1)
+          return true
+        }
+
+        const replaceWithFlag = (param) => {
+          const url = new URL(window.location.href)
+          url.searchParams.set(param, String(Date.now()))
+          window.location.replace(url.toString())
+        }
+
+        const activateWaitingServiceWorker = async () => {
+          if (!('serviceWorker' in navigator)) return
+
+          try {
+            const registrations = await navigator.serviceWorker.getRegistrations()
+            for (const registration of registrations) {
+              if (!registration.waiting) continue
+              registration.waiting.postMessage({ type: 'SKIP_WAITING' })
+            }
+          } catch (error) {
+            bootWarn('failed to activate waiting service worker', error)
+          }
+        }
+
+        const clearServiceWorkerAndCaches = async () => {
+          bootWarn('hard recovery: unregistering service workers and clearing caches')
+
+          if ('serviceWorker' in navigator) {
+            try {
+              const registrations = await navigator.serviceWorker.getRegistrations()
+              await Promise.all(
+                registrations.map((registration) => registration.unregister()),
+              )
+            } catch (error) {
+              bootWarn('failed to unregister service workers', error)
+            }
+          }
+
+          if ('caches' in window) {
+            try {
+              const cacheKeys = await caches.keys()
+              await Promise.all(cacheKeys.map((cacheKey) => caches.delete(cacheKey)))
+            } catch (error) {
+              bootWarn('failed to clear cache storage', error)
+            }
+          }
+        }
+
+        setTimeout(async () => {
+          if (isBootReady()) return
+          if (!tryIncrement(SOFT_RELOAD_KEY, SOFT_PARAM, SOFT_RELOAD_LIMIT)) return
+
+          bootWarn('startup timeout, triggering soft reload')
+          await activateWaitingServiceWorker()
+          replaceWithFlag(SOFT_PARAM)
+        }, SOFT_RELOAD_TIMEOUT_MS)
+
+        setTimeout(async () => {
+          if (isBootReady()) return
+          if (!tryIncrement(HARD_RECOVER_KEY, HARD_PARAM, HARD_RECOVER_LIMIT)) return
+
+          await clearServiceWorkerAndCaches()
+          replaceWithFlag(HARD_PARAM)
+        }, HARD_RECOVER_TIMEOUT_MS)
+
+        bootLog('boot guard active')
+      })()
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

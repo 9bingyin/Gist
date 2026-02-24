@@ -1,5 +1,9 @@
 /// <reference types="vite/client" />
 
+interface Window {
+  __GIST_BOOT_READY__?: boolean
+}
+
 declare module 'virtual:pwa-register/react' {
   import type { Dispatch, SetStateAction } from 'react'
   import type { RegisterSWOptions } from 'vite-plugin-pwa/types'
