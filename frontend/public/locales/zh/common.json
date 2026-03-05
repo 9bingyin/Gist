@@ -192,7 +192,7 @@
     "optional": "可选",
     "required": "*",
     "extended_thinking": "推理设置",
-    "thinking_supported": "模型支持推理参数",
+    "thinking_supported": "推理参数",
     "thinking_supported_hint": "模型不支持推理参数时请关闭，避免请求报错",
     "enable_reasoning": "推理强度",
     "thinking_budget_label": "思考预算",

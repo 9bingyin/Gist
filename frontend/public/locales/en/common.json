@@ -193,7 +193,7 @@
     "optional": "Optional",
     "required": "*",
     "extended_thinking": "Reasoning Settings",
-    "thinking_supported": "Model Supports Reasoning Params",
+    "thinking_supported": "Reasoning Params",
     "thinking_supported_hint": "Disable this if the model does not accept reasoning or thinking params to avoid request errors",
     "enable_reasoning": "Reasoning Effort",
     "thinking_budget_label": "Thinking Budget",
