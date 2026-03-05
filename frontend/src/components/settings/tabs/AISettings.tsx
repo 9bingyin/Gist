@@ -62,6 +62,10 @@ export function AISettings() {
   const [error, setError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [testResult, setTestResult] = useState<{ success: boolean; message?: string; error?: string } | null>(null)
+  const isBaseURLRequired = settings
+    ? settings.provider === 'openai' || settings.provider === 'compatible'
+    : false
+  const hasBaseURL = settings ? settings.baseUrl.trim().length > 0 : false
 
   useEffect(() => {
     loadSettings()
@@ -199,7 +203,7 @@ export function AISettings() {
       <div className="flex flex-wrap items-center justify-between gap-2 py-2">
         <div className="flex items-center gap-1 min-w-0">
           <span className="text-sm font-medium">{t('ai_settings.base_url')}</span>
-          {settings.provider === 'compatible' ? (
+          {isBaseURLRequired ? (
             <span className="text-xs text-destructive">{t('ai_settings.required')}</span>
           ) : (
             <span className="text-xs text-muted-foreground">{t('ai_settings.optional')}</span>
@@ -211,6 +215,7 @@ export function AISettings() {
           onChange={(e) => handleChange('baseUrl', e.target.value)}
           placeholder={
             settings.provider === 'compatible' ? 'https://openrouter.ai/api/v1' :
+            settings.provider === 'openai' ? 'https://api.openai.com/v1' :
             t('ai_settings.leave_empty_for_default')
           }
           className={cn(inputClass, 'shrink-0')}
@@ -247,12 +252,13 @@ export function AISettings() {
         <Switch
           checked={settings.thinkingSupported}
           onCheckedChange={(checked) => handleChange('thinkingSupported', checked)}
+          className="shrink-0"
         />
       </div>
 
       {/* Enable Reasoning */}
       {settings.thinkingSupported && (
-        <div className="flex flex-wrap items-center justify-between gap-2 py-2 pl-4">
+        <div className="flex flex-wrap items-center justify-between gap-2 py-2">
           <div className="min-w-0">
             <span className="text-sm font-medium">
               {settings.provider === 'anthropic' ? t('ai_settings.extended_thinking') : t('ai_settings.enable_reasoning')}
@@ -261,6 +267,7 @@ export function AISettings() {
           <Switch
             checked={settings.thinking}
             onCheckedChange={(checked) => handleChange('thinking', checked)}
+            className="shrink-0"
           />
         </div>
       )}
@@ -317,7 +324,6 @@ export function AISettings() {
               <label htmlFor="compatible-effort" className="text-sm">
                 {t('ai_settings.reasoning_effort_mode')}
               </label>
-              <span className="text-xs text-muted-foreground">{t('ai_settings.o1_grok_models')}</span>
             </div>
             {settings.reasoningEffort !== '' && (
               <select
@@ -346,7 +352,6 @@ export function AISettings() {
               <label htmlFor="compatible-budget" className="text-sm">
                 {t('ai_settings.thinking_budget_mode')}
               </label>
-              <span className="text-xs text-muted-foreground">{t('ai_settings.anthropic_gemini_models')}</span>
             </div>
             {settings.reasoningEffort === '' && settings.thinkingBudget > 0 && (
               <input
@@ -432,7 +437,7 @@ export function AISettings() {
         <button
           type="button"
           onClick={handleTest}
-          disabled={isTesting || !settings.apiKey || !settings.model || (settings.provider === 'compatible' && !settings.baseUrl)}
+          disabled={isTesting || !settings.apiKey || !settings.model || (isBaseURLRequired && !hasBaseURL)}
           className={cn(
             'flex h-8 shrink-0 items-center gap-1.5 rounded-md px-4 text-sm font-medium transition-colors',
             'bg-muted hover:bg-muted/80',
@@ -457,7 +462,7 @@ export function AISettings() {
         <button
           type="button"
           onClick={handleSave}
-          disabled={isSaving}
+          disabled={isSaving || (isBaseURLRequired && !hasBaseURL)}
           className={cn(
             'flex h-8 shrink-0 items-center gap-1.5 rounded-md px-4 text-sm font-medium transition-colors',
             'bg-primary text-primary-foreground hover:bg-primary/90',

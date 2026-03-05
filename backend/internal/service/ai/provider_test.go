@@ -20,12 +20,16 @@ func TestNewProvider_Errors(t *testing.T) {
 
 	_, err = ai.NewProvider(ai.Config{APIKey: "key", Model: "model", Provider: ai.ProviderCompatible})
 	require.ErrorIs(t, err, ai.ErrMissingBaseURL)
+
+	_, err = ai.NewProvider(ai.Config{APIKey: "key", Model: "model", Provider: ai.ProviderOpenAI})
+	require.ErrorIs(t, err, ai.ErrMissingBaseURL)
 }
 
 func TestNewProvider_OpenAI(t *testing.T) {
 	provider, err := ai.NewProvider(ai.Config{
 		Provider: ai.ProviderOpenAI,
 		APIKey:   "key",
+		BaseURL:  "https://api.openai.com/v1",
 		Model:    "gpt-4",
 	})
 	require.NoError(t, err)

@@ -52,6 +52,7 @@ func TestSettingsHandler_UpdateAISettings_Success(t *testing.T) {
 	e := newTestEcho()
 	reqBody := map[string]interface{}{
 		"provider": "openai",
+		"baseUrl":  "https://api.openai.com/v1",
 		"model":    "gpt-4",
 	}
 	req := newJSONRequest(http.MethodPut, "/settings/ai", reqBody)
@@ -63,12 +64,32 @@ func TestSettingsHandler_UpdateAISettings_Success(t *testing.T) {
 
 	mockService.EXPECT().
 		GetAISettings(gomock.Any()).
-		Return(&service.AISettings{Provider: "openai", Model: "gpt-4"}, nil)
+		Return(&service.AISettings{Provider: "openai", BaseURL: "https://api.openai.com/v1", Model: "gpt-4"}, nil)
 
 	err := h.UpdateAISettings(c)
 	require.NoError(t, err)
 
 	require.Equal(t, http.StatusOK, rec.Code)
+}
+
+func TestSettingsHandler_UpdateAISettings_MissingBaseURLForOpenAI(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock.NewMockSettingsService(ctrl)
+	h := handler.NewSettingsHandlerHelper(mockService, nil)
+
+	e := newTestEcho()
+	reqBody := map[string]interface{}{
+		"provider": "openai",
+		"model":    "gpt-4",
+	}
+	req := newJSONRequest(http.MethodPut, "/settings/ai", reqBody)
+	c, rec := newTestContext(e, req)
+
+	err := h.UpdateAISettings(c)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusBadRequest, rec.Code)
 }
 
 func TestSettingsHandler_TestNetworkProxy_Disabled(t *testing.T) {
@@ -235,13 +256,14 @@ func TestSettingsHandler_TestAI_Success(t *testing.T) {
 	reqBody := map[string]interface{}{
 		"provider": "openai",
 		"apiKey":   "sk-test",
+		"baseUrl":  "https://api.openai.com/v1",
 		"model":    "gpt-4",
 	}
 	req := newJSONRequest(http.MethodPost, "/settings/ai/test", reqBody)
 	c, rec := newTestContext(e, req)
 
 	mockService.EXPECT().
-		TestAI(gomock.Any(), "openai", "sk-test", "", "gpt-4", false, false, 0, "").
+		TestAI(gomock.Any(), "openai", "sk-test", "https://api.openai.com/v1", "gpt-4", false, false, 0, "").
 		Return("OK", nil)
 
 	err := h.TestAI(c)
@@ -250,6 +272,52 @@ func TestSettingsHandler_TestAI_Success(t *testing.T) {
 	var resp handler.AITestResponse
 	assertJSONResponse(t, rec, http.StatusOK, &resp)
 	require.Equal(t, "OK", resp.Message)
+}
+
+func TestSettingsHandler_TestAI_MissingBaseURLForOpenAI(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock.NewMockSettingsService(ctrl)
+	h := handler.NewSettingsHandlerHelper(mockService, nil)
+
+	e := newTestEcho()
+	reqBody := map[string]interface{}{
+		"provider": "openai",
+		"apiKey":   "sk-test",
+		"model":    "gpt-4",
+	}
+	req := newJSONRequest(http.MethodPost, "/settings/ai/test", reqBody)
+	c, rec := newTestContext(e, req)
+
+	err := h.TestAI(c)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestSettingsHandler_TestAI_AnthropicBaseURLOptional(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock.NewMockSettingsService(ctrl)
+	h := handler.NewSettingsHandlerHelper(mockService, nil)
+
+	e := newTestEcho()
+	reqBody := map[string]interface{}{
+		"provider": "anthropic",
+		"apiKey":   "sk-ant-test",
+		"model":    "claude-sonnet-4-20250514",
+	}
+	req := newJSONRequest(http.MethodPost, "/settings/ai/test", reqBody)
+	c, rec := newTestContext(e, req)
+
+	mockService.EXPECT().
+		TestAI(gomock.Any(), "anthropic", "sk-ant-test", "", "claude-sonnet-4-20250514", false, false, 0, "").
+		Return("OK", nil)
+
+	err := h.TestAI(c)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, rec.Code)
 }
 
 func TestSettingsHandler_ClearAnubisCookies_Success(t *testing.T) {

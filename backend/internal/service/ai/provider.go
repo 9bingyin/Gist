@@ -23,7 +23,7 @@ type Provider interface {
 type Config struct {
 	Provider          string // openai, anthropic, compatible
 	APIKey            string
-	BaseURL           string // optional for openai, required for compatible
+	BaseURL           string // required for openai/compatible, optional for anthropic
 	Model             string
 	ThinkingSupported bool   // whether the model supports thinking/reasoning
 	Thinking          bool   // enable thinking/reasoning (only effective when ThinkingSupported=true)
@@ -41,7 +41,7 @@ const (
 var (
 	ErrInvalidProvider = errors.New("invalid provider")
 	ErrMissingAPIKey   = errors.New("API key is required")
-	ErrMissingBaseURL  = errors.New("base URL is required for compatible provider")
+	ErrMissingBaseURL  = errors.New("base URL is required for openai and compatible providers")
 	ErrMissingModel    = errors.New("model is required")
 )
 
@@ -56,6 +56,9 @@ func NewProvider(cfg Config) (Provider, error) {
 
 	switch cfg.Provider {
 	case ProviderOpenAI:
+		if cfg.BaseURL == "" {
+			return nil, ErrMissingBaseURL
+		}
 		return NewOpenAIProvider(cfg.APIKey, cfg.BaseURL, cfg.Model, cfg.ThinkingSupported, cfg.Thinking, cfg.ReasoningEffort)
 	case ProviderAnthropic:
 		return NewAnthropicProvider(cfg.APIKey, cfg.BaseURL, cfg.Model, cfg.ThinkingSupported, cfg.Thinking, cfg.ThinkingBudget)

@@ -118,6 +118,10 @@ type SettingsHandler struct {
 	clientFactory *network.ClientFactory
 }
 
+func isBaseURLRequiredForProvider(provider string) bool {
+	return provider == "openai" || provider == "compatible"
+}
+
 func NewSettingsHandler(service service.SettingsService, clientFactory *network.ClientFactory) *SettingsHandler {
 	return &SettingsHandler{service: service, clientFactory: clientFactory}
 }
@@ -187,6 +191,15 @@ func (h *SettingsHandler) UpdateAISettings(c echo.Context) error {
 	if err := c.Bind(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, errorResponse{Error: "invalid request"})
 	}
+	if req.Provider == "" {
+		return c.JSON(http.StatusBadRequest, errorResponse{Error: "provider is required"})
+	}
+	if req.Model == "" {
+		return c.JSON(http.StatusBadRequest, errorResponse{Error: "model is required"})
+	}
+	if isBaseURLRequiredForProvider(req.Provider) && req.BaseURL == "" {
+		return c.JSON(http.StatusBadRequest, errorResponse{Error: "baseUrl is required"})
+	}
 
 	settings := &service.AISettings{
 		Provider:          req.Provider,
@@ -234,6 +247,9 @@ func (h *SettingsHandler) TestAI(c echo.Context) error {
 	}
 	if req.Model == "" {
 		return c.JSON(http.StatusBadRequest, errorResponse{Error: "model is required"})
+	}
+	if isBaseURLRequiredForProvider(req.Provider) && req.BaseURL == "" {
+		return c.JSON(http.StatusBadRequest, errorResponse{Error: "baseUrl is required"})
 	}
 	response, err := h.service.TestAI(c.Request().Context(), req.Provider, req.APIKey, req.BaseURL, req.Model, req.ThinkingSupported, req.Thinking, req.ThinkingBudget, req.ReasoningEffort)
 	if err != nil {
