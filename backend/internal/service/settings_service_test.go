@@ -119,11 +119,11 @@ func TestSettingsService_TestAI_InvalidConfig(t *testing.T) {
 	repo := newSettingsRepoStub()
 	svc := service.NewSettingsService(repo, ai.NewRateLimiter(0))
 
-	_, err := svc.TestAI(context.Background(), ai.ProviderOpenAI, "", "", "", "responses", false, 0, "")
+	_, err := svc.TestAI(context.Background(), ai.ProviderOpenAI, "", "", "", false, false, 0, "")
 	require.Error(t, err)
 
 	repo.data[service.KeyAIAPIKey] = ""
-	_, err = svc.TestAI(context.Background(), ai.ProviderOpenAI, "***", "", "gpt-4", "responses", false, 0, "")
+	_, err = svc.TestAI(context.Background(), ai.ProviderOpenAI, "***", "", "gpt-4", false, false, 0, "")
 	require.ErrorIs(t, err, ai.ErrMissingAPIKey)
 }
 

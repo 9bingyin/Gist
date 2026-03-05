@@ -75,20 +75,14 @@ func TestGetTranslateTextPrompt_UnknownLanguage(t *testing.T) {
 	require.Contains(t, prompt, "<target_language>xx-XX</target_language>")
 }
 
-func TestOpenAIProvider_IsReasoningModel(t *testing.T) {
-	provider, err := ai.NewOpenAIProvider("key", "", "gpt-5-mini", "", false, "")
-	require.NoError(t, err)
-	require.True(t, ai.IsReasoningModelForTest(provider))
-}
-
 func TestAnthropicProvider_Name(t *testing.T) {
-	provider, err := ai.NewAnthropicProvider("key", "", "claude-3", false, 0)
+	provider, err := ai.NewAnthropicProvider("key", "", "claude-3", false, false, 0)
 	require.NoError(t, err)
 	require.Equal(t, ai.ProviderAnthropic, provider.Name())
 }
 
 func TestAnthropicProvider_WithBaseURL(t *testing.T) {
-	provider, err := ai.NewAnthropicProvider("key", "https://example.com", "claude-3", false, 0)
+	provider, err := ai.NewAnthropicProvider("key", "https://example.com", "claude-3", false, false, 0)
 	require.NoError(t, err)
 	require.Equal(t, ai.ProviderAnthropic, provider.Name())
 }

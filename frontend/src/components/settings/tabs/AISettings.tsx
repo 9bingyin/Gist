@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { getAISettings, updateAISettings, testAIConnection, ApiError } from '@/api'
 import { cn } from '@/lib/utils'
 import { Switch } from '@/components/ui/switch'
-import type { AIProvider, AISettings as AISettingsType, OpenAIEndpoint, ReasoningEffort } from '@/types/settings'
+import type { AIProvider, AISettings as AISettingsType, ReasoningEffort } from '@/types/settings'
 
 export function AISettings() {
   const { t } = useTranslation()
@@ -37,14 +37,6 @@ export function AISettings() {
       { value: 'low', label: t('ai_settings.effort_low_percent') },
       { value: 'minimal', label: t('ai_settings.effort_minimal_percent') },
       { value: 'none', label: t('ai_settings.effort_none') },
-    ],
-    [t]
-  )
-
-  const ENDPOINT_OPTIONS: { value: OpenAIEndpoint; label: string }[] = useMemo(
-    () => [
-      { value: 'responses', label: t('ai_settings.endpoint_responses') },
-      { value: 'chat/completions', label: t('ai_settings.endpoint_chat') },
     ],
     [t]
   )
@@ -95,12 +87,7 @@ export function AISettings() {
 
   const handleChange = (field: keyof AISettingsType, value: string | boolean | number) => {
     if (!settings) return
-    // Reset endpoint to default when switching away from OpenAI
-    if (field === 'provider' && value !== 'openai') {
-      setSettings({ ...settings, provider: value as AIProvider, endpoint: 'responses' })
-    } else {
-      setSettings({ ...settings, [field]: value } as AISettingsType)
-    }
+    setSettings({ ...settings, [field]: value } as AISettingsType)
     setSuccessMessage(null)
     setTestResult(null)
   }
@@ -122,7 +109,7 @@ export function AISettings() {
         apiKey: settings.apiKey,
         baseUrl: settings.baseUrl,
         model: settings.model,
-        endpoint: settings.endpoint,
+        thinkingSupported: settings.thinkingSupported,
         thinking: settings.thinking,
         thinkingBudget: settings.thinkingBudget,
         reasoningEffort: settings.reasoningEffort,
@@ -246,45 +233,40 @@ export function AISettings() {
         />
       </div>
 
-      {/* OpenAI Endpoint */}
-      {settings.provider === 'openai' && (
-        <div className="flex flex-wrap items-center justify-between gap-2 py-2">
-          <span className="text-sm font-medium">{t('ai_settings.endpoint_label')}</span>
-          <select
-            value={settings.endpoint}
-            onChange={(e) => handleChange('endpoint', e.target.value as OpenAIEndpoint)}
-            className={cn(selectClass, 'shrink-0')}
-          >
-            {ENDPOINT_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
-            ))}
-          </select>
-        </div>
-      )}
-
       {/* Reasoning Section */}
       <div className="pb-1 pt-4 text-xs font-medium uppercase tracking-wider text-muted-foreground">
         {t('ai_settings.extended_thinking')}
       </div>
 
-      {/* Enable Reasoning */}
+      {/* Thinking Supported */}
       <div className="flex flex-wrap items-center justify-between gap-2 py-2">
         <div className="min-w-0">
-          <span className="text-sm font-medium">
-            {settings.provider === 'anthropic' ? t('ai_settings.extended_thinking') : t('ai_settings.enable_reasoning')}
-          </span>
-          {settings.provider === 'openai' && !settings.thinking && (
-            <p className="text-xs text-muted-foreground">{t('ai_settings.openai_thinking_default_hint')}</p>
-          )}
+          <span className="text-sm font-medium">{t('ai_settings.thinking_supported')}</span>
+          <p className="text-xs text-muted-foreground">{t('ai_settings.thinking_supported_hint')}</p>
         </div>
         <Switch
-          checked={settings.thinking}
-          onCheckedChange={(checked) => handleChange('thinking', checked)}
+          checked={settings.thinkingSupported}
+          onCheckedChange={(checked) => handleChange('thinkingSupported', checked)}
         />
       </div>
 
+      {/* Enable Reasoning */}
+      {settings.thinkingSupported && (
+        <div className="flex flex-wrap items-center justify-between gap-2 py-2 pl-4">
+          <div className="min-w-0">
+            <span className="text-sm font-medium">
+              {settings.provider === 'anthropic' ? t('ai_settings.extended_thinking') : t('ai_settings.enable_reasoning')}
+            </span>
+          </div>
+          <Switch
+            checked={settings.thinking}
+            onCheckedChange={(checked) => handleChange('thinking', checked)}
+          />
+        </div>
+      )}
+
       {/* OpenAI: Reasoning Effort */}
-      {settings.thinking && settings.provider === 'openai' && (
+      {settings.thinkingSupported && settings.thinking && settings.provider === 'openai' && (
         <div className="flex flex-wrap items-center justify-between gap-2 py-2 pl-4">
           <span className="text-sm">{t('ai_settings.reasoning_effort_label')}</span>
           <select
@@ -300,7 +282,7 @@ export function AISettings() {
       )}
 
       {/* Anthropic: Thinking Budget */}
-      {settings.thinking && settings.provider === 'anthropic' && (
+      {settings.thinkingSupported && settings.thinking && settings.provider === 'anthropic' && (
         <div className="flex flex-wrap items-center justify-between gap-2 py-2 pl-4">
           <div className="min-w-0">
             <span className="text-sm">{t('ai_settings.thinking_budget_label')}</span>
@@ -319,7 +301,7 @@ export function AISettings() {
       )}
 
       {/* Compatible: Both options */}
-      {settings.thinking && settings.provider === 'compatible' && (
+      {settings.thinkingSupported && settings.thinking && settings.provider === 'compatible' && (
         <div className="space-y-2 pl-4">
           {/* Effort option */}
           <div className="flex flex-wrap items-center justify-between gap-2 py-1">

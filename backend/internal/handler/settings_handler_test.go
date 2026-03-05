@@ -241,7 +241,7 @@ func TestSettingsHandler_TestAI_Success(t *testing.T) {
 	c, rec := newTestContext(e, req)
 
 	mockService.EXPECT().
-		TestAI(gomock.Any(), "openai", "sk-test", "", "gpt-4", "responses", false, 0, "").
+		TestAI(gomock.Any(), "openai", "sk-test", "", "gpt-4", false, false, 0, "").
 		Return("OK", nil)
 
 	err := h.TestAI(c)

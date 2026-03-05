@@ -1,14 +1,12 @@
 package handler
 
 import (
-	"fmt"
 	"net/http"
 	"strconv"
 
 	"github.com/labstack/echo/v4"
 
 	"gist/backend/internal/service"
-	"gist/backend/internal/service/ai"
 	"gist/backend/pkg/logger"
 	"gist/backend/pkg/network"
 )
@@ -16,44 +14,44 @@ import (
 // Request/Response types
 
 type aiSettingsResponse struct {
-	Provider        string `json:"provider"`
-	APIKey          string `json:"apiKey"`
-	BaseURL         string `json:"baseUrl"`
-	Model           string `json:"model"`
-	Endpoint        string `json:"endpoint" enums:"responses,chat/completions"`
-	Thinking        bool   `json:"thinking"`
-	ThinkingBudget  int    `json:"thinkingBudget"`
-	ReasoningEffort string `json:"reasoningEffort"`
-	SummaryLanguage string `json:"summaryLanguage"`
-	AutoTranslate   bool   `json:"autoTranslate"`
-	AutoSummary     bool   `json:"autoSummary"`
-	RateLimit       int    `json:"rateLimit"`
+	Provider          string `json:"provider"`
+	APIKey            string `json:"apiKey"`
+	BaseURL           string `json:"baseUrl"`
+	Model             string `json:"model"`
+	ThinkingSupported bool   `json:"thinkingSupported"`
+	Thinking          bool   `json:"thinking"`
+	ThinkingBudget    int    `json:"thinkingBudget"`
+	ReasoningEffort   string `json:"reasoningEffort"`
+	SummaryLanguage   string `json:"summaryLanguage"`
+	AutoTranslate     bool   `json:"autoTranslate"`
+	AutoSummary       bool   `json:"autoSummary"`
+	RateLimit         int    `json:"rateLimit"`
 }
 
 type aiSettingsRequest struct {
-	Provider        string `json:"provider"`
-	APIKey          string `json:"apiKey"`
-	BaseURL         string `json:"baseUrl"`
-	Model           string `json:"model"`
-	Endpoint        string `json:"endpoint" enums:"responses,chat/completions"`
-	Thinking        bool   `json:"thinking"`
-	ThinkingBudget  int    `json:"thinkingBudget"`
-	ReasoningEffort string `json:"reasoningEffort"`
-	SummaryLanguage string `json:"summaryLanguage"`
-	AutoTranslate   bool   `json:"autoTranslate"`
-	AutoSummary     bool   `json:"autoSummary"`
-	RateLimit       int    `json:"rateLimit"`
+	Provider          string `json:"provider"`
+	APIKey            string `json:"apiKey"`
+	BaseURL           string `json:"baseUrl"`
+	Model             string `json:"model"`
+	ThinkingSupported bool   `json:"thinkingSupported"`
+	Thinking          bool   `json:"thinking"`
+	ThinkingBudget    int    `json:"thinkingBudget"`
+	ReasoningEffort   string `json:"reasoningEffort"`
+	SummaryLanguage   string `json:"summaryLanguage"`
+	AutoTranslate     bool   `json:"autoTranslate"`
+	AutoSummary       bool   `json:"autoSummary"`
+	RateLimit         int    `json:"rateLimit"`
 }
 
 type aiTestRequest struct {
-	Provider        string `json:"provider"`
-	APIKey          string `json:"apiKey"`
-	BaseURL         string `json:"baseUrl"`
-	Model           string `json:"model"`
-	Endpoint        string `json:"endpoint" enums:"responses,chat/completions"`
-	Thinking        bool   `json:"thinking"`
-	ThinkingBudget  int    `json:"thinkingBudget"`
-	ReasoningEffort string `json:"reasoningEffort"`
+	Provider          string `json:"provider"`
+	APIKey            string `json:"apiKey"`
+	BaseURL           string `json:"baseUrl"`
+	Model             string `json:"model"`
+	ThinkingSupported bool   `json:"thinkingSupported"`
+	Thinking          bool   `json:"thinking"`
+	ThinkingBudget    int    `json:"thinkingBudget"`
+	ReasoningEffort   string `json:"reasoningEffort"`
 }
 
 type aiTestResponse struct {
@@ -120,21 +118,6 @@ type SettingsHandler struct {
 	clientFactory *network.ClientFactory
 }
 
-func normalizeOpenAIEndpoint(provider, endpoint string) (string, error) {
-	if provider != ai.ProviderOpenAI {
-		return endpoint, nil
-	}
-	if endpoint == "" {
-		return "responses", nil
-	}
-	switch endpoint {
-	case "responses", "chat/completions":
-		return endpoint, nil
-	default:
-		return "", fmt.Errorf("invalid endpoint")
-	}
-}
-
 func NewSettingsHandler(service service.SettingsService, clientFactory *network.ClientFactory) *SettingsHandler {
 	return &SettingsHandler{service: service, clientFactory: clientFactory}
 }
@@ -173,18 +156,18 @@ func (h *SettingsHandler) GetAISettings(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, aiSettingsResponse{
-		Provider:        settings.Provider,
-		APIKey:          settings.APIKey,
-		BaseURL:         settings.BaseURL,
-		Model:           settings.Model,
-		Endpoint:        settings.Endpoint,
-		Thinking:        settings.Thinking,
-		ThinkingBudget:  settings.ThinkingBudget,
-		ReasoningEffort: settings.ReasoningEffort,
-		SummaryLanguage: settings.SummaryLanguage,
-		AutoTranslate:   settings.AutoTranslate,
-		AutoSummary:     settings.AutoSummary,
-		RateLimit:       settings.RateLimit,
+		Provider:          settings.Provider,
+		APIKey:            settings.APIKey,
+		BaseURL:           settings.BaseURL,
+		Model:             settings.Model,
+		ThinkingSupported: settings.ThinkingSupported,
+		Thinking:          settings.Thinking,
+		ThinkingBudget:    settings.ThinkingBudget,
+		ReasoningEffort:   settings.ReasoningEffort,
+		SummaryLanguage:   settings.SummaryLanguage,
+		AutoTranslate:     settings.AutoTranslate,
+		AutoSummary:       settings.AutoSummary,
+		RateLimit:         settings.RateLimit,
 	})
 }
 
@@ -205,24 +188,19 @@ func (h *SettingsHandler) UpdateAISettings(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, errorResponse{Error: "invalid request"})
 	}
 
-	endpoint, err := normalizeOpenAIEndpoint(req.Provider, req.Endpoint)
-	if err != nil {
-		return c.JSON(http.StatusBadRequest, errorResponse{Error: err.Error()})
-	}
-
 	settings := &service.AISettings{
-		Provider:        req.Provider,
-		APIKey:          req.APIKey,
-		BaseURL:         req.BaseURL,
-		Model:           req.Model,
-		Endpoint:        endpoint,
-		Thinking:        req.Thinking,
-		ThinkingBudget:  req.ThinkingBudget,
-		ReasoningEffort: req.ReasoningEffort,
-		SummaryLanguage: req.SummaryLanguage,
-		AutoTranslate:   req.AutoTranslate,
-		AutoSummary:     req.AutoSummary,
-		RateLimit:       req.RateLimit,
+		Provider:          req.Provider,
+		APIKey:            req.APIKey,
+		BaseURL:           req.BaseURL,
+		Model:             req.Model,
+		ThinkingSupported: req.ThinkingSupported,
+		Thinking:          req.Thinking,
+		ThinkingBudget:    req.ThinkingBudget,
+		ReasoningEffort:   req.ReasoningEffort,
+		SummaryLanguage:   req.SummaryLanguage,
+		AutoTranslate:     req.AutoTranslate,
+		AutoSummary:       req.AutoSummary,
+		RateLimit:         req.RateLimit,
 	}
 
 	if err := h.service.SetAISettings(c.Request().Context(), settings); err != nil {
@@ -257,12 +235,7 @@ func (h *SettingsHandler) TestAI(c echo.Context) error {
 	if req.Model == "" {
 		return c.JSON(http.StatusBadRequest, errorResponse{Error: "model is required"})
 	}
-	endpoint, err := normalizeOpenAIEndpoint(req.Provider, req.Endpoint)
-	if err != nil {
-		return c.JSON(http.StatusBadRequest, errorResponse{Error: err.Error()})
-	}
-
-	response, err := h.service.TestAI(c.Request().Context(), req.Provider, req.APIKey, req.BaseURL, req.Model, endpoint, req.Thinking, req.ThinkingBudget, req.ReasoningEffort)
+	response, err := h.service.TestAI(c.Request().Context(), req.Provider, req.APIKey, req.BaseURL, req.Model, req.ThinkingSupported, req.Thinking, req.ThinkingBudget, req.ReasoningEffort)
 	if err != nil {
 		logger.Warn("ai settings test failed", "module", "handler", "action", "test", "resource", "settings", "result", "failed", "provider", req.Provider, "error", err)
 		return c.JSON(http.StatusOK, aiTestResponse{

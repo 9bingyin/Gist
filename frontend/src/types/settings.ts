@@ -4,14 +4,12 @@ export type AIProvider = 'openai' | 'anthropic' | 'compatible';
 
 export type ReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'minimal' | 'none' | '';
 
-export type OpenAIEndpoint = 'responses' | 'chat/completions';
-
 export interface AISettings {
   provider: AIProvider;
   apiKey: string;
   baseUrl: string;
   model: string;
-  endpoint: OpenAIEndpoint;
+  thinkingSupported: boolean;
   thinking: boolean;
   thinkingBudget: number;
   reasoningEffort: ReasoningEffort;
@@ -26,7 +24,7 @@ export interface AITestRequest {
   apiKey: string;
   baseUrl: string;
   model: string;
-  endpoint: OpenAIEndpoint;
+  thinkingSupported: boolean;
   thinking: boolean;
   thinkingBudget: number;
   reasoningEffort: ReasoningEffort;

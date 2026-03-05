@@ -21,14 +21,14 @@ type Provider interface {
 
 // Config holds the configuration for an AI provider.
 type Config struct {
-	Provider        string // openai, anthropic, compatible
-	APIKey          string
-	BaseURL         string // optional for openai, required for compatible
-	Model           string
-	Endpoint        string // OpenAI only: responses or chat/completions
-	Thinking        bool   // enable thinking/reasoning
-	ThinkingBudget  int    // Anthropic/Compatible budget_tokens
-	ReasoningEffort string // OpenAI/Compatible effort: low/medium/high/xhigh/minimal/none
+	Provider          string // openai, anthropic, compatible
+	APIKey            string
+	BaseURL           string // optional for openai, required for compatible
+	Model             string
+	ThinkingSupported bool   // whether the model supports thinking/reasoning
+	Thinking          bool   // enable thinking/reasoning (only effective when ThinkingSupported=true)
+	ThinkingBudget    int    // Anthropic/Compatible budget_tokens
+	ReasoningEffort   string // OpenAI/Compatible effort: low/medium/high/xhigh/minimal/none
 }
 
 // ProviderType constants
@@ -56,14 +56,14 @@ func NewProvider(cfg Config) (Provider, error) {
 
 	switch cfg.Provider {
 	case ProviderOpenAI:
-		return NewOpenAIProvider(cfg.APIKey, cfg.BaseURL, cfg.Model, cfg.Endpoint, cfg.Thinking, cfg.ReasoningEffort)
+		return NewOpenAIProvider(cfg.APIKey, cfg.BaseURL, cfg.Model, cfg.ThinkingSupported, cfg.Thinking, cfg.ReasoningEffort)
 	case ProviderAnthropic:
-		return NewAnthropicProvider(cfg.APIKey, cfg.BaseURL, cfg.Model, cfg.Thinking, cfg.ThinkingBudget)
+		return NewAnthropicProvider(cfg.APIKey, cfg.BaseURL, cfg.Model, cfg.ThinkingSupported, cfg.Thinking, cfg.ThinkingBudget)
 	case ProviderCompatible:
 		if cfg.BaseURL == "" {
 			return nil, ErrMissingBaseURL
 		}
-		return NewCompatibleProvider(cfg.APIKey, cfg.BaseURL, cfg.Model, cfg.Thinking, cfg.ThinkingBudget, cfg.ReasoningEffort)
+		return NewCompatibleProvider(cfg.APIKey, cfg.BaseURL, cfg.Model, cfg.ThinkingSupported, cfg.Thinking, cfg.ThinkingBudget, cfg.ReasoningEffort)
 	default:
 		return nil, ErrInvalidProvider
 	}

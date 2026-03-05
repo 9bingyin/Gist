@@ -194,6 +194,9 @@ func (s *aiService) getAIConfig(ctx context.Context) (ai.Config, error) {
 	}
 
 	// Get thinking settings
+	if settingsMap["ai.thinking_supported"] == "true" {
+		cfg.ThinkingSupported = true
+	}
 	if settingsMap["ai.thinking"] == "true" {
 		cfg.Thinking = true
 	}

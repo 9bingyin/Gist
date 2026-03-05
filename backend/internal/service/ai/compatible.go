@@ -10,25 +10,27 @@ import (
 // CompatibleProvider implements Provider for OpenAI-compatible APIs.
 // This supports services like OpenRouter, Azure OpenAI, Ollama, etc.
 type CompatibleProvider struct {
-	client          openai.Client
-	model           string
-	thinking        bool
-	thinkingBudget  int
-	reasoningEffort string
+	client            openai.Client
+	model             string
+	thinkingSupported bool
+	thinking          bool
+	thinkingBudget    int
+	reasoningEffort   string
 }
 
 // NewCompatibleProvider creates a new OpenAI-compatible provider.
-func NewCompatibleProvider(apiKey, baseURL, model string, thinking bool, thinkingBudget int, reasoningEffort string) (*CompatibleProvider, error) {
+func NewCompatibleProvider(apiKey, baseURL, model string, thinkingSupported, thinking bool, thinkingBudget int, reasoningEffort string) (*CompatibleProvider, error) {
 	client := openai.NewClient(
 		option.WithAPIKey(apiKey),
 		option.WithBaseURL(baseURL),
 	)
 	return &CompatibleProvider{
-		client:          client,
-		model:           model,
-		thinking:        thinking,
-		thinkingBudget:  thinkingBudget,
-		reasoningEffort: reasoningEffort,
+		client:            client,
+		model:             model,
+		thinkingSupported: thinkingSupported,
+		thinking:          thinking,
+		thinkingBudget:    thinkingBudget,
+		reasoningEffort:   reasoningEffort,
 	}, nil
 }
 
@@ -43,27 +45,30 @@ func (p *CompatibleProvider) Test(ctx context.Context) (string, error) {
 
 	var opts []option.RequestOption
 
-	// Build reasoning parameter based on configuration
-	if p.thinking {
-		reasoning := map[string]interface{}{}
-		if p.reasoningEffort != "" {
-			// Effort-based mode for o1/Grok models
-			reasoning["effort"] = p.reasoningEffort
-		} else if p.thinkingBudget > 0 {
-			// Budget-based mode for Anthropic/Gemini models
-			reasoning["max_tokens"] = p.thinkingBudget
-		}
-		if len(reasoning) > 0 {
-			opts = append(opts, option.WithJSONSet("reasoning", reasoning))
+	// Only pass reasoning params when the model supports thinking
+	if p.thinkingSupported {
+		if p.thinking {
+			reasoning := map[string]interface{}{}
+			if p.reasoningEffort != "" {
+				reasoning["effort"] = p.reasoningEffort
+			} else if p.thinkingBudget > 0 {
+				reasoning["max_tokens"] = p.thinkingBudget
+			}
+			if len(reasoning) > 0 {
+				opts = append(opts, option.WithJSONSet("reasoning", reasoning))
+			} else {
+				params.MaxTokens = openai.Int(50)
+			}
 		} else {
 			params.MaxTokens = openai.Int(50)
+			// Explicitly disable reasoning
+			opts = append(opts, option.WithJSONSet("reasoning", map[string]interface{}{
+				"enabled": false,
+			}))
 		}
 	} else {
+		// Model does not support thinking, do not pass any reasoning params
 		params.MaxTokens = openai.Int(50)
-		// Explicitly disable reasoning
-		opts = append(opts, option.WithJSONSet("reasoning", map[string]interface{}{
-			"enabled": false,
-		}))
 	}
 
 	resp, err := p.client.Chat.Completions.New(ctx, params, opts...)
@@ -104,21 +109,23 @@ func (p *CompatibleProvider) SummarizeStream(ctx context.Context, systemPrompt, 
 
 		var opts []option.RequestOption
 
-		// Build reasoning parameter based on configuration
-		if p.thinking {
-			reasoning := map[string]interface{}{}
-			if p.reasoningEffort != "" {
-				reasoning["effort"] = p.reasoningEffort
-			} else if p.thinkingBudget > 0 {
-				reasoning["max_tokens"] = p.thinkingBudget
+		// Only pass reasoning params when the model supports thinking
+		if p.thinkingSupported {
+			if p.thinking {
+				reasoning := map[string]interface{}{}
+				if p.reasoningEffort != "" {
+					reasoning["effort"] = p.reasoningEffort
+				} else if p.thinkingBudget > 0 {
+					reasoning["max_tokens"] = p.thinkingBudget
+				}
+				if len(reasoning) > 0 {
+					opts = append(opts, option.WithJSONSet("reasoning", reasoning))
+				}
+			} else {
+				opts = append(opts, option.WithJSONSet("reasoning", map[string]interface{}{
+					"enabled": false,
+				}))
 			}
-			if len(reasoning) > 0 {
-				opts = append(opts, option.WithJSONSet("reasoning", reasoning))
-			}
-		} else {
-			opts = append(opts, option.WithJSONSet("reasoning", map[string]interface{}{
-				"enabled": false,
-			}))
 		}
 
 		stream := p.client.Chat.Completions.NewStreaming(ctx, params, opts...)
@@ -163,21 +170,23 @@ func (p *CompatibleProvider) Complete(ctx context.Context, systemPrompt, content
 
 	var opts []option.RequestOption
 
-	// Build reasoning parameter based on configuration
-	if p.thinking {
-		reasoning := map[string]interface{}{}
-		if p.reasoningEffort != "" {
-			reasoning["effort"] = p.reasoningEffort
-		} else if p.thinkingBudget > 0 {
-			reasoning["max_tokens"] = p.thinkingBudget
+	// Only pass reasoning params when the model supports thinking
+	if p.thinkingSupported {
+		if p.thinking {
+			reasoning := map[string]interface{}{}
+			if p.reasoningEffort != "" {
+				reasoning["effort"] = p.reasoningEffort
+			} else if p.thinkingBudget > 0 {
+				reasoning["max_tokens"] = p.thinkingBudget
+			}
+			if len(reasoning) > 0 {
+				opts = append(opts, option.WithJSONSet("reasoning", reasoning))
+			}
+		} else {
+			opts = append(opts, option.WithJSONSet("reasoning", map[string]interface{}{
+				"enabled": false,
+			}))
 		}
-		if len(reasoning) > 0 {
-			opts = append(opts, option.WithJSONSet("reasoning", reasoning))
-		}
-	} else {
-		opts = append(opts, option.WithJSONSet("reasoning", map[string]interface{}{
-			"enabled": false,
-		}))
 	}
 
 	resp, err := p.client.Chat.Completions.New(ctx, params, opts...)

@@ -14,18 +14,18 @@ import (
 
 // AISettings holds the AI configuration.
 type AISettings struct {
-	Provider        string `json:"provider"`
-	APIKey          string `json:"apiKey"`
-	BaseURL         string `json:"baseUrl"`
-	Model           string `json:"model"`
-	Endpoint        string `json:"endpoint"`
-	Thinking        bool   `json:"thinking"`
-	ThinkingBudget  int    `json:"thinkingBudget"`
-	ReasoningEffort string `json:"reasoningEffort"`
-	SummaryLanguage string `json:"summaryLanguage"`
-	AutoTranslate   bool   `json:"autoTranslate"`
-	AutoSummary     bool   `json:"autoSummary"`
-	RateLimit       int    `json:"rateLimit"`
+	Provider          string `json:"provider"`
+	APIKey            string `json:"apiKey"`
+	BaseURL           string `json:"baseUrl"`
+	Model             string `json:"model"`
+	ThinkingSupported bool   `json:"thinkingSupported"`
+	Thinking          bool   `json:"thinking"`
+	ThinkingBudget    int    `json:"thinkingBudget"`
+	ReasoningEffort   string `json:"reasoningEffort"`
+	SummaryLanguage   string `json:"summaryLanguage"`
+	AutoTranslate     bool   `json:"autoTranslate"`
+	AutoSummary       bool   `json:"autoSummary"`
+	RateLimit         int    `json:"rateLimit"`
 }
 
 // GeneralSettings holds general application settings.
@@ -55,10 +55,10 @@ const (
 	keyAIProvider        = "ai.provider"
 	keyAIAPIKey          = "ai.api_key"
 	keyAIBaseURL         = "ai.base_url"
-	keyAIModel           = "ai.model"
-	keyAIEndpoint        = "ai.openai_endpoint"
-	keyAIThinking        = "ai.thinking"
-	keyAIThinkingBudget  = "ai.thinking_budget"
+	keyAIModel             = "ai.model"
+	keyAIThinkingSupported = "ai.thinking_supported"
+	keyAIThinking          = "ai.thinking"
+	keyAIThinkingBudget    = "ai.thinking_budget"
 	keyAIReasoningEffort = "ai.reasoning_effort"
 	keyAISummaryLanguage = "ai.summary_language"
 	keyAIAutoTranslate   = "ai.auto_translate"
@@ -87,7 +87,7 @@ type SettingsService interface {
 	// If apiKey is empty string, it keeps the existing key.
 	SetAISettings(ctx context.Context, settings *AISettings) error
 	// TestAI tests the AI connection with the given configuration.
-	TestAI(ctx context.Context, provider, apiKey, baseURL, model, endpoint string, thinking bool, thinkingBudget int, reasoningEffort string) (string, error)
+	TestAI(ctx context.Context, provider, apiKey, baseURL, model string, thinkingSupported, thinking bool, thinkingBudget int, reasoningEffort string) (string, error)
 	// GetGeneralSettings returns the general settings.
 	GetGeneralSettings(ctx context.Context) (*GeneralSettings, error)
 	// SetGeneralSettings updates the general settings.
@@ -125,7 +125,6 @@ func NewSettingsService(repo repository.SettingsRepository, rateLimiter *ai.Rate
 func (s *settingsService) GetAISettings(ctx context.Context) (*AISettings, error) {
 	settings := &AISettings{
 		Provider:        ai.ProviderOpenAI, // default
-		Endpoint:        "responses",       // default endpoint
 		ThinkingBudget:  10000,             // default budget
 		ReasoningEffort: "medium",          // default effort
 		SummaryLanguage: "zh-CN",           // default language
@@ -143,9 +142,7 @@ func (s *settingsService) GetAISettings(ctx context.Context) (*AISettings, error
 	if val, err := s.getString(ctx, keyAIModel); err == nil {
 		settings.Model = val
 	}
-	if val, err := s.getString(ctx, keyAIEndpoint); err == nil && val != "" {
-		settings.Endpoint = val
-	}
+	settings.ThinkingSupported = s.getBool(ctx, keyAIThinkingSupported)
 	settings.Thinking = s.getBool(ctx, keyAIThinking)
 	if val, err := s.getInt(ctx, keyAIThinkingBudget); err == nil && val > 0 {
 		settings.ThinkingBudget = val
@@ -187,9 +184,13 @@ func (s *settingsService) SetAISettings(ctx context.Context, settings *AISetting
 		logger.Warn("ai settings update model failed", "module", "service", "action", "update", "resource", "settings", "result", "failed", "model", settings.Model, "error", err)
 		return fmt.Errorf("set model: %w", err)
 	}
-	if err := s.repo.Set(ctx, keyAIEndpoint, settings.Endpoint); err != nil {
-		logger.Warn("ai settings update endpoint failed", "module", "service", "action", "update", "resource", "settings", "result", "failed", "endpoint", settings.Endpoint, "error", err)
-		return fmt.Errorf("set endpoint: %w", err)
+	thinkingSupportedVal := "false"
+	if settings.ThinkingSupported {
+		thinkingSupportedVal = "true"
+	}
+	if err := s.repo.Set(ctx, keyAIThinkingSupported, thinkingSupportedVal); err != nil {
+		logger.Warn("ai settings update thinking supported failed", "module", "service", "action", "update", "resource", "settings", "result", "failed", "error", err)
+		return fmt.Errorf("set thinking supported: %w", err)
 	}
 	thinkingVal := "false"
 	if settings.Thinking {
@@ -239,7 +240,7 @@ func (s *settingsService) SetAISettings(ctx context.Context, settings *AISetting
 	if s.rateLimiter != nil {
 		s.rateLimiter.SetLimit(rateLimit)
 	}
-	logger.Info("ai settings updated", "module", "service", "action", "update", "resource", "settings", "result", "ok", "provider", settings.Provider, "model", settings.Model, "endpoint", settings.Endpoint, "rate_limit", rateLimit)
+	logger.Info("ai settings updated", "module", "service", "action", "update", "resource", "settings", "result", "ok", "provider", settings.Provider, "model", settings.Model, "rate_limit", rateLimit)
 	return nil
 }
 
@@ -281,7 +282,7 @@ func isMaskedKey(key string) bool {
 }
 
 // TestAI tests the AI connection with the given configuration.
-func (s *settingsService) TestAI(ctx context.Context, provider, apiKey, baseURL, model, endpoint string, thinking bool, thinkingBudget int, reasoningEffort string) (string, error) {
+func (s *settingsService) TestAI(ctx context.Context, provider, apiKey, baseURL, model string, thinkingSupported, thinking bool, thinkingBudget int, reasoningEffort string) (string, error) {
 	// If apiKey looks like a masked key, try to get the stored key
 	if isMaskedKey(apiKey) {
 		storedKey, err := s.getString(ctx, keyAIAPIKey)
@@ -292,14 +293,14 @@ func (s *settingsService) TestAI(ctx context.Context, provider, apiKey, baseURL,
 	}
 
 	cfg := ai.Config{
-		Provider:        provider,
-		APIKey:          apiKey,
-		BaseURL:         baseURL,
-		Model:           model,
-		Endpoint:        endpoint,
-		Thinking:        thinking,
-		ThinkingBudget:  thinkingBudget,
-		ReasoningEffort: reasoningEffort,
+		Provider:          provider,
+		APIKey:            apiKey,
+		BaseURL:           baseURL,
+		Model:             model,
+		ThinkingSupported: thinkingSupported,
+		Thinking:          thinking,
+		ThinkingBudget:    thinkingBudget,
+		ReasoningEffort:   reasoningEffort,
 	}
 
 	p, err := ai.NewProvider(cfg)
