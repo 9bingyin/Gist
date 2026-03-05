@@ -24,7 +24,7 @@ export function AISettings() {
       { value: 'medium', label: t('ai_settings.effort_medium') },
       { value: 'low', label: t('ai_settings.effort_low') },
       { value: 'minimal', label: t('ai_settings.effort_minimal') },
-      { value: 'none', label: t('ai_settings.effort_none_gpt5') },
+      { value: 'none', label: t('ai_settings.effort_none') },
     ],
     [t]
   )
