@@ -7,6 +7,7 @@ import { useFolders } from '@/hooks/useFolders'
 import { useMasonryColumn } from '@/hooks/useMasonryColumn'
 import { useSwipeGesture } from '@/hooks/useSwipeGesture'
 import { selectionToParams, type SelectionType } from '@/hooks/useSelection'
+import { flattenUniqueEntries } from '@/lib/entry-pagination'
 import { useImageDimensionsStore } from '@/stores/image-dimensions-store'
 import { PictureItem } from './PictureItem'
 import { EntryListHeader } from '@/components/entry-list/EntryListHeader'
@@ -57,6 +58,7 @@ export function PictureMasonry({
     enabledDirections: ['right'],
     threshold: 100,
     preventScroll: true,
+    startFrom: { left: 32 },
     enabled: Boolean(isMobile && onMenuClick),
   })
 
@@ -111,9 +113,7 @@ export function PictureMasonry({
     return map
   }, [folders])
 
-  const entries = useMemo(() => {
-    return data?.pages.flatMap((page) => page.entries) ?? []
-  }, [data])
+  const entries = useMemo(() => flattenUniqueEntries(data?.pages), [data])
 
   // Generate a stable key representing the current filter context
   const virtuosoKey = useMemo(() => {

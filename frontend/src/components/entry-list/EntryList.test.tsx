@@ -5,11 +5,15 @@ import type { Entry } from '@/types/api'
 // --- Hoisted mocks (available in vi.mock factories) ---
 const {
   mockGetVirtualItems,
+  mockMeasure,
+  mockRenderedEntryListItem,
   mockTranslateArticlesBatch,
   mockCancelAllBatchTranslations,
   mockTranslationActionsGet,
 } = vi.hoisted(() => ({
   mockGetVirtualItems: vi.fn(),
+  mockMeasure: vi.fn(),
+  mockRenderedEntryListItem: vi.fn(),
   mockTranslateArticlesBatch: vi.fn(() => Promise.resolve()),
   mockCancelAllBatchTranslations: vi.fn(),
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -25,6 +29,7 @@ vi.mock('@tanstack/react-virtual', () => ({
   useVirtualizer: () => ({
     getVirtualItems: mockGetVirtualItems,
     measureElement: () => {},
+    measure: mockMeasure,
     getTotalSize: () => 500,
   }),
 }))
@@ -71,7 +76,10 @@ vi.mock('@/stores/translation-store', () => ({
 }))
 
 vi.mock('./EntryListItem', () => ({
-  EntryListItem: () => null,
+  EntryListItem: ({ entry }: { entry: Entry }) => {
+    mockRenderedEntryListItem(entry.id)
+    return null
+  },
 }))
 
 vi.mock('./EntryListHeader', () => ({
@@ -133,6 +141,8 @@ describe('EntryList translation scheduling', () => {
     vi.clearAllMocks()
 
     mockGetVirtualItems.mockReturnValue(visibleVirtualItems)
+    mockMeasure.mockReset()
+    mockRenderedEntryListItem.mockReset()
     mockTranslationActionsGet.mockReturnValue(undefined)
 
     vi.mocked(useEntriesInfinite).mockReturnValue({
@@ -283,5 +293,64 @@ describe('EntryList translation scheduling', () => {
     expect(ids).not.toContain('2')
     // Entry 3 is newly scheduled
     expect(ids).toContain('3')
+  })
+
+  it('should deduplicate entries repeated across pages before scheduling translation', () => {
+    vi.mocked(useEntriesInfinite).mockReturnValue({
+      data: {
+        pages: [
+          { entries: [makeEntry('1'), makeEntry('2')], hasMore: true },
+          { entries: [makeEntry('2'), makeEntry('3')], hasMore: false },
+        ],
+      },
+      fetchNextPage: vi.fn(),
+      hasNextPage: false,
+      isFetchingNextPage: false,
+      isLoading: false,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any)
+
+    mockGetVirtualItems.mockReturnValue([
+      { index: 0, start: 0, size: 100, end: 100, lane: 0, key: 0 },
+      { index: 1, start: 100, size: 100, end: 200, lane: 0, key: 1 },
+      { index: 2, start: 200, size: 100, end: 300, lane: 0, key: 2 },
+    ])
+
+    render(<EntryList {...defaultProps} selectedEntryId={null} />)
+
+    act(() => {
+      vi.advanceTimersByTime(500)
+    })
+
+    expect(mockTranslateArticlesBatch).toHaveBeenCalledTimes(1)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const calledArticles = (mockTranslateArticlesBatch.mock.calls[0] as any[])[0] as Array<{ id: string }>
+    expect(calledArticles.map((article) => article.id)).toEqual(['1', '2', '3'])
+  })
+
+  it('should not render duplicate items when pages contain repeated entries', () => {
+    vi.mocked(useEntriesInfinite).mockReturnValue({
+      data: {
+        pages: [
+          { entries: [makeEntry('1'), makeEntry('2')], hasMore: true },
+          { entries: [makeEntry('2'), makeEntry('3')], hasMore: false },
+        ],
+      },
+      fetchNextPage: vi.fn(),
+      hasNextPage: false,
+      isFetchingNextPage: false,
+      isLoading: false,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any)
+
+    mockGetVirtualItems.mockReturnValue([
+      { index: 0, start: 0, size: 100, end: 100, lane: 0, key: 0 },
+      { index: 1, start: 100, size: 100, end: 200, lane: 0, key: 1 },
+      { index: 2, start: 200, size: 100, end: 300, lane: 0, key: 2 },
+    ])
+
+    render(<EntryList {...defaultProps} selectedEntryId={null} />)
+
+    expect(mockRenderedEntryListItem.mock.calls.map(([id]) => id)).toEqual(['1', '2', '3'])
   })
 })
