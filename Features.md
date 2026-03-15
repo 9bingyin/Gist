@@ -1,0 +1,1 @@
+1. swipe to show feed list and article list
