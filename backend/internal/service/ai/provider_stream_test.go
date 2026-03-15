@@ -15,23 +15,11 @@ import (
 	"gist/backend/internal/service/ai"
 )
 
-func TestOpenAIProvider_ChatEndpoints(t *testing.T) {
-	server := newOpenAITestServer(t)
-	defer server.Close()
-
-	provider, err := ai.NewOpenAIProvider("key", server.URL+"/v1/", "gpt-4o-mini", "chat/completions", false, "")
-	require.NoError(t, err)
-
-	testAndCompleteProvider(t, provider, "chat-response")
-	streamText := readStream(t, provider, "sys", "content")
-	require.Equal(t, "chat-stream", streamText)
-}
-
 func TestOpenAIProvider_ResponsesEndpoints(t *testing.T) {
 	server := newOpenAITestServer(t)
 	defer server.Close()
 
-	provider, err := ai.NewOpenAIProvider("key", server.URL+"/v1/", "gpt-4o-mini", "responses", false, "")
+	provider, err := ai.NewOpenAIProvider("key", server.URL+"/v1/", "gpt-4o-mini", false, false, "")
 	require.NoError(t, err)
 
 	testAndCompleteProvider(t, provider, "response-text")
@@ -43,7 +31,7 @@ func TestCompatibleProvider_ChatEndpoints(t *testing.T) {
 	server := newOpenAITestServer(t)
 	defer server.Close()
 
-	provider, err := ai.NewCompatibleProvider("key", server.URL+"/v1/", "gpt-4o-mini", false, 0, "")
+	provider, err := ai.NewCompatibleProvider("key", server.URL+"/v1/", "gpt-4o-mini", false, false, 0, "")
 	require.NoError(t, err)
 
 	testAndCompleteProvider(t, provider, "chat-response")
@@ -55,7 +43,7 @@ func TestAnthropicProvider_MessageEndpoints(t *testing.T) {
 	server := newAnthropicTestServer(t)
 	defer server.Close()
 
-	provider, err := ai.NewAnthropicProvider("key", server.URL+"/", "claude-3-sonnet", false, 0)
+	provider, err := ai.NewAnthropicProvider("key", server.URL+"/", "claude-3-sonnet", false, false, 0)
 	require.NoError(t, err)
 
 	testProvider(t, provider, "claude-response")

@@ -8,6 +8,7 @@ import { useAISettings } from '@/hooks/useAISettings'
 import { useGeneralSettings } from '@/hooks/useGeneralSettings'
 import { useSwipeGesture } from '@/hooks/useSwipeGesture'
 import { selectionToParams, type SelectionType } from '@/hooks/useSelection'
+import { flattenUniqueEntries } from '@/lib/entry-pagination'
 import { stripHtml } from '@/lib/html-utils'
 import { cn } from '@/lib/utils'
 import * as ScrollAreaPrimitive from '@radix-ui/react-scroll-area'
@@ -17,7 +18,7 @@ import { EntryListHeader } from './EntryListHeader'
 import { needsTranslation } from '@/lib/language-detect'
 import { translateArticlesBatch, cancelAllBatchTranslations } from '@/services/translation-service'
 import { translationActions } from '@/stores/translation-store'
-import { selectionScrollKey, entryListScrollPositions, entryListMeasurementsCache } from './scroll-key'
+import { selectionScrollKey, entryListScrollPositions } from './scroll-key'
 import { useScrollToTop } from '@/hooks/useScrollToTop'
 import { useFeedViewStore } from '@/stores/feed-view-store'
 import type { Entry, Feed, Folder, ContentType } from '@/types/api'
@@ -125,6 +126,7 @@ export function EntryList({
     enabledDirections: ['right'],
     threshold: 100,
     preventScroll: true,
+    startFrom: { left: 32 },
     enabled: Boolean(isMobile && onMenuClick),
   })
 
@@ -193,10 +195,7 @@ export function EntryList({
     return map
   }, [folders])
 
-  const entries = useMemo(
-    () => data?.pages.flatMap((page) => page.entries) ?? [],
-    [data]
-  )
+  const entries = useMemo(() => flattenUniqueEntries(data?.pages), [data])
 
   const unreadCleanupKey = useMemo(() => {
     switch (selection.type) {
@@ -238,14 +237,8 @@ export function EntryList({
     getScrollElement: () => containerRef.current,
     estimateSize: () => ESTIMATED_ITEM_HEIGHT,
     overscan: 5,
-    // Restore offset and measurements on remount (only used on first mount)
+    // Restore offset on remount (only used on first mount)
     initialOffset: entryListScrollPositions.get(scrollKey),
-    initialMeasurementsCache: entryListMeasurementsCache.get(scrollKey),
-    onChange: (instance) => {
-      if (!instance.isScrolling) {
-        entryListMeasurementsCache.set(scrollKey, instance.measurementsCache)
-      }
-    },
   })
 
   const virtualItems = virtualizer.getVirtualItems()
@@ -539,7 +532,10 @@ export function EntryList({
       />
 
       <ScrollAreaPrimitive.Root className="relative min-h-0 flex-1 overflow-hidden">
-        <div ref={containerRef} className="h-full overflow-y-auto">
+        <div
+          ref={containerRef}
+          className="h-full overflow-y-auto overscroll-y-contain [overflow-anchor:none]"
+        >
           {isLoading ? (
             <EntryListSkeleton />
           ) : entries.length === 0 ? (
@@ -556,6 +552,8 @@ export function EntryList({
               >
                 {virtualItems.map((virtualRow) => {
                   const entry = entries[virtualRow.index]
+                  if (!entry) return null
+
                   return (
                     <EntryListItem
                       key={entry.id}

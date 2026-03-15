@@ -53,6 +53,9 @@ export default defineConfig({
         navigateFallback: 'index.html',
         navigateFallbackDenylist: [/^\/api/],
         cleanupOutdatedCaches: true,
+        // Workaround for Chrome 143+ ServiceWorkerAutoPreload regression (chromium #466790291)
+        // Opt out of auto-preload by routing all requests through fetch-event
+        importScripts: ['sw-preload-fix.js'],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,

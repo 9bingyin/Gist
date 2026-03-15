@@ -14,4 +14,10 @@ export function selectionScrollKey(selection: SelectionType, contentType: Conten
 // Module-level caches for EntryList scroll position restoration.
 // Survive unmount/remount (e.g., switching to/from picture mode).
 export const entryListScrollPositions = new Map<string, number>()
-export const entryListMeasurementsCache = new Map<string, VirtualItem[]>()
+
+export interface EntryListMeasurementsSnapshot {
+  entryIdsKey: string
+  measurements: VirtualItem[]
+}
+
+export const entryListMeasurementsCache = new Map<string, EntryListMeasurementsSnapshot>()

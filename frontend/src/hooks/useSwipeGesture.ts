@@ -12,6 +12,12 @@ interface UseSwipeGestureOptions {
   velocityThreshold?: number // Minimum velocity for a swipe (px/ms)
   enabledDirections?: SwipeDirection[] // Which directions to detect
   preventScroll?: boolean // Prevent default scroll behavior during horizontal swipe
+  startFrom?: {
+    left?: number
+    right?: number
+    top?: number
+    bottom?: number
+  } // Restrict gesture start area, useful for edge swipes on mobile
   enabled?: boolean // Whether to register touch listeners (default true)
 }
 
@@ -23,6 +29,8 @@ interface TouchState {
   currentY: number
   isScrolling: boolean | null // null = undetermined, true = vertical scroll, false = horizontal swipe
 }
+
+const DIRECTION_LOCK_RATIO = 1.2
 
 export function useSwipeGesture(
   elementRef: React.RefObject<HTMLElement | null>,
@@ -38,6 +46,7 @@ export function useSwipeGesture(
     velocityThreshold = 0.3,
     enabledDirections = ['left', 'right', 'up', 'down'],
     preventScroll = true,
+    startFrom,
     enabled = true,
   } = options
 
@@ -47,6 +56,20 @@ export function useSwipeGesture(
     const touch = e.touches[0]
     if (!touch) return
 
+    const element = elementRef.current
+    if (element && startFrom) {
+      const rect = element.getBoundingClientRect()
+      const withinLeft = startFrom.left === undefined || touch.clientX <= rect.left + startFrom.left
+      const withinRight = startFrom.right === undefined || touch.clientX >= rect.right - startFrom.right
+      const withinTop = startFrom.top === undefined || touch.clientY <= rect.top + startFrom.top
+      const withinBottom = startFrom.bottom === undefined || touch.clientY >= rect.bottom - startFrom.bottom
+
+      if (!withinLeft || !withinRight || !withinTop || !withinBottom) {
+        touchState.current = null
+        return
+      }
+    }
+
     touchState.current = {
       startX: touch.clientX,
       startY: touch.clientY,
@@ -55,7 +78,7 @@ export function useSwipeGesture(
       currentY: touch.clientY,
       isScrolling: null,
     }
-  }, [])
+  }, [elementRef, startFrom])
 
   const handleTouchMove = useCallback(
     (e: TouchEvent) => {
@@ -74,8 +97,11 @@ export function useSwipeGesture(
 
         // Need at least 10px movement to determine direction
         if (deltaX > 10 || deltaY > 10) {
-          // If vertical movement is greater, it's a scroll
-          touchState.current.isScrolling = deltaY > deltaX
+          if (deltaX > deltaY * DIRECTION_LOCK_RATIO) {
+            touchState.current.isScrolling = false
+          } else if (deltaY > deltaX * DIRECTION_LOCK_RATIO) {
+            touchState.current.isScrolling = true
+          }
         }
       }
 
@@ -111,7 +137,7 @@ export function useSwipeGesture(
     let direction: SwipeDirection | null = null
 
     // Horizontal swipe detection
-    if (absX > absY) {
+    if (absX > absY * DIRECTION_LOCK_RATIO) {
       if (absX > threshold || velocity > velocityThreshold) {
         if (deltaX > 0 && enabledDirections.includes('right')) {
           direction = 'right'
@@ -123,7 +149,7 @@ export function useSwipeGesture(
       }
     }
     // Vertical swipe detection
-    else {
+    else if (absY > absX * DIRECTION_LOCK_RATIO) {
       if (absY > threshold || velocity > velocityThreshold) {
         if (deltaY > 0 && enabledDirections.includes('down')) {
           direction = 'down'

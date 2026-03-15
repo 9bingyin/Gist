@@ -144,4 +144,27 @@ describe('useSwipeGesture', () => {
 
     expect(onSwipe).toHaveBeenCalledWith('right')
   })
+
+  it('should only start swipe detection inside the configured edge zone', () => {
+    const onSwipeRight = vi.fn()
+
+    renderHook(() =>
+      useSwipeGesture(ref, {
+        onSwipeRight,
+        startFrom: { left: 24 },
+      })
+    )
+
+    element.dispatchEvent(createTouchEvent('touchstart', 40, 100))
+    element.dispatchEvent(createTouchEvent('touchmove', 120, 100))
+    element.dispatchEvent(createTouchEvent('touchend', 120, 100))
+
+    expect(onSwipeRight).not.toHaveBeenCalled()
+
+    element.dispatchEvent(createTouchEvent('touchstart', 20, 100))
+    element.dispatchEvent(createTouchEvent('touchmove', 120, 100))
+    element.dispatchEvent(createTouchEvent('touchend', 120, 100))
+
+    expect(onSwipeRight).toHaveBeenCalledTimes(1)
+  })
 })
