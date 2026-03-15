@@ -54,7 +54,7 @@ vi.mock('@/hooks/useAISettings', () => ({
 }))
 
 vi.mock('@/hooks/useGeneralSettings', () => ({
-  useGeneralSettings: vi.fn(() => ({ data: { markReadOnScroll: false } })),
+  useGeneralSettings: vi.fn(() => ({ data: { fallbackUserAgent: '', autoReadability: false, markReadOnScroll: false, defaultShowUnread: false, keepReadUntilExit: false } })),
 }))
 
 vi.mock('@/hooks/useSelection', () => ({

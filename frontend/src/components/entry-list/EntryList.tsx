@@ -120,6 +120,8 @@ export function EntryList({
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } =
     useEntriesInfinite({ ...params, unreadOnly })
 
+  const keepReadUntilExit = generalSettings?.keepReadUntilExit ?? false
+
   // Swipe gesture: Right swipe opens sidebar (only on mobile)
   useSwipeGesture(listWrapperRef, {
     onSwipeRight: () => onMenuClick?.(),
@@ -250,11 +252,14 @@ export function EntryList({
   const handleEntryClick = useCallback((entry: Entry) => {
     const viewMode = getFeedExplicitViewMode(entry.feedId)
     if (viewMode === 'browser' && entry.url) {
+      if (!entry.read) {
+        markAsRead({ id: entry.id, read: true, skipInvalidate: keepReadUntilExit })
+      }
       window.open(entry.url, '_blank', 'noopener,noreferrer')
       return
     }
     onSelectEntry(entry.id)
-  }, [getFeedExplicitViewMode, onSelectEntry])
+  }, [getFeedExplicitViewMode, keepReadUntilExit, markAsRead, onSelectEntry])
 
   useEffect(() => {
     const lastItem = virtualItems.at(-1)

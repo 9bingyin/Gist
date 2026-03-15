@@ -41,6 +41,7 @@ export interface GeneralSettings {
   autoReadability: boolean;
   markReadOnScroll: boolean;
   defaultShowUnread: boolean;
+  keepReadUntilExit: boolean;
 }
 
 export type ProxyType = 'http' | 'socks5';

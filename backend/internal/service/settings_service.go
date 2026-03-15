@@ -34,6 +34,7 @@ type GeneralSettings struct {
 	AutoReadability   bool   `json:"autoReadability"`
 	MarkReadOnScroll  bool   `json:"markReadOnScroll"`
 	DefaultShowUnread bool   `json:"defaultShowUnread"`
+	KeepReadUntilExit bool   `json:"keepReadUntilExit"`
 }
 
 // NetworkSettings holds network proxy configuration.
@@ -54,23 +55,24 @@ type AppearanceSettings struct {
 
 // Setting keys
 const (
-	keyAIProvider        = "ai.provider"
-	keyAIAPIKey          = "ai.api_key"
-	keyAIBaseURL         = "ai.base_url"
+	keyAIProvider          = "ai.provider"
+	keyAIAPIKey            = "ai.api_key"
+	keyAIBaseURL           = "ai.base_url"
 	keyAIModel             = "ai.model"
 	keyAIThinkingSupported = "ai.thinking_supported"
 	keyAIThinking          = "ai.thinking"
 	keyAIThinkingBudget    = "ai.thinking_budget"
-	keyAIReasoningEffort = "ai.reasoning_effort"
-	keyAISummaryLanguage = "ai.summary_language"
-	keyAIAutoTranslate   = "ai.auto_translate"
-	keyAIAutoSummary     = "ai.auto_summary"
-	keyAIRateLimit       = "ai.rate_limit"
+	keyAIReasoningEffort   = "ai.reasoning_effort"
+	keyAISummaryLanguage   = "ai.summary_language"
+	keyAIAutoTranslate     = "ai.auto_translate"
+	keyAIAutoSummary       = "ai.auto_summary"
+	keyAIRateLimit         = "ai.rate_limit"
 
 	keyFallbackUserAgent = "general.fallback_user_agent"
 	keyAutoReadability   = "general.auto_readability"
 	keyMarkReadOnScroll  = "general.mark_read_on_scroll"
 	keyDefaultShowUnread = "general.default_show_unread"
+	keyKeepReadUntilExit = "general.keep_read_until_exit"
 
 	keyNetworkEnabled  = "network.proxy_enabled"
 	keyNetworkType     = "network.proxy_type"
@@ -371,6 +373,7 @@ func (s *settingsService) GetGeneralSettings(ctx context.Context) (*GeneralSetti
 	settings.AutoReadability = s.getBool(ctx, keyAutoReadability)
 	settings.MarkReadOnScroll = s.getBool(ctx, keyMarkReadOnScroll)
 	settings.DefaultShowUnread = s.getBool(ctx, keyDefaultShowUnread)
+	settings.KeepReadUntilExit = s.getBool(ctx, keyKeepReadUntilExit)
 
 	return settings, nil
 }
@@ -405,6 +408,14 @@ func (s *settingsService) SetGeneralSettings(ctx context.Context, settings *Gene
 		logger.Warn("general settings update default show unread failed", "module", "service", "action", "update", "resource", "settings", "result", "failed", "error", err)
 		return fmt.Errorf("set default show unread: %w", err)
 	}
+	keepReadUntilExitVal := "false"
+	if settings.KeepReadUntilExit {
+		keepReadUntilExitVal = "true"
+	}
+	if err := s.repo.Set(ctx, keyKeepReadUntilExit, keepReadUntilExitVal); err != nil {
+		logger.Warn("general settings update keep read until exit failed", "module", "service", "action", "update", "resource", "settings", "result", "failed", "error", err)
+		return fmt.Errorf("set keep read until exit: %w", err)
+	}
 	logger.Info(
 		"general settings updated",
 		"module", "service",
@@ -414,6 +425,7 @@ func (s *settingsService) SetGeneralSettings(ctx context.Context, settings *Gene
 		"auto_readability", settings.AutoReadability,
 		"mark_read_on_scroll", settings.MarkReadOnScroll,
 		"default_show_unread", settings.DefaultShowUnread,
+		"keep_read_until_exit", settings.KeepReadUntilExit,
 	)
 	return nil
 }

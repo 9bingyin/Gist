@@ -8,6 +8,7 @@ import { isVideoThumbnail } from '@/lib/media-utils'
 import { formatRelativeTime } from '@/lib/date-utils'
 import { stripHtml } from '@/lib/html-utils'
 import { useMarkAsRead, useMarkAsStarred, useRemoveFromUnreadList } from '@/hooks/useEntries'
+import { useGeneralSettings } from '@/hooks/useGeneralSettings'
 import { useLightboxStore } from '@/stores/lightbox-store'
 import { FeedIcon } from '@/components/ui/feed-icon'
 
@@ -18,6 +19,7 @@ export function Lightbox() {
   const { mutate: markAsRead } = useMarkAsRead()
   const { mutate: markAsStarred } = useMarkAsStarred()
   const removeFromUnreadList = useRemoveFromUnreadList()
+  const { data: generalSettings } = useGeneralSettings()
 
   // Track which entries have been marked as read to avoid duplicate calls
   const markedAsReadRef = useRef<Set<string>>(new Set())
@@ -70,10 +72,12 @@ export function Lightbox() {
   // This deferred removal prevents white screen on mobile when unreadOnly is enabled
   useEffect(() => {
     if (!isOpen && markedAsReadRef.current.size > 0) {
-      removeFromUnreadList(markedAsReadRef.current)
+      if (!(generalSettings?.keepReadUntilExit ?? false)) {
+        removeFromUnreadList(markedAsReadRef.current)
+      }
       markedAsReadRef.current.clear()
     }
-  }, [isOpen, removeFromUnreadList])
+  }, [generalSettings?.keepReadUntilExit, isOpen, removeFromUnreadList])
 
   // Sync embla with store
   useEffect(() => {

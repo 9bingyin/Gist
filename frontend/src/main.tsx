@@ -7,6 +7,7 @@ import { queryClient } from '@/lib/queryClient'
 import { I18nProvider } from '@/components/i18n-provider'
 
 const BOOT_READY_ATTR = 'data-gist-boot-ready'
+const BOOT_DONE_ATTR = 'data-gist-booted'
 const BOOT_SOFT_PARAM = '_boot_soft'
 const BOOT_HARD_PARAM = '_boot_hard'
 const bootStartTime = performance.now()
@@ -24,6 +25,8 @@ function logBoot(message: string, detail?: unknown): void {
 function markBootReady(): void {
   window.__GIST_BOOT_READY__ = true
   document.documentElement.setAttribute(BOOT_READY_ATTR, '1')
+  // Signal the watchdog in index.html that boot completed to avoid recovery reload loops.
+  document.documentElement.setAttribute(BOOT_DONE_ATTR, '1')
 
   const url = new URL(window.location.href)
   let changed = false
@@ -90,15 +93,18 @@ if ('serviceWorker' in navigator) {
     })
 }
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <I18nProvider>
-        <App />
-      </I18nProvider>
-    </QueryClientProvider>
-  </StrictMode>,
+const appTree = (
+  <QueryClientProvider client={queryClient}>
+    <I18nProvider>
+      <App />
+    </I18nProvider>
+  </QueryClientProvider>
 )
+
+// Avoid double render/fetch on initial load in dev by only enabling StrictMode during development.
+const rootNode = import.meta.env.DEV ? <StrictMode>{appTree}</StrictMode> : appTree
+
+createRoot(document.getElementById('root')!).render(rootNode)
 
 requestAnimationFrame(() => {
   requestAnimationFrame(() => {

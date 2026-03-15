@@ -46,6 +46,7 @@ export function EntryContent({ entryId, isMobile, onBack }: EntryContentProps) {
         ? false
         : autoReadabilityFromSettings
   const autoSummary = aiSettings?.autoSummary ?? false
+  const keepReadUntilExit = generalSettings?.keepReadUntilExit ?? false
 
   // Readability hook
   const {
@@ -102,11 +103,13 @@ export function EntryContent({ entryId, isMobile, onBack }: EntryContentProps) {
     const markedAsReadSet = markedAsReadRef.current
     return () => {
       if (markedAsReadSet.size > 0) {
-        removeFromUnreadList(markedAsReadSet)
+        if (!keepReadUntilExit) {
+          removeFromUnreadList(markedAsReadSet)
+        }
         markedAsReadSet.clear()
       }
     }
-  }, [removeFromUnreadList])
+  }, [keepReadUntilExit, removeFromUnreadList])
 
   const handleToggleStarred = useCallback(() => {
     if (entry) {
