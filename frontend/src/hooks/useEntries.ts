@@ -9,6 +9,7 @@ import {
   getUnreadCounts,
   getStarredCount,
 } from '@/api'
+import { countLoadedEntries } from '@/lib/entry-pagination'
 import type { Entry, EntryListParams, MarkAllReadParams } from '@/types/api'
 
 function entriesQueryKey(params: EntryListParams) {
@@ -24,7 +25,7 @@ export function useEntriesInfinite(params: Omit<EntryListParams, 'offset'>) {
       listEntries({ ...params, limit: pageSize, offset: pageParam }),
     getNextPageParam: (lastPage, allPages) => {
       if (!lastPage.hasMore) return undefined
-      return allPages.length * pageSize
+      return countLoadedEntries(allPages)
     },
     initialPageParam: 0,
   })

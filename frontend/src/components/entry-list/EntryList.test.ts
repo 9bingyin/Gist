@@ -120,15 +120,19 @@ describe('scroll position caches across unmount/remount', () => {
       { index: 1, start: 95, end: 205, size: 110, key: '1', lane: 0 },
       { index: 2, start: 205, end: 300, size: 95, key: '2', lane: 0 },
     ] as VirtualItem[]
+    const snapshot = {
+      entryIdsKey: '1:2:3',
+      measurements,
+    }
 
     // Simulate: onChange saves measurements when scrolling stops
-    entryListMeasurementsCache.set(key, measurements)
+    entryListMeasurementsCache.set(key, snapshot)
 
     // Simulate: remount reads cache for initialMeasurementsCache
     const restored = entryListMeasurementsCache.get(key)
-    expect(restored).toBe(measurements)
-    expect(restored).toHaveLength(3)
-    expect(restored![1].size).toBe(110)
+    expect(restored).toEqual(snapshot)
+    expect(restored?.measurements).toHaveLength(3)
+    expect(restored?.measurements[1]?.size).toBe(110)
   })
 
   it('should not leak measurements between content types', () => {
@@ -138,10 +142,14 @@ describe('scroll position caches across unmount/remount', () => {
     const articleMeasurements = [
       { index: 0, start: 0, end: 100, size: 100, key: '0', lane: 0 },
     ] as VirtualItem[]
+    const snapshot = {
+      entryIdsKey: '1',
+      measurements: articleMeasurements,
+    }
 
-    entryListMeasurementsCache.set(articleKey, articleMeasurements)
+    entryListMeasurementsCache.set(articleKey, snapshot)
 
-    expect(entryListMeasurementsCache.get(articleKey)).toBe(articleMeasurements)
+    expect(entryListMeasurementsCache.get(articleKey)).toEqual(snapshot)
     expect(entryListMeasurementsCache.get(notificationKey)).toBeUndefined()
   })
 })

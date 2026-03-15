@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { getAISettings, updateAISettings, testAIConnection, ApiError } from '@/api'
 import { cn } from '@/lib/utils'
 import { Switch } from '@/components/ui/switch'
-import type { AIProvider, AISettings as AISettingsType, OpenAIEndpoint, ReasoningEffort } from '@/types/settings'
+import type { AIProvider, AISettings as AISettingsType, ReasoningEffort } from '@/types/settings'
 
 export function AISettings() {
   const { t } = useTranslation()
@@ -24,7 +24,7 @@ export function AISettings() {
       { value: 'medium', label: t('ai_settings.effort_medium') },
       { value: 'low', label: t('ai_settings.effort_low') },
       { value: 'minimal', label: t('ai_settings.effort_minimal') },
-      { value: 'none', label: t('ai_settings.effort_none_gpt5') },
+      { value: 'none', label: t('ai_settings.effort_none') },
     ],
     [t]
   )
@@ -37,14 +37,6 @@ export function AISettings() {
       { value: 'low', label: t('ai_settings.effort_low_percent') },
       { value: 'minimal', label: t('ai_settings.effort_minimal_percent') },
       { value: 'none', label: t('ai_settings.effort_none') },
-    ],
-    [t]
-  )
-
-  const ENDPOINT_OPTIONS: { value: OpenAIEndpoint; label: string }[] = useMemo(
-    () => [
-      { value: 'responses', label: t('ai_settings.endpoint_responses') },
-      { value: 'chat/completions', label: t('ai_settings.endpoint_chat') },
     ],
     [t]
   )
@@ -70,6 +62,10 @@ export function AISettings() {
   const [error, setError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [testResult, setTestResult] = useState<{ success: boolean; message?: string; error?: string } | null>(null)
+  const isBaseURLRequired = settings
+    ? settings.provider === 'openai' || settings.provider === 'compatible'
+    : false
+  const hasBaseURL = settings ? settings.baseUrl.trim().length > 0 : false
 
   useEffect(() => {
     loadSettings()
@@ -95,12 +91,7 @@ export function AISettings() {
 
   const handleChange = (field: keyof AISettingsType, value: string | boolean | number) => {
     if (!settings) return
-    // Reset endpoint to default when switching away from OpenAI
-    if (field === 'provider' && value !== 'openai') {
-      setSettings({ ...settings, provider: value as AIProvider, endpoint: 'responses' })
-    } else {
-      setSettings({ ...settings, [field]: value } as AISettingsType)
-    }
+    setSettings({ ...settings, [field]: value } as AISettingsType)
     setSuccessMessage(null)
     setTestResult(null)
   }
@@ -122,7 +113,7 @@ export function AISettings() {
         apiKey: settings.apiKey,
         baseUrl: settings.baseUrl,
         model: settings.model,
-        endpoint: settings.endpoint,
+        thinkingSupported: settings.thinkingSupported,
         thinking: settings.thinking,
         thinkingBudget: settings.thinkingBudget,
         reasoningEffort: settings.reasoningEffort,
@@ -212,7 +203,7 @@ export function AISettings() {
       <div className="flex flex-wrap items-center justify-between gap-2 py-2">
         <div className="flex items-center gap-1 min-w-0">
           <span className="text-sm font-medium">{t('ai_settings.base_url')}</span>
-          {settings.provider === 'compatible' ? (
+          {isBaseURLRequired ? (
             <span className="text-xs text-destructive">{t('ai_settings.required')}</span>
           ) : (
             <span className="text-xs text-muted-foreground">{t('ai_settings.optional')}</span>
@@ -224,6 +215,7 @@ export function AISettings() {
           onChange={(e) => handleChange('baseUrl', e.target.value)}
           placeholder={
             settings.provider === 'compatible' ? 'https://openrouter.ai/api/v1' :
+            settings.provider === 'openai' ? 'https://api.openai.com/v1' :
             t('ai_settings.leave_empty_for_default')
           }
           className={cn(inputClass, 'shrink-0')}
@@ -246,45 +238,42 @@ export function AISettings() {
         />
       </div>
 
-      {/* OpenAI Endpoint */}
-      {settings.provider === 'openai' && (
-        <div className="flex flex-wrap items-center justify-between gap-2 py-2">
-          <span className="text-sm font-medium">{t('ai_settings.endpoint_label')}</span>
-          <select
-            value={settings.endpoint}
-            onChange={(e) => handleChange('endpoint', e.target.value as OpenAIEndpoint)}
-            className={cn(selectClass, 'shrink-0')}
-          >
-            {ENDPOINT_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
-            ))}
-          </select>
-        </div>
-      )}
-
       {/* Reasoning Section */}
       <div className="pb-1 pt-4 text-xs font-medium uppercase tracking-wider text-muted-foreground">
         {t('ai_settings.extended_thinking')}
       </div>
 
-      {/* Enable Reasoning */}
+      {/* Thinking Supported */}
       <div className="flex flex-wrap items-center justify-between gap-2 py-2">
         <div className="min-w-0">
-          <span className="text-sm font-medium">
-            {settings.provider === 'anthropic' ? t('ai_settings.extended_thinking') : t('ai_settings.enable_reasoning')}
-          </span>
-          {settings.provider === 'openai' && !settings.thinking && (
-            <p className="text-xs text-muted-foreground">{t('ai_settings.openai_thinking_default_hint')}</p>
-          )}
+          <span className="text-sm font-medium">{t('ai_settings.thinking_supported')}</span>
+          <p className="text-xs text-muted-foreground">{t('ai_settings.thinking_supported_hint')}</p>
         </div>
         <Switch
-          checked={settings.thinking}
-          onCheckedChange={(checked) => handleChange('thinking', checked)}
+          checked={settings.thinkingSupported}
+          onCheckedChange={(checked) => handleChange('thinkingSupported', checked)}
+          className="shrink-0"
         />
       </div>
 
+      {/* Enable Reasoning */}
+      {settings.thinkingSupported && (
+        <div className="flex flex-wrap items-center justify-between gap-2 py-2">
+          <div className="min-w-0">
+            <span className="text-sm font-medium">
+              {settings.provider === 'anthropic' ? t('ai_settings.extended_thinking') : t('ai_settings.enable_reasoning')}
+            </span>
+          </div>
+          <Switch
+            checked={settings.thinking}
+            onCheckedChange={(checked) => handleChange('thinking', checked)}
+            className="shrink-0"
+          />
+        </div>
+      )}
+
       {/* OpenAI: Reasoning Effort */}
-      {settings.thinking && settings.provider === 'openai' && (
+      {settings.thinkingSupported && settings.thinking && settings.provider === 'openai' && (
         <div className="flex flex-wrap items-center justify-between gap-2 py-2 pl-4">
           <span className="text-sm">{t('ai_settings.reasoning_effort_label')}</span>
           <select
@@ -300,7 +289,7 @@ export function AISettings() {
       )}
 
       {/* Anthropic: Thinking Budget */}
-      {settings.thinking && settings.provider === 'anthropic' && (
+      {settings.thinkingSupported && settings.thinking && settings.provider === 'anthropic' && (
         <div className="flex flex-wrap items-center justify-between gap-2 py-2 pl-4">
           <div className="min-w-0">
             <span className="text-sm">{t('ai_settings.thinking_budget_label')}</span>
@@ -319,7 +308,7 @@ export function AISettings() {
       )}
 
       {/* Compatible: Both options */}
-      {settings.thinking && settings.provider === 'compatible' && (
+      {settings.thinkingSupported && settings.thinking && settings.provider === 'compatible' && (
         <div className="space-y-2 pl-4">
           {/* Effort option */}
           <div className="flex flex-wrap items-center justify-between gap-2 py-1">
@@ -335,7 +324,6 @@ export function AISettings() {
               <label htmlFor="compatible-effort" className="text-sm">
                 {t('ai_settings.reasoning_effort_mode')}
               </label>
-              <span className="text-xs text-muted-foreground">{t('ai_settings.o1_grok_models')}</span>
             </div>
             {settings.reasoningEffort !== '' && (
               <select
@@ -364,7 +352,6 @@ export function AISettings() {
               <label htmlFor="compatible-budget" className="text-sm">
                 {t('ai_settings.thinking_budget_mode')}
               </label>
-              <span className="text-xs text-muted-foreground">{t('ai_settings.anthropic_gemini_models')}</span>
             </div>
             {settings.reasoningEffort === '' && settings.thinkingBudget > 0 && (
               <input
@@ -450,7 +437,7 @@ export function AISettings() {
         <button
           type="button"
           onClick={handleTest}
-          disabled={isTesting || !settings.apiKey || !settings.model || (settings.provider === 'compatible' && !settings.baseUrl)}
+          disabled={isTesting || !settings.apiKey || !settings.model || (isBaseURLRequired && !hasBaseURL)}
           className={cn(
             'flex h-8 shrink-0 items-center gap-1.5 rounded-md px-4 text-sm font-medium transition-colors',
             'bg-muted hover:bg-muted/80',
@@ -475,7 +462,7 @@ export function AISettings() {
         <button
           type="button"
           onClick={handleSave}
-          disabled={isSaving}
+          disabled={isSaving || (isBaseURLRequired && !hasBaseURL)}
           className={cn(
             'flex h-8 shrink-0 items-center gap-1.5 rounded-md px-4 text-sm font-medium transition-colors',
             'bg-primary text-primary-foreground hover:bg-primary/90',

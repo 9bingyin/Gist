@@ -215,16 +215,16 @@ func (mr *MockSettingsServiceMockRecorder) SetNetworkSettings(ctx, settings any)
 }
 
 // TestAI mocks base method.
-func (m *MockSettingsService) TestAI(ctx context.Context, provider, apiKey, baseURL, model, endpoint string, thinking bool, thinkingBudget int, reasoningEffort string) (string, error) {
+func (m *MockSettingsService) TestAI(ctx context.Context, provider, apiKey, baseURL, model string, thinkingSupported, thinking bool, thinkingBudget int, reasoningEffort string) (string, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "TestAI", ctx, provider, apiKey, baseURL, model, endpoint, thinking, thinkingBudget, reasoningEffort)
+	ret := m.ctrl.Call(m, "TestAI", ctx, provider, apiKey, baseURL, model, thinkingSupported, thinking, thinkingBudget, reasoningEffort)
 	ret0, _ := ret[0].(string)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // TestAI indicates an expected call of TestAI.
-func (mr *MockSettingsServiceMockRecorder) TestAI(ctx, provider, apiKey, baseURL, model, endpoint, thinking, thinkingBudget, reasoningEffort any) *gomock.Call {
+func (mr *MockSettingsServiceMockRecorder) TestAI(ctx, provider, apiKey, baseURL, model, thinkingSupported, thinking, thinkingBudget, reasoningEffort any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TestAI", reflect.TypeOf((*MockSettingsService)(nil).TestAI), ctx, provider, apiKey, baseURL, model, endpoint, thinking, thinkingBudget, reasoningEffort)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TestAI", reflect.TypeOf((*MockSettingsService)(nil).TestAI), ctx, provider, apiKey, baseURL, model, thinkingSupported, thinking, thinkingBudget, reasoningEffort)
 }
