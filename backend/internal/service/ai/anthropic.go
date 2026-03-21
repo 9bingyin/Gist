@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"strings"
 
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/anthropics/anthropic-sdk-go/option"
@@ -149,7 +150,9 @@ func (p *AnthropicProvider) SummarizeStream(ctx context.Context, systemPrompt, c
 	return textCh, errCh
 }
 
-// Complete generates a response without streaming.
+// Complete generates a response using streaming internally.
+// Anthropic API requires streaming for operations that may take longer than 10 minutes,
+// so we use streaming and collect the full response.
 func (p *AnthropicProvider) Complete(ctx context.Context, systemPrompt, content string) (string, error) {
 	params := anthropic.MessageNewParams{
 		Model: anthropic.Model(p.model),
@@ -180,17 +183,24 @@ func (p *AnthropicProvider) Complete(ctx context.Context, systemPrompt, content 
 		params.MaxTokens = 64000
 	}
 
-	resp, err := p.client.Messages.New(ctx, params)
-	if err != nil {
+	var result strings.Builder
+	stream := p.client.Messages.NewStreaming(ctx, params)
+	defer stream.Close()
+
+	for stream.Next() {
+		event := stream.Current()
+		switch eventVariant := event.AsAny().(type) {
+		case anthropic.ContentBlockDeltaEvent:
+			switch deltaVariant := eventVariant.Delta.AsAny().(type) {
+			case anthropic.TextDelta:
+				result.WriteString(deltaVariant.Text)
+			}
+		}
+	}
+
+	if err := stream.Err(); err != nil {
 		return "", err
 	}
 
-	// Extract text content from response (skip thinking blocks)
-	for _, block := range resp.Content {
-		switch v := block.AsAny().(type) {
-		case anthropic.TextBlock:
-			return v.Text, nil
-		}
-	}
-	return "", nil
+	return result.String(), nil
 }

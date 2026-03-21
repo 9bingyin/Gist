@@ -48,10 +48,13 @@ func TestAnthropicProvider_MessageEndpoints(t *testing.T) {
 
 	testProvider(t, provider, "claude-response")
 
+	// Complete now uses streaming internally for Anthropic
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	_, err = provider.Complete(ctx, "sys", "content")
-	require.Error(t, err)
+	got, err := provider.Complete(ctx, "sys", "content")
+	require.NoError(t, err)
+	require.Equal(t, "claude-stream", got)
+
 	streamText := readStream(t, provider, "sys", "content")
 	require.Equal(t, "claude-stream", streamText)
 }
