@@ -1,5 +1,4 @@
-/// <reference types="vitest" />
-import { defineConfig } from 'vitest/config'
+import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
@@ -131,45 +130,25 @@ export default defineConfig({
     },
   },
   build: {
-    rollupOptions: {
+    rolldownOptions: {
       output: {
         entryFileNames: 'assets/app-[hash].js',
-        manualChunks: {
-          'react-vendor': ['react', 'react-dom'],
-          'query-vendor': ['@tanstack/react-query', '@tanstack/react-virtual'],
-          'radix-vendor': [
-            '@radix-ui/react-dialog',
-            '@radix-ui/react-dropdown-menu',
-            '@radix-ui/react-scroll-area',
-          ],
-          'syntax-highlighter': ['shiki', '@shikijs/transformers'],
-          'motion-vendor': ['motion', 'framer-motion'],
-          'i18n-vendor': ['i18next', 'react-i18next'],
-          'utils-vendor': ['clsx', 'tailwind-merge', 'class-variance-authority', 'zustand', 'wouter'],
-          'lang-vendor': ['eld'],
-          'html-parser-vendor': [
-            'unified',
-            'rehype-parse',
-            'rehype-sanitize',
-            'rehype-stringify',
-            'hast-util-to-jsx-runtime',
-          ],
-          'masonry-vendor': ['@virtuoso.dev/masonry'],
-          'carousel-vendor': ['embla-carousel-react'],
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('/react/') || id.includes('/react-dom/')) return 'react-vendor'
+            if (id.includes('@tanstack/react-query') || id.includes('@tanstack/react-virtual')) return 'query-vendor'
+            if (id.includes('@radix-ui/')) return 'radix-vendor'
+            if (id.includes('/shiki/') || id.includes('@shikijs/')) return 'syntax-highlighter'
+            if (id.includes('/motion/') || id.includes('/framer-motion/')) return 'motion-vendor'
+            if (id.includes('/i18next/') || id.includes('/react-i18next/')) return 'i18n-vendor'
+            if (id.includes('/clsx/') || id.includes('/tailwind-merge/') || id.includes('/class-variance-authority/') || id.includes('/zustand/') || id.includes('/wouter/')) return 'utils-vendor'
+            if (id.includes('/eld/')) return 'lang-vendor'
+            if (id.includes('/unified/') || id.includes('/rehype-parse/') || id.includes('/rehype-sanitize/') || id.includes('/rehype-stringify/') || id.includes('/hast-util-to-jsx-runtime/')) return 'html-parser-vendor'
+            if (id.includes('@virtuoso.dev/masonry')) return 'masonry-vendor'
+            if (id.includes('/embla-carousel')) return 'carousel-vendor'
+          }
         },
       },
-    },
-  },
-  test: {
-    globals: true,
-    environment: 'jsdom',
-    include: ['src/**/*.{test,spec}.{ts,tsx}'],
-    exclude: ['e2e/**', 'node_modules/**'],
-    coverage: {
-      provider: 'v8',
-      reporter: ['text', 'json', 'html'],
-      include: ['src/**/*.{ts,tsx}'],
-      exclude: ['src/**/*.d.ts', 'src/main.tsx'],
     },
   },
 })
