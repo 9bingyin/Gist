@@ -124,7 +124,7 @@ export function useCodeHighlight(
         if (pre.dataset.shikiHighlighted) continue
 
         const match = /language-([a-z0-9_+-]+)/i.exec(block.className || '')
-        const rawLang = match ? match[1] : ''
+        const rawLang = match?.[1] ?? ''
         const lang = normalizeLanguage(rawLang)
 
         const code = block.textContent || ''
