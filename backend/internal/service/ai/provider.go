@@ -27,8 +27,8 @@ type Config struct {
 	Model             string
 	ThinkingSupported bool   // whether the model supports thinking/reasoning
 	Thinking          bool   // enable thinking/reasoning (only effective when ThinkingSupported=true)
-	ThinkingBudget    int    // Anthropic/Compatible budget_tokens
-	ReasoningEffort   string // OpenAI/Compatible effort: low/medium/high/xhigh/minimal/none
+	ThinkingBudget    int    // Anthropic budget_tokens
+	ReasoningEffort   string // OpenAI/Compatible reasoning_effort
 }
 
 // ProviderType constants
@@ -66,7 +66,7 @@ func NewProvider(cfg Config) (Provider, error) {
 		if cfg.BaseURL == "" {
 			return nil, ErrMissingBaseURL
 		}
-		return NewCompatibleProvider(cfg.APIKey, cfg.BaseURL, cfg.Model, cfg.ThinkingSupported, cfg.Thinking, cfg.ThinkingBudget, cfg.ReasoningEffort)
+		return NewCompatibleProvider(cfg.APIKey, cfg.BaseURL, cfg.Model, cfg.ThinkingSupported, cfg.Thinking, cfg.ReasoningEffort)
 	default:
 		return nil, ErrInvalidProvider
 	}

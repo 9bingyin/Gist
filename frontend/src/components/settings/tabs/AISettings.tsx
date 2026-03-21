@@ -17,25 +17,13 @@ export function AISettings() {
     [t]
   )
 
-  const OPENAI_EFFORT_OPTIONS: { value: ReasoningEffort; label: string }[] = useMemo(
+  const EFFORT_OPTIONS: { value: ReasoningEffort; label: string }[] = useMemo(
     () => [
       { value: 'xhigh', label: t('ai_settings.effort_xhigh') },
       { value: 'high', label: t('ai_settings.effort_high') },
       { value: 'medium', label: t('ai_settings.effort_medium') },
       { value: 'low', label: t('ai_settings.effort_low') },
       { value: 'minimal', label: t('ai_settings.effort_minimal') },
-      { value: 'none', label: t('ai_settings.effort_none') },
-    ],
-    [t]
-  )
-
-  const COMPATIBLE_EFFORT_OPTIONS: { value: ReasoningEffort; label: string }[] = useMemo(
-    () => [
-      { value: 'xhigh', label: t('ai_settings.effort_xhigh_percent') },
-      { value: 'high', label: t('ai_settings.effort_high_percent') },
-      { value: 'medium', label: t('ai_settings.effort_medium_percent') },
-      { value: 'low', label: t('ai_settings.effort_low_percent') },
-      { value: 'minimal', label: t('ai_settings.effort_minimal_percent') },
       { value: 'none', label: t('ai_settings.effort_none') },
     ],
     [t]
@@ -92,13 +80,6 @@ export function AISettings() {
   const handleChange = (field: keyof AISettingsType, value: string | boolean | number) => {
     if (!settings) return
     setSettings({ ...settings, [field]: value } as AISettingsType)
-    setSuccessMessage(null)
-    setTestResult(null)
-  }
-
-  const handleMultiChange = (changes: Partial<AISettingsType>) => {
-    if (!settings) return
-    setSettings({ ...settings, ...changes })
     setSuccessMessage(null)
     setTestResult(null)
   }
@@ -272,8 +253,8 @@ export function AISettings() {
         </div>
       )}
 
-      {/* OpenAI: Reasoning Effort */}
-      {settings.thinkingSupported && settings.thinking && settings.provider === 'openai' && (
+      {/* OpenAI / Compatible: Reasoning Effort */}
+      {settings.thinkingSupported && settings.thinking && (settings.provider === 'openai' || settings.provider === 'compatible') && (
         <div className="flex flex-wrap items-center justify-between gap-2 py-2 pl-4">
           <span className="text-sm">{t('ai_settings.reasoning_effort_label')}</span>
           <select
@@ -281,7 +262,7 @@ export function AISettings() {
             onChange={(e) => handleChange('reasoningEffort', e.target.value)}
             className={cn(selectClass, 'shrink-0')}
           >
-            {OPENAI_EFFORT_OPTIONS.map((opt) => (
+            {EFFORT_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>{opt.label}</option>
             ))}
           </select>
@@ -304,67 +285,6 @@ export function AISettings() {
             placeholder="10000"
             className={cn(inputClass, 'w-24 shrink-0')}
           />
-        </div>
-      )}
-
-      {/* Compatible: Both options */}
-      {settings.thinkingSupported && settings.thinking && settings.provider === 'compatible' && (
-        <div className="space-y-2 pl-4">
-          {/* Effort option */}
-          <div className="flex flex-wrap items-center justify-between gap-2 py-1">
-            <div className="flex items-center gap-2 min-w-0">
-              <input
-                type="radio"
-                id="compatible-effort"
-                name="compatible-mode"
-                checked={settings.reasoningEffort !== ''}
-                onChange={() => handleMultiChange({ reasoningEffort: 'medium', thinkingBudget: 0 })}
-                className="size-4 shrink-0"
-              />
-              <label htmlFor="compatible-effort" className="text-sm">
-                {t('ai_settings.reasoning_effort_mode')}
-              </label>
-            </div>
-            {settings.reasoningEffort !== '' && (
-              <select
-                value={settings.reasoningEffort}
-                onChange={(e) => handleChange('reasoningEffort', e.target.value)}
-                className={cn(selectClass, 'w-32 shrink-0')}
-              >
-                {COMPATIBLE_EFFORT_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
-              </select>
-            )}
-          </div>
-
-          {/* Budget option */}
-          <div className="flex flex-wrap items-center justify-between gap-2 py-1">
-            <div className="flex items-center gap-2 min-w-0">
-              <input
-                type="radio"
-                id="compatible-budget"
-                name="compatible-mode"
-                checked={settings.reasoningEffort === '' && settings.thinkingBudget > 0}
-                onChange={() => handleMultiChange({ reasoningEffort: '', thinkingBudget: 10000 })}
-                className="size-4 shrink-0"
-              />
-              <label htmlFor="compatible-budget" className="text-sm">
-                {t('ai_settings.thinking_budget_mode')}
-              </label>
-            </div>
-            {settings.reasoningEffort === '' && settings.thinkingBudget > 0 && (
-              <input
-                type="number"
-                value={settings.thinkingBudget}
-                onChange={(e) => handleChange('thinkingBudget', parseInt(e.target.value) || 0)}
-                min={1024}
-                max={128000}
-                placeholder="10000"
-                className={cn(inputClass, 'w-24 shrink-0')}
-              />
-            )}
-          </div>
         </div>
       )}
 

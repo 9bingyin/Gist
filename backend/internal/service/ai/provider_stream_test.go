@@ -31,7 +31,7 @@ func TestCompatibleProvider_ChatEndpoints(t *testing.T) {
 	server := newOpenAITestServer(t)
 	defer server.Close()
 
-	provider, err := ai.NewCompatibleProvider("key", server.URL+"/v1/", "gpt-4o-mini", false, false, 0, "")
+	provider, err := ai.NewCompatibleProvider("key", server.URL+"/v1/", "gpt-4o-mini", false, false, "")
 	require.NoError(t, err)
 
 	testAndCompleteProvider(t, provider, "chat-response")
