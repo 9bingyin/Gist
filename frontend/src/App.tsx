@@ -1,4 +1,4 @@
-import { useCallback, useState, useMemo, useEffect } from 'react'
+import { Suspense, lazy, useCallback, useState, useMemo, useEffect } from 'react'
 import { Router, useLocation, Redirect } from 'wouter'
 import { useTranslation } from 'react-i18next'
 import { ThreeColumnLayout } from '@/components/layout/three-column-layout'
@@ -7,7 +7,6 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import { Sidebar } from '@/components/sidebar'
 import { AddFeedPage } from '@/components/add-feed'
 import { EntryList } from '@/components/entry-list'
-import { EntryContent } from '@/components/entry-content'
 import { PictureMasonry, Lightbox } from '@/components/picture-masonry'
 import { ScrollToTopZone } from '@/components/layout/ScrollToTopZone'
 import { ImagePreview } from '@/components/ui/image-preview'
@@ -28,6 +27,10 @@ import { cn } from '@/lib/utils'
 import type { ContentType, Feed, Folder } from '@/types/api'
 
 const defaultContentTypes: ContentType[] = ['article', 'picture', 'notification']
+const LazyEntryContent = lazy(async () => {
+  const module = await import('@/components/entry-content')
+  return { default: module.EntryContent }
+})
 
 function LoadingScreen() {
   const { t } = useTranslation()
@@ -36,6 +39,109 @@ function LoadingScreen() {
       <div className="flex flex-col items-center gap-4">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
         <p className="text-sm text-muted-foreground">{t('entry.loading')}</p>
+      </div>
+    </div>
+  )
+}
+
+function AppBootstrapShell() {
+  return (
+    <div className="flex h-dvh flex-col bg-background lg:flex-row">
+      <aside className="hidden w-72 shrink-0 border-r border-border/60 bg-muted/20 px-5 py-6 lg:flex lg:flex-col">
+        <div className="h-8 w-28 rounded-full bg-muted" />
+        <div className="mt-8 space-y-3">
+          {Array.from({ length: 6 }, (_, index) => (
+            <div key={index} className="h-10 rounded-xl bg-muted/80" />
+          ))}
+        </div>
+      </aside>
+      <div className="flex min-h-0 min-w-0 flex-1">
+        <section className="flex min-w-0 flex-1 flex-col border-r border-border/60 lg:max-w-md">
+          <div className="border-b border-border/60 px-4 py-4 sm:px-6">
+            <div className="h-6 w-40 rounded bg-muted" />
+          </div>
+          <div className="flex-1 space-y-px overflow-hidden px-2 py-2">
+            {Array.from({ length: 6 }, (_, index) => (
+              <div key={index} className="rounded-2xl px-3 py-4">
+                <div className="h-3 w-24 rounded bg-muted" />
+                <div className="mt-3 h-4 w-5/6 rounded bg-muted" />
+                <div className="mt-2 h-3 w-full rounded bg-muted/80" />
+                <div className="mt-2 h-3 w-2/3 rounded bg-muted/80" />
+              </div>
+            ))}
+          </div>
+        </section>
+        <section className="hidden min-w-0 flex-1 px-6 py-10 lg:block">
+          <div className="mx-auto max-w-3xl space-y-5">
+            <div className="h-10 w-3/4 rounded bg-muted" />
+            <div className="flex gap-4">
+              <div className="h-4 w-24 rounded bg-muted" />
+              <div className="h-4 w-32 rounded bg-muted" />
+            </div>
+            <div className="h-px w-full bg-border/60" />
+            {Array.from({ length: 8 }, (_, index) => (
+              <div
+                key={index}
+                className={`h-4 rounded bg-muted/80 ${index % 3 === 2 ? 'w-4/5' : 'w-full'}`}
+              />
+            ))}
+          </div>
+        </section>
+      </div>
+    </div>
+  )
+}
+
+function EntryContentPlaceholder({ message }: { message: string }) {
+  return (
+    <div className="flex h-full flex-col">
+      <div className="flex h-12 items-center px-6" />
+      <div className="flex flex-1 items-center justify-center">
+        <div className="text-center text-muted-foreground">
+          <svg
+            className="mx-auto size-12 opacity-50"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={1.5}
+              d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+            />
+          </svg>
+          <p className="mt-2 text-sm">{message}</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function EntryContentFallback() {
+  return (
+    <div className="relative flex h-full flex-col animate-pulse">
+      <div className="absolute inset-x-0 top-0 z-20">
+        <div className="h-12" />
+      </div>
+      <div className="flex-1 overflow-auto">
+        <div className="mx-auto w-full max-w-[720px] px-6 pb-20 pt-16">
+          <div className="mb-10 space-y-5">
+            <div className="h-10 w-3/4 rounded bg-muted" />
+            <div className="flex gap-6">
+              <div className="h-4 w-24 rounded bg-muted" />
+              <div className="h-4 w-32 rounded bg-muted" />
+            </div>
+            <hr className="border-border/60" />
+          </div>
+          <div className="space-y-4">
+            <div className="h-4 w-full rounded bg-muted" />
+            <div className="h-4 w-full rounded bg-muted" />
+            <div className="h-4 w-3/4 rounded bg-muted" />
+            <div className="h-4 w-full rounded bg-muted" />
+            <div className="h-4 w-5/6 rounded bg-muted" />
+          </div>
+        </div>
       </div>
     </div>
   )
@@ -178,11 +284,32 @@ function AuthenticatedApp() {
     }
   }, [visibleContentTypes, contentType, selectAll])
 
+  const entryContent = selectedEntryId ? (
+    <Suspense fallback={<EntryContentFallback />}>
+      <LazyEntryContent key={selectedEntryId} entryId={selectedEntryId} />
+    </Suspense>
+  ) : (
+    <EntryContentPlaceholder message={t('entry.select_article')} />
+  )
+
+  const mobileEntryContent = selectedEntryId ? (
+    <Suspense fallback={<EntryContentFallback />}>
+      <LazyEntryContent
+        key={selectedEntryId}
+        entryId={selectedEntryId}
+        isMobile
+        onBack={showList}
+      />
+    </Suspense>
+  ) : (
+    <EntryContentPlaceholder message={t('entry.select_article')} />
+  )
+
   // Redirect root to /all with first visible type (must be after ALL hooks including useCallback)
   if (location === '/') {
     // 等待 appearanceSettings 加载完成再跳转，避免先跳 article 再跳正确类型
     if (isAppearanceLoading) {
-      return <div className="h-dvh bg-background" />
+      return <AppBootstrapShell />
     }
     const defaultType = visibleContentTypes[0] ?? 'article'
     return <Redirect to={`/all?type=${defaultType}`} replace />
@@ -190,7 +317,7 @@ function AuthenticatedApp() {
 
   // 等待 appearanceSettings 加载完成，避免显示默认三视图的闪烁
   if (isAppearanceLoading) {
-    return <div className="h-dvh bg-background" />
+    return <AppBootstrapShell />
   }
 
   // Sidebar component (shared between mobile and desktop)
@@ -258,12 +385,7 @@ function AuthenticatedApp() {
             'absolute inset-0 bg-background transition-transform duration-300 ease-out safe-area-top',
             mobileView === 'detail' ? 'translate-x-0' : 'translate-x-full'
           )}>
-            <EntryContent
-              key={selectedEntryId}
-              entryId={selectedEntryId}
-              isMobile
-              onBack={showList}
-            />
+            {mobileEntryContent}
           </div>
         </div>
       )
@@ -343,7 +465,7 @@ function AuthenticatedApp() {
             sidebarVisible={sidebarVisible}
           />
         }
-        content={<EntryContent key={selectedEntryId} entryId={selectedEntryId} />}
+        content={entryContent}
         showSidebar={showSidebar}
       />
       <ImagePreview />

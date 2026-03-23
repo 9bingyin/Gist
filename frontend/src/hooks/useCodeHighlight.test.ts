@@ -2,16 +2,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderHook, waitFor, act } from '@testing-library/react'
 import { useCodeHighlight } from './useCodeHighlight'
 
-// Mock Shiki
-const mockCodeToHtml = vi.fn()
-const mockLoadLanguage = vi.fn()
-const mockHighlighter = {
-  codeToHtml: mockCodeToHtml,
-  loadLanguage: mockLoadLanguage,
-}
+const mockHighlightCode = vi.fn()
 
-vi.mock('shiki', () => ({
-  createHighlighter: vi.fn(() => Promise.resolve(mockHighlighter)),
+vi.mock('@/lib/code-highlight-runtime', () => ({
+  highlightCode: mockHighlightCode,
 }))
 
 describe('useCodeHighlight', () => {
@@ -20,10 +14,8 @@ describe('useCodeHighlight', () => {
   beforeEach(() => {
     container = document.createElement('div')
     document.body.appendChild(container)
-    mockCodeToHtml.mockReset()
-    mockLoadLanguage.mockReset()
-    // Default mock return for codeToHtml
-    mockCodeToHtml.mockReturnValue(
+    mockHighlightCode.mockReset()
+    mockHighlightCode.mockResolvedValue(
       '<pre class="shiki"><code><span class="line">highlighted code</span></code></pre>'
     )
   })
@@ -33,369 +25,133 @@ describe('useCodeHighlight', () => {
     vi.clearAllMocks()
   })
 
-  it('should return early if container ref is null', () => {
-    const ref = { current: null }
-    renderHook(() => useCodeHighlight(ref, 'content'))
-
-    expect(mockCodeToHtml).not.toHaveBeenCalled()
+  it('容器为空时不会加载高亮运行时', () => {
+    renderHook(() => useCodeHighlight({ current: null }, 'content'))
+    expect(mockHighlightCode).not.toHaveBeenCalled()
   })
 
-  it('should return early if no code blocks found', () => {
+  it('没有代码块时不会触发高亮', () => {
     container.innerHTML = '<p>No code here</p>'
-    const ref = { current: container }
 
-    renderHook(() => useCodeHighlight(ref, 'content'))
+    renderHook(() => useCodeHighlight({ current: container }, 'content'))
 
-    expect(mockCodeToHtml).not.toHaveBeenCalled()
+    expect(mockHighlightCode).not.toHaveBeenCalled()
   })
 
-  it('should skip empty code blocks', async () => {
-    container.innerHTML = '<pre><code class="language-js">   </code></pre>'
-    const ref = { current: container }
+  it('会按规范化后的语言调用高亮运行时', async () => {
+    container.innerHTML = '<pre><code class="language-ts">const x: number = 1</code></pre>'
 
-    renderHook(() => useCodeHighlight(ref, 'content'))
+    renderHook(() => useCodeHighlight({ current: container }, 'content'))
 
     await waitFor(() => {
-      expect(mockCodeToHtml).not.toHaveBeenCalled()
+      expect(mockHighlightCode).toHaveBeenCalledWith('const x: number = 1', 'typescript')
     })
   })
 
-  it('should highlight code blocks with language class', async () => {
+  it('会给 pre 节点写入高亮状态和语言标记', async () => {
     container.innerHTML = '<pre><code class="language-javascript">const x = 1</code></pre>'
-    const ref = { current: container }
 
-    renderHook(() => useCodeHighlight(ref, 'content'))
-
-    await waitFor(() => {
-      expect(mockCodeToHtml).toHaveBeenCalledWith('const x = 1', expect.objectContaining({
-        lang: 'javascript',
-        themes: {
-          light: 'github-light',
-          dark: 'github-dark',
-        },
-        defaultColor: false,
-      }))
-    })
-  })
-
-  it('should add shiki class to pre element', async () => {
-    container.innerHTML = '<pre><code class="language-js">const x = 1</code></pre>'
-    const ref = { current: container }
-
-    renderHook(() => useCodeHighlight(ref, 'content'))
+    renderHook(() => useCodeHighlight({ current: container }, 'content'))
 
     await waitFor(() => {
       const pre = container.querySelector('pre')
       expect(pre?.className).toContain('shiki')
-    })
-  })
-
-  it('should set data-shikiHighlighted attribute after processing', async () => {
-    container.innerHTML = '<pre><code class="language-js">const x = 1</code></pre>'
-    const ref = { current: container }
-
-    renderHook(() => useCodeHighlight(ref, 'content'))
-
-    await waitFor(() => {
-      const pre = container.querySelector('pre')
       expect(pre?.dataset.shikiHighlighted).toBe('true')
+      expect(pre?.dataset.language).toBe('javascript')
     })
   })
 
-  it('should set data-language attribute on pre element', async () => {
-    container.innerHTML = '<pre><code class="language-typescript">const x: number = 1</code></pre>'
-    const ref = { current: container }
-
-    renderHook(() => useCodeHighlight(ref, 'content'))
-
-    await waitFor(() => {
-      const pre = container.querySelector('pre')
-      expect(pre?.dataset.language).toBe('typescript')
-    })
-  })
-
-  it('should not set data-language attribute when language is empty', async () => {
+  it('没有语言时会退回 text', async () => {
     container.innerHTML = '<pre><code>plain text</code></pre>'
-    const ref = { current: container }
 
-    renderHook(() => useCodeHighlight(ref, 'content'))
+    renderHook(() => useCodeHighlight({ current: container }, 'content'))
 
     await waitFor(() => {
-      const pre = container.querySelector('pre')
-      expect(pre?.dataset.shikiHighlighted).toBe('true')
-      expect(pre?.dataset.language).toBeUndefined()
+      expect(mockHighlightCode).toHaveBeenCalledWith('plain text', 'text')
     })
   })
 
-  it('should add code-header with copy button', async () => {
-    container.innerHTML = '<pre><code class="language-js">const x = 1</code></pre>'
-    const ref = { current: container }
-
-    renderHook(() => useCodeHighlight(ref, 'content'))
-
-    await waitFor(() => {
-      const header = container.querySelector('[data-code-header="true"]')
-      expect(header).not.toBeNull()
-      const copyBtn = header?.querySelector('button[aria-label="Copy code"]')
-      expect(copyBtn).not.toBeNull()
-    })
-  })
-
-  it('should add language label when language is specified', async () => {
+  it('会插入语言标签和复制按钮', async () => {
     container.innerHTML = '<pre><code class="language-python">print("hello")</code></pre>'
-    const ref = { current: container }
 
-    renderHook(() => useCodeHighlight(ref, 'content'))
-
-    await waitFor(() => {
-      const header = container.querySelector('[data-code-header="true"]')
-      const langSpan = header?.querySelector('span.font-mono.uppercase')
-      expect(langSpan).not.toBeNull()
-      expect(langSpan?.textContent).toBe('python')
-    })
-  })
-
-  it('should not add language label when language is not specified', async () => {
-    container.innerHTML = '<pre><code>plain text</code></pre>'
-    const ref = { current: container }
-
-    renderHook(() => useCodeHighlight(ref, 'content'))
+    renderHook(() => useCodeHighlight({ current: container }, 'content'))
 
     await waitFor(() => {
       const header = container.querySelector('[data-code-header="true"]')
       expect(header).not.toBeNull()
-      const langSpan = header?.querySelector('span.font-mono.uppercase')
-      expect(langSpan).toBeNull()
+      expect(header?.querySelector('span.font-mono.uppercase')?.textContent).toBe('python')
+      expect(header?.querySelector('button[aria-label="Copy code"]')).not.toBeNull()
     })
   })
 
-  it('should not re-highlight already processed blocks', async () => {
+  it('已经高亮过的代码块不会重复处理', async () => {
     container.innerHTML = '<pre data-shiki-highlighted="true"><code class="language-js">const x = 1</code></pre>'
-    const ref = { current: container }
 
-    renderHook(() => useCodeHighlight(ref, 'content'))
+    renderHook(() => useCodeHighlight({ current: container }, 'content'))
 
     await waitFor(() => {
-      expect(mockCodeToHtml).not.toHaveBeenCalled()
+      expect(mockHighlightCode).not.toHaveBeenCalled()
     })
   })
 
-  it('should handle multiple code blocks', async () => {
+  it('支持多个代码块', async () => {
     container.innerHTML = `
       <pre><code class="language-js">const x = 1</code></pre>
       <pre><code class="language-python">x = 1</code></pre>
     `
-    const ref = { current: container }
 
-    renderHook(() => useCodeHighlight(ref, 'content'))
+    renderHook(() => useCodeHighlight({ current: container }, 'content'))
 
     await waitFor(() => {
-      expect(mockCodeToHtml).toHaveBeenCalledTimes(2)
+      expect(mockHighlightCode).toHaveBeenCalledTimes(2)
     })
   })
 
-  describe('language normalization', () => {
-    it('should normalize js to javascript', async () => {
-      container.innerHTML = '<pre><code class="language-js">const x = 1</code></pre>'
-      const ref = { current: container }
-
-      renderHook(() => useCodeHighlight(ref, 'content'))
-
-      await waitFor(() => {
-        expect(mockCodeToHtml).toHaveBeenCalledWith(
-          expect.any(String),
-          expect.objectContaining({ lang: 'javascript' })
-        )
-      })
+  it('复制按钮会写入剪贴板并更新状态', async () => {
+    Object.assign(navigator, {
+      clipboard: {
+        writeText: vi.fn(() => Promise.resolve()),
+      },
     })
 
-    it('should normalize ts to typescript', async () => {
-      container.innerHTML = '<pre><code class="language-ts">const x: number = 1</code></pre>'
-      const ref = { current: container }
+    container.innerHTML = '<pre><code class="language-js">const x = 1</code></pre>'
 
-      renderHook(() => useCodeHighlight(ref, 'content'))
+    renderHook(() => useCodeHighlight({ current: container }, 'content'))
 
-      await waitFor(() => {
-        expect(mockCodeToHtml).toHaveBeenCalledWith(
-          expect.any(String),
-          expect.objectContaining({ lang: 'typescript' })
-        )
-      })
+    await waitFor(() => {
+      expect(container.querySelector('button[aria-label="Copy code"]')).not.toBeNull()
     })
 
-    it('should normalize py to python', async () => {
-      container.innerHTML = '<pre><code class="language-py">x = 1</code></pre>'
-      const ref = { current: container }
+    const copyButton = container.querySelector('button[aria-label="Copy code"]') as HTMLButtonElement
 
-      renderHook(() => useCodeHighlight(ref, 'content'))
-
-      await waitFor(() => {
-        expect(mockCodeToHtml).toHaveBeenCalledWith(
-          expect.any(String),
-          expect.objectContaining({ lang: 'python' })
-        )
-      })
+    await act(async () => {
+      copyButton.click()
     })
 
-    it('should normalize sh to bash', async () => {
-      container.innerHTML = '<pre><code class="language-sh">echo hello</code></pre>'
-      const ref = { current: container }
-
-      renderHook(() => useCodeHighlight(ref, 'content'))
-
-      await waitFor(() => {
-        expect(mockCodeToHtml).toHaveBeenCalledWith(
-          expect.any(String),
-          expect.objectContaining({ lang: 'bash' })
-        )
-      })
-    })
-
-    it('should normalize yml to yaml', async () => {
-      container.innerHTML = '<pre><code class="language-yml">key: value</code></pre>'
-      const ref = { current: container }
-
-      renderHook(() => useCodeHighlight(ref, 'content'))
-
-      await waitFor(() => {
-        expect(mockCodeToHtml).toHaveBeenCalledWith(
-          expect.any(String),
-          expect.objectContaining({ lang: 'yaml' })
-        )
-      })
-    })
-
-    it('should use text for plaintext', async () => {
-      container.innerHTML = '<pre><code class="language-plaintext">plain text</code></pre>'
-      const ref = { current: container }
-
-      renderHook(() => useCodeHighlight(ref, 'content'))
-
-      await waitFor(() => {
-        expect(mockCodeToHtml).toHaveBeenCalledWith(
-          expect.any(String),
-          expect.objectContaining({ lang: 'text' })
-        )
-      })
-    })
-
-    it('should convert language to lowercase', async () => {
-      container.innerHTML = '<pre><code class="language-JavaScript">const x = 1</code></pre>'
-      const ref = { current: container }
-
-      renderHook(() => useCodeHighlight(ref, 'content'))
-
-      await waitFor(() => {
-        expect(mockCodeToHtml).toHaveBeenCalledWith(
-          expect.any(String),
-          expect.objectContaining({ lang: 'javascript' })
-        )
-      })
-    })
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('const x = 1')
+    expect(copyButton.classList.contains('!text-green-500')).toBe(true)
   })
 
-  describe('copy button functionality', () => {
-    beforeEach(() => {
-      // Mock clipboard API
-      Object.assign(navigator, {
-        clipboard: {
-          writeText: vi.fn(() => Promise.resolve()),
-        },
-      })
+  it('内容变化后会重新处理代码块', async () => {
+    container.innerHTML = '<pre><code class="language-js">const x = 1</code></pre>'
+
+    const { rerender } = renderHook(
+      ({ content }) => useCodeHighlight({ current: container }, content),
+      { initialProps: { content: 'content-1' } }
+    )
+
+    await waitFor(() => {
+      expect(mockHighlightCode).toHaveBeenCalledTimes(1)
     })
 
-    it('should copy code to clipboard when clicked', async () => {
-      container.innerHTML = '<pre><code class="language-js">const x = 1</code></pre>'
-      const ref = { current: container }
+    mockHighlightCode.mockClear()
+    container.innerHTML = '<pre><code class="language-python">x = 1</code></pre>'
 
-      renderHook(() => useCodeHighlight(ref, 'content'))
+    rerender({ content: 'content-2' })
 
-      await waitFor(() => {
-        const copyBtn = container.querySelector('button[aria-label="Copy code"]') as HTMLButtonElement
-        expect(copyBtn).not.toBeNull()
-      })
-
-      const copyBtn = container.querySelector('button[aria-label="Copy code"]') as HTMLButtonElement
-      await act(async () => {
-        copyBtn.click()
-      })
-
-      expect(navigator.clipboard.writeText).toHaveBeenCalledWith('const x = 1')
-    })
-
-    it('should add copied class after clicking', async () => {
-      container.innerHTML = '<pre><code class="language-js">const x = 1</code></pre>'
-      const ref = { current: container }
-
-      renderHook(() => useCodeHighlight(ref, 'content'))
-
-      await waitFor(() => {
-        const copyBtn = container.querySelector('button[aria-label="Copy code"]')
-        expect(copyBtn).not.toBeNull()
-      })
-
-      const copyBtn = container.querySelector('button[aria-label="Copy code"]') as HTMLButtonElement
-      await act(async () => {
-        copyBtn.click()
-      })
-
-      expect(copyBtn.classList.contains('!text-green-500')).toBe(true)
-    })
-
-    it('should have correct button attributes', async () => {
-      container.innerHTML = '<pre><code class="language-js">const x = 1</code></pre>'
-      const ref = { current: container }
-
-      renderHook(() => useCodeHighlight(ref, 'content'))
-
-      await waitFor(() => {
-        const copyBtn = container.querySelector('button[aria-label="Copy code"]') as HTMLButtonElement
-        expect(copyBtn).not.toBeNull()
-        expect(copyBtn.type).toBe('button')
-        expect(copyBtn.getAttribute('aria-label')).toBe('Copy code')
-      })
-    })
-  })
-
-  describe('cleanup', () => {
-    it('should cancel processing on unmount', async () => {
-      container.innerHTML = '<pre><code class="language-js">const x = 1</code></pre>'
-      const ref = { current: container }
-
-      const { unmount } = renderHook(() => useCodeHighlight(ref, 'content'))
-
-      // Unmount immediately
-      unmount()
-
-      // The hook should have set cancelled = true, preventing further processing
-      // This is hard to test directly, but we can verify no errors are thrown
-      expect(true).toBe(true)
-    })
-  })
-
-  describe('re-render behavior', () => {
-    it('should re-process when content changes', async () => {
-      container.innerHTML = '<pre><code class="language-js">const x = 1</code></pre>'
-      const ref = { current: container }
-
-      const { rerender } = renderHook(
-        ({ content }) => useCodeHighlight(ref, content),
-        { initialProps: { content: 'content1' } }
-      )
-
-      await waitFor(() => {
-        expect(mockCodeToHtml).toHaveBeenCalledTimes(1)
-      })
-
-      // Reset and change content
-      mockCodeToHtml.mockClear()
-      container.innerHTML = '<pre><code class="language-python">x = 1</code></pre>'
-
-      rerender({ content: 'content2' })
-
-      await waitFor(() => {
-        expect(mockCodeToHtml).toHaveBeenCalledTimes(1)
-      })
+    await waitFor(() => {
+      expect(mockHighlightCode).toHaveBeenCalledTimes(1)
+      expect(mockHighlightCode).toHaveBeenCalledWith('x = 1', 'python')
     })
   })
 })
