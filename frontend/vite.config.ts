@@ -136,10 +136,10 @@ export default defineConfig({
     },
   },
   build: {
-    rolldownOptions: {
+    rollupOptions: {
       output: {
         entryFileNames: 'assets/app-[hash].js',
-        manualChunks(id) {
+        manualChunks(id: string) {
           if (id.includes('node_modules')) {
             if (id.includes('/react/') || id.includes('/react-dom/')) return 'react-vendor'
             if (id.includes('@tanstack/react-query') || id.includes('@tanstack/react-virtual')) return 'query-vendor'
