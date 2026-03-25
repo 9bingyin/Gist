@@ -33,5 +33,27 @@ describe('html-utils', () => {
       expect(stripHtml('<script>alert("xss")</script>Hello')).toBe('Hello')
       expect(stripHtml('<style>.red{color:red}</style>Content')).toBe('Content')
     })
+
+    it('should remove nested newsletter style content from summaries', () => {
+      const html = [
+        "<div class='beehiiv'>",
+        '<style>.bh__table { border: 1px solid #C0C0C0; }</style>',
+        '<div><p>Hello World</p></div>',
+        '</div>',
+      ].join('')
+
+      expect(stripHtml(html)).toBe('Hello World')
+    })
+
+    it('should remove embedded fallback text from non-content tags', () => {
+      const html = [
+        '<iframe src="https://example.com/embed">iframe fallback</iframe>',
+        '<object data="movie.swf">object fallback</object>',
+        '<textarea>raw text</textarea>',
+        '<p>Hello World</p>',
+      ].join('')
+
+      expect(stripHtml(html)).toBe('Hello World')
+    })
   })
 })

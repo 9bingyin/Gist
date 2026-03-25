@@ -8,6 +8,7 @@ import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
 import rehypeStringify from 'rehype-stringify'
 import { unified } from 'unified'
 import { visit } from 'unist-util-visit'
+import { NON_CONTENT_TAG_NAMES } from './html-content-tags'
 
 export type ParseHtmlOptions = {
   components?: Components
@@ -89,22 +90,7 @@ function rehypeTrimEndBrElement() {
  * after sanitize strips the tag wrapper.
  */
 function rehypeDropNonContentElements() {
-  const blockedTagNames = new Set([
-    'style',
-    'script',
-    'noscript',
-    'template',
-    'head',
-    'title',
-    'iframe',
-    'frame',
-    'frameset',
-    'object',
-    'embed',
-    'textarea',
-    'noembed',
-    'noframes',
-  ])
+  const blockedTagNames: ReadonlySet<string> = new Set(NON_CONTENT_TAG_NAMES)
 
   return (tree: Root) => {
     visit(tree, 'element', (node: Element, index, parent) => {
