@@ -343,6 +343,9 @@
     "edit_feed": "编辑订阅源",
     "feed_title": "标题",
     "feed_url": "URL",
+    "summary_prompt_reminder": "摘要自定义提示词",
+    "summary_prompt_reminder_count": "{{count}} / {{max}}",
+    "summary_prompt_reminder_too_long": "自定义提示词不能超过 {{max}} 个字符",
     "url_readonly": "不可修改",
     "update_failed": "更新失败"
   },

@@ -153,6 +153,7 @@
 | url | TEXT | NOT NULL UNIQUE | Feed URL |
 | site_url | TEXT | | 网站首页 URL |
 | description | TEXT | | 订阅描述 |
+| summary_prompt_reminder | TEXT | | 订阅级 AI 摘要自定义提示词 |
 | icon_path | TEXT | | 图标文件路径 (如 example.com.png) |
 | type | TEXT | NOT NULL DEFAULT 'article' | 内容类型 (article/picture/notification) |
 | etag | TEXT | | HTTP ETag (Conditional GET) |

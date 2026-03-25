@@ -1,5 +1,7 @@
 package service
 
+import "context"
+
 // Export for testing
 var IsValidURL = isValidURL
 var HasDynamicTime = hasDynamicTime
@@ -60,4 +62,11 @@ func SetRefreshServiceRefreshing(s RefreshService, v bool) {
 	if rs, ok := s.(*refreshService); ok {
 		rs.isRefreshing = v
 	}
+}
+
+func BuildAISummarizeSystemPromptForTest(s AIService, ctx context.Context, entryID int64, title string) string {
+	if svc, ok := s.(*aiService); ok {
+		return svc.buildSummarizeSystemPrompt(ctx, entryID, title)
+	}
+	return ""
 }

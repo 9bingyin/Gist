@@ -364,7 +364,7 @@ export async function createFeed(payload: {
 
 export async function updateFeed(
   id: string,
-  payload: { title: string; folderId?: string }
+  payload: { title: string; folderId?: string; summaryPromptReminder?: string }
 ): Promise<Feed> {
   return request<Feed>(`/api/feeds/${id}`, {
     method: 'PUT',
@@ -895,4 +895,3 @@ export async function deleteDomainRateLimit(host: string): Promise<void> {
     method: 'DELETE',
   })
 }
-

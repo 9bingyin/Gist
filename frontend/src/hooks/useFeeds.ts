@@ -23,8 +23,17 @@ export function useDeleteFeed() {
 export function useUpdateFeed() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (payload: { id: string; title: string; folderId?: string }) =>
-      updateFeed(payload.id, { title: payload.title, folderId: payload.folderId }),
+    mutationFn: (payload: {
+      id: string
+      title: string
+      folderId?: string
+      summaryPromptReminder?: string
+    }) =>
+      updateFeed(payload.id, {
+        title: payload.title,
+        folderId: payload.folderId,
+        summaryPromptReminder: payload.summaryPromptReminder,
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['feeds'] })
     },

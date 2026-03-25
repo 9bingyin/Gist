@@ -9,10 +9,10 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"gist/backend/pkg/logger"
 	"gist/backend/internal/model"
 	"gist/backend/internal/repository"
 	"gist/backend/internal/service/ai"
+	"gist/backend/pkg/logger"
 )
 
 // TranslateBlockResult represents a translated block result.
@@ -75,6 +75,8 @@ type aiService struct {
 	translationRepo     repository.AITranslationRepository
 	listTranslationRepo repository.AIListTranslationRepository
 	settingsRepo        repository.SettingsRepository
+	entryRepo           repository.EntryRepository
+	feedRepo            repository.FeedRepository
 	rateLimiter         *ai.RateLimiter
 }
 
@@ -86,11 +88,25 @@ func NewAIService(
 	settingsRepo repository.SettingsRepository,
 	rateLimiter *ai.RateLimiter,
 ) AIService {
+	return NewAIServiceWithFeedContext(summaryRepo, translationRepo, listTranslationRepo, settingsRepo, rateLimiter, nil, nil)
+}
+
+func NewAIServiceWithFeedContext(
+	summaryRepo repository.AISummaryRepository,
+	translationRepo repository.AITranslationRepository,
+	listTranslationRepo repository.AIListTranslationRepository,
+	settingsRepo repository.SettingsRepository,
+	rateLimiter *ai.RateLimiter,
+	entryRepo repository.EntryRepository,
+	feedRepo repository.FeedRepository,
+) AIService {
 	return &aiService{
 		summaryRepo:         summaryRepo,
 		translationRepo:     translationRepo,
 		listTranslationRepo: listTranslationRepo,
 		settingsRepo:        settingsRepo,
+		entryRepo:           entryRepo,
+		feedRepo:            feedRepo,
 		rateLimiter:         rateLimiter,
 	}
 }
@@ -121,10 +137,8 @@ func (s *aiService) Summarize(ctx context.Context, entryID int64, content, title
 	}
 
 	// Get language setting
-	language := s.GetSummaryLanguage(ctx)
-
 	// Build system prompt
-	systemPrompt := ai.GetSummarizePrompt(title, language)
+	systemPrompt := s.buildSummarizeSystemPrompt(ctx, entryID, title)
 
 	// Convert HTML to plain text to save tokens
 	plainText := ai.HTMLToText(content)
@@ -137,6 +151,34 @@ func (s *aiService) Summarize(ctx context.Context, entryID int64, content, title
 	logger.Info("ai summarize stream started", "module", "service", "action", "fetch", "resource", "ai", "result", "ok", "entry_id", entryID, "provider", cfg.Provider, "model", cfg.Model)
 
 	return textCh, errCh, nil
+}
+
+func (s *aiService) buildSummarizeSystemPrompt(ctx context.Context, entryID int64, title string) string {
+	return ai.GetSummarizePrompt(title, s.GetSummaryLanguage(ctx), s.getSummaryPromptReminder(ctx, entryID))
+}
+
+func (s *aiService) getSummaryPromptReminder(ctx context.Context, entryID int64) string {
+	if s.entryRepo == nil || s.feedRepo == nil {
+		return ""
+	}
+
+	entry, err := s.entryRepo.GetByID(ctx, entryID)
+	if err != nil {
+		logger.Warn("ai summarize load entry failed", "module", "service", "action", "fetch", "resource", "ai", "result", "failed", "entry_id", entryID, "error", err)
+		return ""
+	}
+
+	feed, err := s.feedRepo.GetByID(ctx, entry.FeedID)
+	if err != nil {
+		logger.Warn("ai summarize load feed failed", "module", "service", "action", "fetch", "resource", "ai", "result", "failed", "entry_id", entryID, "feed_id", entry.FeedID, "error", err)
+		return ""
+	}
+
+	if feed.SummaryPromptReminder == nil {
+		return ""
+	}
+
+	return strings.TrimSpace(*feed.SummaryPromptReminder)
 }
 
 func (s *aiService) SaveSummary(ctx context.Context, entryID int64, isReadability bool, summary string) error {

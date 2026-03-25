@@ -1,48 +1,6 @@
 basePath: /api
 definitions:
-  gist_backend_internal_service.BatchTranslateResult:
-    properties:
-      cached:
-        type: boolean
-      id:
-        type: string
-      summary:
-        type: string
-      title:
-        type: string
-    type: object
-  gist_backend_internal_service.ImportResult:
-    properties:
-      feedsCreated:
-        type: integer
-      feedsSkipped:
-        type: integer
-      foldersCreated:
-        type: integer
-      foldersSkipped:
-        type: integer
-    type: object
-  gist_backend_internal_service.ImportTask:
-    properties:
-      createdAt:
-        type: string
-      current:
-        type: integer
-      error:
-        type: string
-      feed:
-        type: string
-      id:
-        type: string
-      result:
-        $ref: '#/definitions/gist_backend_internal_service.ImportResult'
-      status:
-        description: '"running", "done", "error", "cancelled"'
-        type: string
-      total:
-        type: integer
-    type: object
-  internal_handler.aiSettingsRequest:
+  handler.aiSettingsRequest:
     properties:
       apiKey:
         type: string
@@ -51,11 +9,6 @@ definitions:
       autoTranslate:
         type: boolean
       baseUrl:
-        type: string
-      endpoint:
-        enum:
-        - responses
-        - chat/completions
         type: string
       model:
         type: string
@@ -71,8 +24,10 @@ definitions:
         type: boolean
       thinkingBudget:
         type: integer
+      thinkingSupported:
+        type: boolean
     type: object
-  internal_handler.aiSettingsResponse:
+  handler.aiSettingsResponse:
     properties:
       apiKey:
         type: string
@@ -81,11 +36,6 @@ definitions:
       autoTranslate:
         type: boolean
       baseUrl:
-        type: string
-      endpoint:
-        enum:
-        - responses
-        - chat/completions
         type: string
       model:
         type: string
@@ -101,17 +51,14 @@ definitions:
         type: boolean
       thinkingBudget:
         type: integer
+      thinkingSupported:
+        type: boolean
     type: object
-  internal_handler.aiTestRequest:
+  handler.aiTestRequest:
     properties:
       apiKey:
         type: string
       baseUrl:
-        type: string
-      endpoint:
-        enum:
-        - responses
-        - chat/completions
         type: string
       model:
         type: string
@@ -123,8 +70,10 @@ definitions:
         type: boolean
       thinkingBudget:
         type: integer
+      thinkingSupported:
+        type: boolean
     type: object
-  internal_handler.aiTestResponse:
+  handler.aiTestResponse:
     properties:
       error:
         type: string
@@ -133,33 +82,33 @@ definitions:
       success:
         type: boolean
     type: object
-  internal_handler.appearanceSettingsRequest:
+  handler.appearanceSettingsRequest:
     properties:
       contentTypes:
         items:
           type: string
         type: array
     type: object
-  internal_handler.appearanceSettingsResponse:
+  handler.appearanceSettingsResponse:
     properties:
       contentTypes:
         items:
           type: string
         type: array
     type: object
-  internal_handler.authResponse:
+  handler.authResponse:
     properties:
       token:
         type: string
       user:
-        $ref: '#/definitions/internal_handler.userResponse'
+        $ref: '#/definitions/handler.userResponse'
     type: object
-  internal_handler.authStatusResponse:
+  handler.authStatusResponse:
     properties:
       exists:
         type: boolean
     type: object
-  internal_handler.batchTranslateRequest:
+  handler.batchTranslateRequest:
     properties:
       articles:
         items:
@@ -173,7 +122,7 @@ definitions:
           type: object
         type: array
     type: object
-  internal_handler.clearCacheResponse:
+  handler.clearCacheResponse:
     properties:
       listTranslations:
         type: integer
@@ -182,7 +131,7 @@ definitions:
       translations:
         type: integer
     type: object
-  internal_handler.createFeedRequest:
+  handler.createFeedRequest:
     properties:
       folderId:
         type: string
@@ -193,40 +142,40 @@ definitions:
       url:
         type: string
     type: object
-  internal_handler.deleteFeedsRequest:
+  handler.deleteFeedsRequest:
     properties:
       ids:
         items:
           type: string
         type: array
     type: object
-  internal_handler.deleteFoldersRequest:
+  handler.deleteFoldersRequest:
     properties:
       ids:
         items:
           type: string
         type: array
     type: object
-  internal_handler.deletedCountResponse:
+  handler.deletedCountResponse:
     properties:
       deleted:
         type: integer
     type: object
-  internal_handler.domainRateLimitListResponse:
+  handler.domainRateLimitListResponse:
     properties:
       items:
         items:
-          $ref: '#/definitions/internal_handler.domainRateLimitResponse'
+          $ref: '#/definitions/handler.domainRateLimitResponse'
         type: array
     type: object
-  internal_handler.domainRateLimitRequest:
+  handler.domainRateLimitRequest:
     properties:
       host:
         type: string
       intervalSeconds:
         type: integer
     type: object
-  internal_handler.domainRateLimitResponse:
+  handler.domainRateLimitResponse:
     properties:
       host:
         type: string
@@ -235,21 +184,21 @@ definitions:
       intervalSeconds:
         type: integer
     type: object
-  internal_handler.entryClearResponse:
+  handler.entryClearResponse:
     properties:
       deleted:
         type: integer
     type: object
-  internal_handler.entryListResponse:
+  handler.entryListResponse:
     properties:
       entries:
         items:
-          $ref: '#/definitions/internal_handler.entryResponse'
+          $ref: '#/definitions/handler.entryResponse'
         type: array
       hasMore:
         type: boolean
     type: object
-  internal_handler.entryResponse:
+  handler.entryResponse:
     properties:
       author:
         type: string
@@ -278,20 +227,20 @@ definitions:
       url:
         type: string
     type: object
-  internal_handler.errorResponse:
+  handler.errorResponse:
     properties:
       error:
         type: string
     type: object
-  internal_handler.feedConflictResponse:
+  handler.feedConflictResponse:
     properties:
       error:
         example: feed_exists
         type: string
       existingFeed:
-        $ref: '#/definitions/internal_handler.feedResponse'
+        $ref: '#/definitions/handler.feedResponse'
     type: object
-  internal_handler.feedPreviewResponse:
+  handler.feedPreviewResponse:
     properties:
       description:
         type: string
@@ -308,7 +257,7 @@ definitions:
       url:
         type: string
     type: object
-  internal_handler.feedResponse:
+  handler.feedResponse:
     properties:
       createdAt:
         type: string
@@ -328,6 +277,8 @@ definitions:
         type: string
       siteUrl:
         type: string
+      summaryPromptReminder:
+        type: string
       title:
         type: string
       type:
@@ -337,7 +288,7 @@ definitions:
       url:
         type: string
     type: object
-  internal_handler.folderRequest:
+  handler.folderRequest:
     properties:
       name:
         type: string
@@ -346,7 +297,7 @@ definitions:
       type:
         type: string
     type: object
-  internal_handler.folderResponse:
+  handler.folderResponse:
     properties:
       createdAt:
         type: string
@@ -361,43 +312,43 @@ definitions:
       updatedAt:
         type: string
     type: object
-  internal_handler.generalSettingsRequest:
+  handler.generalSettingsRequest:
     properties:
       autoReadability:
         type: boolean
       fallbackUserAgent:
         type: string
     type: object
-  internal_handler.generalSettingsResponse:
+  handler.generalSettingsResponse:
     properties:
       autoReadability:
         type: boolean
       fallbackUserAgent:
         type: string
     type: object
-  internal_handler.iconClearResponse:
+  handler.iconClearResponse:
     properties:
       deleted:
         type: integer
     type: object
-  internal_handler.importCancelledResponse:
+  handler.importCancelledResponse:
     properties:
       cancelled:
         type: boolean
     type: object
-  internal_handler.importStartedResponse:
+  handler.importStartedResponse:
     properties:
       status:
         type: string
     type: object
-  internal_handler.loginRequest:
+  handler.loginRequest:
     properties:
       identifier:
         type: string
       password:
         type: string
     type: object
-  internal_handler.markAllReadRequest:
+  handler.markAllReadRequest:
     properties:
       contentType:
         type: string
@@ -406,7 +357,7 @@ definitions:
       folderId:
         type: string
     type: object
-  internal_handler.networkSettingsRequest:
+  handler.networkSettingsRequest:
     properties:
       enabled:
         type: boolean
@@ -423,7 +374,7 @@ definitions:
       username:
         type: string
     type: object
-  internal_handler.networkSettingsResponse:
+  handler.networkSettingsResponse:
     properties:
       enabled:
         type: boolean
@@ -440,7 +391,7 @@ definitions:
       username:
         type: string
     type: object
-  internal_handler.networkTestRequest:
+  handler.networkTestRequest:
     properties:
       enabled:
         type: boolean
@@ -455,7 +406,7 @@ definitions:
       username:
         type: string
     type: object
-  internal_handler.networkTestResponse:
+  handler.networkTestResponse:
     properties:
       error:
         type: string
@@ -464,19 +415,19 @@ definitions:
       success:
         type: boolean
     type: object
-  internal_handler.readableContentResponse:
+  handler.readableContentResponse:
     properties:
       readableContent:
         type: string
     type: object
-  internal_handler.refreshStatusResponse:
+  handler.refreshStatusResponse:
     properties:
       isRefreshing:
         type: boolean
       lastRefreshedAt:
         type: string
     type: object
-  internal_handler.registerRequest:
+  handler.registerRequest:
     properties:
       email:
         type: string
@@ -487,12 +438,12 @@ definitions:
       username:
         type: string
     type: object
-  internal_handler.starredCountResponse:
+  handler.starredCountResponse:
     properties:
       count:
         type: integer
     type: object
-  internal_handler.summarizeRequest:
+  handler.summarizeRequest:
     properties:
       content:
         type: string
@@ -503,14 +454,14 @@ definitions:
       title:
         type: string
     type: object
-  internal_handler.summarizeResponse:
+  handler.summarizeResponse:
     properties:
       cached:
         type: boolean
       summary:
         type: string
     type: object
-  internal_handler.translateRequest:
+  handler.translateRequest:
     properties:
       content:
         type: string
@@ -521,33 +472,37 @@ definitions:
       title:
         type: string
     type: object
-  internal_handler.translateResponse:
+  handler.translateResponse:
     properties:
       cached:
         type: boolean
       content:
         type: string
     type: object
-  internal_handler.unreadCountsResponse:
+  handler.unreadCountsResponse:
     properties:
       counts:
         additionalProperties:
           type: integer
         type: object
     type: object
-  internal_handler.updateFeedRequest:
+  handler.updateFeedRequest:
     properties:
       folderId:
         type: string
+      summaryPromptReminder:
+        type: string
       title:
         type: string
+    required:
+    - title
     type: object
-  internal_handler.updateFolderTypeRequest:
+  handler.updateFolderTypeRequest:
     properties:
       type:
         type: string
     type: object
-  internal_handler.updateProfileRequest:
+  handler.updateProfileRequest:
     properties:
       currentPassword:
         type: string
@@ -558,29 +513,29 @@ definitions:
       nickname:
         type: string
     type: object
-  internal_handler.updateProfileResponse:
+  handler.updateProfileResponse:
     properties:
       token:
         type: string
       user:
-        $ref: '#/definitions/internal_handler.userResponse'
+        $ref: '#/definitions/handler.userResponse'
     type: object
-  internal_handler.updateReadRequest:
+  handler.updateReadRequest:
     properties:
       read:
         type: boolean
     type: object
-  internal_handler.updateStarredRequest:
+  handler.updateStarredRequest:
     properties:
       starred:
         type: boolean
     type: object
-  internal_handler.updateTypeRequest:
+  handler.updateTypeRequest:
     properties:
       type:
         type: string
     type: object
-  internal_handler.userResponse:
+  handler.userResponse:
     properties:
       avatarUrl:
         type: string
@@ -590,6 +545,48 @@ definitions:
         type: string
       username:
         type: string
+    type: object
+  service.BatchTranslateResult:
+    properties:
+      cached:
+        type: boolean
+      id:
+        type: string
+      summary:
+        type: string
+      title:
+        type: string
+    type: object
+  service.ImportResult:
+    properties:
+      feedsCreated:
+        type: integer
+      feedsSkipped:
+        type: integer
+      foldersCreated:
+        type: integer
+      foldersSkipped:
+        type: integer
+    type: object
+  service.ImportTask:
+    properties:
+      createdAt:
+        type: string
+      current:
+        type: integer
+      error:
+        type: string
+      feed:
+        type: string
+      id:
+        type: string
+      result:
+        $ref: '#/definitions/service.ImportResult'
+      status:
+        description: '"running", "done", "error", "cancelled"'
+        type: string
+      total:
+        type: integer
     type: object
 info:
   contact: {}
@@ -606,11 +603,11 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_handler.clearCacheResponse'
+            $ref: '#/definitions/handler.clearCacheResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
       summary: Clear AI cache
       tags:
       - ai
@@ -626,7 +623,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/internal_handler.summarizeRequest'
+          $ref: '#/definitions/handler.summarizeRequest'
       produces:
       - application/json
       - text/event-stream
@@ -634,15 +631,15 @@ paths:
         "200":
           description: Cached summary
           schema:
-            $ref: '#/definitions/internal_handler.summarizeResponse'
+            $ref: '#/definitions/handler.summarizeResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
       summary: Generate AI summary
       tags:
       - ai
@@ -658,7 +655,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/internal_handler.translateRequest'
+          $ref: '#/definitions/handler.translateRequest'
       produces:
       - application/json
       - text/event-stream
@@ -666,15 +663,15 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_handler.translateResponse'
+            $ref: '#/definitions/handler.translateResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
       summary: Generate AI translation
       tags:
       - ai
@@ -690,22 +687,22 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/internal_handler.batchTranslateRequest'
+          $ref: '#/definitions/handler.batchTranslateRequest'
       produces:
       - application/x-ndjson
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/gist_backend_internal_service.BatchTranslateResult'
+            $ref: '#/definitions/service.BatchTranslateResult'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
       summary: Batch translate articles
       tags:
       - ai
@@ -717,7 +714,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_handler.domainRateLimitListResponse'
+            $ref: '#/definitions/handler.domainRateLimitListResponse'
       summary: List all domain rate limits
       tags:
       - domain-rate-limits
@@ -730,14 +727,14 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/internal_handler.domainRateLimitRequest'
+          $ref: '#/definitions/handler.domainRateLimitRequest'
       produces:
       - application/json
       responses:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/internal_handler.domainRateLimitResponse'
+            $ref: '#/definitions/handler.domainRateLimitResponse'
       summary: Create a domain rate limit
       tags:
       - domain-rate-limits
@@ -769,14 +766,14 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/internal_handler.domainRateLimitRequest'
+          $ref: '#/definitions/handler.domainRateLimitRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_handler.domainRateLimitResponse'
+            $ref: '#/definitions/handler.domainRateLimitResponse'
       summary: Update a domain rate limit
       tags:
       - domain-rate-limits
@@ -804,15 +801,15 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
         "504":
           description: Gateway Timeout
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
       summary: Proxy external image
       tags:
       - proxy
@@ -827,26 +824,26 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/internal_handler.loginRequest'
+          $ref: '#/definitions/handler.loginRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_handler.authResponse'
+            $ref: '#/definitions/handler.authResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
       summary: Login
       tags:
       - auth
@@ -876,15 +873,15 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_handler.userResponse'
+            $ref: '#/definitions/handler.userResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
       security:
       - BearerAuth: []
       summary: Get current user
@@ -902,26 +899,26 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/internal_handler.updateProfileRequest'
+          $ref: '#/definitions/handler.updateProfileRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_handler.updateProfileResponse'
+            $ref: '#/definitions/handler.updateProfileResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
       security:
       - BearerAuth: []
       summary: Update profile
@@ -938,26 +935,26 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/internal_handler.registerRequest'
+          $ref: '#/definitions/handler.registerRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_handler.authResponse'
+            $ref: '#/definitions/handler.authResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
         "409":
           description: Conflict
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
       summary: Register user
       tags:
       - auth
@@ -970,11 +967,11 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_handler.authStatusResponse'
+            $ref: '#/definitions/handler.authStatusResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
       summary: Check user status
       tags:
       - auth
@@ -1016,11 +1013,11 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_handler.entryListResponse'
+            $ref: '#/definitions/handler.entryListResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
       summary: List entries
       tags:
       - entries
@@ -1039,15 +1036,15 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_handler.entryResponse'
+            $ref: '#/definitions/handler.entryResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
       summary: Get entry
       tags:
       - entries
@@ -1066,15 +1063,15 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_handler.readableContentResponse'
+            $ref: '#/definitions/handler.readableContentResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
       summary: Fetch readable content
       tags:
       - entries
@@ -1094,7 +1091,7 @@ paths:
         name: read
         required: true
         schema:
-          $ref: '#/definitions/internal_handler.updateReadRequest'
+          $ref: '#/definitions/handler.updateReadRequest'
       produces:
       - application/json
       responses:
@@ -1103,11 +1100,11 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
       summary: Update read status
       tags:
       - entries
@@ -1127,7 +1124,7 @@ paths:
         name: starred
         required: true
         schema:
-          $ref: '#/definitions/internal_handler.updateStarredRequest'
+          $ref: '#/definitions/handler.updateStarredRequest'
       produces:
       - application/json
       responses:
@@ -1136,11 +1133,11 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
       summary: Update starred status
       tags:
       - entries
@@ -1154,11 +1151,11 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_handler.entryClearResponse'
+            $ref: '#/definitions/handler.entryClearResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
       summary: Clear entry cache
       tags:
       - entries
@@ -1174,7 +1171,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/internal_handler.markAllReadRequest'
+          $ref: '#/definitions/handler.markAllReadRequest'
       produces:
       - application/json
       responses:
@@ -1183,7 +1180,7 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
       summary: Mark all as read
       tags:
       - entries
@@ -1196,11 +1193,11 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_handler.entryClearResponse'
+            $ref: '#/definitions/handler.entryClearResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
       summary: Clear readability cache
       tags:
       - entries
@@ -1215,14 +1212,14 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/internal_handler.deleteFeedsRequest'
+          $ref: '#/definitions/handler.deleteFeedsRequest'
       responses:
         "204":
           description: No Content
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
       summary: Delete multiple feeds
       tags:
       - feeds
@@ -1240,7 +1237,7 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/internal_handler.feedResponse'
+              $ref: '#/definitions/handler.feedResponse'
             type: array
       summary: List feeds
       tags:
@@ -1255,22 +1252,22 @@ paths:
         name: feed
         required: true
         schema:
-          $ref: '#/definitions/internal_handler.createFeedRequest'
+          $ref: '#/definitions/handler.createFeedRequest'
       produces:
       - application/json
       responses:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/internal_handler.feedResponse'
+            $ref: '#/definitions/handler.feedResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
         "409":
           description: Feed URL already exists
           schema:
-            $ref: '#/definitions/internal_handler.feedConflictResponse'
+            $ref: '#/definitions/handler.feedConflictResponse'
       summary: Create a feed
       tags:
       - feeds
@@ -1289,18 +1286,19 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
       summary: Delete a feed
       tags:
       - feeds
     put:
       consumes:
       - application/json
-      description: Update the title or folder of an existing feed
+      description: Update an existing feed. title is required; folder and summary
+        prompt reminder are optional.
       parameters:
       - description: Feed ID
         in: path
@@ -1312,22 +1310,22 @@ paths:
         name: feed
         required: true
         schema:
-          $ref: '#/definitions/internal_handler.updateFeedRequest'
+          $ref: '#/definitions/handler.updateFeedRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_handler.feedResponse'
+            $ref: '#/definitions/handler.feedResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
       summary: Update a feed
       tags:
       - feeds
@@ -1347,18 +1345,18 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/internal_handler.updateTypeRequest'
+          $ref: '#/definitions/handler.updateTypeRequest'
       responses:
         "204":
           description: No Content
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
       summary: Update feed type
       tags:
       - feeds
@@ -1377,11 +1375,11 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_handler.feedPreviewResponse'
+            $ref: '#/definitions/handler.feedPreviewResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
       summary: Preview a feed
       tags:
       - feeds
@@ -1395,7 +1393,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_handler.refreshStatusResponse'
+            $ref: '#/definitions/handler.refreshStatusResponse'
       summary: Get refresh status
       tags:
       - feeds
@@ -1407,7 +1405,7 @@ paths:
         "409":
           description: Refresh already in progress
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
       summary: Refresh all feeds
       tags:
       - feeds
@@ -1422,14 +1420,14 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/internal_handler.deleteFoldersRequest'
+          $ref: '#/definitions/handler.deleteFoldersRequest'
       responses:
         "204":
           description: No Content
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
       summary: Delete multiple folders
       tags:
       - folders
@@ -1442,7 +1440,7 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/internal_handler.folderResponse'
+              $ref: '#/definitions/handler.folderResponse'
             type: array
       summary: List folders
       tags:
@@ -1457,7 +1455,7 @@ paths:
         name: folder
         required: true
         schema:
-          $ref: '#/definitions/internal_handler.folderRequest'
+          $ref: '#/definitions/handler.folderRequest'
       produces:
       - application/json
       responses:
@@ -1468,7 +1466,7 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
       summary: Create a folder
       tags:
       - folders
@@ -1487,11 +1485,11 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
       summary: Delete a folder
       tags:
       - folders
@@ -1510,22 +1508,22 @@ paths:
         name: folder
         required: true
         schema:
-          $ref: '#/definitions/internal_handler.folderRequest'
+          $ref: '#/definitions/handler.folderRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_handler.folderResponse'
+            $ref: '#/definitions/handler.folderResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
       summary: Update a folder
       tags:
       - folders
@@ -1545,18 +1543,18 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/internal_handler.updateFolderTypeRequest'
+          $ref: '#/definitions/handler.updateFolderTypeRequest'
       responses:
         "204":
           description: No Content
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
       summary: Update folder type
       tags:
       - folders
@@ -1569,11 +1567,11 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_handler.iconClearResponse'
+            $ref: '#/definitions/handler.iconClearResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
       summary: Clear icon cache
       tags:
       - icons
@@ -1599,7 +1597,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_handler.importCancelledResponse'
+            $ref: '#/definitions/handler.importCancelledResponse'
       summary: Cancel Import
       tags:
       - opml
@@ -1619,15 +1617,15 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_handler.importStartedResponse'
+            $ref: '#/definitions/handler.importStartedResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
         "413":
           description: Request Entity Too Large
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
       summary: Import OPML
       tags:
       - opml
@@ -1640,7 +1638,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/gist_backend_internal_service.ImportTask'
+            $ref: '#/definitions/service.ImportTask'
       summary: Import Status
       tags:
       - opml
@@ -1653,11 +1651,11 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_handler.aiSettingsResponse'
+            $ref: '#/definitions/handler.aiSettingsResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
       summary: Get AI settings
       tags:
       - settings
@@ -1672,22 +1670,22 @@ paths:
         name: settings
         required: true
         schema:
-          $ref: '#/definitions/internal_handler.aiSettingsRequest'
+          $ref: '#/definitions/handler.aiSettingsRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_handler.aiSettingsResponse'
+            $ref: '#/definitions/handler.aiSettingsResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
       summary: Update AI settings
       tags:
       - settings
@@ -1702,18 +1700,18 @@ paths:
         name: config
         required: true
         schema:
-          $ref: '#/definitions/internal_handler.aiTestRequest'
+          $ref: '#/definitions/handler.aiTestRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_handler.aiTestResponse'
+            $ref: '#/definitions/handler.aiTestResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
       summary: Test AI connection
       tags:
       - settings
@@ -1726,11 +1724,11 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_handler.deletedCountResponse'
+            $ref: '#/definitions/handler.deletedCountResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
       summary: Clear Anubis cookies
       tags:
       - settings
@@ -1743,11 +1741,11 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_handler.appearanceSettingsResponse'
+            $ref: '#/definitions/handler.appearanceSettingsResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
       summary: Get appearance settings
       tags:
       - settings
@@ -1761,22 +1759,22 @@ paths:
         name: settings
         required: true
         schema:
-          $ref: '#/definitions/internal_handler.appearanceSettingsRequest'
+          $ref: '#/definitions/handler.appearanceSettingsRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_handler.appearanceSettingsResponse'
+            $ref: '#/definitions/handler.appearanceSettingsResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
       summary: Update appearance settings
       tags:
       - settings
@@ -1790,11 +1788,11 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_handler.generalSettingsResponse'
+            $ref: '#/definitions/handler.generalSettingsResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
       summary: Get general settings
       tags:
       - settings
@@ -1808,22 +1806,22 @@ paths:
         name: settings
         required: true
         schema:
-          $ref: '#/definitions/internal_handler.generalSettingsRequest'
+          $ref: '#/definitions/handler.generalSettingsRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_handler.generalSettingsResponse'
+            $ref: '#/definitions/handler.generalSettingsResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
       summary: Update general settings
       tags:
       - settings
@@ -1836,11 +1834,11 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_handler.networkSettingsResponse'
+            $ref: '#/definitions/handler.networkSettingsResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
       summary: Get network settings
       tags:
       - settings
@@ -1855,22 +1853,22 @@ paths:
         name: settings
         required: true
         schema:
-          $ref: '#/definitions/internal_handler.networkSettingsRequest'
+          $ref: '#/definitions/handler.networkSettingsRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_handler.networkSettingsResponse'
+            $ref: '#/definitions/handler.networkSettingsResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
       summary: Update network settings
       tags:
       - settings
@@ -1885,18 +1883,18 @@ paths:
         name: config
         required: true
         schema:
-          $ref: '#/definitions/internal_handler.networkTestRequest'
+          $ref: '#/definitions/handler.networkTestRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_handler.networkTestResponse'
+            $ref: '#/definitions/handler.networkTestResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
+            $ref: '#/definitions/handler.errorResponse'
       summary: Test network proxy
       tags:
       - settings
@@ -1909,7 +1907,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_handler.starredCountResponse'
+            $ref: '#/definitions/handler.starredCountResponse'
       summary: Get starred count
       tags:
       - entries
@@ -1922,7 +1920,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_handler.unreadCountsResponse'
+            $ref: '#/definitions/handler.unreadCountsResponse'
       summary: Get unread counts
       tags:
       - entries

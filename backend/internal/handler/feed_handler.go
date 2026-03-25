@@ -37,8 +37,9 @@ type feedConflictResponse struct {
 }
 
 type updateFeedRequest struct {
-	Title    string  `json:"title"`
-	FolderID *string `json:"folderId"`
+	Title                 string  `json:"title" binding:"required"`
+	FolderID              *string `json:"folderId"`
+	SummaryPromptReminder *string `json:"summaryPromptReminder"`
 }
 
 type deleteFeedsRequest struct {
@@ -46,19 +47,20 @@ type deleteFeedsRequest struct {
 }
 
 type feedResponse struct {
-	ID           string  `json:"id"`
-	FolderID     *string `json:"folderId,omitempty"`
-	Title        string  `json:"title"`
-	URL          string  `json:"url"`
-	SiteURL      *string `json:"siteUrl,omitempty"`
-	Description  *string `json:"description,omitempty"`
-	IconPath     *string `json:"iconPath,omitempty"`
-	Type         string  `json:"type"`
-	ETag         *string `json:"etag,omitempty"`
-	LastModified *string `json:"lastModified,omitempty"`
-	ErrorMessage *string `json:"errorMessage,omitempty"`
-	CreatedAt    string  `json:"createdAt"`
-	UpdatedAt    string  `json:"updatedAt"`
+	ID                    string  `json:"id"`
+	FolderID              *string `json:"folderId,omitempty"`
+	Title                 string  `json:"title"`
+	URL                   string  `json:"url"`
+	SiteURL               *string `json:"siteUrl,omitempty"`
+	Description           *string `json:"description,omitempty"`
+	SummaryPromptReminder *string `json:"summaryPromptReminder,omitempty"`
+	IconPath              *string `json:"iconPath,omitempty"`
+	Type                  string  `json:"type"`
+	ETag                  *string `json:"etag,omitempty"`
+	LastModified          *string `json:"lastModified,omitempty"`
+	ErrorMessage          *string `json:"errorMessage,omitempty"`
+	CreatedAt             string  `json:"createdAt"`
+	UpdatedAt             string  `json:"updatedAt"`
 }
 
 type refreshStatusResponse struct {
@@ -195,7 +197,7 @@ func (h *FeedHandler) Preview(c echo.Context) error {
 
 // Update updates an existing feed.
 // @Summary Update a feed
-// @Description Update the title or folder of an existing feed
+// @Description Update an existing feed. title is required; folder and summary prompt reminder are optional.
 // @Tags feeds
 // @Accept json
 // @Produce json
@@ -214,6 +216,9 @@ func (h *FeedHandler) Update(c echo.Context) error {
 	if err := c.Bind(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, errorResponse{Error: "invalid request"})
 	}
+	if strings.TrimSpace(req.Title) == "" {
+		return c.JSON(http.StatusBadRequest, errorResponse{Error: "title is required"})
+	}
 	var folderID *int64
 	if req.FolderID != nil {
 		fid, err := strconv.ParseInt(*req.FolderID, 10, 64)
@@ -222,7 +227,7 @@ func (h *FeedHandler) Update(c echo.Context) error {
 		}
 		folderID = &fid
 	}
-	feed, err := h.service.Update(c.Request().Context(), id, req.Title, folderID)
+	feed, err := h.service.Update(c.Request().Context(), id, req.Title, folderID, req.SummaryPromptReminder)
 	if err != nil {
 		logger.Error("feed update failed", "module", "handler", "action", "update", "resource", "feed", "result", "failed", "feed_id", id, "error", err)
 		return writeServiceError(c, err)
@@ -363,19 +368,20 @@ func (h *FeedHandler) RefreshAll(c echo.Context) error {
 
 func toFeedResponse(feed model.Feed) feedResponse {
 	return feedResponse{
-		ID:           idToString(feed.ID),
-		FolderID:     idPtrToString(feed.FolderID),
-		Title:        feed.Title,
-		URL:          feed.URL,
-		SiteURL:      feed.SiteURL,
-		Description:  feed.Description,
-		IconPath:     feed.IconPath,
-		Type:         feed.Type,
-		ETag:         feed.ETag,
-		LastModified: feed.LastModified,
-		ErrorMessage: feed.ErrorMessage,
-		CreatedAt:    feed.CreatedAt.UTC().Format(time.RFC3339),
-		UpdatedAt:    feed.UpdatedAt.UTC().Format(time.RFC3339),
+		ID:                    idToString(feed.ID),
+		FolderID:              idPtrToString(feed.FolderID),
+		Title:                 feed.Title,
+		URL:                   feed.URL,
+		SiteURL:               feed.SiteURL,
+		Description:           feed.Description,
+		SummaryPromptReminder: feed.SummaryPromptReminder,
+		IconPath:              feed.IconPath,
+		Type:                  feed.Type,
+		ETag:                  feed.ETag,
+		LastModified:          feed.LastModified,
+		ErrorMessage:          feed.ErrorMessage,
+		CreatedAt:             feed.CreatedAt.UTC().Format(time.RFC3339),
+		UpdatedAt:             feed.UpdatedAt.UTC().Format(time.RFC3339),
 	}
 }
 

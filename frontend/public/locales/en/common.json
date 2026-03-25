@@ -343,6 +343,9 @@
     "edit_feed": "Edit Feed",
     "feed_title": "Title",
     "feed_url": "URL",
+    "summary_prompt_reminder": "Summary Prompt Reminder",
+    "summary_prompt_reminder_count": "{{count}} / {{max}}",
+    "summary_prompt_reminder_too_long": "The custom prompt cannot exceed {{max}} characters",
     "url_readonly": "Read-only",
     "update_failed": "Update failed"
   },
