@@ -84,6 +84,25 @@ function rehypeTrimEndBrElement() {
 }
 
 /**
+ * Remove non-content elements entirely, including their text children.
+ * This prevents tags like <style> from leaking raw CSS into article body text
+ * after sanitize strips the tag wrapper.
+ */
+function rehypeDropNonContentElements() {
+  const blockedTagNames = new Set(['style', 'script', 'noscript', 'template'])
+
+  return (tree: Root) => {
+    visit(tree, 'element', (node: Element, index, parent) => {
+      if (!parent || index === undefined) return
+      if (!blockedTagNames.has(node.tagName)) return
+
+      parent.children.splice(index, 1)
+      return index
+    })
+  }
+}
+
+/**
  * Parse HTML string to React components
  */
 export function parseHtml(content: string, options?: ParseHtmlOptions) {
@@ -114,6 +133,7 @@ export function parseHtml(content: string, options?: ParseHtmlOptions) {
   // Build the processing pipeline
   const pipeline = unified()
     .use(rehypeParse, { fragment: true })
+    .use(rehypeDropNonContentElements)
     .use(rehypeSanitize, rehypeSchema)
     .use(rehypeEmojiImages)
     .use(rehypeTrimEndBrElement)

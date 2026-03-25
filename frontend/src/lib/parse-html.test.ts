@@ -27,6 +27,14 @@ describe('parse-html', () => {
       expect(hastToHtml(result.hastTree)).toContain('<video')
       expect(hastToHtml(result.hastTree)).toContain('controls')
     })
+
+    it('should remove style elements together with their CSS text', () => {
+      const html =
+        '<style>.bh__table { border: 1px solid #C0C0C0; }</style><p>Hello World</p>'
+      const result = parseHtml(html)
+
+      expect(hastToHtml(result.hastTree)).toBe('<p>Hello World</p>')
+    })
   })
 
   describe('emoji image conversion', () => {
