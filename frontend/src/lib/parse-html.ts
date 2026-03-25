@@ -89,7 +89,22 @@ function rehypeTrimEndBrElement() {
  * after sanitize strips the tag wrapper.
  */
 function rehypeDropNonContentElements() {
-  const blockedTagNames = new Set(['style', 'script', 'noscript', 'template'])
+  const blockedTagNames = new Set([
+    'style',
+    'script',
+    'noscript',
+    'template',
+    'head',
+    'title',
+    'iframe',
+    'frame',
+    'frameset',
+    'object',
+    'embed',
+    'textarea',
+    'noembed',
+    'noframes',
+  ])
 
   return (tree: Root) => {
     visit(tree, 'element', (node: Element, index, parent) => {
