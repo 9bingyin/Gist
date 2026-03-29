@@ -147,6 +147,11 @@ describe('router', () => {
       expect(buildPath({ type: 'all' }, null, true)).toBe('/all?unread=true')
     })
 
+    it('should allow explicit unread=false query parameter', () => {
+      expect(buildPath({ type: 'all' }, null, false, 'article', { explicitUnreadParam: true }))
+        .toBe('/all?unread=false&type=article')
+    })
+
     it('should add type query parameter', () => {
       expect(buildPath({ type: 'all' }, null, false, 'picture')).toBe('/all?type=picture')
     })

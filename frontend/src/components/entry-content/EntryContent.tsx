@@ -8,6 +8,7 @@ import { useScrollToTop } from '@/hooks/useScrollToTop'
 import { useReadability } from '@/hooks/useReadability'
 import { useAISummary } from '@/hooks/useAISummary'
 import { useAITranslation } from '@/hooks/useAITranslation'
+import { useFeedViewStore } from '@/stores/feed-view-store'
 import { EntryContentHeader } from './EntryContentHeader'
 import { EntryContentBody } from './EntryContentBody'
 
@@ -34,8 +35,18 @@ export function EntryContent({ entryId, isMobile, onBack }: EntryContentProps) {
 
   const autoTranslate = aiSettings?.autoTranslate ?? false
   const targetLanguage = aiSettings?.summaryLanguage ?? 'zh-CN'
-  const autoReadability = generalSettings?.autoReadability ?? false
+  const feedViewModeExplicit = useFeedViewStore((s) =>
+    entry ? s.getExplicitMode(entry.feedId) : undefined
+  )
+  const autoReadabilityFromSettings = generalSettings?.autoReadability ?? false
+  const autoReadability =
+    feedViewModeExplicit === 'readability'
+      ? true
+      : feedViewModeExplicit
+        ? false
+        : autoReadabilityFromSettings
   const autoSummary = aiSettings?.autoSummary ?? false
+  const keepReadUntilExit = generalSettings?.keepReadUntilExit ?? false
 
   // Readability hook
   const {
@@ -92,11 +103,13 @@ export function EntryContent({ entryId, isMobile, onBack }: EntryContentProps) {
     const markedAsReadSet = markedAsReadRef.current
     return () => {
       if (markedAsReadSet.size > 0) {
-        removeFromUnreadList(markedAsReadSet)
+        if (!keepReadUntilExit) {
+          removeFromUnreadList(markedAsReadSet)
+        }
         markedAsReadSet.clear()
       }
     }
-  }, [removeFromUnreadList])
+  }, [keepReadUntilExit, removeFromUnreadList])
 
   const handleToggleStarred = useCallback(() => {
     if (entry) {

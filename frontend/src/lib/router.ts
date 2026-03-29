@@ -8,6 +8,14 @@ export interface RouteState {
   contentType: ContentType
 }
 
+export interface BuildPathOptions {
+  /**
+   * When true and unreadOnly is false, include `unread=false` in the URL.
+   * This is used to preserve an explicit user override (e.g. when the default is "show unread").
+   */
+  explicitUnreadParam?: boolean
+}
+
 function parseContentType(value: string | null): ContentType {
   if (value === 'picture' || value === 'notification') {
     return value
@@ -82,7 +90,8 @@ export function buildPath(
   selection: SelectionType,
   entryId?: string | null,
   unreadOnly?: boolean,
-  contentType?: ContentType
+  contentType?: ContentType,
+  options?: BuildPathOptions
 ): string {
   let path: string
 
@@ -102,8 +111,10 @@ export function buildPath(
   }
 
   const params = new URLSearchParams()
-  if (unreadOnly) {
+  if (unreadOnly === true) {
     params.set('unread', 'true')
+  } else if (unreadOnly === false && options?.explicitUnreadParam) {
+    params.set('unread', 'false')
   }
   if (contentType) {
     params.set('type', contentType)

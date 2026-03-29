@@ -13,141 +13,222 @@
     <link rel="icon" href="/logo.svg" sizes="any" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon-180x180.png" />
     <title>Gist</title>
+    <style>
+      /* Pre-React boot placeholder (also helps PWA/standalone first paint) */
+      html, body { height: 100%; }
+      body { margin: 0; background: #F6F6E9; }
+      #boot {
+        min-height: 100dvh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 18px;
+        padding: 24px;
+        box-sizing: border-box;
+      }
+      #boot .logo { width: 72px; height: 72px; border-radius: 18px; }
+      #boot .title { margin-top: auto; font: 600 22px/1.2 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; color: #111827; opacity: 0.9; }
+      #boot .sub { font: 400 13px/1.2 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; color: #6B7280; }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div id="boot" aria-label="Gist loading">
+        <img class="logo" src="/logo.svg" alt="Gist" />
+        <div class="sub">Loading…</div>
+        <div class="title">Gist - RSS Reader</div>
+      </div>
+    </div>
     <script>
-      ;(() => {
-        const BOOT_READY_ATTR = 'data-gist-boot-ready'
-        const SOFT_RELOAD_KEY = 'gist.boot.soft_count'
-        const HARD_RECOVER_KEY = 'gist.boot.hard_count'
-        const SOFT_RELOAD_LIMIT = 1
-        const HARD_RECOVER_LIMIT = 1
-        const SOFT_RELOAD_TIMEOUT_MS = 3500
-        const HARD_RECOVER_TIMEOUT_MS = 12000
-        const SOFT_PARAM = '_boot_soft'
-        const HARD_PARAM = '_boot_hard'
+      (function () {
+        var BOOT_FLAG = 'data-gist-booted';
+        var RECOVERY_KEY = 'gist_boot_recovery_ts';
+        var RECOVERY_COUNT_KEY = 'gist_boot_recovery_count';
+        var SOFT_RELOAD_KEY = 'gist_boot_soft_reload_ts';
+        var SOFT_RELOAD_COUNT_KEY = 'gist_boot_soft_reload_count';
 
-        const isStandalone =
-          (typeof window.matchMedia === 'function' &&
-            window.matchMedia('(display-mode: standalone)').matches) ||
-          window.navigator.standalone === true
+        function now() {
+          return Date.now();
+        }
 
-        if (!isStandalone) return
+        function hasBooted() {
+          return document.documentElement.hasAttribute(BOOT_FLAG);
+        }
 
-        const bootLog = (...args) => console.info('[boot-guard]', ...args)
-        const bootWarn = (...args) => console.warn('[boot-guard]', ...args)
-
-        const isBootReady = () =>
-          document.documentElement.getAttribute(BOOT_READY_ATTR) === '1' ||
-          window.__GIST_BOOT_READY__ === true
-
-        const hasSessionStorage = (() => {
+        function hasUrlMarker(name) {
           try {
-            const probeKey = '__gist_boot_probe__'
-            sessionStorage.setItem(probeKey, '1')
-            sessionStorage.removeItem(probeKey)
-            return true
-          } catch {
-            return false
+            var u = new URL(location.href);
+            return u.searchParams.has(name);
+          } catch (_) {
+            return false;
           }
-        })()
-
-        const readCount = (key, param) => {
-          if (hasSessionStorage) {
-            const raw = sessionStorage.getItem(key)
-            if (!raw) return 0
-            const count = Number.parseInt(raw, 10)
-            return Number.isFinite(count) ? count : 0
-          }
-
-          const raw = new URL(window.location.href).searchParams.get(param)
-          if (!raw) return 0
-          const count = Number.parseInt(raw, 10)
-          return Number.isFinite(count) ? count : 0
         }
 
-        const writeCount = (key, param, count) => {
-          if (hasSessionStorage) {
-            sessionStorage.setItem(key, String(count))
-            return
-          }
-
-          const url = new URL(window.location.href)
-          url.searchParams.set(param, String(count))
-          history.replaceState(history.state, '', url.toString())
-        }
-
-        const tryIncrement = (key, param, limit) => {
-          const count = readCount(key, param)
-          if (count >= limit) return false
-          writeCount(key, param, count + 1)
-          return true
-        }
-
-        const replaceWithFlag = (param) => {
-          const url = new URL(window.location.href)
-          url.searchParams.set(param, String(Date.now()))
-          window.location.replace(url.toString())
-        }
-
-        const activateWaitingServiceWorker = async () => {
-          if (!('serviceWorker' in navigator)) return
-
+        function replaceWithMarker(name) {
           try {
-            const registrations = await navigator.serviceWorker.getRegistrations()
-            for (const registration of registrations) {
-              if (!registration.waiting) continue
-              registration.waiting.postMessage({ type: 'SKIP_WAITING' })
-            }
-          } catch (error) {
-            bootWarn('failed to activate waiting service worker', error)
+            var url = new URL(location.href);
+            url.searchParams.set(name, String(Date.now()));
+            location.replace(url.toString());
+          } catch (_) {
+            location.reload();
           }
         }
 
-        const clearServiceWorkerAndCaches = async () => {
-          bootWarn('hard recovery: unregistering service workers and clearing caches')
+        function canAttemptSoftReload() {
+          // If sessionStorage isn't available, use URL marker as a hard loop breaker.
+          if (hasUrlMarker('_boot_soft')) return false;
+          try {
+            var countRaw = sessionStorage.getItem(SOFT_RELOAD_COUNT_KEY);
+            var count = countRaw ? parseInt(countRaw, 10) : 0;
+            if (!Number.isFinite(count)) count = 0;
+            if (count >= 1) return false;
 
-          if ('serviceWorker' in navigator) {
-            try {
-              const registrations = await navigator.serviceWorker.getRegistrations()
-              await Promise.all(
-                registrations.map((registration) => registration.unregister()),
-              )
-            } catch (error) {
-              bootWarn('failed to unregister service workers', error)
-            }
-          }
-
-          if ('caches' in window) {
-            try {
-              const cacheKeys = await caches.keys()
-              await Promise.all(cacheKeys.map((cacheKey) => caches.delete(cacheKey)))
-            } catch (error) {
-              bootWarn('failed to clear cache storage', error)
-            }
+            var last = sessionStorage.getItem(SOFT_RELOAD_KEY);
+            if (!last) return true;
+            var lastNum = parseInt(last, 10);
+            if (!Number.isFinite(lastNum)) return true;
+            // Avoid tight loops.
+            return now() - lastNum >= 10000;
+          } catch (_) {
+            return true;
           }
         }
 
-        setTimeout(async () => {
-          if (isBootReady()) return
-          if (!tryIncrement(SOFT_RELOAD_KEY, SOFT_PARAM, SOFT_RELOAD_LIMIT)) return
+        function markSoftReloadAttempt() {
+          try {
+            sessionStorage.setItem(SOFT_RELOAD_KEY, String(now()));
+            var countRaw = sessionStorage.getItem(SOFT_RELOAD_COUNT_KEY);
+            var count = countRaw ? parseInt(countRaw, 10) : 0;
+            if (!Number.isFinite(count)) count = 0;
+            sessionStorage.setItem(SOFT_RELOAD_COUNT_KEY, String(count + 1));
+          } catch (_) {}
+        }
 
-          bootWarn('startup timeout, triggering soft reload')
-          await activateWaitingServiceWorker()
-          replaceWithFlag(SOFT_PARAM)
-        }, SOFT_RELOAD_TIMEOUT_MS)
+        function lastSoftReloadTs() {
+          try {
+            var t = sessionStorage.getItem(SOFT_RELOAD_KEY);
+            var n = t ? parseInt(t, 10) : NaN;
+            if (Number.isFinite(n)) return n;
+          } catch (_) {}
+          return null;
+        }
 
-        setTimeout(async () => {
-          if (isBootReady()) return
-          if (!tryIncrement(HARD_RECOVER_KEY, HARD_PARAM, HARD_RECOVER_LIMIT)) return
+        function safeSoftReload() {
+          replaceWithMarker('_boot_soft');
+        }
 
-          await clearServiceWorkerAndCaches()
-          replaceWithFlag(HARD_PARAM)
-        }, HARD_RECOVER_TIMEOUT_MS)
+        function canAttemptRecovery() {
+          try {
+            var urlHadMarker = hasUrlMarker('_boot_reload');
 
-        bootLog('boot guard active')
-      })()
+            var countRaw = sessionStorage.getItem(RECOVERY_COUNT_KEY);
+            var count = countRaw ? parseInt(countRaw, 10) : 0;
+            if (!Number.isFinite(count)) count = 0;
+            // Allow at most 2 self-heal attempts per tab session.
+            if (count >= 2) return false;
+
+            var last = sessionStorage.getItem(RECOVERY_KEY);
+            if (!last) return true;
+
+            var lastNum = parseInt(last, 10);
+            if (!Number.isFinite(lastNum)) return true;
+            // Avoid tight loops; require some time to pass.
+            if (now() - lastNum < 15000) return false;
+
+            // If we don't have sessionStorage (or it gets wiped), fall back to URL marker.
+            // With sessionStorage available, URL marker alone should not block a second attempt.
+            if (urlHadMarker && count === 0) {
+              // Marker without count is suspicious; be conservative.
+              return false;
+            }
+
+            return true;
+          } catch (_) {
+            // If sessionStorage is unavailable, use URL marker as a hard loop breaker.
+            if (hasUrlMarker('_boot_reload')) return false;
+            return true;
+          }
+        }
+
+        function markRecoveryAttempt() {
+          try {
+            sessionStorage.setItem(RECOVERY_KEY, String(now()));
+            var countRaw = sessionStorage.getItem(RECOVERY_COUNT_KEY);
+            var count = countRaw ? parseInt(countRaw, 10) : 0;
+            if (!Number.isFinite(count)) count = 0;
+            sessionStorage.setItem(RECOVERY_COUNT_KEY, String(count + 1));
+          } catch (_) {}
+        }
+
+        function safeReload() {
+          replaceWithMarker('_boot_reload');
+        }
+
+        async function clearSWAndCaches() {
+          try {
+            if ('serviceWorker' in navigator) {
+              var regs = await navigator.serviceWorker.getRegistrations();
+              await Promise.all(regs.map(function (r) { return r.unregister(); }));
+            }
+          } catch (_) {}
+          try {
+            if ('caches' in window) {
+              var keys = await caches.keys();
+              await Promise.all(keys.map(function (k) { return caches.delete(k); }));
+            }
+          } catch (_) {}
+        }
+
+        function scheduleWatchdog(reason) {
+          // Fast path: if the app hasn't booted shortly after resume/open,
+          // do a single soft reload first (mirrors the manual quick re-open workaround).
+          setTimeout(function () {
+            if (hasBooted()) return;
+            if (!canAttemptSoftReload()) return;
+
+            markSoftReloadAttempt();
+            safeSoftReload();
+          }, 2500);
+
+          // Slow path: if boot still hasn't completed after a grace period, do a hard recovery.
+          var timeoutMs = 6000;
+          setTimeout(function () {
+            if (hasBooted()) return;
+            if (!canAttemptRecovery()) return;
+
+            markRecoveryAttempt();
+            clearSWAndCaches().finally(safeReload);
+          }, timeoutMs);
+        }
+
+        function maybeForceHardRecovery(reason) {
+          if (hasBooted()) return;
+          var softSeen = hasUrlMarker('_boot_soft') || (lastSoftReloadTs() !== null && now() - lastSoftReloadTs() > 2000);
+          if (!softSeen) return;
+          if (!canAttemptRecovery()) return;
+          markRecoveryAttempt();
+          clearSWAndCaches().finally(safeReload);
+        }
+
+        // First navigation
+        window.addEventListener('load', function () { scheduleWatchdog('load'); }, { once: true });
+        // BFCache restore / app resume
+        window.addEventListener('pageshow', function () { scheduleWatchdog('pageshow'); });
+
+        // Some mobile browsers/PWA resumes don't fire pageshow reliably; visibility/focus does.
+        document.addEventListener('visibilitychange', function () {
+          if (document.visibilityState === 'visible') scheduleWatchdog('visibility');
+          if (document.visibilityState === 'visible') maybeForceHardRecovery('visibility');
+        });
+        window.addEventListener('focus', function () {
+          scheduleWatchdog('focus');
+          maybeForceHardRecovery('focus');
+        });
+
+        // Also schedule once immediately in case load/pageshow won't fire (edge cases).
+        scheduleWatchdog('init');
+      })();
     </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>

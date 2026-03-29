@@ -206,7 +206,7 @@ export function ThreeColumnLayout({
   return (
     <div
       ref={containerRef}
-      className={cn('flex h-screen w-screen overflow-hidden', className)}
+      className={cn('flex h-dvh w-screen overflow-hidden', className)}
       style={{
         // CSS custom property for potential use by child components
         '--feed-col-width': `${feedColResizable.position}px`,

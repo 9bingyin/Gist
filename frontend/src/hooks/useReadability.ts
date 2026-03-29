@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { fetchReadableContent } from '@/api'
 import type { Entry } from '@/types/api'
 
@@ -26,11 +26,16 @@ export function useReadability({
   const [showReadable, setShowReadable] = useState(false)
   const [readableError, setReadableError] = useState<string | null>(null)
 
+  // Ensure auto readability is applied at most once per entry selection.
+  // This keeps "auto" as a default behavior and still allows manual toggle off.
+  const autoAppliedEntryIdRef = useRef<string | null>(null)
+
   // Reset state when entry changes
   useEffect(() => {
     setLocalReadableContent(null)
     setShowReadable(false)
     setReadableError(null)
+    autoAppliedEntryIdRef.current = null
   }, [entry?.id])
 
   const readableContent = localReadableContent || entry?.readableContent
@@ -64,7 +69,9 @@ export function useReadability({
   // Auto-enable readability when entry is selected
   useEffect(() => {
     if (!autoReadability || !entry || isReadableLoading) return
-    if (showReadable) return
+    if (autoAppliedEntryIdRef.current === entry.id) return
+
+    autoAppliedEntryIdRef.current = entry.id
 
     if (entry.readableContent) {
       setShowReadable(true)

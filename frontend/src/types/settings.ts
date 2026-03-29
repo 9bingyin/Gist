@@ -39,6 +39,9 @@ export interface AITestResponse {
 export interface GeneralSettings {
   fallbackUserAgent: string;
   autoReadability: boolean;
+  markReadOnScroll: boolean;
+  defaultShowUnread: boolean;
+  keepReadUntilExit: boolean;
 }
 
 export type ProxyType = 'http' | 'socks5';
