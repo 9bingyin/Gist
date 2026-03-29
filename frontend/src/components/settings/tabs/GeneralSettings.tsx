@@ -145,6 +145,20 @@ export function GeneralSettings() {
         </div>
       </section>
 
+      {/* Default Show Unread Section */}
+      <section>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="min-w-0">
+            <div className="text-sm font-medium">{t('settings.default_show_unread')}</div>
+            <div className="text-xs text-muted-foreground">{t('settings.default_show_unread_description')}</div>
+          </div>
+          <Switch
+            checked={defaultShowUnread}
+            onCheckedChange={handleDefaultShowUnreadChange}
+          />
+        </div>
+      </section>
+
       {/* Keep read entries until exit */}
       <section>
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -159,19 +173,6 @@ export function GeneralSettings() {
         </div>
       </section>
 
-      {/* Default Show Unread Section */}
-      <section>
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="min-w-0">
-            <div className="text-sm font-medium">{t('settings.default_show_unread')}</div>
-            <div className="text-xs text-muted-foreground">{t('settings.default_show_unread_description')}</div>
-          </div>
-          <Switch
-            checked={defaultShowUnread}
-            onCheckedChange={handleDefaultShowUnreadChange}
-          />
-        </div>
-      </section>
 
       {/* Advanced Section */}
       <section>

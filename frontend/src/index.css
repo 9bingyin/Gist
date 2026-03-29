@@ -117,9 +117,16 @@ body {
   height: 100dvh;
 }
 
+.min-h-dvh {
+  min-height: 100dvh;
+}
+
 @supports not (height: 100dvh) {
   .h-dvh {
     height: 100vh;
+  }
+  .min-h-dvh {
+    min-height: 100vh;
   }
 }
 

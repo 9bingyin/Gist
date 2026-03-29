@@ -128,7 +128,7 @@ export function EntryList({
     enabledDirections: ['right'],
     threshold: 100,
     preventScroll: true,
-    startFrom: { left: 32 },
+    startFrom: { left: 64 },
     enabled: Boolean(isMobile && onMenuClick),
   })
 
