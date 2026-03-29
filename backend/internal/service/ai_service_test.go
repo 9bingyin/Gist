@@ -7,7 +7,9 @@ import (
 	"testing"
 	"time"
 
+	repositorymock "gist/backend/internal/repository/mock"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	"gist/backend/internal/model"
 	"gist/backend/internal/service/ai"
@@ -295,6 +297,63 @@ func TestAIService_GetCachedSummary_Error(t *testing.T) {
 	_, err := svc.GetCachedSummary(context.Background(), 123, false)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "database error")
+}
+
+func TestAIService_BuildSummarizeSystemPrompt_UsesFeedReminder(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	settingsRepo := newSettingsRepoStub()
+	settingsRepo.data[service.KeyAISummaryLanguage] = "en-US"
+	entryRepo := repositorymock.NewMockEntryRepository(ctrl)
+	feedRepo := repositorymock.NewMockFeedRepository(ctrl)
+
+	reminder := "Focus on benchmark numbers"
+	entryRepo.EXPECT().GetByID(gomock.Any(), int64(123)).Return(model.Entry{ID: 123, FeedID: 7}, nil)
+	feedRepo.EXPECT().GetByID(gomock.Any(), int64(7)).Return(model.Feed{
+		ID:                    7,
+		SummaryPromptReminder: &reminder,
+	}, nil)
+
+	svc := service.NewAIServiceWithFeedContext(
+		&summaryRepoStub{},
+		&translationRepoStub{},
+		&listTranslationRepoStub{},
+		settingsRepo,
+		ai.NewRateLimiter(100),
+		entryRepo,
+		feedRepo,
+	)
+
+	prompt := service.BuildAISummarizeSystemPromptForTest(svc, context.Background(), 123, "Title")
+	require.Contains(t, prompt, "<system-reminder>\nFocus on benchmark numbers\n</system-reminder>")
+}
+
+func TestAIService_BuildSummarizeSystemPrompt_FallbackOnFeedLookupError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	settingsRepo := newSettingsRepoStub()
+	settingsRepo.data[service.KeyAISummaryLanguage] = "en-US"
+	entryRepo := repositorymock.NewMockEntryRepository(ctrl)
+	feedRepo := repositorymock.NewMockFeedRepository(ctrl)
+
+	entryRepo.EXPECT().GetByID(gomock.Any(), int64(123)).Return(model.Entry{ID: 123, FeedID: 7}, nil)
+	feedRepo.EXPECT().GetByID(gomock.Any(), int64(7)).Return(model.Feed{}, errors.New("feed lookup failed"))
+
+	svc := service.NewAIServiceWithFeedContext(
+		&summaryRepoStub{},
+		&translationRepoStub{},
+		&listTranslationRepoStub{},
+		settingsRepo,
+		ai.NewRateLimiter(100),
+		entryRepo,
+		feedRepo,
+	)
+
+	prompt := service.BuildAISummarizeSystemPromptForTest(svc, context.Background(), 123, "Title")
+	require.NotContains(t, prompt, "<system-reminder>")
+	require.Contains(t, prompt, "<target_language>English</target_language>")
 }
 
 // TestAIService_TranslateBlocks_ContextCancelled tests the BUG fix:

@@ -10,6 +10,8 @@ import { useUpdateFeed } from '@/hooks/useFeeds'
 import { cn } from '@/lib/utils'
 import type { Feed } from '@/types/api'
 
+const SUMMARY_PROMPT_REMINDER_MAX_LENGTH = 2000
+
 interface EditFeedDialogProps {
   feed: Feed | null
   open: boolean
@@ -19,13 +21,17 @@ interface EditFeedDialogProps {
 export function EditFeedDialog({ feed, open, onOpenChange }: EditFeedDialogProps) {
   const { t } = useTranslation()
   const [title, setTitle] = useState('')
+  const [summaryPromptReminder, setSummaryPromptReminder] = useState('')
   const [error, setError] = useState<string | null>(null)
   const updateFeed = useUpdateFeed()
+  const reminderLength = Array.from(summaryPromptReminder).length
+  const reminderTooLong = reminderLength > SUMMARY_PROMPT_REMINDER_MAX_LENGTH
 
   useEffect(() => {
     if (feed) {
       /* eslint-disable react-hooks/set-state-in-effect */
       setTitle(feed.title)
+      setSummaryPromptReminder(feed.summaryPromptReminder ?? '')
       setError(null)
       /* eslint-enable react-hooks/set-state-in-effect */
     }
@@ -33,7 +39,7 @@ export function EditFeedDialog({ feed, open, onOpenChange }: EditFeedDialogProps
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!feed || !title.trim()) return
+    if (!feed || !title.trim() || reminderTooLong) return
 
     setError(null)
     try {
@@ -41,6 +47,7 @@ export function EditFeedDialog({ feed, open, onOpenChange }: EditFeedDialogProps
         id: feed.id,
         title: title.trim(),
         folderId: feed.folderId,
+        summaryPromptReminder,
       })
       onOpenChange(false)
     } catch {
@@ -54,16 +61,17 @@ export function EditFeedDialog({ feed, open, onOpenChange }: EditFeedDialogProps
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md p-0">
+      <DialogContent className="max-w-lg p-0">
         <DialogHeader className="border-b border-border px-4 py-3">
           <DialogTitle>{t('feeds.edit_feed')}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 p-4">
           <div className="space-y-2">
-            <label className="text-sm font-medium text-foreground">
+            <label htmlFor="feed-title-input" className="text-sm font-medium text-foreground">
               {t('feeds.feed_title')}
             </label>
             <input
+              id="feed-title-input"
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
@@ -90,6 +98,42 @@ export function EditFeedDialog({ feed, open, onOpenChange }: EditFeedDialogProps
               {feed?.url}
             </div>
           </div>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-4">
+              <label htmlFor="feed-summary-prompt-reminder" className="text-sm font-medium text-foreground">
+                {t('feeds.summary_prompt_reminder')}
+              </label>
+              <span
+                className={cn(
+                  'text-xs',
+                  reminderTooLong ? 'text-destructive' : 'text-muted-foreground'
+                )}
+              >
+                {t('feeds.summary_prompt_reminder_count', {
+                  count: reminderLength,
+                  max: SUMMARY_PROMPT_REMINDER_MAX_LENGTH,
+                })}
+              </span>
+            </div>
+            <textarea
+              id="feed-summary-prompt-reminder"
+              value={summaryPromptReminder}
+              onChange={(e) => setSummaryPromptReminder(e.target.value)}
+              rows={6}
+              className={cn(
+                'min-h-28 w-full resize-y rounded-md border border-border bg-background px-3 py-2 text-sm',
+                'focus:outline-none focus:ring-2 focus:ring-primary/50',
+                'placeholder:text-muted-foreground'
+              )}
+            />
+            {reminderTooLong && (
+              <p className="text-xs text-destructive">
+                {t('feeds.summary_prompt_reminder_too_long', {
+                  max: SUMMARY_PROMPT_REMINDER_MAX_LENGTH,
+                })}
+              </p>
+            )}
+          </div>
           {error && (
             <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
               {error}
@@ -108,7 +152,7 @@ export function EditFeedDialog({ feed, open, onOpenChange }: EditFeedDialogProps
             </button>
             <button
               type="submit"
-              disabled={!title.trim() || updateFeed.isPending}
+              disabled={!title.trim() || reminderTooLong || updateFeed.isPending}
               className={cn(
                 'rounded-md px-4 py-2 text-sm font-medium transition-colors',
                 'bg-primary text-primary-foreground hover:bg-primary/90',

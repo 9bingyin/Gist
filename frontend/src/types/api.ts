@@ -16,6 +16,7 @@ export interface Feed {
   url: string
   siteUrl?: string
   description?: string
+  summaryPromptReminder?: string
   iconPath?: string
   type: ContentType
   etag?: string

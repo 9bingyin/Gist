@@ -52,11 +52,6 @@ definitions:
         type: boolean
       baseUrl:
         type: string
-      endpoint:
-        enum:
-        - responses
-        - chat/completions
-        type: string
       model:
         type: string
       provider:
@@ -71,6 +66,8 @@ definitions:
         type: boolean
       thinkingBudget:
         type: integer
+      thinkingSupported:
+        type: boolean
     type: object
   internal_handler.aiSettingsResponse:
     properties:
@@ -82,11 +79,6 @@ definitions:
         type: boolean
       baseUrl:
         type: string
-      endpoint:
-        enum:
-        - responses
-        - chat/completions
-        type: string
       model:
         type: string
       provider:
@@ -101,17 +93,14 @@ definitions:
         type: boolean
       thinkingBudget:
         type: integer
+      thinkingSupported:
+        type: boolean
     type: object
   internal_handler.aiTestRequest:
     properties:
       apiKey:
         type: string
       baseUrl:
-        type: string
-      endpoint:
-        enum:
-        - responses
-        - chat/completions
         type: string
       model:
         type: string
@@ -123,6 +112,8 @@ definitions:
         type: boolean
       thinkingBudget:
         type: integer
+      thinkingSupported:
+        type: boolean
     type: object
   internal_handler.aiTestResponse:
     properties:
@@ -327,6 +318,8 @@ definitions:
       lastModified:
         type: string
       siteUrl:
+        type: string
+      summaryPromptReminder:
         type: string
       title:
         type: string
@@ -539,8 +532,12 @@ definitions:
     properties:
       folderId:
         type: string
+      summaryPromptReminder:
+        type: string
       title:
         type: string
+    required:
+    - title
     type: object
   internal_handler.updateFolderTypeRequest:
     properties:
@@ -1300,7 +1297,8 @@ paths:
     put:
       consumes:
       - application/json
-      description: Update the title or folder of an existing feed
+      description: Update an existing feed. title is required; folder and summary
+        prompt reminder are optional.
       parameters:
       - description: Feed ID
         in: path

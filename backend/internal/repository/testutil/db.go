@@ -120,10 +120,10 @@ func SeedFeed(t *testing.T, db *sql.DB, feed model.Feed) int64 {
 
 	_, err := db.ExecContext(
 		context.Background(),
-		`INSERT INTO feeds (id, folder_id, title, url, site_url, description, icon_path, type, etag, last_modified, error_message, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO feeds (id, folder_id, title, url, site_url, description, summary_prompt_reminder, icon_path, type, etag, last_modified, error_message, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		feed.ID, ptrVal(feed.FolderID), feed.Title, feed.URL, ptrVal(feed.SiteURL), ptrVal(feed.Description),
-		ptrVal(feed.IconPath), feed.Type, ptrVal(feed.ETag), ptrVal(feed.LastModified), ptrVal(feed.ErrorMessage), now, now,
+		ptrVal(feed.SummaryPromptReminder), ptrVal(feed.IconPath), feed.Type, ptrVal(feed.ETag), ptrVal(feed.LastModified), ptrVal(feed.ErrorMessage), now, now,
 	)
 	if err != nil {
 		t.Fatalf("failed to seed feed: %v", err)

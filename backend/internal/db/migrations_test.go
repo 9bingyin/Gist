@@ -110,6 +110,11 @@ func TestMigrate_EntryHashDeduplication_MergesHistoricalDuplicates(t *testing.T)
 	err = db.Migrate(database)
 	require.NoError(t, err)
 
+	var reminderColumnCount int
+	err = database.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('feeds') WHERE name = 'summary_prompt_reminder'`).Scan(&reminderColumnCount)
+	require.NoError(t, err)
+	require.Equal(t, 1, reminderColumnCount)
+
 	var oldIndexCount int
 	err = database.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = 'idx_entries_feed_url'`).Scan(&oldIndexCount)
 	require.NoError(t, err)

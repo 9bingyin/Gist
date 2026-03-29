@@ -16,9 +16,11 @@ func TestFeedRepository_CreateAndGet(t *testing.T) {
 	repo := repository.NewFeedRepository(db)
 	ctx := context.Background()
 
+	reminder := "聚焦核心论点"
 	feed := model.Feed{
-		Title: "Test Feed",
-		URL:   "https://example.com/feed",
+		Title:                 "Test Feed",
+		URL:                   "https://example.com/feed",
+		SummaryPromptReminder: &reminder,
 	}
 
 	created, err := repo.Create(ctx, feed)
@@ -32,6 +34,8 @@ func TestFeedRepository_CreateAndGet(t *testing.T) {
 	require.Equal(t, created.ID, fetched.ID)
 	require.Equal(t, created.Title, fetched.Title)
 	require.Equal(t, created.URL, fetched.URL)
+	require.NotNil(t, fetched.SummaryPromptReminder)
+	require.Equal(t, reminder, *fetched.SummaryPromptReminder)
 }
 
 func TestFeedRepository_List(t *testing.T) {
@@ -67,13 +71,27 @@ func TestFeedRepository_Update(t *testing.T) {
 	require.NoError(t, err)
 
 	feed.Title = "New Title"
+	reminder := "强调数据和证据"
+	feed.SummaryPromptReminder = &reminder
 	updated, err := repo.Update(ctx, feed)
 	require.NoError(t, err)
 	require.Equal(t, "New Title", updated.Title)
+	require.NotNil(t, updated.SummaryPromptReminder)
+	require.Equal(t, reminder, *updated.SummaryPromptReminder)
 
 	fetched, err := repo.GetByID(ctx, id)
 	require.NoError(t, err)
 	require.Equal(t, "New Title", fetched.Title)
+	require.NotNil(t, fetched.SummaryPromptReminder)
+	require.Equal(t, reminder, *fetched.SummaryPromptReminder)
+
+	feed.SummaryPromptReminder = nil
+	_, err = repo.Update(ctx, feed)
+	require.NoError(t, err)
+
+	fetched, err = repo.GetByID(ctx, id)
+	require.NoError(t, err)
+	require.Nil(t, fetched.SummaryPromptReminder)
 }
 
 func TestFeedRepository_Delete(t *testing.T) {

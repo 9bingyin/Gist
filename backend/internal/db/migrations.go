@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS feeds (
   url TEXT NOT NULL UNIQUE,
   site_url TEXT,
   description TEXT,
+  summary_prompt_reminder TEXT,
   etag TEXT,
   last_modified TEXT,
   created_at TEXT NOT NULL,
@@ -318,6 +319,20 @@ func runMigrations(db *sql.DB) error {
 	// Migration 17: Switch entry dedup key to hash and merge historical duplicates.
 	if err := migrateEntryHashDeduplication(db); err != nil {
 		return fmt.Errorf("migrate entry hash deduplication: %w", err)
+	}
+
+	// Migration 18: Add summary_prompt_reminder column to feeds for per-feed summarize prompt customization.
+	err = db.QueryRow(`
+		SELECT COUNT(*) FROM pragma_table_info('feeds') WHERE name = 'summary_prompt_reminder'
+	`).Scan(&count)
+	if err != nil {
+		return fmt.Errorf("check feeds summary_prompt_reminder column: %w", err)
+	}
+
+	if count == 0 {
+		if _, err := db.Exec(`ALTER TABLE feeds ADD COLUMN summary_prompt_reminder TEXT`); err != nil {
+			return fmt.Errorf("add feeds summary_prompt_reminder column: %w", err)
+		}
 	}
 
 	return nil

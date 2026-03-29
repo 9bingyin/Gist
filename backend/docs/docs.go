@@ -1119,7 +1119,7 @@ const docTemplate = `{
         },
         "/feeds/{id}": {
             "put": {
-                "description": "Update the title or folder of an existing feed",
+                "description": "Update an existing feed. title is required; folder and summary prompt reminder are optional.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2111,13 +2111,6 @@ const docTemplate = `{
                 "baseUrl": {
                     "type": "string"
                 },
-                "endpoint": {
-                    "type": "string",
-                    "enum": [
-                        "responses",
-                        "chat/completions"
-                    ]
-                },
                 "model": {
                     "type": "string"
                 },
@@ -2138,6 +2131,9 @@ const docTemplate = `{
                 },
                 "thinkingBudget": {
                     "type": "integer"
+                },
+                "thinkingSupported": {
+                    "type": "boolean"
                 }
             }
         },
@@ -2156,13 +2152,6 @@ const docTemplate = `{
                 "baseUrl": {
                     "type": "string"
                 },
-                "endpoint": {
-                    "type": "string",
-                    "enum": [
-                        "responses",
-                        "chat/completions"
-                    ]
-                },
                 "model": {
                     "type": "string"
                 },
@@ -2183,6 +2172,9 @@ const docTemplate = `{
                 },
                 "thinkingBudget": {
                     "type": "integer"
+                },
+                "thinkingSupported": {
+                    "type": "boolean"
                 }
             }
         },
@@ -2194,13 +2186,6 @@ const docTemplate = `{
                 },
                 "baseUrl": {
                     "type": "string"
-                },
-                "endpoint": {
-                    "type": "string",
-                    "enum": [
-                        "responses",
-                        "chat/completions"
-                    ]
                 },
                 "model": {
                     "type": "string"
@@ -2216,6 +2201,9 @@ const docTemplate = `{
                 },
                 "thinkingBudget": {
                     "type": "integer"
+                },
+                "thinkingSupported": {
+                    "type": "boolean"
                 }
             }
         },
@@ -2533,6 +2521,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "siteUrl": {
+                    "type": "string"
+                },
+                "summaryPromptReminder": {
                     "type": "string"
                 },
                 "title": {
@@ -2859,8 +2850,14 @@ const docTemplate = `{
         },
         "internal_handler.updateFeedRequest": {
             "type": "object",
+            "required": [
+                "title"
+            ],
             "properties": {
                 "folderId": {
+                    "type": "string"
+                },
+                "summaryPromptReminder": {
                     "type": "string"
                 },
                 "title": {

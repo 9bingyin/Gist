@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/mmcdole/gofeed"
 
@@ -26,13 +27,14 @@ import (
 )
 
 const feedTimeout = 30 * time.Second
+const maxFeedSummaryPromptReminderLength = 2000
 
 type FeedService interface {
 	Add(ctx context.Context, feedURL string, folderID *int64, titleOverride string, feedType string) (model.Feed, error)
 	AddWithoutFetch(ctx context.Context, feedURL string, folderID *int64, titleOverride string, feedType string) (model.Feed, bool, error)
 	Preview(ctx context.Context, feedURL string) (FeedPreview, error)
 	List(ctx context.Context, folderID *int64) ([]model.Feed, error)
-	Update(ctx context.Context, id int64, title string, folderID *int64) (model.Feed, error)
+	Update(ctx context.Context, id int64, title string, folderID *int64, summaryPromptReminder *string) (model.Feed, error)
 	UpdateType(ctx context.Context, id int64, feedType string) error
 	Delete(ctx context.Context, id int64) error
 	DeleteBatch(ctx context.Context, ids []int64) error
@@ -250,10 +252,19 @@ func (s *feedService) List(ctx context.Context, folderID *int64) ([]model.Feed, 
 	return feeds, nil
 }
 
-func (s *feedService) Update(ctx context.Context, id int64, title string, folderID *int64) (model.Feed, error) {
+func (s *feedService) Update(ctx context.Context, id int64, title string, folderID *int64, summaryPromptReminder *string) (model.Feed, error) {
 	trimmedTitle := strings.TrimSpace(title)
 	if trimmedTitle == "" {
 		return model.Feed{}, ErrInvalid
+	}
+
+	var normalizedReminder *string
+	var err error
+	if summaryPromptReminder != nil {
+		normalizedReminder, err = normalizeSummaryPromptReminder(*summaryPromptReminder)
+		if err != nil {
+			return model.Feed{}, err
+		}
 	}
 
 	feed, err := s.feeds.GetByID(ctx, id)
@@ -289,6 +300,9 @@ func (s *feedService) Update(ctx context.Context, id int64, title string, folder
 	}
 	feed.Title = trimmedTitle
 	feed.FolderID = folderID
+	if summaryPromptReminder != nil {
+		feed.SummaryPromptReminder = normalizedReminder
+	}
 
 	updated, err := s.feeds.Update(ctx, feed)
 	if err != nil {
@@ -297,6 +311,17 @@ func (s *feedService) Update(ctx context.Context, id int64, title string, folder
 	}
 	logger.Info("feed updated", "module", "service", "action", "update", "resource", "feed", "result", "ok", "feed_id", updated.ID, "feed_title", updated.Title)
 	return updated, nil
+}
+
+func normalizeSummaryPromptReminder(raw string) (*string, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return nil, nil
+	}
+	if utf8.RuneCountInString(trimmed) > maxFeedSummaryPromptReminderLength {
+		return nil, ErrInvalid
+	}
+	return &trimmed, nil
 }
 
 func (s *feedService) Delete(ctx context.Context, id int64) error {

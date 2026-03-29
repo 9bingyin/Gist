@@ -29,9 +29,11 @@ func TestRegisterStatic_ServesFiles(t *testing.T) {
 	dir := t.TempDir()
 	indexPath := filepath.Join(dir, "index.html")
 	appPath := filepath.Join(dir, "app.js")
+	assetPath := filepath.Join(dir, "assets")
 
 	require.NoError(t, os.WriteFile(indexPath, []byte("INDEX"), 0o600))
 	require.NoError(t, os.WriteFile(appPath, []byte("APP"), 0o600))
+	require.NoError(t, os.MkdirAll(assetPath, 0o755))
 
 	e := echo.New()
 	gh.RegisterStatic(e, dir)
@@ -41,6 +43,7 @@ func TestRegisterStatic_ServesFiles(t *testing.T) {
 	e.ServeHTTP(rec, req)
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Contains(t, rec.Body.String(), "INDEX")
+	require.Equal(t, "no-cache", rec.Header().Get("Cache-Control"))
 
 	req = httptest.NewRequest(http.MethodGet, "/app.js", nil)
 	rec = httptest.NewRecorder()
@@ -53,6 +56,11 @@ func TestRegisterStatic_ServesFiles(t *testing.T) {
 	e.ServeHTTP(rec, req)
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Contains(t, rec.Body.String(), "INDEX")
+
+	req = httptest.NewRequest(http.MethodGet, "/assets/missing.js", nil)
+	rec = httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusNotFound, rec.Code)
 
 	req = httptest.NewRequest(http.MethodGet, "/api/test", nil)
 	rec = httptest.NewRecorder()

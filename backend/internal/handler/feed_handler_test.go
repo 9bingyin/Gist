@@ -142,19 +142,22 @@ func TestFeedHandler_Update_Success(t *testing.T) {
 
 	e := newTestEcho()
 	reqBody := map[string]interface{}{
-		"title": "Updated Title",
+		"title":                 "Updated Title",
+		"summaryPromptReminder": "突出结论",
 	}
 	req := newJSONRequest(http.MethodPut, "/feeds/123", reqBody)
 	c, rec := newTestContext(e, req)
 	setPathParams(c, map[string]string{"id": "123"})
 
+	reminder := "突出结论"
 	updatedFeed := model.Feed{
-		ID:    123,
-		Title: "Updated Title",
+		ID:                    123,
+		Title:                 "Updated Title",
+		SummaryPromptReminder: &reminder,
 	}
 
 	mockService.EXPECT().
-		Update(gomock.Any(), int64(123), "Updated Title", gomock.Any()).
+		Update(gomock.Any(), int64(123), "Updated Title", gomock.Any(), gomock.Any()).
 		Return(updatedFeed, nil)
 
 	err := h.Update(c)
@@ -164,6 +167,29 @@ func TestFeedHandler_Update_Success(t *testing.T) {
 	assertJSONResponse(t, rec, http.StatusOK, &resp)
 	require.Equal(t, "123", resp.ID)
 	require.Equal(t, "Updated Title", resp.Title)
+	require.NotNil(t, resp.SummaryPromptReminder)
+	require.Equal(t, "突出结论", *resp.SummaryPromptReminder)
+}
+
+func TestFeedHandler_Update_TitleRequired(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock.NewMockFeedService(ctrl)
+	mockRefreshService := mock.NewMockRefreshService(ctrl)
+	h := handler.NewFeedHandlerHelper(mockService, mockRefreshService)
+
+	e := newTestEcho()
+	req := newJSONRequest(http.MethodPut, "/feeds/123", map[string]interface{}{
+		"summaryPromptReminder": "突出结论",
+	})
+	c, rec := newTestContext(e, req)
+	setPathParams(c, map[string]string{"id": "123"})
+
+	err := h.Update(c)
+	require.NoError(t, err)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code)
 }
 
 func TestFeedHandler_Delete_Success(t *testing.T) {

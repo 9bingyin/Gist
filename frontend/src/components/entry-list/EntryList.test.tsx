@@ -2,11 +2,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, cleanup, act } from '@testing-library/react'
 import type { Entry } from '@/types/api'
 
-// --- Hoisted mocks (available in vi.mock factories) ---
 const {
   mockGetVirtualItems,
   mockMeasure,
   mockRenderedEntryListItem,
+  mockNeedsTranslation,
   mockTranslateArticlesBatch,
   mockCancelAllBatchTranslations,
   mockTranslationActionsGet,
@@ -14,13 +14,13 @@ const {
   mockGetVirtualItems: vi.fn(),
   mockMeasure: vi.fn(),
   mockRenderedEntryListItem: vi.fn(),
+  mockNeedsTranslation: vi.fn(() => Promise.resolve(true)),
   mockTranslateArticlesBatch: vi.fn(() => Promise.resolve()),
   mockCancelAllBatchTranslations: vi.fn(),
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   mockTranslationActionsGet: vi.fn((): any => undefined),
 }))
 
-// --- Module mocks ---
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }))
@@ -65,8 +65,8 @@ vi.mock('@/lib/html-utils', () => ({
   stripHtml: (html: string) => html,
 }))
 
-vi.mock('@/lib/language-detect', () => ({
-  needsTranslation: () => true,
+vi.mock('@/lib/language-detect-async', () => ({
+  needsTranslation: mockNeedsTranslation,
 }))
 
 vi.mock('@/services/translation-service', () => ({
@@ -92,23 +92,19 @@ vi.mock('./EntryListHeader', () => ({
   EntryListHeader: () => null,
 }))
 
-vi.mock('@radix-ui/react-scroll-area', () => {
-  return {
-    Root: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-    Corner: () => null,
-  }
-})
+vi.mock('@radix-ui/react-scroll-area', () => ({
+  Root: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  Corner: () => null,
+}))
 
 vi.mock('@/components/ui/scroll-area', () => ({
   ScrollBar: () => null,
 }))
 
-// --- Imports after mocks ---
 import { EntryList } from './EntryList'
 import { useEntriesInfinite } from '@/hooks/useEntries'
 import { useAISettings } from '@/hooks/useAISettings'
 
-// --- Helpers ---
 function makeEntry(id: string): Entry {
   return {
     id,
@@ -124,7 +120,6 @@ function makeEntry(id: string): Entry {
 
 const allEntries = ['1', '2', '3', '4', '5'].map(makeEntry)
 
-// Virtualizer only shows entries at index 0 and 1
 const visibleVirtualItems = [
   { index: 0, start: 0, size: 100, end: 100, lane: 0, key: 0 },
   { index: 1, start: 100, size: 100, end: 200, lane: 0, key: 1 },
@@ -140,7 +135,20 @@ const defaultProps = {
   contentType: 'article' as const,
 }
 
-// --- Tests ---
+async function flushTranslationScheduling() {
+  await act(async () => {
+    await Promise.resolve()
+    await Promise.resolve()
+  })
+}
+
+async function runBatchTimer() {
+  await flushTranslationScheduling()
+  await act(async () => {
+    vi.advanceTimersByTime(500)
+  })
+}
+
 describe('EntryList translation scheduling', () => {
   beforeEach(() => {
     vi.useFakeTimers()
@@ -149,6 +157,7 @@ describe('EntryList translation scheduling', () => {
     mockGetVirtualItems.mockReturnValue(visibleVirtualItems)
     mockMeasure.mockReset()
     mockRenderedEntryListItem.mockReset()
+    mockNeedsTranslation.mockResolvedValue(true)
     mockTranslationActionsGet.mockReturnValue(undefined)
 
     vi.mocked(useEntriesInfinite).mockReturnValue({
@@ -171,137 +180,112 @@ describe('EntryList translation scheduling', () => {
     vi.useRealTimers()
   })
 
-  it('should schedule translation for selected entry outside visible range', () => {
+  it('会为可视区外的选中文章安排翻译', async () => {
     render(<EntryList {...defaultProps} selectedEntryId="4" />)
 
-    act(() => {
-      vi.advanceTimersByTime(500)
-    })
+    await runBatchTimer()
 
     expect(mockTranslateArticlesBatch).toHaveBeenCalled()
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const calledArticles = (mockTranslateArticlesBatch.mock.calls[0] as any[])[0] as Array<{ id: string }>
-    const ids = calledArticles.map((a) => a.id)
+    const ids = calledArticles.map((article) => article.id)
     expect(ids).toContain('4')
     expect(ids).toContain('1')
     expect(ids).toContain('2')
   })
 
-  it('should not duplicate when selected entry is already visible', () => {
+  it('选中文章已在可视区时不会重复安排', async () => {
     render(<EntryList {...defaultProps} selectedEntryId="1" />)
 
-    act(() => {
-      vi.advanceTimersByTime(500)
-    })
+    await runBatchTimer()
 
     expect(mockTranslateArticlesBatch).toHaveBeenCalled()
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const calledArticles = (mockTranslateArticlesBatch.mock.calls[0] as any[])[0] as Array<{ id: string }>
-    const ids = calledArticles.map((a) => a.id)
+    const ids = calledArticles.map((article) => article.id)
     expect(ids.filter((id) => id === '1')).toHaveLength(1)
   })
 
-  it('should only translate visible items when no entry is selected', () => {
+  it('没有选中文章时只翻译可视项', async () => {
     render(<EntryList {...defaultProps} selectedEntryId={null} />)
 
-    act(() => {
-      vi.advanceTimersByTime(500)
-    })
+    await runBatchTimer()
 
     expect(mockTranslateArticlesBatch).toHaveBeenCalled()
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const calledArticles = (mockTranslateArticlesBatch.mock.calls[0] as any[])[0] as Array<{ id: string }>
-    const ids = calledArticles.map((a) => a.id)
+    const ids = calledArticles.map((article) => article.id)
     expect(ids).toEqual(expect.arrayContaining(['1', '2']))
     expect(ids).not.toContain('3')
     expect(ids).not.toContain('4')
     expect(ids).not.toContain('5')
   })
 
-  it('should not schedule any translation when autoTranslate is off', () => {
+  it('自动翻译关闭时不会发起批量翻译', () => {
     vi.mocked(useAISettings).mockReturnValue({
       data: { autoTranslate: false, summaryLanguage: 'zh-CN' },
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any)
 
     render(<EntryList {...defaultProps} selectedEntryId="4" />)
-
-    act(() => {
-      vi.advanceTimersByTime(500)
-    })
+    vi.advanceTimersByTime(500)
 
     expect(mockTranslateArticlesBatch).not.toHaveBeenCalled()
   })
 
-  it('should retry entries that failed to translate after batch completes', async () => {
-    // No translations in store (simulating backend partial/total failure)
+  it('批量翻译失败后会允许下次重试', async () => {
     mockTranslationActionsGet.mockReturnValue(undefined)
 
     const { rerender } = render(<EntryList {...defaultProps} selectedEntryId={null} />)
 
-    // First batch fires
-    await act(async () => {
-      vi.advanceTimersByTime(500)
-    })
+    await runBatchTimer()
 
     expect(mockTranslateArticlesBatch).toHaveBeenCalledTimes(1)
     mockTranslateArticlesBatch.mockClear()
 
-    // Trigger re-scheduling by changing selectedEntryId (causes useEffect to re-fire)
     rerender(<EntryList {...defaultProps} selectedEntryId="3" />)
 
-    await act(async () => {
-      vi.advanceTimersByTime(500)
-    })
+    await runBatchTimer()
 
     expect(mockTranslateArticlesBatch).toHaveBeenCalledTimes(1)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const calledArticles = (mockTranslateArticlesBatch.mock.calls[0] as any[])[0] as Array<{ id: string }>
-    const ids = calledArticles.map((a) => a.id)
-    // Entries 1 and 2 should be retried (removed from tracking by .finally())
+    const ids = calledArticles.map((article) => article.id)
     expect(ids).toContain('1')
     expect(ids).toContain('2')
-    // Entry 3 is newly scheduled
     expect(ids).toContain('3')
   })
 
-  it('should not retry entries that were successfully translated', async () => {
-    // Translations exist in store for entries 1 and 2
+  it('已成功翻译的文章不会重复进入批量队列', async () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ;(mockTranslationActionsGet as any).mockImplementation((id: string) => {
-      if (id === '1' || id === '2') return { title: 'translated', summary: 'sum', content: null }
+      if (id === '1' || id === '2') {
+        return { title: 'translated', summary: 'translated summary', content: null }
+      }
       return undefined
     })
 
     const { rerender } = render(<EntryList {...defaultProps} selectedEntryId={null} />)
 
-    // First batch fires
-    await act(async () => {
-      vi.advanceTimersByTime(500)
-    })
+    await runBatchTimer()
 
     expect(mockTranslateArticlesBatch).toHaveBeenCalledTimes(1)
     mockTranslateArticlesBatch.mockClear()
 
-    // Trigger re-scheduling
     rerender(<EntryList {...defaultProps} selectedEntryId="3" />)
 
-    await act(async () => {
-      vi.advanceTimersByTime(500)
-    })
+    await runBatchTimer()
 
     expect(mockTranslateArticlesBatch).toHaveBeenCalledTimes(1)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const calledArticles = (mockTranslateArticlesBatch.mock.calls[0] as any[])[0] as Array<{ id: string }>
-    const ids = calledArticles.map((a) => a.id)
-    // Entries 1 and 2 should NOT be retried (translations exist in store)
+    const ids = calledArticles.map((article) => article.id)
     expect(ids).not.toContain('1')
     expect(ids).not.toContain('2')
-    // Entry 3 is newly scheduled
     expect(ids).toContain('3')
   })
 
-  it('should deduplicate entries repeated across pages before scheduling translation', () => {
+  it('分页有重复文章时只会安排一次翻译', async () => {
     vi.mocked(useEntriesInfinite).mockReturnValue({
       data: {
         pages: [
@@ -324,9 +308,7 @@ describe('EntryList translation scheduling', () => {
 
     render(<EntryList {...defaultProps} selectedEntryId={null} />)
 
-    act(() => {
-      vi.advanceTimersByTime(500)
-    })
+    await runBatchTimer()
 
     expect(mockTranslateArticlesBatch).toHaveBeenCalledTimes(1)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -334,7 +316,7 @@ describe('EntryList translation scheduling', () => {
     expect(calledArticles.map((article) => article.id)).toEqual(['1', '2', '3'])
   })
 
-  it('should not render duplicate items when pages contain repeated entries', () => {
+  it('渲染列表时也会去重重复文章', () => {
     vi.mocked(useEntriesInfinite).mockReturnValue({
       data: {
         pages: [

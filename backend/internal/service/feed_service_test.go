@@ -422,7 +422,7 @@ func TestFeedService_Update_Delete_UpdateType_DeleteBatch(t *testing.T) {
 
 	svc := service.NewFeedService(mockFeeds, mockFolders, mockEntries, nil, nil, nil, nil)
 
-	_, err := svc.Update(context.Background(), 1, "", nil)
+	_, err := svc.Update(context.Background(), 1, "", nil, nil)
 	require.ErrorIs(t, err, service.ErrInvalid)
 
 	folderID := int64(10)
@@ -430,12 +430,12 @@ func TestFeedService_Update_Delete_UpdateType_DeleteBatch(t *testing.T) {
 	mockFeeds.EXPECT().GetByID(gomock.Any(), int64(1)).Return(model.Feed{ID: 1, Title: "Old", Type: "article"}, nil)
 	// 然后获取 folder 失败
 	mockFolders.EXPECT().GetByID(gomock.Any(), folderID).Return(model.Folder{}, errors.New("db"))
-	_, err = svc.Update(context.Background(), 1, "Title", &folderID)
+	_, err = svc.Update(context.Background(), 1, "Title", &folderID, nil)
 	require.Error(t, err)
 
 	// feed 不存在
 	mockFeeds.EXPECT().GetByID(gomock.Any(), int64(1)).Return(model.Feed{}, sql.ErrNoRows)
-	_, err = svc.Update(context.Background(), 1, "Title", &folderID)
+	_, err = svc.Update(context.Background(), 1, "Title", &folderID, nil)
 	require.ErrorIs(t, err, service.ErrNotFound)
 
 	mockFeeds.EXPECT().GetByID(gomock.Any(), int64(2)).Return(model.Feed{ID: 2, Title: "Old"}, nil)
@@ -445,7 +445,7 @@ func TestFeedService_Update_Delete_UpdateType_DeleteBatch(t *testing.T) {
 			return feed, nil
 		},
 	)
-	_, err = svc.Update(context.Background(), 2, "New", nil)
+	_, err = svc.Update(context.Background(), 2, "New", nil, nil)
 	require.NoError(t, err)
 
 	mockFeeds.EXPECT().GetByID(gomock.Any(), int64(3)).Return(model.Feed{}, sql.ErrNoRows)
@@ -921,7 +921,7 @@ func TestFeedService_Update_GetByIDError(t *testing.T) {
 	mockFeeds.EXPECT().GetByID(gomock.Any(), int64(1)).Return(model.Feed{}, errors.New("db error"))
 
 	svc := service.NewFeedService(mockFeeds, nil, nil, nil, nil, nil, nil)
-	_, err := svc.Update(context.Background(), 1, "Title", nil)
+	_, err := svc.Update(context.Background(), 1, "Title", nil, nil)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "get feed")
 }
@@ -936,8 +936,66 @@ func TestFeedService_Update_UpdateError(t *testing.T) {
 	mockFeeds.EXPECT().Update(gomock.Any(), gomock.Any()).Return(model.Feed{}, errors.New("update error"))
 
 	svc := service.NewFeedService(mockFeeds, nil, nil, nil, nil, nil, nil)
-	_, err := svc.Update(context.Background(), 1, "New Title", nil)
+	_, err := svc.Update(context.Background(), 1, "New Title", nil, nil)
 	require.Error(t, err)
+}
+
+func TestFeedService_Update_SummaryPromptReminder(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockFeeds := mock.NewMockFeedRepository(ctrl)
+
+	rawReminder := "  关注数据和关键结论  "
+	mockFeeds.EXPECT().GetByID(gomock.Any(), int64(1)).Return(model.Feed{
+		ID:    1,
+		Title: "Old",
+		Type:  "article",
+	}, nil)
+	mockFeeds.EXPECT().Update(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, feed model.Feed) (model.Feed, error) {
+			require.NotNil(t, feed.SummaryPromptReminder)
+			require.Equal(t, "关注数据和关键结论", *feed.SummaryPromptReminder)
+			return feed, nil
+		},
+	)
+
+	svc := service.NewFeedService(mockFeeds, nil, nil, nil, nil, nil, nil)
+	updated, err := svc.Update(context.Background(), 1, "New Title", nil, &rawReminder)
+	require.NoError(t, err)
+	require.NotNil(t, updated.SummaryPromptReminder)
+	require.Equal(t, "关注数据和关键结论", *updated.SummaryPromptReminder)
+}
+
+func TestFeedService_Update_SummaryPromptReminderClearAndValidate(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockFeeds := mock.NewMockFeedRepository(ctrl)
+
+	existingReminder := "旧规则"
+	mockFeeds.EXPECT().GetByID(gomock.Any(), int64(1)).Return(model.Feed{
+		ID:                    1,
+		Title:                 "Old",
+		Type:                  "article",
+		SummaryPromptReminder: &existingReminder,
+	}, nil)
+	mockFeeds.EXPECT().Update(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, feed model.Feed) (model.Feed, error) {
+			require.Nil(t, feed.SummaryPromptReminder)
+			return feed, nil
+		},
+	)
+
+	clearReminder := "   "
+	svc := service.NewFeedService(mockFeeds, nil, nil, nil, nil, nil, nil)
+	updated, err := svc.Update(context.Background(), 1, "New Title", nil, &clearReminder)
+	require.NoError(t, err)
+	require.Nil(t, updated.SummaryPromptReminder)
+
+	tooLongReminder := strings.Repeat("a", 2001)
+	_, err = svc.Update(context.Background(), 1, "New Title", nil, &tooLongReminder)
+	require.ErrorIs(t, err, service.ErrInvalid)
 }
 
 func TestFeedService_Update_FolderNotFound(t *testing.T) {
@@ -954,7 +1012,7 @@ func TestFeedService_Update_FolderNotFound(t *testing.T) {
 	mockFolders.EXPECT().GetByID(gomock.Any(), folderID).Return(model.Folder{}, sql.ErrNoRows)
 
 	svc := service.NewFeedService(mockFeeds, mockFolders, nil, nil, nil, nil, nil)
-	_, err := svc.Update(context.Background(), 1, "Title", &folderID)
+	_, err := svc.Update(context.Background(), 1, "Title", &folderID, nil)
 	require.ErrorIs(t, err, service.ErrNotFound)
 }
 
@@ -1187,7 +1245,7 @@ func TestFeedService_Update_TypeMismatch(t *testing.T) {
 	mockFeeds.EXPECT().GetByID(gomock.Any(), int64(1)).Return(model.Feed{ID: 1, Title: "Feed Title", Type: "article"}, nil)
 
 	svc := service.NewFeedService(mockFeeds, mockFolders, nil, nil, nil, nil, nil)
-	_, err := svc.Update(context.Background(), 1, "Feed Title", &newFolderID)
+	_, err := svc.Update(context.Background(), 1, "Feed Title", &newFolderID, nil)
 	require.ErrorIs(t, err, service.ErrInvalid)
 }
 
@@ -1215,7 +1273,7 @@ func TestFeedService_Update_SameTypeSucceeds(t *testing.T) {
 	)
 
 	svc := service.NewFeedService(mockFeeds, mockFolders, nil, nil, nil, nil, nil)
-	feed, err := svc.Update(context.Background(), 1, "Feed Title", &newFolderID)
+	feed, err := svc.Update(context.Background(), 1, "Feed Title", &newFolderID, nil)
 	require.NoError(t, err)
 	require.Equal(t, &newFolderID, feed.FolderID)
 }
@@ -1252,7 +1310,7 @@ func TestFeedService_Update_SameFolderNoTypeCheck(t *testing.T) {
 	)
 
 	svc := service.NewFeedService(mockFeeds, mockFolders, nil, nil, nil, nil, nil)
-	feed, err := svc.Update(context.Background(), 1, "New Title", &folderID)
+	feed, err := svc.Update(context.Background(), 1, "New Title", &folderID, nil)
 	require.NoError(t, err)
 	require.Equal(t, &folderID, feed.FolderID)
 }
@@ -1285,7 +1343,7 @@ func TestFeedService_Update_FromNullToFolder(t *testing.T) {
 	)
 
 	svc := service.NewFeedService(mockFeeds, mockFolders, nil, nil, nil, nil, nil)
-	_, err := svc.Update(context.Background(), 1, "Feed Title", &folderID)
+	_, err := svc.Update(context.Background(), 1, "Feed Title", &folderID, nil)
 	require.NoError(t, err)
 }
 
@@ -1318,7 +1376,7 @@ func TestFeedService_Update_FromFolderToNull(t *testing.T) {
 	)
 
 	svc := service.NewFeedService(mockFeeds, mockFolders, nil, nil, nil, nil, nil)
-	_, err := svc.Update(context.Background(), 1, "Feed Title", nil)
+	_, err := svc.Update(context.Background(), 1, "Feed Title", nil, nil)
 	require.NoError(t, err)
 }
 

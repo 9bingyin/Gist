@@ -15,7 +15,7 @@ import * as ScrollAreaPrimitive from '@radix-ui/react-scroll-area'
 import { ScrollBar } from '@/components/ui/scroll-area'
 import { EntryListItem } from './EntryListItem'
 import { EntryListHeader } from './EntryListHeader'
-import { needsTranslation } from '@/lib/language-detect'
+import { needsTranslation as needsTranslationAsync } from '@/lib/language-detect-async'
 import { translateArticlesBatch, cancelAllBatchTranslations } from '@/services/translation-service'
 import { translationActions } from '@/stores/translation-store'
 import { selectionScrollKey, entryListScrollPositions } from './scroll-key'
@@ -135,7 +135,9 @@ export function EntryList({
   // Track translated entries to avoid re-translating
   const translatedEntries = useRef(new Set<string>())
   const pendingTranslation = useRef(new Map<string, Entry>())
+  const pendingDetection = useRef(new Set<string>())
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const translationSession = useRef(0)
 
   const autoTranslate = aiSettings?.autoTranslate ?? false
   const targetLanguage = aiSettings?.summaryLanguage ?? 'zh-CN'
@@ -173,13 +175,28 @@ export function EntryList({
     // Cancel any in-flight batch translations
     cancelAllBatchTranslations()
     // Clear translation tracking for new list
+    translationSession.current += 1
     translatedEntries.current.clear()
     pendingTranslation.current.clear()
+    pendingDetection.current.clear()
     if (debounceTimer.current) {
       clearTimeout(debounceTimer.current)
       debounceTimer.current = null
     }
   }, [selection, contentType])
+
+  useEffect(() => {
+    const pendingDetectionEntries = pendingDetection.current
+
+    return () => {
+      translationSession.current += 1
+      pendingDetectionEntries.clear()
+      if (debounceTimer.current) {
+        clearTimeout(debounceTimer.current)
+        debounceTimer.current = null
+      }
+    }
+  }, [])
 
   const feedsMap = useMemo(() => {
     const map = new Map<string, Feed>()
@@ -302,6 +319,15 @@ export function EntryList({
     }
   }, [targetLanguage])
 
+  const queueEntryForTranslation = useCallback((entry: Entry) => {
+    pendingTranslation.current.set(entry.id, entry)
+
+    if (debounceTimer.current) {
+      clearTimeout(debounceTimer.current)
+    }
+    debounceTimer.current = setTimeout(triggerBatchTranslation, 500)
+  }, [triggerBatchTranslation])
+
   // Schedule entry for translation when visible
   const scheduleTranslation = useCallback(
     (entry: Entry) => {
@@ -315,23 +341,36 @@ export function EntryList({
       // Skip if user manually disabled translation for this article
       if (translationActions.isDisabled(entry.id)) return
 
-      // Check if needs translation
-      const summary = entry.content ? stripHtml(entry.content).slice(0, 200) : null
-      if (!needsTranslation(entry.title || '', summary, targetLanguage)) {
-        translatedEntries.current.add(entry.id)
+      if (pendingTranslation.current.has(entry.id) || pendingDetection.current.has(entry.id)) {
         return
       }
 
-      // Add to pending
-      pendingTranslation.current.set(entry.id, entry)
+      const summary = entry.content ? stripHtml(entry.content).slice(0, 200) : null
+      const session = translationSession.current
+      pendingDetection.current.add(entry.id)
 
-      // Debounce batch translation
-      if (debounceTimer.current) {
-        clearTimeout(debounceTimer.current)
-      }
-      debounceTimer.current = setTimeout(triggerBatchTranslation, 500)
+      void needsTranslationAsync(entry.title || '', summary, targetLanguage)
+        .then((shouldTranslate) => {
+          if (translationSession.current !== session) return
+
+          if (!shouldTranslate) {
+            translatedEntries.current.add(entry.id)
+            return
+          }
+
+          queueEntryForTranslation(entry)
+        })
+        .catch(() => {
+          if (translationSession.current !== session) return
+          queueEntryForTranslation(entry)
+        })
+        .finally(() => {
+          if (translationSession.current === session) {
+            pendingDetection.current.delete(entry.id)
+          }
+        })
     },
-    [autoTranslate, targetLanguage, triggerBatchTranslation]
+    [autoTranslate, targetLanguage, queueEntryForTranslation]
   )
 
   // Trigger translation for visible items and selected entry

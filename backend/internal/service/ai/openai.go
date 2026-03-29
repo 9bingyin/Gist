@@ -94,18 +94,17 @@ func (p *OpenAIProvider) SummarizeStream(ctx context.Context, systemPrompt, cont
 		defer close(textCh)
 		defer close(errCh)
 
-		// Build input messages
-		inputItems := []responses.ResponseInputItemUnionParam{}
-		if systemPrompt != "" {
-			inputItems = append(inputItems, responses.ResponseInputItemParamOfMessage(systemPrompt, responses.EasyInputMessageRoleSystem))
-		}
-		inputItems = append(inputItems, responses.ResponseInputItemParamOfMessage(content, responses.EasyInputMessageRoleUser))
-
 		params := responses.ResponseNewParams{
 			Model: shared.ResponsesModel(p.model),
 			Input: responses.ResponseNewParamsInputUnion{
-				OfInputItemList: responses.ResponseInputParam(inputItems),
+				OfInputItemList: responses.ResponseInputParam{
+					responses.ResponseInputItemParamOfMessage(content, responses.EasyInputMessageRoleUser),
+				},
 			},
+		}
+
+		if systemPrompt != "" {
+			params.Instructions = openai.String(systemPrompt)
 		}
 
 		// Only pass reasoning params when the model supports thinking
@@ -145,18 +144,17 @@ func (p *OpenAIProvider) SummarizeStream(ctx context.Context, systemPrompt, cont
 
 // Complete generates a response without streaming.
 func (p *OpenAIProvider) Complete(ctx context.Context, systemPrompt, content string) (string, error) {
-	// Build input messages
-	inputItems := []responses.ResponseInputItemUnionParam{}
-	if systemPrompt != "" {
-		inputItems = append(inputItems, responses.ResponseInputItemParamOfMessage(systemPrompt, responses.EasyInputMessageRoleSystem))
-	}
-	inputItems = append(inputItems, responses.ResponseInputItemParamOfMessage(content, responses.EasyInputMessageRoleUser))
-
 	params := responses.ResponseNewParams{
 		Model: shared.ResponsesModel(p.model),
 		Input: responses.ResponseNewParamsInputUnion{
-			OfInputItemList: responses.ResponseInputParam(inputItems),
+			OfInputItemList: responses.ResponseInputParam{
+				responses.ResponseInputItemParamOfMessage(content, responses.EasyInputMessageRoleUser),
+			},
 		},
+	}
+
+	if systemPrompt != "" {
+		params.Instructions = openai.String(systemPrompt)
 	}
 
 	// Only pass reasoning params when the model supports thinking
