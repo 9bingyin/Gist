@@ -88,6 +88,7 @@ vi.mock('./EntryListHeader', () => ({
 
 vi.mock('@radix-ui/react-scroll-area', () => ({
   Root: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  Viewport: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   Corner: () => null,
 }))
 
