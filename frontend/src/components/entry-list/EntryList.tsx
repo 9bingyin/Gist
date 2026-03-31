@@ -348,9 +348,9 @@ export function EntryList({
       />
 
       <ScrollAreaPrimitive.Root className="relative min-h-0 flex-1 overflow-hidden">
-        <div
+        <ScrollAreaPrimitive.Viewport
           ref={containerRef}
-          className="h-full overflow-y-auto overscroll-y-contain [overflow-anchor:none]"
+          className="h-full w-full rounded-[inherit] overscroll-y-contain [overflow-anchor:none]"
         >
           {isLoading ? (
             <EntryListSkeleton />
@@ -389,7 +389,7 @@ export function EntryList({
           )}
 
           {isFetchingNextPage && <LoadingMore />}
-        </div>
+        </ScrollAreaPrimitive.Viewport>
         <ScrollBar />
         <ScrollAreaPrimitive.Corner />
       </ScrollAreaPrimitive.Root>
