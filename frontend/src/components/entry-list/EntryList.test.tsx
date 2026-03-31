@@ -86,11 +86,16 @@ vi.mock('./EntryListHeader', () => ({
   EntryListHeader: () => null,
 }))
 
-vi.mock('@radix-ui/react-scroll-area', () => ({
-  Root: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  Viewport: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  Corner: () => null,
-}))
+vi.mock('@radix-ui/react-scroll-area', async () => {
+  const { forwardRef } = await import('react')
+  return {
+    Root: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+    Viewport: forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
+      (props, ref) => <div ref={ref} {...props} />,
+    ),
+    Corner: () => null,
+  }
+})
 
 vi.mock('@/components/ui/scroll-area', () => ({
   ScrollBar: () => null,
