@@ -113,8 +113,8 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
   if (isMobile) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="!inset-0 !translate-x-0 !translate-y-0 w-screen h-screen max-w-none max-h-none p-0 overflow-hidden gap-0 rounded-none">
-          <div className="flex h-full flex-col safe-area-inset">
+        <DialogContent className="!inset-0 !translate-x-0 !translate-y-0 h-dvh w-full max-w-none max-h-none rounded-none bg-background p-0 overflow-hidden gap-0">
+          <div className="flex h-full min-h-0 flex-col bg-background safe-area-inset">
             {/* Header */}
             <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border shrink-0">
               <div className="relative flex-1">
@@ -157,7 +157,7 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
             </div>
 
             {/* Content */}
-            <div className="flex-1 overflow-auto px-4 py-4">
+            <div className="min-h-0 flex-1 overflow-auto px-4 py-4">
               {renderContent()}
             </div>
           </div>
