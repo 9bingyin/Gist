@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useMemo, useCallback } from 'react'
+import { useEffect, useLayoutEffect, useRef, useMemo, useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useEntriesInfinite, useUnreadCounts } from '@/hooks/useEntries'
@@ -18,6 +18,7 @@ import { translateArticlesBatch, cancelAllBatchTranslations } from '@/services/t
 import { translationActions } from '@/stores/translation-store'
 import { selectionScrollKey, entryListScrollPositions } from './scroll-key'
 import { useScrollToTop } from '@/hooks/useScrollToTop'
+import { estimateEntryListItemHeight } from './entry-list-height'
 import type { Entry, Feed, Folder, ContentType } from '@/types/api'
 
 interface EntryListProps {
@@ -66,6 +67,7 @@ export function EntryList({
   const { data: unreadCounts } = useUnreadCounts()
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } =
     useEntriesInfinite({ ...params, unreadOnly })
+  const [containerWidth, setContainerWidth] = useState(0)
 
   // Swipe gesture: Right swipe opens sidebar (only on mobile)
   useSwipeGesture(listWrapperRef, {
@@ -100,6 +102,30 @@ export function EntryList({
     const saved = entryListScrollPositions.get(scrollKey)
     node.scrollTop = saved ?? 0
   }, [scrollKey])
+
+  useLayoutEffect(() => {
+    const node = containerRef.current
+    if (!node) return
+
+    const updateWidth = () => {
+      setContainerWidth(node.clientWidth)
+    }
+
+    updateWidth()
+
+    if (typeof ResizeObserver === 'undefined') {
+      return
+    }
+
+    const observer = new ResizeObserver(() => {
+      updateWidth()
+    })
+    observer.observe(node)
+
+    return () => {
+      observer.disconnect()
+    }
+  }, [])
 
   useEffect(() => {
     const node = containerRef.current
@@ -160,17 +186,25 @@ export function EntryList({
   }, [folders])
 
   const entries = useMemo(() => flattenUniqueEntries(data?.pages), [data])
+  const estimatedItemSizes = useMemo(
+    () => entries.map((entry) => estimateEntryListItemHeight(entry, containerWidth)),
+    [entries, containerWidth]
+  )
 
   const virtualizer = useVirtualizer({
     count: entries.length,
     getScrollElement: () => containerRef.current,
-    estimateSize: () => ESTIMATED_ITEM_HEIGHT,
+    estimateSize: (index) => estimatedItemSizes[index] ?? ESTIMATED_ITEM_HEIGHT,
     overscan: 5,
     // Restore offset on remount (only used on first mount)
     initialOffset: entryListScrollPositions.get(scrollKey),
   })
 
   const virtualItems = virtualizer.getVirtualItems()
+
+  useEffect(() => {
+    virtualizer.measure()
+  }, [virtualizer, estimatedItemSizes])
 
   useEffect(() => {
     const lastItem = virtualItems.at(-1)
@@ -373,7 +407,6 @@ export function EntryList({
                   return (
                     <EntryListItem
                       key={entry.id}
-                      ref={virtualizer.measureElement}
                       data-index={virtualRow.index}
                       entry={entry}
                       feed={feedsMap.get(entry.feedId)}
