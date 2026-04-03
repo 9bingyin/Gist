@@ -16,7 +16,11 @@ import { EntryListHeader } from './EntryListHeader'
 import { needsTranslation as needsTranslationAsync } from '@/lib/language-detect-async'
 import { translateArticlesBatch, cancelAllBatchTranslations } from '@/services/translation-service'
 import { translationActions } from '@/stores/translation-store'
-import { selectionScrollKey, entryListScrollPositions } from './scroll-key'
+import {
+  selectionScrollKey,
+  entryListMeasurementsCache,
+  entryListScrollPositions,
+} from './scroll-key'
 import { useScrollToTop } from '@/hooks/useScrollToTop'
 import { estimateEntryListItemHeight } from './entry-list-height'
 import type { Entry, Feed, Folder, ContentType } from '@/types/api'
@@ -186,10 +190,19 @@ export function EntryList({
   }, [folders])
 
   const entries = useMemo(() => flattenUniqueEntries(data?.pages), [data])
+  const entryIdsKey = useMemo(() => entries.map((entry) => entry.id).join(':'), [entries])
   const estimatedItemSizes = useMemo(
     () => entries.map((entry) => estimateEntryListItemHeight(entry, containerWidth)),
     [entries, containerWidth]
   )
+  const initialMeasurementsCache = useMemo(() => {
+    const snapshot = entryListMeasurementsCache.get(scrollKey)
+    if (!snapshot) {
+      return []
+    }
+
+    return snapshot.entryIdsKey === entryIdsKey ? snapshot.measurements : []
+  }, [scrollKey, entryIdsKey])
 
   const virtualizer = useVirtualizer({
     count: entries.length,
@@ -198,6 +211,18 @@ export function EntryList({
     overscan: 5,
     // Restore offset on remount (only used on first mount)
     initialOffset: entryListScrollPositions.get(scrollKey),
+    initialMeasurementsCache,
+    onChange: (instance) => {
+      if (entryIdsKey.length === 0) {
+        entryListMeasurementsCache.delete(scrollKey)
+        return
+      }
+
+      entryListMeasurementsCache.set(scrollKey, {
+        entryIdsKey,
+        measurements: instance.measurementsCache,
+      })
+    },
   })
 
   const virtualItems = virtualizer.getVirtualItems()

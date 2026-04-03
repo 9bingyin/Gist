@@ -5,6 +5,7 @@ import type { Entry } from '@/types/api'
 const {
   mockGetVirtualItems,
   mockMeasure,
+  mockUseVirtualizer,
   mockRenderedEntryListItem,
   mockNeedsTranslation,
   mockTranslateArticlesBatch,
@@ -13,6 +14,7 @@ const {
 } = vi.hoisted(() => ({
   mockGetVirtualItems: vi.fn(),
   mockMeasure: vi.fn(),
+  mockUseVirtualizer: vi.fn(),
   mockRenderedEntryListItem: vi.fn(),
   mockNeedsTranslation: vi.fn(() => Promise.resolve(true)),
   mockTranslateArticlesBatch: vi.fn(() => Promise.resolve()),
@@ -26,12 +28,15 @@ vi.mock('react-i18next', () => ({
 }))
 
 vi.mock('@tanstack/react-virtual', () => ({
-  useVirtualizer: () => ({
-    getVirtualItems: mockGetVirtualItems,
-    measureElement: () => {},
-    measure: mockMeasure,
-    getTotalSize: () => 500,
-  }),
+  useVirtualizer: (options: unknown) => {
+    mockUseVirtualizer(options)
+    return {
+      getVirtualItems: mockGetVirtualItems,
+      measure: mockMeasure,
+      getTotalSize: () => 500,
+      measurementsCache: [],
+    }
+  },
 }))
 
 vi.mock('@/hooks/useEntries', () => ({
@@ -104,6 +109,7 @@ vi.mock('@/components/ui/scroll-area', () => ({
 import { EntryList } from './EntryList'
 import { useEntriesInfinite } from '@/hooks/useEntries'
 import { useAISettings } from '@/hooks/useAISettings'
+import { entryListMeasurementsCache, selectionScrollKey } from './scroll-key'
 
 function makeEntry(id: string): Entry {
   return {
@@ -156,9 +162,11 @@ describe('EntryList translation scheduling', () => {
 
     mockGetVirtualItems.mockReturnValue(visibleVirtualItems)
     mockMeasure.mockReset()
+    mockUseVirtualizer.mockReset()
     mockRenderedEntryListItem.mockReset()
     mockNeedsTranslation.mockResolvedValue(true)
     mockTranslationActionsGet.mockReturnValue(undefined)
+    entryListMeasurementsCache.clear()
 
     vi.mocked(useEntriesInfinite).mockReturnValue({
       data: { pages: [{ entries: allEntries, hasMore: false }] },
@@ -254,6 +262,26 @@ describe('EntryList translation scheduling', () => {
     expect(ids).toContain('1')
     expect(ids).toContain('2')
     expect(ids).toContain('3')
+  })
+
+  it('会向虚拟列表恢复匹配当前条目集的测量缓存', () => {
+    const scrollKey = selectionScrollKey(defaultProps.selection, defaultProps.contentType)
+    const cachedMeasurements = [
+      { index: 0, start: 0, end: 96, size: 96, key: '0', lane: 0 },
+      { index: 1, start: 96, end: 202, size: 106, key: '1', lane: 0 },
+    ]
+
+    entryListMeasurementsCache.set(scrollKey, {
+      entryIdsKey: allEntries.map((entry) => entry.id).join(':'),
+      measurements: cachedMeasurements,
+    })
+
+    render(<EntryList {...defaultProps} />)
+
+    expect(mockUseVirtualizer).toHaveBeenCalled()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const options = mockUseVirtualizer.mock.calls.at(-1)?.[0] as any
+    expect(options.initialMeasurementsCache).toEqual(cachedMeasurements)
   })
 
   it('已成功翻译的文章不会重复进入批量队列', async () => {

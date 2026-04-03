@@ -193,6 +193,10 @@ body {
   animation: dropdown-out 120ms ease;
 }
 
+.entry-content-viewport {
+  overflow-anchor: none;
+}
+
 @keyframes dropdown-in {
   from {
     opacity: 0;
