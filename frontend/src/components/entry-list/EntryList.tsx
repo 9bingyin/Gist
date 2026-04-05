@@ -435,6 +435,7 @@ export function EntryList({
                       data-index={virtualRow.index}
                       entry={entry}
                       feed={feedsMap.get(entry.feedId)}
+                      containerWidth={containerWidth}
                       isSelected={entry.id === selectedEntryId}
                       onClick={() => onSelectEntry(entry.id)}
                       autoTranslate={autoTranslate}
