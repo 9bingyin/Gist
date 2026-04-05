@@ -204,7 +204,7 @@ func (s *feedServiceStub) List(ctx context.Context, folderID *int64) ([]model.Fe
 	return nil, nil
 }
 
-func (s *feedServiceStub) Update(ctx context.Context, id int64, title string, folderID *int64) (model.Feed, error) {
+func (s *feedServiceStub) Update(ctx context.Context, id int64, title string, folderID *int64, summaryPromptReminder *string) (model.Feed, error) {
 	return model.Feed{}, nil
 }
 

@@ -21,8 +21,9 @@ export async function getDimensionsBatch(srcs: string[]): Promise<Map<string, Im
   const results = await getMany<ImageDimension>(srcs, store)
   const map = new Map<string, ImageDimension>()
   results.forEach((dim, i) => {
-    if (dim) {
-      map.set(srcs[i], dim)
+      const src = srcs[i]
+      if (dim && src) {
+        map.set(src, dim)
     }
   })
   return map

@@ -1,63 +1,34 @@
 import type { RefObject } from 'react'
 import { useEffect } from 'react'
-import type { HighlighterGeneric, BundledLanguage, BundledTheme } from 'shiki'
 
-type TransformerModule = typeof import('@shikijs/transformers')
+type HighlightRuntimeModule = typeof import('@/lib/code-highlight-runtime')
 
-let highlighterPromise: Promise<HighlighterGeneric<BundledLanguage, BundledTheme>> | null = null
-let transformerModulePromise: Promise<TransformerModule> | null = null
-const loadedLanguages = new Set<string>()
+let highlightRuntimePromise: Promise<HighlightRuntimeModule> | null = null
 
-const commonLanguages = [
-  'javascript',
-  'typescript',
-  'json',
-  'html',
-  'css',
-  'python',
-  'bash',
-  'shell',
-  'markdown',
-  'yaml',
-  'xml',
-  'sql',
-] as const
-
-async function getHighlighter() {
-  if (!highlighterPromise) {
-    highlighterPromise = (async () => {
-      const { createHighlighter } = await import('shiki')
-      const highlighter = await createHighlighter({
-        themes: ['github-light', 'github-dark'],
-        langs: [...commonLanguages],
-      })
-      for (const lang of commonLanguages) {
-        loadedLanguages.add(lang)
-      }
-      return highlighter
-    })()
+async function getHighlightRuntime() {
+  if (!highlightRuntimePromise) {
+    highlightRuntimePromise = import('@/lib/code-highlight-runtime')
   }
-  return highlighterPromise
-}
-
-async function getTransformerModule() {
-  if (!transformerModulePromise) {
-    transformerModulePromise = import('@shikijs/transformers')
-  }
-  return transformerModulePromise
+  return highlightRuntimePromise
 }
 
 function normalizeLanguage(lang: string): string {
   const aliases: Record<string, string> = {
     js: 'javascript',
     ts: 'typescript',
+    jsx: 'jsx',
+    tsx: 'tsx',
     py: 'python',
     sh: 'bash',
     zsh: 'bash',
+    shellscript: 'shell',
     yml: 'yaml',
     htm: 'html',
     plaintext: 'text',
     text: 'text',
+    csharp: 'csharp',
+    cplusplus: 'cpp',
+    'c++': 'cpp',
   }
   return aliases[lang.toLowerCase()] || lang.toLowerCase()
 }
@@ -108,10 +79,7 @@ export function useCodeHighlight(
     let cancelled = false
 
     async function highlightBlocks() {
-      const [highlighter, transformerModule] = await Promise.all([
-        getHighlighter(),
-        getTransformerModule(),
-      ])
+      const { highlightCode } = await getHighlightRuntime()
       if (cancelled) return
 
       for (const block of blocks) {
@@ -124,41 +92,16 @@ export function useCodeHighlight(
         if (pre.dataset.shikiHighlighted) continue
 
         const match = /language-([a-z0-9_+-]+)/i.exec(block.className || '')
-        const rawLang = match ? match[1] : ''
-        const lang = normalizeLanguage(rawLang)
+        const rawLang = match?.[1] ?? ''
+        const lang = rawLang ? normalizeLanguage(rawLang) : 'text'
 
         const code = block.textContent || ''
         if (!code.trim()) continue
 
-        let effectiveLang = lang
-        if (lang && lang !== 'text') {
-          if (!loadedLanguages.has(lang)) {
-            try {
-              await highlighter.loadLanguage(lang as BundledLanguage)
-              loadedLanguages.add(lang)
-            } catch {
-              effectiveLang = 'text'
-            }
-          }
-        } else {
-          effectiveLang = 'text'
-        }
-
         if (cancelled) break
 
         try {
-          const html = highlighter.codeToHtml(code, {
-            lang: effectiveLang,
-            themes: {
-              light: 'github-light',
-              dark: 'github-dark',
-            },
-            defaultColor: false,
-            transformers: [
-              transformerModule.transformerNotationDiff(),
-              transformerModule.transformerNotationHighlight(),
-            ],
-          })
+          const html = await highlightCode(code, lang)
 
           const temp = document.createElement('div')
           temp.innerHTML = html

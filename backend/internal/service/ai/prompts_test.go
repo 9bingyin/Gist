@@ -23,33 +23,43 @@ func TestWrapInputSimple(t *testing.T) {
 }
 
 func TestGetSummarizePrompt_UsesLanguageName(t *testing.T) {
-	prompt := ai.GetSummarizePrompt("Title", "en-US")
+	prompt := ai.GetSummarizePrompt("Title", "en-US", "")
 	require.Contains(t, prompt, "<article_title>Title</article_title>")
 	require.Contains(t, prompt, "<target_language>English</target_language>")
 }
 
 func TestGetSummarizePrompt_ContainsInputReference(t *testing.T) {
-	prompt := ai.GetSummarizePrompt("Title", "en-US")
+	prompt := ai.GetSummarizePrompt("Title", "en-US", "")
 	require.Contains(t, prompt, "<input>")
 }
 
 func TestGetSummarizePrompt_HasSecuritySection(t *testing.T) {
-	prompt := ai.GetSummarizePrompt("", "zh-CN")
+	prompt := ai.GetSummarizePrompt("", "zh-CN", "")
 	require.Contains(t, prompt, "<security_critical>")
 	require.Contains(t, prompt, "魔法咒语")
 	require.Contains(t, prompt, "PROMPT INJECTION WARNING")
 }
 
 func TestGetSummarizePrompt_EmptyTitle(t *testing.T) {
-	prompt := ai.GetSummarizePrompt("", "en-US")
+	prompt := ai.GetSummarizePrompt("", "en-US", "")
 	require.NotContains(t, prompt, "<article_title>")
 }
 
 func TestGetSummarizePrompt_OutputFormat(t *testing.T) {
-	prompt := ai.GetSummarizePrompt("Title", "en-US")
+	prompt := ai.GetSummarizePrompt("Title", "en-US", "")
 	require.Contains(t, prompt, "No markdown")
 	require.Contains(t, prompt, "No preamble")
 	require.Contains(t, prompt, "START DIRECTLY")
+}
+
+func TestGetSummarizePrompt_UsesSystemReminderTag(t *testing.T) {
+	prompt := ai.GetSummarizePrompt("Title", "en-US", "Focus on benchmarks")
+	require.Contains(t, prompt, "<system-reminder>\nFocus on benchmarks\n</system-reminder>")
+}
+
+func TestGetSummarizePrompt_EmptyReminderOmitted(t *testing.T) {
+	prompt := ai.GetSummarizePrompt("Title", "en-US", "   ")
+	require.NotContains(t, prompt, "<system-reminder>")
 }
 
 func TestGetTranslateBlockPrompt_UsesLanguageName(t *testing.T) {

@@ -1,447 +1,140 @@
-# Gist 开发规范 (SPEC)
+# Gist 开发规范
 
-> **Note**: 本文件 (`.rules`) 是项目的核心规范文档。`CLAUDE.md`、`AGENTS.md`、`GEMINI.md` 均为指向此文件的软链接（可通过 `ls -la` 查看）。修改时只需编辑 `.rules` 文件。
+> **Note**: 本文件 (`.rules`) 是项目的核心规范文档。`CLAUDE.md`、`AGENTS.md`、`GEMINI.md` 均为指向此文件的软链接。
 
-## 1. 开发环境与工具
+## 开发偏好
 
-*   **包管理器**：必须使用 **bun**。
-*   **数据库工具**：可以使用 `sqlite3` 命令行工具检查数据库。
-*   **自动化工具**：根目录 `backend/` 下提供了 `Makefile`，常用命令包括 `make gen`, `make test`, `make lint`。
-
----
-
-## 2. 项目愿景与架构概览
-
-本项目旨在构建一个高性能、轻量级、且深度集成 AI 能力的现代化 RSS 阅读器。
-
-*   **核心目标**：全格式 Feed 支持、沉浸式阅读体验、AI 自动化摘要/翻译。
-*   **技术栈**：
-    *   **前端**：React 19.2 + Vite + TypeScript + shadcn/ui + Tailwind CSS v4。
-    *   **后端**：Go 1.25.5+ + Echo 框架。
-    *   **基础库**：`pkg/` 目录下存放高度解耦的基础组件。
-    *   **业务核心**：`internal/` 目录下存放业务专有的逻辑。
-    *   **解析/存储**：`gofeed` + `modernc.org/sqlite` (纯 Go 驱动)。
-    *   **AI 层**：OpenAI SDK / Anthropic (支持 BYOK 模式)。
+- **包管理器**：必须使用 bun
+- **自动化工具**：backend/Makefile 提供 `make gen`（生成 Mock）、`make test`（运行测试）、`make lint`（静态分析）
+- **数据库检查**：可使用 `sqlite3` 命令行工具
 
 ---
 
-## 3. 核心架构原则
+## 核心约束
 
-*   **无 CGO 依赖**：数据库必须选用 `modernc.org/sqlite`。
-*   **安全优先 (Security First)**：所有输入视为不可信，必须进行验证和清洗。
-*   **高内聚低耦合**：模块间通过接口交互，严禁跨层级直接访问内部实现。
-*   **类型安全**：利用 Go 和 TypeScript 类型系统消除潜在错误，严禁滥用 `any` 或 `interface{}`。
-*   **性能优先**：针对 RSS 长列表场景，必须实现虚拟列表 (Virtualization) 和异步处理。
-*   **黑盒测试优先**：所有单元测试必须使用 `package name_test` 命名空间，强制通过公开 API 进行验证。
-*   **基础设施分离**：通用的工具（Logger, Snowflake, Generic Network）必须放在 `pkg/` 目录下，禁止包含业务逻辑。
-*   **Mock 去中心化**：Mock 文件应生成在接口定义包的 `mock/` 子目录下，包名为 `mock`。
+### 后端 (Go)
 
----
+**架构原则**：
+- **无 CGO 依赖**：数据库必须使用 `modernc.org/sqlite`
+- **黑盒测试优先**：所有单元测试使用 `package name_test` 命名空间，强制通过公开 API 验证
+- **Mock 去中心化**：Mock 文件生成在接口定义包的 `mock/` 子目录，包名为 `mock`
+  ```go
+  //go:generate mockgen -source=$GOFILE -destination=mock/$GOFILE -package=mock
+  ```
+- **依赖注入**：通过构造函数注入依赖，禁止全局状态变量（配置对象除外）
+- **可见性控制**：仅公开必要的 API（首字母大写）
 
-## 4. 后端开发规范 (Go)
+**日志规范**：
+- 使用 `pkg/logger` 包，禁止直接使用 `log`、`slog` 或 `fmt.Print`
+- 业务日志必须包含四个标准字段：`module`、`action`、`resource`、`result`
+- 字段命名使用 `snake_case`（如 `feed_id`、`status_code`）
+- 安全规范：
+  - URL 使用 `network.ExtractHost()` 脱敏，禁止记录完整 URL
+  - 禁止记录密码、Token、API Key 的实际值
+- Repository 层不记录日志，错误向上传递给 Service 层
 
-### 4.1 代码结构与分层
+**数据库特殊限制**：
+- `modernc.org/sqlite` 不支持 FTS5 特殊删除语法 `INSERT INTO fts(fts, ...) VALUES('delete', ...)`
+- 必须使用 `DELETE FROM fts WHERE rowid = ?`
 
-**目录结构**：
-*   `backend/pkg/` - **基础设施库 (Infrastructure)**
-    *   *原则：通用、无业务状态、可被任何项目复用*
-    *   `pkg/logger/` - 结构化日志封装 (基于 slog)
-    *   `pkg/snowflake/` - 分布式 ID 生成器
-    *   `pkg/network/` - 通用 HTTP 客户端工厂 (Proxy/IP栈/TLS指纹)
-    *   `pkg/opml/` - OPML 标准解析与生成
-*   `backend/internal/` - **业务核心 (Business Core)**
-    *   *原则：私有、包含业务逻辑、严禁外部引用*
-    *   `internal/handler/` - HTTP 协议适配层 (Request/Response/DTO)
-    *   `internal/service/` - 业务领域层 (核心逻辑、事务控制)
-    *   `internal/repository/` - 数据持久层 (SQL/CRUD)
-    *   `internal/db/` - 数据库初始化与迁移
-    *   `internal/config/` - 应用配置加载
-    *   `internal/scheduler/` - 定时任务调度
-    *   `internal/model/` - 领域实体定义
+**安全防御**：
+- Handler 层必须校验所有 Query/Body/Path 参数
+- 文件操作使用 `filepath.Clean` 防御路径穿越
+- 严禁硬编码密钥
+- ORM 必须使用参数绑定（`?`），严禁字符串拼接 SQL
 
-**分层职责**：
-*   **Handler**：仅负责 HTTP 协议转换。
-    *   禁止包含业务逻辑。
-    *   负责参数校验、DTO转换、调用 Service、统一错误响应。
-*   **Service**：核心业务逻辑载体。
-    *   禁止直接操作 SQL。
-    *   负责业务规则、事务管理、调用 Repository 或其他 Service。
-    *   必须定义为 Interface，通过 `//go:generate mockgen` 生成 Mock。
-*   **Repository**：数据存取。
-    *   负责 SQL 组装、数据映射。
-    *   必须定义为 Interface，便于 Service 层 Mock。
-    *   使用内存 SQLite 进行测试。
+**并发安全**：
+- goroutine 间共享状态必须使用同步机制（`sync/atomic`、`sync.Mutex` 或 channel），禁止裸写共享变量
 
-**开发原则**：
-*   **依赖注入**：通过构造函数注入依赖，配置对象除外，禁止使用全局状态变量。
-*   **可见性控制**：仅公开必要的 API（首字母大写），私有逻辑严格保持小写。
-*   **并发安全**：goroutine 间共享状态必须使用同步机制（`sync/atomic`、`sync.Mutex` 或 channel），禁止裸写共享变量。
-*   **可选字段**：Model 中可选/nullable 字段使用指针类型 (`*string`, `*time.Time`)，便于区分 "空值" 和 "未设置"。
+**服务器生命周期**：
+- 必须监听 SIGINT/SIGTERM 优雅关闭，禁止直接 `os.Exit()`
 
-### 4.2 测试与 Mock 规范 (Testing Standard)
-
-本项目严格遵循 **黑盒测试 (Black-box Testing)** 原则。
-
-*   **包名规范**：所有单元测试文件必须使用 `_test` 包名后缀。
-    *   示例：`internal/service/feed_service_test.go` 的包名为 `package service_test`。
-    *   目的：强制测试代码仅能访问被测包的 `Exported` (公开) 接口，确保 API 设计的合理性。
-*   **内部测试辅助**：若需测试内部状态或常量，必须在源码包内创建 `export_test.go`。
-    *   内容：将私有变量/函数赋值给公开变量，仅在测试编译时有效。
-    *   示例：
-        ```go
-        package service
-        // export_test.go - 仅在测试时编译
-        var DefaultPageSize = defaultPageSize
-        func NewFeedServiceHelper(...) *feedService { return &feedService{...} }
-        ```
-*   **Mock 策略 (Decentralized)**：
-    *   **生成位置**：Mock 文件必须生成在接口定义包的 `mock/` 子目录下。
-    *   **包名规范**：Mock 包名统一为 `mock`。
-    *   **指令规范**：在接口定义处添加 `go:generate` 指令。
-        ```go
-        //go:generate mockgen -source=$GOFILE -destination=mock/$GOFILE -package=mock
-        type FeedService interface { ... }
-        ```
-    *   **使用方式**：测试代码中 `import "gist/backend/internal/service/mock"`。
-    *   **禁止集中式 Mock**：不得创建 `testutil/mock_*.go` 等集中式 Mock 文件。
-*   **测试工具**：
-    *   使用 `gomock` 生成 Mock 实现。
-    *   使用 `testify/require` 进行断言（禁止使用 `testify/assert`）。
-*   **自动化工具**：
-    *   `make gen`：自动重新生成所有 Mock 文件。
-    *   `make test`：运行所有测试（已配置 `-race` 检测数据竞争）。
-    *   `make lint`：运行静态分析 (golangci-lint)。
-    *   `make cover`：生成测试覆盖率报告。
-*   **提交前检查**：提交代码前必须运行 `make test` 和 `make lint`，确保所有测试通过且无静态分析错误。
-
-
-### 4.3 数据存储 (Storage)
-*   **驱动模式**：SQLite 通过 DSN pragma 参数配置，确保连接池所有连接生效：
-    ```
-    _pragma=journal_mode(WAL)
-    _pragma=foreign_keys(ON)
-    _pragma=busy_timeout(30000)
-    _pragma=synchronous(NORMAL)
-    ```
-*   **全文检索**：建立 `entries_fts` 虚拟表（unicode61 分词），通过 Trigger 自动同步主表数据。
-    *   **注意**：`modernc.org/sqlite` 不支持 FTS5 的特殊删除语法 `INSERT INTO fts(fts, ...) VALUES('delete', ...)`，必须使用 `DELETE FROM fts WHERE rowid = ?`。
-*   **ORM 规范**：使用 GORM 时必须使用参数绑定（`?`），**严禁**字符串拼接 SQL。
-*   **Schema 同步**：修改数据库结构后，**必须**同步更新本文档的 Schema 定义。
-*   **数据完整性**：
-    *   更新字段时必须检查新值有效性，空值/零值不应覆盖已有有效值。
-    *   层级结构（如文件夹树）修改父子关系时必须检测循环引用。
-    *   批量操作应使用单条 SQL（`DELETE ... WHERE id IN (?)`），**禁止**循环逐条执行。
-
-#### 4.3.1 数据库 Schema
-
-**folders** - 文件夹表
-| 列名 | 类型 | 约束 | 说明 |
-|------|------|------|------|
-| id | INTEGER | PRIMARY KEY | Snowflake ID |
-| name | TEXT | NOT NULL | 文件夹名称 |
-| parent_id | INTEGER | FK -> folders(id) ON DELETE CASCADE | 父文件夹 ID |
-| type | TEXT | NOT NULL DEFAULT 'article' | 内容类型 (article/picture/notification) |
-| created_at | TEXT | NOT NULL | 创建时间 (RFC3339) |
-| updated_at | TEXT | NOT NULL | 更新时间 (RFC3339) |
-
-**feeds** - 订阅源表
-| 列名 | 类型 | 约束 | 说明 |
-|------|------|------|------|
-| id | INTEGER | PRIMARY KEY | Snowflake ID |
-| folder_id | INTEGER | FK -> folders(id) ON DELETE SET NULL | 所属文件夹 |
-| title | TEXT | NOT NULL | 订阅标题 |
-| url | TEXT | NOT NULL UNIQUE | Feed URL |
-| site_url | TEXT | | 网站首页 URL |
-| description | TEXT | | 订阅描述 |
-| icon_path | TEXT | | 图标文件路径 (如 example.com.png) |
-| type | TEXT | NOT NULL DEFAULT 'article' | 内容类型 (article/picture/notification) |
-| etag | TEXT | | HTTP ETag (Conditional GET) |
-| last_modified | TEXT | | HTTP Last-Modified |
-| error_message | TEXT | | 获取/刷新错误信息 |
-| created_at | TEXT | NOT NULL | 创建时间 |
-| updated_at | TEXT | NOT NULL | 更新时间 |
-
-**entries** - 文章表
-| 列名 | 类型 | 约束 | 说明 |
-|------|------|------|------|
-| id | INTEGER | PRIMARY KEY | Snowflake ID |
-| feed_id | INTEGER | NOT NULL, FK -> feeds(id) ON DELETE CASCADE | 所属订阅 |
-| hash | TEXT | NOT NULL | 去重哈希 (SHA-256 hex) |
-| title | TEXT | | 文章标题 |
-| url | TEXT | | 文章链接 |
-| content | TEXT | | 原始内容 (HTML) |
-| readable_content | TEXT | | Readability 提取的正文 |
-| thumbnail_url | TEXT | | 缩略图 URL |
-| author | TEXT | | 作者 |
-| published_at | TEXT | | 发布时间 |
-| read | INTEGER | NOT NULL DEFAULT 0 | 已读状态 (0/1) |
-| starred | INTEGER | NOT NULL DEFAULT 0 | 收藏状态 (0/1) |
-| created_at | TEXT | NOT NULL | 创建时间 |
-| updated_at | TEXT | NOT NULL | 更新时间 |
-
-**entries_fts** - 全文检索虚拟表 (FTS5)
-| 列名 | 说明 |
-|------|------|
-| title | 文章标题 |
-| content | 文章内容 |
-| author | 作者 |
-| url | 文章链接 |
-
-*Tokenizer*: `unicode61`
-
-**settings** - 键值配置表
-| 列名 | 类型 | 约束 | 说明 |
-|------|------|------|------|
-| key | TEXT | PRIMARY KEY | 配置键 |
-| value | TEXT | NOT NULL | 配置值 |
-| updated_at | TEXT | NOT NULL | 更新时间 (RFC3339) |
-
-*已使用的配置键*:
-- `user.username` - 用户名 (单用户模式，小写字母和数字，注册后不可修改)
-- `user.nickname` - 用户昵称 (显示名称，可选，默认使用用户名)
-- `user.email` - 用户邮箱 (用于 Gravatar 头像)
-- `user.password_hash` - bcrypt 密码哈希
-- `user.jwt_secret` - JWT 签名密钥 (hex 编码的 32 字节随机数)
-- `ai.provider` - AI 提供商 (openai/anthropic/compatible)
-- `ai.api_key` - API 密钥
-- `ai.base_url` - 自定义 Base URL
-- `ai.model` - 模型名称
-- `ai.thinking_supported` - 模型是否支持思考/推理参数 (true/false)
-- `ai.thinking` - 启用思考/推理 (true/false，仅在 thinking_supported=true 时生效)
-- `ai.thinking_budget` - 思考 token 预算 (Anthropic/Compatible)
-- `ai.reasoning_effort` - 推理强度 (OpenAI/Compatible: none/minimal/low/medium/high/xhigh)
-- `ai.summary_language` - AI 摘要/翻译输出语言 (zh-CN/en-US/ja 等)
-- `ai.auto_translate` - 自动翻译非目标语言文章 (true/false)
-- `ai.auto_summary` - 自动生成 AI 摘要 (true/false)
-- `ai.rate_limit` - API 请求速率限制 QPS (默认 10)
-- `general.fallback_user_agent` - 备用 User-Agent (当默认 UA 被拒绝时使用)
-- `general.auto_readability` - 自动开启阅读模式 (true/false)
-- `anubis.cookie.<host>` - Anubis 挑战通过后的 Cookie (按域名存储)
-- `anubis.cookie.<host>.expires` - Anubis Cookie 过期时间 (RFC3339 格式)
-- `network.proxy_enabled` - 是否启用代理 (true/false)
-- `network.proxy_type` - 代理类型 (http/socks5)
-- `network.proxy_host` - 代理主机地址
-- `network.proxy_port` - 代理端口
-- `network.proxy_username` - 代理用户名 (可选)
-- `network.proxy_password` - 代理密码 (可选)
-- `network.ip_stack` - IP 栈优先级 (default/ipv4/ipv6，默认 default)
-- `appearance.content_types` - 分类视图显示顺序 (article/picture/notification)
-
-**ai_summaries** - AI 摘要缓存表
-| 列名 | 类型 | 约束 | 说明 |
-|------|------|------|------|
-| id | INTEGER | PRIMARY KEY | Snowflake ID |
-| entry_id | INTEGER | NOT NULL, FK -> entries(id) ON DELETE CASCADE | 关联文章 |
-| is_readability | INTEGER | NOT NULL DEFAULT 0 | 是否为 Readability 内容 (0/1) |
-| language | TEXT | NOT NULL | 输出语言 |
-| summary | TEXT | NOT NULL | 摘要内容 |
-| created_at | TEXT | NOT NULL | 创建时间 (RFC3339) |
-
-**ai_translations** - AI 翻译缓存表
-| 列名 | 类型 | 约束 | 说明 |
-|------|------|------|------|
-| id | INTEGER | PRIMARY KEY | Snowflake ID |
-| entry_id | INTEGER | NOT NULL, FK -> entries(id) ON DELETE CASCADE | 关联文章 |
-| is_readability | INTEGER | NOT NULL DEFAULT 0 | 是否为 Readability 内容 (0/1) |
-| language | TEXT | NOT NULL | 目标语言 |
-| content | TEXT | NOT NULL | 翻译后内容 (HTML) |
-| created_at | TEXT | NOT NULL | 创建时间 (RFC3339) |
-
-**ai_list_translations** - 列表翻译缓存表 (标题/摘要)
-| 列名 | 类型 | 约束 | 说明 |
-|------|------|------|------|
-| id | INTEGER | PRIMARY KEY | Snowflake ID |
-| entry_id | INTEGER | NOT NULL, FK -> entries(id) ON DELETE CASCADE | 关联文章 |
-| language | TEXT | NOT NULL | 目标语言 |
-| title | TEXT | NOT NULL | 翻译后标题 |
-| summary | TEXT | NOT NULL | 翻译后摘要 |
-| created_at | TEXT | NOT NULL | 创建时间 (RFC3339) |
-
-**domain_rate_limits** - 域名限速配置表
-| 列名 | 类型 | 约束 | 说明 |
-|------|------|------|------|
-| id | INTEGER | PRIMARY KEY | Snowflake ID |
-| host | TEXT | NOT NULL UNIQUE | 域名 (如 rsshub.app) |
-| interval_seconds | INTEGER | NOT NULL | 请求间隔秒数 |
-| created_at | TEXT | NOT NULL | 创建时间 (RFC3339) |
-| updated_at | TEXT | NOT NULL | 更新时间 (RFC3339) |
-
-#### 4.3.2 索引
-```sql
-idx_folders_parent_id    ON folders(parent_id)
-idx_feeds_folder_id      ON feeds(folder_id)
-idx_entries_feed_id      ON entries(feed_id)
-idx_entries_read         ON entries(read)
-idx_entries_starred      ON entries(starred)
-idx_entries_feed_read    ON entries(feed_id, read)
-idx_entries_feed_hash    ON entries(feed_id, hash) UNIQUE
-idx_ai_summaries_entry_mode ON ai_summaries(entry_id, is_readability, language) UNIQUE
-idx_ai_translations_entry_mode ON ai_translations(entry_id, is_readability, language) UNIQUE
-idx_ai_list_translations_entry_lang ON ai_list_translations(entry_id, language) UNIQUE
-idx_domain_rate_limits_host ON domain_rate_limits(host)
-```
-
-#### 4.3.3 触发器
-```sql
-entries_ai  -- AFTER INSERT: 同步插入 entries_fts
-entries_ad  -- AFTER DELETE: 同步删除 entries_fts
-```
-
-### 4.4 网络与解析 (Parser)
-*   **宽容解析**：使用 `gofeed` 处理各类非标准 Feed。
-*   **流量优化**：必须实现 **Conditional GET**。
-    *   存储 `ETag` 和 `Last-Modified`。
-    *   请求头携带 `If-None-Match` 和 `If-Modified-Since`。
-    *   响应 304 时跳过解析。
-
-### 4.5 功能特性集成
-*   **AI 能力**：
-    *   **BYOK 架构**：后端提供统一 Proxy，API Key 由用户端提供。
-    *   **异步处理**：摘要/翻译任务必须进队列异步执行，不阻塞 Feed 更新。
-*   **API 文档 (Swagger)**：
-    *   **注解驱动**：在 Handler 中使用 `swag` 注解定义规范。
-    *   **自动化**：API 更新后必须运行 `swag init -g cmd/server/main.go --parseDependency --parseInternal` 重新生成文档。
-    *   **UI**：集成 `echo-swagger` 暴露 `/swagger/index.html`。
-
-### 4.6 安全防御
-*   **输入验证**：Handler 层必须校验所有 Query/Body/Path 参数。
-*   **路径安全**：文件操作必须使用 `filepath.Clean` 防御路径穿越。
-*   **敏感数据**：严禁硬编码密钥，严禁在日志中打印 Token 或密码哈希。
-
-### 4.7 服务器生命周期
-*   **优雅关闭**：必须监听 `SIGINT/SIGTERM` 信号，调用 `server.Shutdown()` 等待请求完成，**禁止**直接 `os.Exit()`。
-*   **资源清理**：数据库连接、定时任务等资源必须在关闭流程中正确释放。
-*   **后台任务**：使用 `sync.WaitGroup` 确保 goroutine 正确结束，使用无缓冲 channel 传递停止信号。
-*   **定时任务**：在启动时立即执行一次，然后按间隔运行；刷新任务设置合理超时 (如 5 分钟)。
-
-### 4.8 HTTP 客户端
-*   **ClientFactory 模式**：`network.ClientFactory` 统一管理 HTTP 客户端创建，支持代理和 IP 栈配置。
-*   **Provider 接口**：使用 `ProxyProvider` 和 `IPStackProvider` 接口避免与 service 包的循环依赖。
-*   **User-Agent 策略**：默认使用 `GistUserAgent` 标识自身，备用 `ChromeUserAgent` 用于被屏蔽时重试。
-*   **TLS 指纹**：Chrome UA 版本需与 TLS 指纹配置匹配 (当前 Chrome 135)，使用 `azuretls-client` 库。
-*   **代理支持**：支持 HTTP/SOCKS5 代理，通过 `network.*` 配置键设置。
-*   **IP 栈选择**：支持 `default/ipv4/ipv6` 优先级，IPv4/IPv6 故障自动切换。
-
-### 4.9 环境变量
-后端环境变量使用 `GIST_` 前缀：
-*   `GIST_ADDR` - 服务监听地址 (默认 `:8080`)
-*   `GIST_DB_PATH` - 数据库路径
-*   `GIST_DATA_DIR` - 数据目录 (默认 `./data`)
-*   `GIST_STATIC_DIR` - 静态文件目录
-*   `GIST_LOG_LEVEL` - 日志级别 (debug/info/warn/error，默认 `info`)
-
-### 4.10 日志规范
-*   **Logger 封装**：使用 `pkg/logger` 包，**禁止**直接使用 `log`、`slog` 或 `fmt.Print`。
-*   **日志级别**：小写格式，按严重程度选择：
-    *   `error`: HTTP 5xx、系统关键错误
-    *   `warn`: HTTP 4xx、可恢复错误、重试
-    *   `info`: 操作成功、生命周期事件
-    *   `debug`: 调试信息
-*   **标准字段**：业务日志必须包含 `module`、`action`、`resource`、`result` 四个字段。
-    *   `module`: `http` | `handler` | `service` | `scheduler` | `network`
-    *   `action`: `create` | `fetch` | `update` | `delete` | `refresh` | `list` | `login` | `request`
-    *   `resource`: `feed` | `entry` | `folder` | `auth` | `ai` | `icon` | `settings` | `anubis`
-    *   `result`: `ok` | `failed` | `skipped` | `cancelled`
-*   **字段命名**：所有 key 使用 `snake_case`（如 `feed_id`、`status_code`），**禁止** camelCase。
-*   **可读性**：有 feed 对象时应同时记录 `feed_id` 和 `feed_title`。
-*   **安全规范**：
-    *   URL 使用 `network.ExtractHost()` 脱敏，**禁止**记录完整 URL
-    *   **禁止**记录密码、Token、API Key 的实际值
-*   **分层职责**：Repository 层**不记录**日志，错误向上传递给 Service 层处理。
+**测试工具**：
+- 使用 `gomock` 生成 Mock
+- 使用 `testify/require` 断言（禁止 `testify/assert`）
+- 提交前必须运行 `make test` 和 `make lint`
 
 ---
 
-## 5. 前端开发规范 (TypeScript/React)
+### 前端 (React/TypeScript)
 
-### 5.1 架构与组件
-*   **目录结构**：
-    *   `src/api/`: API 调用封装（请求函数、类型定义、流式响应处理）。
-    *   `src/components/ui/`: 通用 UI 组件 (shadcn/ui)。
-    *   `src/components/{feature}/`: 业务组件 (如 `sidebar/`, `entry-list/`, `settings/`)。
-    *   `src/hooks/`: 自定义 React Hooks。
-    *   `src/lib/`: 工具函数（HTML 解析、日期处理、路由等）。
-    *   `src/services/`: 服务层（复杂异步逻辑，如批量翻译请求去重/取消）。
-    *   `src/stores/`: Zustand 状态管理。
-    *   `src/types/`: TypeScript 类型定义。
-    *   `src/i18n/`: 国际化配置。
-*   **逻辑分离**：UI 负责渲染，逻辑抽离至自定义 Hooks (`useFeeds`, `useEntries` 等)。
-*   **类型规范**：所有 Props 和 API 响应必须定义 Interface，**严禁**使用 `any`。
-*   **路径别名**：使用 `@` 别名指向 `src` 目录，import 使用 `@/components/...` 格式。
-*   **路由库**：使用 `wouter` 轻量路由，路由解析/构建逻辑集中在 `lib/router.ts`。
+**类型安全**：
+- 所有 Props 和 API 响应必须定义 Interface
+- 严禁使用 `any` 类型
+- 路径别名：使用 `@/` 指向 `src/` 目录
 
-### 5.2 性能工程
-*   **状态管理**：使用 `TanStack Query` 处理 Feed 数据缓存与预加载：
-    *   设置 `staleTime` 避免频繁重新请求 (如 30s)
-    *   设置 `refetchInterval` 保持数据新鲜 (如 60s)
-    *   使用 `invalidateQueries` 进行缓存失效
-    *   分页使用 `useInfiniteQuery` + `getNextPageParam`
-*   **渲染优化**：列表页禁止同步执行复杂的 Readability 转换，使用虚拟滚动。
-*   **分页边界**：`hasMore` 判断应请求 `limit+1` 条数据，通过实际返回数量判断是否有下一页。
+**安全与渲染**：
+- 除非数据源经过 `unified` + `rehype` 管道清洗，否则严禁使用 `dangerouslySetInnerHTML`
+- HTML 解析必须使用 `unified` + `rehype` + `hast-util-to-jsx-runtime`
 
-### 5.3 安全与渲染 (XSS 防御)
-*   **危险操作**：除非数据源经过 `unified` 管道清洗，否则**严禁**使用 `dangerouslySetInnerHTML`。
-*   **HTML 解析**：使用 `unified` + `rehype` 管道处理 HTML：
-    *   自定义 sanitize schema 允许 `video/audio/figure` 等标签
-    *   允许 `style/class` 属性用于保留原始样式
-    *   使用 `hast-util-to-jsx-runtime` 转换为 React 组件
-*   **依赖审计**：定期检查 `bun.lock` 漏洞。
+**资源管理**：
+- SSE/WebSocket 连接必须在 `useEffect` 返回的清理函数中关闭
+- 启动新批量任务前必须先取消旧任务
+- 禁止使用模块级变量传递请求上下文
 
-### 5.4 深色模式
-*   Tailwind `dark:` 变体 + CSS 变量（`:root` 浅色，`.dark` 深色）。
-*   通过 `useTheme` hook 切换，支持 `light` | `dark` | `system`。
-*   优先用语义化变量（`bg-background`），必要时用 `dark:` 前缀。
+**性能**：
+- 分页边界：`hasMore` 判断应请求 `limit+1` 条，通过实际返回数量判断是否有下一页
 
-### 5.5 国际化 (i18n)
-*   `i18next` + `react-i18next`，文件位于 `public/locales/{zh,en}/common.json`。
-*   嵌套 JSON 按模块组织（`sidebar.*`, `settings.*`），支持插值 `{{variable}}`。
-*   添加翻译键时**必须**同时更新中英文文件。
+**国际化**：
+- 添加翻译键时必须同时更新中英文文件
 
-### 5.6 资源与状态管理
-*   **长连接清理**：SSE/WebSocket 连接必须在 `useEffect` 返回的清理函数中关闭，防止连接泄漏。
-*   **异步任务取消**：启动新批量任务前必须先取消旧任务，再过滤/处理数据，避免状态不一致。
-*   **避免全局状态**：**禁止**使用模块级变量传递请求上下文，应通过函数参数或闭包传递。
-*   **Zustand 模式**：
-    *   Store 需暴露 `actions` 对象供非 React 代码调用
-    *   简单全局状态可使用 `useSyncExternalStore` + 模块级变量
-*   **URL 状态持久化**：筛选状态 (unreadOnly, contentType) 通过 URL query params 持久化。
-
-### 5.7 PWA 与移动端交互
-*   **导航历史策略**：侧边栏跳转、筛选开关使用 `navigate(..., { replace: true })`，仅文章详情使用 `push` 保留边缘返回。
-*   **回退同步**：监听 `popstate`/`pageshow` 事件，回退或 BFCache 恢复时强制关闭侧边栏/弹层（统一在 `useMobileLayout` 处理）。
-*   **安全区适配**：使用 `100dvh` 与 `safe-area-*` 工具类，固定定位元素必须覆盖或适配安全区。
-
-### 5.8 测试规范 (Vitest)
-
-*   **技术栈**：Vitest + jsdom + `@vitest/coverage-v8`。
-*   **文件位置**：测试文件与源文件同目录，命名 `*.test.ts`（如 `url.test.ts`）。
-*   **测试命令**：
-    *   `bun run test` - 运行测试
-    *   `bun run test:watch` - 监听模式
-    *   `bun run test:coverage` - 生成覆盖率
-*   **Store 测试**：`beforeEach` 中使用 `useMyStore.setState()` 重置状态。
+**测试**：
+- 使用 Vitest + jsdom
+- 测试文件与源文件同目录，命名 `*.test.ts`
 
 ---
 
-## 6. Git 提交规范
+### Git 提交规范
 
-*   遵循 [Conventional Commits](https://www.conventionalcommits.org/) 格式。
-*   **格式**：`<type>: <简体中文描述>`
+- 遵循 Conventional Commits 格式：`<type>: <简体中文描述>`
+- 标题行简洁说明"做了什么"
+- Body（可选）：复杂变更用 `-` 列表详细说明技术细节、影响范围、解决方案
 
 ---
 
-## 7. API 与交互契约
+### API 契约
 
-*   **一致性**：后端 DTO 修改后，必须同步更新前端 `src/types/`。
-*   **Snowflake ID 序列化**：
-    *   JavaScript 无法安全处理大于 2^53-1 的整数
-    *   后端 API 响应中 ID 必须序列化为字符串 (`idToString()`)
-    *   前端类型定义中 ID 字段必须使用 `string` 类型
-*   **时间格式**：API 响应中的时间字段必须转换为 UTC 时区，使用 RFC3339 格式。
-*   **错误处理**：
-    *   **后端**：定义标准错误类型 (`ErrNotFound`, `ErrConflict`, `ErrInvalid`, `ErrFeedFetch`)，Handler 层使用 `writeServiceError` 统一转换错误码。
-    *   **前端**：`api/index.ts` 统一拦截非 2xx 响应，`ApiError` 包含 `status` 属性用于区分错误类型。
-*   **流式响应**：
-    *   AI 功能使用 Server-Sent Events 流式传输
-    *   前端使用 AsyncGenerator 处理流式响应
-    *   缓存命中时返回 JSON，未命中时返回 SSE 流
-    *   批量操作使用 NDJSON 格式流式响应
+- **Snowflake ID**：后端序列化为字符串，前端类型定义使用 `string`
+- **时间格式**：UTC 时区，RFC3339 格式
+- **流式响应**：AI 功能使用 SSE，缓存命中返回 JSON，未命中返回流
+- **前后端同步**：后端 DTO 修改后必须同步更新前端 `src/types/`
+
+---
+
+## 条件指令
+
+<important if="数据库相关">
+- Schema 修改后必须同步更新本文档
+- 批量操作使用单条 SQL：`DELETE ... WHERE id IN (?)`，禁止循环逐条执行
+- 更新字段时检查新值有效性，空值/零值不应覆盖已有有效值
+- 层级结构修改父子关系时必须检测循环引用
+</important>
+
+<important if="AI 功能">
+- 摘要/翻译任务必须异步执行，不阻塞 Feed 更新
+- 使用 SSE 流式传输
+- 实现请求速率限制
+</important>
+
+<important if="简单功能或 Bug 修复">
+- 无需创建详细 spec
+- 直接修复，避免过度设计
+- 不要添加未要求的功能
+</important>
+
+<important if="复杂重构或新功能">
+- 先探索现有实现，复用已有函数和工具
+- 考虑架构影响和模块边界
+- 遵循高内聚低耦合原则
+</important>
+
+<important if="网络请求">
+- 使用 `network.ClientFactory` 创建 HTTP 客户端
+- 默认使用 `GistUserAgent`，被屏蔽时使用 `ChromeUserAgent` 重试
+- Feed 更新必须实现 Conditional GET（ETag/Last-Modified）
+</important>
+
+<important if="API 修改">
+- Handler 中使用 swag 注解定义 API 规范
+- 修改后运行：`swag init -g cmd/server/main.go --parseDependency --parseInternal`
+</important>

@@ -5,6 +5,7 @@ import (
 
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
+	"github.com/openai/openai-go/v3/shared"
 )
 
 // CompatibleProvider implements Provider for OpenAI-compatible APIs.
@@ -14,12 +15,11 @@ type CompatibleProvider struct {
 	model             string
 	thinkingSupported bool
 	thinking          bool
-	thinkingBudget    int
 	reasoningEffort   string
 }
 
 // NewCompatibleProvider creates a new OpenAI-compatible provider.
-func NewCompatibleProvider(apiKey, baseURL, model string, thinkingSupported, thinking bool, thinkingBudget int, reasoningEffort string) (*CompatibleProvider, error) {
+func NewCompatibleProvider(apiKey, baseURL, model string, thinkingSupported, thinking bool, reasoningEffort string) (*CompatibleProvider, error) {
 	client := openai.NewClient(
 		option.WithAPIKey(apiKey),
 		option.WithBaseURL(baseURL),
@@ -29,7 +29,6 @@ func NewCompatibleProvider(apiKey, baseURL, model string, thinkingSupported, thi
 		model:             model,
 		thinkingSupported: thinkingSupported,
 		thinking:          thinking,
-		thinkingBudget:    thinkingBudget,
 		reasoningEffort:   reasoningEffort,
 	}, nil
 }
@@ -41,37 +40,15 @@ func (p *CompatibleProvider) Test(ctx context.Context) (string, error) {
 		Messages: []openai.ChatCompletionMessageParamUnion{
 			openai.UserMessage("Hello world"),
 		},
+		MaxCompletionTokens: openai.Int(50),
 	}
 
-	var opts []option.RequestOption
-
-	// Only pass reasoning params when the model supports thinking
-	if p.thinkingSupported {
-		if p.thinking {
-			reasoning := map[string]interface{}{}
-			if p.reasoningEffort != "" {
-				reasoning["effort"] = p.reasoningEffort
-			} else if p.thinkingBudget > 0 {
-				reasoning["max_tokens"] = p.thinkingBudget
-			}
-			if len(reasoning) > 0 {
-				opts = append(opts, option.WithJSONSet("reasoning", reasoning))
-			} else {
-				params.MaxTokens = openai.Int(50)
-			}
-		} else {
-			params.MaxTokens = openai.Int(50)
-			// Explicitly disable reasoning
-			opts = append(opts, option.WithJSONSet("reasoning", map[string]interface{}{
-				"enabled": false,
-			}))
-		}
-	} else {
-		// Model does not support thinking, do not pass any reasoning params
-		params.MaxTokens = openai.Int(50)
+	// Only pass reasoning params when the model supports thinking and enabled
+	if p.thinkingSupported && p.thinking && p.reasoningEffort != "" {
+		params.ReasoningEffort = shared.ReasoningEffort(p.reasoningEffort)
 	}
 
-	resp, err := p.client.Chat.Completions.New(ctx, params, opts...)
+	resp, err := p.client.Chat.Completions.New(ctx, params)
 	if err != nil {
 		return "", err
 	}
@@ -107,29 +84,13 @@ func (p *CompatibleProvider) SummarizeStream(ctx context.Context, systemPrompt, 
 			Messages: messages,
 		}
 
-		var opts []option.RequestOption
-
-		// Only pass reasoning params when the model supports thinking
-		if p.thinkingSupported {
-			if p.thinking {
-				reasoning := map[string]interface{}{}
-				if p.reasoningEffort != "" {
-					reasoning["effort"] = p.reasoningEffort
-				} else if p.thinkingBudget > 0 {
-					reasoning["max_tokens"] = p.thinkingBudget
-				}
-				if len(reasoning) > 0 {
-					opts = append(opts, option.WithJSONSet("reasoning", reasoning))
-				}
-			} else {
-				opts = append(opts, option.WithJSONSet("reasoning", map[string]interface{}{
-					"enabled": false,
-				}))
-			}
+		// Only pass reasoning params when the model supports thinking and enabled
+		if p.thinkingSupported && p.thinking && p.reasoningEffort != "" {
+			params.ReasoningEffort = shared.ReasoningEffort(p.reasoningEffort)
 		}
 
-		stream := p.client.Chat.Completions.NewStreaming(ctx, params, opts...)
-		defer stream.Close() // Close HTTP connection when done or cancelled
+		stream := p.client.Chat.Completions.NewStreaming(ctx, params)
+		defer stream.Close()
 
 		for stream.Next() {
 			chunk := stream.Current()
@@ -168,28 +129,12 @@ func (p *CompatibleProvider) Complete(ctx context.Context, systemPrompt, content
 		Messages: messages,
 	}
 
-	var opts []option.RequestOption
-
-	// Only pass reasoning params when the model supports thinking
-	if p.thinkingSupported {
-		if p.thinking {
-			reasoning := map[string]interface{}{}
-			if p.reasoningEffort != "" {
-				reasoning["effort"] = p.reasoningEffort
-			} else if p.thinkingBudget > 0 {
-				reasoning["max_tokens"] = p.thinkingBudget
-			}
-			if len(reasoning) > 0 {
-				opts = append(opts, option.WithJSONSet("reasoning", reasoning))
-			}
-		} else {
-			opts = append(opts, option.WithJSONSet("reasoning", map[string]interface{}{
-				"enabled": false,
-			}))
-		}
+	// Only pass reasoning params when the model supports thinking and enabled
+	if p.thinkingSupported && p.thinking && p.reasoningEffort != "" {
+		params.ReasoningEffort = shared.ReasoningEffort(p.reasoningEffort)
 	}
 
-	resp, err := p.client.Chat.Completions.New(ctx, params, opts...)
+	resp, err := p.client.Chat.Completions.New(ctx, params)
 	if err != nil {
 		return "", err
 	}

@@ -27,6 +27,41 @@ describe('parse-html', () => {
       expect(hastToHtml(result.hastTree)).toContain('<video')
       expect(hastToHtml(result.hastTree)).toContain('controls')
     })
+
+    it('should remove style elements together with their CSS text', () => {
+      const html =
+        '<style>.bh__table { border: 1px solid #C0C0C0; }</style><p>Hello World</p>'
+      const result = parseHtml(html)
+
+      expect(hastToHtml(result.hastTree)).toBe('<p>Hello World</p>')
+    })
+
+    it('should remove head and title elements together with their text content', () => {
+      const html = '<head><title>Newsletter title</title></head><p>Hello World</p>'
+      const result = parseHtml(html)
+
+      expect(hastToHtml(result.hastTree)).toBe('<p>Hello World</p>')
+    })
+
+    it('should remove iframe and object fallback text', () => {
+      const html =
+        '<iframe src="https://example.com/embed">iframe fallback</iframe><object data="movie.swf">object fallback</object><p>Hello World</p>'
+      const result = parseHtml(html)
+
+      expect(hastToHtml(result.hastTree)).toBe('<p>Hello World</p>')
+    })
+
+    it('should remove textarea raw text and legacy fallback tags', () => {
+      const html = [
+        '<textarea>raw <b>text</b></textarea>',
+        '<noembed><img src="x">fallback</noembed>',
+        '<noframes><a href="/x">legacy fallback</a></noframes>',
+        '<p>Hello World</p>',
+      ].join('')
+      const result = parseHtml(html)
+
+      expect(hastToHtml(result.hastTree)).toBe('<p>Hello World</p>')
+    })
   })
 
   describe('emoji image conversion', () => {
