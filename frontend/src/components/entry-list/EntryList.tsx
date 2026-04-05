@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useMemo, useCallback, useState, type PointerEvent as ReactPointerEvent, type MouseEvent as ReactMouseEvent } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useVirtualizer } from '@tanstack/react-virtual'
+import { useVirtualizer, useWindowVirtualizer } from '@tanstack/react-virtual'
 import { useEntriesInfinite, useMarkAsRead, useRemoveFromUnreadList, useUnreadCounts } from '@/hooks/useEntries'
 import { useFeeds } from '@/hooks/useFeeds'
 import { useFolders } from '@/hooks/useFolders'
@@ -33,6 +33,7 @@ interface EntryListProps {
   onToggleUnreadOnly: () => void
   contentType: ContentType
   isMobile?: boolean
+  isActive?: boolean
   onMenuClick?: () => void
   isTablet?: boolean
   onToggleSidebar?: () => void
@@ -83,6 +84,7 @@ export function EntryList({
   onToggleUnreadOnly,
   contentType,
   isMobile,
+  isActive = true,
   onMenuClick,
   isTablet,
   onToggleSidebar,
@@ -94,6 +96,7 @@ export function EntryList({
   const params = selectionToParams(selection, contentType)
   const containerRef = useRef<HTMLDivElement>(null)
   const listWrapperRef = useRef<HTMLDivElement>(null)
+  const listContentRef = useRef<HTMLDivElement>(null)
   const markReadButtonRef = useRef<HTMLButtonElement>(null)
   const markReadPositionRef = useRef<{ x: number; y: number } | null>(null)
   const dragStateRef = useRef<{
@@ -108,7 +111,8 @@ export function EntryList({
 
   const getFeedExplicitViewMode = useFeedViewStore((s) => s.getExplicitMode)
 
-  useScrollToTop(containerRef, 'entrylist')
+  // Mobile: scroll the window; Desktop: scroll the container div
+  useScrollToTop(isMobile ? 'window' : containerRef, 'entrylist')
 
   const { data: feeds = [] } = useFeeds()
   const { data: folders = [] } = useFolders()
@@ -144,29 +148,42 @@ export function EntryList({
   const scrollKey = selectionScrollKey(selection, contentType)
 
   // Restore scroll position on same-mount key change (e.g., article -> notification).
-  // On remount (e.g., returning from picture mode), the virtualizer's own
-  // _willUpdate handles restoration via initialOffset.
+  // Mobile: uses window scroll; Desktop: uses container div scrollTop.
   useLayoutEffect(() => {
+    if (isMobile) {
+      if (!isActive) return
+      const saved = entryListScrollPositions.get(scrollKey)
+      if (saved != null && saved > 0) {
+        window.scrollTo(0, saved)
+      }
+      return
+    }
     const node = containerRef.current
     if (!node) return
-
     const saved = entryListScrollPositions.get(scrollKey)
     node.scrollTop = saved ?? 0
-  }, [scrollKey])
+  }, [isMobile, isActive, scrollKey])
 
   useEffect(() => {
+    if (isMobile) {
+      // Only track window scroll when this list is the active view
+      if (!isActive) return
+      const handleScroll = () => {
+        entryListScrollPositions.set(scrollKey, window.scrollY)
+      }
+      window.addEventListener('scroll', handleScroll, { passive: true })
+      return () => window.removeEventListener('scroll', handleScroll)
+    }
     const node = containerRef.current
     if (!node) return
-
     const handleScroll = () => {
       entryListScrollPositions.set(scrollKey, node.scrollTop)
     }
-
     node.addEventListener('scroll', handleScroll, { passive: true })
     return () => {
       node.removeEventListener('scroll', handleScroll)
     }
-  }, [scrollKey])
+  }, [isMobile, isActive, scrollKey])
 
   // Cancel pending translations and reset state when list changes
   useEffect(() => {
@@ -234,14 +251,26 @@ export function EntryList({
     lastUnreadCleanupKeyRef.current = unreadCleanupKey
   }, [entries, unreadOnly, isLoading, unreadCleanupKey, removeFromUnreadList])
 
-  const virtualizer = useVirtualizer({
-    count: entries.length,
+  // Mobile: window virtualizer (enables browser address bar auto-hide)
+  // Desktop: div virtualizer (contained three-column layout)
+  const windowVirtualizer = useWindowVirtualizer({
+    count: isMobile ? entries.length : 0,
+    estimateSize: () => ESTIMATED_ITEM_HEIGHT,
+    overscan: 5,
+    scrollMargin: listContentRef.current?.offsetTop ?? 0,
+    enabled: !!isMobile && isActive,
+  })
+
+  const divVirtualizer = useVirtualizer({
+    count: isMobile ? 0 : entries.length,
     getScrollElement: () => containerRef.current,
     estimateSize: () => ESTIMATED_ITEM_HEIGHT,
     overscan: 5,
     // Restore offset on remount (only used on first mount)
-    initialOffset: entryListScrollPositions.get(scrollKey),
+    initialOffset: isMobile ? 0 : (entryListScrollPositions.get(scrollKey) ?? 0),
   })
+
+  const virtualizer = isMobile ? windowVirtualizer : divVirtualizer
 
   const virtualItems = virtualizer.getVirtualItems()
 
@@ -518,6 +547,119 @@ export function EntryList({
     onMarkAllReadAndGoNextFeed?.()
   }, [onMarkAllReadAndGoNextFeed])
 
+  // ─── Mobile layout ───────────────────────────────────────────────────────
+  // The list is rendered in normal document flow so that **window** is the
+  // scroll container.  Mobile browsers (Chrome, Safari) only auto-hide the
+  // address bar / toolbar when the *window* itself scrolls – not when an
+  // inner div with overflow:auto scrolls.
+  //
+  // useWindowVirtualizer is used instead of useVirtualizer; it listens to
+  // window scroll events and positions items relative to a scrollMargin
+  // derived from listContentRef.offsetTop (the sticky header height).
+  if (isMobile) {
+    const scrollMargin = windowVirtualizer.options.scrollMargin
+    return (
+      <div ref={listWrapperRef}>
+        {/* Sticky header inside the document flow.
+             safe-area-top pads content below the device status bar (notch). */}
+        <div className="sticky top-0 z-10 bg-background safe-area-top">
+          <EntryListHeader
+            title={title}
+            unreadCount={unreadCount}
+            unreadOnly={unreadOnly}
+            onToggleUnreadOnly={onToggleUnreadOnly}
+            onMarkAllRead={onMarkAllRead}
+            viewMenuFeedId={selection.type === 'feed' ? selection.feedId : undefined}
+            viewMenuDefaultMode={(generalSettings?.autoReadability ?? false) ? 'readability' : 'normal'}
+            scrollToTopScope="entrylist"
+            isMobile={isMobile}
+            onMenuClick={onMenuClick}
+          />
+        </div>
+
+        <div ref={listContentRef}>
+          {isLoading ? (
+            <EntryListSkeleton />
+          ) : entries.length === 0 ? (
+            <EntryListEmpty />
+          ) : (
+            <div
+              className="relative w-full"
+              style={{ height: windowVirtualizer.getTotalSize() }}
+            >
+              <div
+                style={{
+                  transform: `translateY(${(virtualItems[0]?.start ?? 0) - scrollMargin}px)`,
+                }}
+              >
+                {virtualItems.map((virtualRow) => {
+                  const entry = entries[virtualRow.index]
+                  if (!entry) return null
+                  return (
+                    <EntryListItem
+                      key={entry.id}
+                      ref={windowVirtualizer.measureElement}
+                      data-index={virtualRow.index}
+                      entry={entry}
+                      feed={feedsMap.get(entry.feedId)}
+                      isSelected={entry.id === selectedEntryId}
+                      onClick={() => handleEntryClick(entry)}
+                      autoTranslate={autoTranslate}
+                      targetLanguage={targetLanguage}
+                      markReadOnScroll={generalSettings?.markReadOnScroll ?? false}
+                      scrollRootRef={null}
+                      topOffset={TOP_BAR_HEIGHT}
+                      onMarkRead={handleMarkReadOnScroll}
+                    />
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {isFetchingNextPage && <LoadingMore />}
+        </div>
+
+        {showMarkAllReadFooter && (
+          <button
+            ref={markReadButtonRef}
+            type="button"
+            onClick={handleMarkReadClick}
+            onPointerDown={handleMarkReadPointerDown}
+            title={t('entry.mark_all_read')}
+            aria-label={t('entry.mark_all_read')}
+            className={cn(
+              'fixed z-30 flex size-12 items-center justify-center rounded-full',
+              'bg-muted text-foreground shadow-lg',
+              'transition-colors hover:bg-item-hover active:scale-95',
+              'touch-none'
+            )}
+            style={{
+              left: markReadPosition?.x ?? 16,
+              top: markReadPosition?.y ?? 16,
+              opacity: markReadPosition ? 1 : 0,
+              pointerEvents: markReadPosition ? 'auto' : 'none',
+            }}
+          >
+            <svg
+              className="size-5"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M18 6 7 17l-5-5" />
+              <path d="m22 10-7.5 7.5L13 16" />
+            </svg>
+          </button>
+        )}
+      </div>
+    )
+  }
+
+  // ─── Desktop / tablet layout ──────────────────────────────────────────────
   return (
     <div ref={listWrapperRef} className="relative flex h-full flex-col">
       <EntryListHeader
@@ -539,7 +681,14 @@ export function EntryList({
       <ScrollAreaPrimitive.Root className="relative min-h-0 flex-1 overflow-hidden">
         <div
           ref={containerRef}
-          className="h-full overflow-y-auto overscroll-y-contain [overflow-anchor:none]"
+          className={cn(
+            'h-full overflow-y-auto [overflow-anchor:none]',
+            // On desktop keep scroll containment; on mobile omit it so Chrome
+            // Android can promote this div to "implicit root scroller" and
+            // auto-hide the address bar.  Chrome explicitly rejects elements
+            // whose overscroll-behavior-y !== auto as root scroller candidates.
+            !isMobile && 'overscroll-y-contain',
+          )}
         >
           {isLoading ? (
             <EntryListSkeleton />

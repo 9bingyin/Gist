@@ -101,8 +101,7 @@
 }
 
 html {
-  /* Prevent pinch-to-zoom and browser default swipe navigation */
-  touch-action: pan-x pan-y;
+  /* Prevent horizontal swipe-to-navigate (back/forward) */
   overscroll-behavior-x: none;
 }
 
@@ -110,6 +109,17 @@ body {
   background-color: theme(colors.background);
   color: theme(colors.foreground);
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  /* Disable double-tap zoom while preserving native scroll, a prerequisite for
+   * mobile browsers to auto-hide the address bar when scrolling content. */
+  touch-action: manipulation;
+}
+
+/* PWA (add-to-home-screen) mode: browser chrome is already gone, prevent
+ * overscroll-bounce from conflicting with any in-app pull-to-refresh. */
+@media (display-mode: standalone) {
+  body {
+    overscroll-behavior-y: none;
+  }
 }
 
 /* Dynamic viewport height for mobile browsers */
@@ -492,6 +502,32 @@ body {
 .dark .entry-content .prose pre.shiki span {
   color: var(--shiki-dark);
   background-color: transparent;
+}
+
+/* Mobile detail view slide-in/out animations */
+@keyframes mobile-detail-enter {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+@keyframes mobile-detail-exit {
+  from { transform: translateX(0); }
+  to { transform: translateX(100%); }
+}
+
+.animate-mobile-detail-enter {
+  animation: mobile-detail-enter 300ms ease-out forwards;
+}
+
+.animate-mobile-detail-exit {
+  animation: mobile-detail-exit 300ms ease-out forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-mobile-detail-enter,
+  .animate-mobile-detail-exit {
+    animation: none;
+  }
 }
 
 /* Scrollbar */

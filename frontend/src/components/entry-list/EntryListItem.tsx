@@ -17,7 +17,7 @@ interface EntryListItemProps {
   style?: React.CSSProperties
   'data-index'?: number
   markReadOnScroll?: boolean
-  scrollRootRef?: React.RefObject<HTMLElement | null>
+  scrollRootRef?: React.RefObject<HTMLElement | null> | null
   topOffset?: number
   onMarkRead?: (entryId: string) => void
 }
@@ -79,16 +79,20 @@ export const EntryListItem = forwardRef<HTMLDivElement, EntryListItemProps>(
 
   useEffect(() => {
     if (!markReadOnScroll || entry.read || !onMarkRead) return
-    const root = scrollRootRef?.current
-    if (!root || !itemRef.current) return
+    if (!itemRef.current) return
+    // scrollRootRef === null  → viewport mode (mobile window scroll)
+    // scrollRootRef === undefined or ref.current is null → not ready yet
+    const useViewport = scrollRootRef === null
+    const root = useViewport ? null : scrollRootRef?.current
+    if (!useViewport && !root) return
 
     hasBeenVisibleRef.current = false
 
     const observer = new IntersectionObserver(
       (observerEntries) => {
         observerEntries.forEach((observerEntry) => {
-          const rootBounds = observerEntry.rootBounds
-          if (!rootBounds) return
+          // rootBounds may be null when root is the viewport (implicit root)
+          const rootTop = observerEntry.rootBounds?.top ?? 0
 
           if (observerEntry.isIntersecting) {
             hasBeenVisibleRef.current = true
@@ -96,7 +100,7 @@ export const EntryListItem = forwardRef<HTMLDivElement, EntryListItemProps>(
           }
 
           const cardRect = observerEntry.boundingClientRect
-          if (hasBeenVisibleRef.current && cardRect.top < rootBounds.top) {
+          if (hasBeenVisibleRef.current && cardRect.top < rootTop) {
             onMarkRead(entry.id)
             observer.unobserve(observerEntry.target)
           }

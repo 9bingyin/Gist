@@ -26,9 +26,11 @@ export function EntryContent({ entryId, isMobile, onBack }: EntryContentProps) {
   const { mutate: markAsRead } = useMarkAsRead()
   const { mutate: markAsStarred } = useMarkAsStarred()
   const removeFromUnreadList = useRemoveFromUnreadList()
-  const { scrollRef, isAtTop, scrollNode } = useEntryContentScroll(entryId)
+  // On mobile, use window as the scroll container so the browser can auto-hide
+  // the address bar. On desktop, use the inner ScrollArea div.
+  const { scrollRef, isAtTop, scrollNode } = useEntryContentScroll(entryId, !!isMobile)
 
-  useScrollToTop(scrollNode, 'entrycontent')
+  useScrollToTop(isMobile ? 'window' : scrollNode, 'entrycontent')
 
   // Track entries marked as read to trigger list removal on switch
   const markedAsReadRef = useRef<Set<string>>(new Set())
@@ -134,7 +136,9 @@ export function EntryContent({ entryId, isMobile, onBack }: EntryContentProps) {
   }
 
   return (
-    <div className="relative flex h-full w-full flex-col overflow-hidden">
+    // Mobile: no h-full/overflow-hidden — content flows into document for window scroll.
+    // Desktop: h-full overflow-hidden for contained three-column layout.
+    <div className={isMobile ? 'flex flex-col' : 'relative flex h-full w-full flex-col overflow-hidden'}>
       <EntryContentHeader
         entry={entry}
         displayTitle={displayTitle}
@@ -165,6 +169,7 @@ export function EntryContent({ entryId, isMobile, onBack }: EntryContentProps) {
         aiSummary={aiSummary}
         isLoadingSummary={isLoadingSummary}
         summaryError={summaryError}
+        isMobile={isMobile}
       />
     </div>
   )

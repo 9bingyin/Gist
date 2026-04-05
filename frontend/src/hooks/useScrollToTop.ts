@@ -12,8 +12,9 @@ export function dispatchScrollToTop(scope?: string) {
 // Only responds when:
 // 1. The event has no scope (broadcast), or the scope matches this listener's scope
 // 2. The element is visible (checked via CSS visibility)
+// Pass 'window' to scroll the window itself (mobile window-scroll mode).
 export function useScrollToTop(
-  scrollTarget: RefObject<HTMLElement | null> | HTMLElement | null,
+  scrollTarget: RefObject<HTMLElement | null> | HTMLElement | null | 'window',
   scope?: string
 ) {
   useEffect(() => {
@@ -21,6 +22,11 @@ export function useScrollToTop(
       const eventScope = (e as CustomEvent<string | undefined>).detail
       // If event has a scope, only respond if it matches
       if (eventScope && eventScope !== scope) return
+
+      if (scrollTarget === 'window') {
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+        return
+      }
 
       const el = scrollTarget && 'current' in scrollTarget
         ? scrollTarget.current

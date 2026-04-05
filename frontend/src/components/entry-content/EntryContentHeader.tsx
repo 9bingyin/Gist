@@ -81,7 +81,7 @@ export function EntryContentHeader({
   const title = displayTitle ?? entry.title ?? t('entry.untitled')
 
   return (
-    <div className="absolute inset-x-0 top-0 z-20">
+    <div className={isMobile ? 'sticky top-0 z-20' : 'absolute inset-x-0 top-0 z-20'}>
       {/* Background and Border Layer */}
       <div
         className={cn(

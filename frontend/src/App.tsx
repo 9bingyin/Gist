@@ -1,4 +1,4 @@
-import { useCallback, useState, useMemo, useEffect } from 'react'
+import { useCallback, useState, useMemo, useEffect, useRef } from 'react'
 import { Router, useLocation, Redirect } from 'wouter'
 import { useTranslation } from 'react-i18next'
 import { ThreeColumnLayout } from '@/components/layout/three-column-layout'
@@ -25,6 +25,7 @@ import { useUISettingKey, useUISettingActions, hasSidebarVisibilitySetting, setU
 import { useRefreshStatus } from '@/hooks/useRefreshStatus'
 import { isAddFeedPath } from '@/lib/router'
 import { cn } from '@/lib/utils'
+import { selectionScrollKey, entryListScrollPositions } from '@/components/entry-list/scroll-key'
 import type { ContentType, Feed, Folder } from '@/types/api'
 
 const defaultContentTypes: ContentType[] = ['article', 'picture', 'notification']
@@ -53,6 +54,26 @@ function AuthenticatedApp() {
     openSidebar,
     closeSidebar,
   } = useMobileLayout()
+
+  // Mobile detail view transition: controls whether the detail panel is mounted
+  // and whether it is animating out (exiting). The detail renders in document flow
+  // (not inside a fixed/overflow-hidden container) so that window is the scroll
+  // container, which is required for mobile browsers to auto-hide the address bar.
+  const [mobileDetailOpen, setMobileDetailOpen] = useState(mobileView === 'detail')
+  const isMobileDetailExiting = mobileView === 'list' && mobileDetailOpen
+  const prevMobileViewRef = useRef(mobileView)
+  useEffect(() => {
+    const prev = prevMobileViewRef.current
+    prevMobileViewRef.current = mobileView
+    if (mobileView === 'detail') {
+      setMobileDetailOpen(true)
+      // Reset window scroll for the detail content (list was scrolling the window)
+      window.scrollTo(0, 0)
+    } else if (prev === 'detail') {
+      // Detail → list: scroll will be restored by EntryList's useLayoutEffect
+      // when isActive changes back to true
+    }
+  }, [mobileView])
 
   const {
     selection,
@@ -290,13 +311,13 @@ function AuthenticatedApp() {
 
     if (isAddFeedPath(location)) {
       mobileContent = (
-        <div className="h-dvh safe-area-top">
+        <div className="fixed inset-0 overflow-hidden safe-area-top">
           <AddFeedPage onClose={handleCloseAddFeed} contentType={addFeedContentType} />
         </div>
       )
     } else if (contentType === 'picture') {
       mobileContent = (
-        <div className="h-dvh flex flex-col overflow-hidden safe-area-top">
+        <div className="fixed inset-0 flex flex-col overflow-hidden safe-area-top">
           <PictureMasonry
             selection={selection}
             contentType={contentType}
@@ -309,13 +330,17 @@ function AuthenticatedApp() {
         </div>
       )
     } else {
-      // List and detail views rendered together, controlled by CSS
+      // Both list and detail use window as the scroll container so that mobile
+      // browsers auto-hide the address bar / toolbar on scroll.
+      // Only one panel is in document flow at a time; the other is hidden.
       mobileContent = (
-        <div className="relative h-dvh w-screen max-w-full overflow-hidden">
-          {/* List view - always rendered to preserve scroll position */}
+        <>
+          {/* List view - in document flow for window scroll.
+               Hidden (display:none) when detail is fully shown so it doesn't
+               interfere with window scroll or virtualizer calculations. */}
           <div className={cn(
-            'absolute inset-0 flex flex-col overflow-hidden bg-background safe-area-top',
-            mobileView === 'detail' && 'invisible'
+            'bg-background',
+            mobileDetailOpen && 'hidden'
           )}>
             <EntryList
               selection={selection}
@@ -327,22 +352,41 @@ function AuthenticatedApp() {
               onToggleUnreadOnly={toggleUnreadOnly}
               contentType={contentType}
               isMobile
+              isActive={!mobileDetailOpen}
               onMenuClick={openSidebar}
             />
           </div>
-          {/* Detail view - slides in from right */}
-          <div className={cn(
-            'absolute inset-0 bg-background transition-transform duration-300 ease-out safe-area-top',
-            mobileView === 'detail' ? 'translate-x-0' : 'translate-x-full'
-          )}>
-            <EntryContent
-              key={selectedEntryId}
-              entryId={selectedEntryId}
-              isMobile
-              onBack={showList}
-            />
-          </div>
-        </div>
+          {/* Detail view - in document flow so window is the scroll container,
+               enabling mobile browsers to auto-hide the address bar on scroll.
+               Header uses sticky positioning; content flows naturally below it. */}
+          {mobileDetailOpen && (
+            <div
+              className={cn(
+                'relative z-10 min-h-dvh bg-background safe-area-top',
+                isMobileDetailExiting
+                  ? 'animate-mobile-detail-exit'
+                  : 'animate-mobile-detail-enter'
+              )}
+              onAnimationEnd={isMobileDetailExiting ? () => {
+                // Restore the list's saved scroll position BEFORE React
+                // re-renders so the window virtualizer reads the correct
+                // scrollY during its first enabled render pass.
+                const saved = entryListScrollPositions.get(
+                  selectionScrollKey(selection, contentType)
+                ) ?? 0
+                window.scrollTo(0, saved)
+                setMobileDetailOpen(false)
+              } : undefined}
+            >
+              <EntryContent
+                key={selectedEntryId}
+                entryId={selectedEntryId}
+                isMobile
+                onBack={showList}
+              />
+            </div>
+          )}
+        </>
       )
     }
 
