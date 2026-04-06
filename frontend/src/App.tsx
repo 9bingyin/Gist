@@ -512,8 +512,7 @@ function AuthenticatedApp() {
             'absolute inset-0 bg-background safe-area-top',
             mobileDetailOpen ? 'block' : 'hidden'
           )}>
-            {mobileEntryContent}修复bug：最近5篇文章的详细阅读视图中的阅读位置还是没有保存。
-          </div>
+            {mobileEntryContent}          </div>
         </div>
       )
     }
