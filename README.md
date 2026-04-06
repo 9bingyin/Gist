@@ -45,6 +45,9 @@ services:
 
 访问 `http://localhost:8080`，数据持久化在 `./data` 目录。
 
+###  通过镜像包安装
+
+
 ### Docker Run
 
 ```bash
