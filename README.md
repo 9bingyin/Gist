@@ -8,6 +8,9 @@
 
 ![desktop](docs/images/desktop.png)
 
+移动端截图  
+<img width="1938" height="1422" alt="image" src="https://github.com/user-attachments/assets/431221a6-0cc5-40d8-8428-b3e946f7ccc5" />
+
 ## 功能特性
 
 - 全格式订阅，支持 RSS 2.0 / Atom / JSON Feed
