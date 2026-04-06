@@ -42,6 +42,7 @@ interface EntryListProps {
 
 const ESTIMATED_ITEM_HEIGHT = 100
 const TOP_BAR_HEIGHT = 56
+const SCROLL_PADDING_COUNT = 5
 const MARK_READ_BUTTON_STORAGE_KEY = 'gist.markAllReadButtonPos'
 
 type StoredButtonPosition = { xRatio: number; yRatio: number }
@@ -149,17 +150,34 @@ export function EntryList({
   // Save/restore scroll position per selection+contentType
   const scrollKey = selectionScrollKey(selection, contentType)
 
+  // Track previous isActive value to detect detail→list transition on mobile
+  const prevIsActiveRef = useRef(isActive)
+
   // Restore scroll position on same-mount key change (e.g., article -> notification).
   // Mobile: uses window scroll; Desktop: uses container div scrollTop.
   useLayoutEffect(() => {
     if (isMobile) {
-      if (!isActive) return
+      if (!isActive) {
+        // Entering detail view — record so we know to use rAF on return
+        prevIsActiveRef.current = false
+        return
+      }
+      const wasInactive = !prevIsActiveRef.current
+      prevIsActiveRef.current = true
       const saved = entryListScrollPositions.get(scrollKey)
-      if (saved != null && saved > 0) {
+      if (saved == null || saved === 0) return
+      if (wasInactive) {
+        // Returning from detail view: defer so virtualizer re-enables and DOM paints
+        requestAnimationFrame(() => {
+          window.scrollTo(0, saved)
+        })
+      } else {
+        // scrollKey changed while list was active (e.g., feed switch) — restore immediately
         window.scrollTo(0, saved)
       }
       return
     }
+    prevIsActiveRef.current = isActive
     const node = containerRef.current
     if (!node) return
     const saved = entryListScrollPositions.get(scrollKey)
@@ -200,6 +218,9 @@ export function EntryList({
       clearTimeout(debounceTimer.current)
       debounceTimer.current = null
     }
+    // Reset scroll-read and auto-jump tracking for new selection
+    markedReadByScrollRef.current.clear()
+    hasTriggeredAutoJumpRef.current = false
   }, [selection, contentType])
 
   useEffect(() => {
@@ -268,10 +289,20 @@ export function EntryList({
     lastUnreadCleanupKeyRef.current = unreadCleanupKey
   }, [entries, unreadOnly, isLoading, unreadCleanupKey, removeFromUnreadList])
 
+  const markReadOnScrollEnabled = generalSettings?.markReadOnScroll ?? false
+
+  // Blank spacer rows added at the end so users can scroll the last real entry
+  // out of view, allowing it to be marked as read before auto-jumping.
+  const scrollPaddingCount =
+    markReadOnScrollEnabled && !hasNextPage && !isFetchingNextPage && entries.length > 0
+      ? SCROLL_PADDING_COUNT
+      : 0
+  const totalVirtualCount = entries.length + scrollPaddingCount
+
   // Mobile: window virtualizer (enables browser address bar auto-hide)
   // Desktop: div virtualizer (contained three-column layout)
   const windowVirtualizer = useWindowVirtualizer({
-    count: isMobile ? entries.length : 0,
+    count: isMobile ? totalVirtualCount : 0,
     estimateSize: () => ESTIMATED_ITEM_HEIGHT,
     overscan: 5,
     scrollMargin: listContentRef.current?.offsetTop ?? 0,
@@ -279,7 +310,7 @@ export function EntryList({
   })
 
   const divVirtualizer = useVirtualizer({
-    count: isMobile ? 0 : entries.length,
+    count: isMobile ? 0 : totalVirtualCount,
     getScrollElement: () => containerRef.current,
     estimateSize: () => ESTIMATED_ITEM_HEIGHT,
     overscan: 5,
@@ -291,9 +322,44 @@ export function EntryList({
 
   const virtualItems = virtualizer.getVirtualItems()
 
+  // Track entries individually marked as read by scrolling past the top bar.
+  // Using a Set (rather than a boolean) lets us require ALL initially-unread
+  // entries to have scrolled past before triggering the auto-jump.
+  const markedReadByScrollRef = useRef(new Set<string>())
+  const hasTriggeredAutoJumpRef = useRef(false)
+
+  // Auto-jump to next feed once every entry that was unread on load has
+  // individually scrolled past the top bar.  The spacer rows provide the
+  // extra scroll distance needed for the last entry to clear the bar.
+  useEffect(() => {
+    if (!markReadOnScrollEnabled) return
+    if (hasTriggeredAutoJumpRef.current) return
+    if (selection.type !== 'feed' && selection.type !== 'folder') return
+    if (!onMarkAllReadAndGoNextFeed) return
+    if (scrollPaddingCount === 0) return
+    if (markedReadByScrollRef.current.size === 0) return
+    // Every entry must be either already-read on load OR have been scrolled past
+    const allScrolledPast = entries.every(
+      (e) => e.read || markedReadByScrollRef.current.has(e.id)
+    )
+    if (!allScrolledPast) return
+    hasTriggeredAutoJumpRef.current = true
+    onMarkAllReadAndGoNextFeed()
+  }, [virtualItems, entries, scrollPaddingCount, markReadOnScrollEnabled, selection.type, onMarkAllReadAndGoNextFeed])
+
   const handleMarkReadOnScroll = useCallback((entryId: string) => {
+    markedReadByScrollRef.current.add(entryId)
     markAsRead({ id: entryId, read: true, skipInvalidate: true })
   }, [markAsRead])
+
+  // Scroll selected entry into view on desktop when selectedEntryId changes
+  useEffect(() => {
+    if (isMobile) return
+    if (!selectedEntryId) return
+    const idx = entries.findIndex((e) => e.id === selectedEntryId)
+    if (idx < 0) return
+    virtualizer.scrollToIndex(idx, { align: 'auto' })
+  }, [isMobile, selectedEntryId, entries, virtualizer])
 
   const handleEntryClick = useCallback((entry: Entry) => {
     const viewMode = getFeedExplicitViewMode(entry.feedId)
@@ -632,6 +698,16 @@ export function EntryList({
                 }}
               >
                 {virtualItems.map((virtualRow) => {
+                  if (virtualRow.index >= entries.length) {
+                    return (
+                      <div
+                        key={`spacer-${virtualRow.index}`}
+                        ref={windowVirtualizer.measureElement}
+                        data-index={virtualRow.index}
+                        style={{ height: ESTIMATED_ITEM_HEIGHT }}
+                      />
+                    )
+                  }
                   const entry = entries[virtualRow.index]
                   if (!entry) return null
                   return (
@@ -744,6 +820,16 @@ export function EntryList({
                 }}
               >
                 {virtualItems.map((virtualRow) => {
+                  if (virtualRow.index >= entries.length) {
+                    return (
+                      <div
+                        key={`spacer-${virtualRow.index}`}
+                        ref={virtualizer.measureElement}
+                        data-index={virtualRow.index}
+                        style={{ height: ESTIMATED_ITEM_HEIGHT }}
+                      />
+                    )
+                  }
                   const entry = entries[virtualRow.index]
                   if (!entry) return null
 

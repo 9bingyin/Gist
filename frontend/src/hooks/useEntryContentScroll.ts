@@ -1,9 +1,63 @@
 import { useCallback, useLayoutEffect, useRef, useState } from 'react'
 
 const SCROLL_TOP_THRESHOLD = 48
+const POSITION_CACHE_SIZE = 5
+const SESSION_KEY = 'gist.entryScrollPositions'
 
-// Module-level cache: entryId -> scrollTop
-const entryScrollPositions = new Map<string, number>()
+/** LRU cache capped at POSITION_CACHE_SIZE entries, backed by sessionStorage. */
+class EntryScrollCache {
+  // Insertion-ordered Map: oldest entry is Map.keys().next()
+  private map = new Map<string, number>()
+
+  constructor() {
+    try {
+      const raw = sessionStorage.getItem(SESSION_KEY)
+      if (raw) {
+        const parsed = JSON.parse(raw) as Array<[string, number]>
+        if (Array.isArray(parsed)) {
+          for (const [k, v] of parsed) {
+            if (typeof k === 'string' && typeof v === 'number') {
+              this.map.set(k, v)
+            }
+          }
+        }
+      }
+    } catch {
+      // ignore parse / storage errors
+    }
+  }
+
+  get(entryId: string): number | undefined {
+    return this.map.get(entryId)
+  }
+
+  set(entryId: string, value: number): void {
+    // Refresh position in insertion order
+    this.map.delete(entryId)
+    this.map.set(entryId, value)
+    // Evict oldest entries beyond the cap
+    while (this.map.size > POSITION_CACHE_SIZE) {
+      const oldest = this.map.keys().next().value
+      if (oldest !== undefined) this.map.delete(oldest)
+    }
+    this.persist()
+  }
+
+  private persist(): void {
+    try {
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify(Array.from(this.map.entries())))
+    } catch {
+      // ignore storage errors (private browsing, quota exceeded, etc.)
+    }
+  }
+}
+
+const entryScrollPositions = new EntryScrollCache()
+
+/** Returns the saved scroll position for an entry, or undefined if none. */
+export function getEntryScrollPosition(entryId: string): number | undefined {
+  return entryScrollPositions.get(entryId)
+}
 
 export function useEntryContentScroll(entryId: string | null, useWindowScroll = false) {
   const [scrollNode, setScrollNode] = useState<HTMLDivElement | null>(null)

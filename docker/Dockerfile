@@ -10,9 +10,12 @@ RUN bun run build
 FROM golang:1.26.1 AS backend-builder
 WORKDIR /app/backend
 COPY backend/go.mod backend/go.sum ./
-RUN go mod download
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
 COPY backend/ ./
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -v -o gist-server ./cmd/server/main.go
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -v -o gist-server ./cmd/server/main.go
 
 # Stage 3: Final Image
 FROM alpine:latest

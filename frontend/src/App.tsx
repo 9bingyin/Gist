@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useState, useMemo, useEffect, useRef } from 'react'
+import { Suspense, lazy, useCallback, useState, useMemo, useEffect, useLayoutEffect, useRef } from 'react'
 import { Router, useLocation, Redirect } from 'wouter'
 import { useTranslation } from 'react-i18next'
 import { ThreeColumnLayout } from '@/components/layout/three-column-layout'
@@ -22,9 +22,10 @@ import { useAppearanceSettings } from '@/hooks/useAppearanceSettings'
 import { useTitle, buildTitle } from '@/hooks/useTitle'
 import { useUISettingKey, useUISettingActions, hasSidebarVisibilitySetting, setUISetting } from '@/hooks/useUISettings'
 import { useRefreshStatus } from '@/hooks/useRefreshStatus'
+import { getEntryScrollPosition } from '@/hooks/useEntryContentScroll'
 import { isAddFeedPath } from '@/lib/router'
 import { cn } from '@/lib/utils'
-import { selectionScrollKey, entryListScrollPositions } from '@/components/entry-list/scroll-key'
+
 import type { ContentType, Feed, Folder } from '@/types/api'
 
 const defaultContentTypes: ContentType[] = ['article', 'picture', 'notification']
@@ -166,20 +167,40 @@ function AuthenticatedApp() {
   // (not inside a fixed/overflow-hidden container) so that window is the scroll
   // container, which is required for mobile browsers to auto-hide the address bar.
   const [mobileDetailOpen, setMobileDetailOpen] = useState(mobileView === 'detail')
-  const isMobileDetailExiting = mobileView === 'list' && mobileDetailOpen
   const prevMobileViewRef = useRef(mobileView)
-  useEffect(() => {
+  // Ref so the useLayoutEffect below can read the latest selectedEntryId without
+  // needing it in its deps (selectedEntryId is declared after this effect).
+  const selectedEntryIdRef = useRef<string | null>(null)
+  // useLayoutEffect to apply list/detail visibility synchronously before the browser
+  // paints, eliminating the flash of blank content during transitions.
+  useLayoutEffect(() => {
     const prev = prevMobileViewRef.current
     prevMobileViewRef.current = mobileView
     if (mobileView === 'detail') {
       setMobileDetailOpen(true)
-      // Reset window scroll for the detail content (list was scrolling the window)
-      window.scrollTo(0, 0)
+      // Do NOT scrollTo here — the detail div is still display:none at this
+      // point, so the document has no height and window.scrollTo would fail.
+      // Scroll restore happens in the mobileDetailOpen effect below.
     } else if (prev === 'detail') {
-      // Detail → list: scroll will be restored by EntryList's useLayoutEffect
-      // when isActive changes back to true
+      // Immediately show list so it is visible while the detail slides out.
+      // Scroll restoration is handled by EntryList's useLayoutEffect (isActive → true).
+      setMobileDetailOpen(false)
     }
   }, [mobileView])
+
+  // Restore (or reset) window scroll AFTER the detail div becomes visible.
+  // setMobileDetailOpen(true) triggers a synchronous re-render; this effect
+  // fires on that second render when the detail div is block and has height.
+  useLayoutEffect(() => {
+    if (!mobileDetailOpen) return
+    const id = selectedEntryIdRef.current
+    const saved = id ? getEntryScrollPosition(id) : undefined
+    if (saved != null && saved > 0) {
+      window.scrollTo(0, saved)
+    } else {
+      window.scrollTo(0, 0)
+    }
+  }, [mobileDetailOpen])
 
   const {
     selection,
@@ -193,6 +214,9 @@ function AuthenticatedApp() {
     toggleUnreadOnly,
     contentType,
   } = useSelection()
+
+  // Keep ref in sync so the mobileView useLayoutEffect can read it
+  selectedEntryIdRef.current = selectedEntryId
 
   const { mutate: markAllAsRead } = useMarkAllAsRead()
   const [addFeedContentType, setAddFeedContentType] = useState<ContentType>('article')
@@ -310,7 +334,7 @@ function AuthenticatedApp() {
       // folder: start after the last feed belonging to this folder in the current ordering
       let lastIdx = -1
       for (let i = 0; i < candidates.length; i += 1) {
-        if (candidates[i].folderId === selection.folderId) {
+        if (candidates[i]?.folderId === selection.folderId) {
           lastIdx = i
         }
       }
@@ -461,9 +485,9 @@ function AuthenticatedApp() {
       // browsers auto-hide the address bar / toolbar on scroll.
       // Only one panel is in document flow at a time; the other is hidden.
       mobileContent = (
-        <>
+        <div className="relative min-h-dvh">
           {/* List view - in document flow for window scroll.
-               Hidden (display:none) when detail is fully shown so it doesn't
+               Hidden (display:none) when detail is open so it doesn't
                interfere with window scroll or virtualizer calculations. */}
           <div className={cn(
             'bg-background',
@@ -483,17 +507,12 @@ function AuthenticatedApp() {
               onMenuClick={openSidebar}
             />
           </div>
-          {/* Detail view - slides in from right */}
+          {/* Detail view - shown only when an entry is selected (tap to enter) */}
           <div className={cn(
-            'absolute inset-0 bg-background transition-transform duration-300 ease-out safe-area-top',
-            mobileView === 'detail' ? 'translate-x-0' : 'translate-x-full'
+            'absolute inset-0 bg-background safe-area-top',
+            mobileDetailOpen ? 'block' : 'hidden'
           )}>
-            <EntryContent
-              key={selectedEntryId}
-              entryId={selectedEntryId}
-              isMobile
-              onBack={showList}
-            />
+            {mobileEntryContent}修复bug：最近5篇文章的详细阅读视图中的阅读位置还是没有保存。
           </div>
         </div>
       )
