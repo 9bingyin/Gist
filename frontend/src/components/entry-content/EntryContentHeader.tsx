@@ -1,5 +1,4 @@
 import { useTranslation } from 'react-i18next'
-import { isSafeUrl } from '@/lib/url'
 import { cn } from '@/lib/utils'
 import { BackIcon } from '@/components/ui/icons'
 import { dispatchScrollToTop } from '@/hooks/useScrollToTop'
@@ -14,6 +13,7 @@ interface EntryContentHeaderProps {
   error: string | null
   onToggleReadable: () => void
   onToggleStarred: () => void
+  onToggleRead: () => void
   isLoadingSummary?: boolean
   hasSummary?: boolean
   onToggleSummary?: () => void
@@ -66,6 +66,7 @@ export function EntryContentHeader({
   error,
   onToggleReadable,
   onToggleStarred,
+  onToggleRead,
   isLoadingSummary,
   hasSummary,
   onToggleSummary,
@@ -77,7 +78,6 @@ export function EntryContentHeader({
   onBack,
 }: EntryContentHeaderProps) {
   const { t } = useTranslation()
-  const safeUrl = entry.url && isSafeUrl(entry.url) ? entry.url : null
   const title = displayTitle ?? entry.title ?? t('entry.untitled')
 
   return (
@@ -253,29 +253,26 @@ export function EntryContentHeader({
             </button>
           )}
 
-          {safeUrl && (
-            <a
-              href={safeUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="no-drag-region flex size-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-              aria-label={t('entry.open_original')}
-            >
-              <svg
-                className="size-5"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={2}
-                viewBox="0 0 24 24"
-              >
+          <button
+            type="button"
+            onClick={onToggleRead}
+            title={entry.read ? t('entry.mark_as_unread') : t('entry.mark_as_read')}
+            className="no-drag-region flex size-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
+            <svg className="size-5" viewBox="0 0 24 24" fill="currentColor">
+              {entry.read ? (
+                // Hollow circle — read state
                 <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                  fillRule="evenodd"
+                  clipRule="evenodd"
+                  d="M12 3a9 9 0 100 18A9 9 0 0012 3zm-1 0a10 10 0 110 20 10 10 0 010-20z"
                 />
-              </svg>
-            </a>
-          )}
+              ) : (
+                // Filled circle — unread state
+                <circle cx="12" cy="12" r="9" />
+              )}
+            </svg>
+          </button>
         </div>
       </div>
     </div>

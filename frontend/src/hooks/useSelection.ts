@@ -49,10 +49,12 @@ export function useSelection(): UseSelectionReturn {
 
   // If user didn't explicitly specify unread filter, apply default from settings.
   // We write it into the URL so it behaves consistently across navigation.
+  // Starred view always shows all starred entries, so skip this effect for it.
   useEffect(() => {
     if (unreadParamPresent) return
     if (!defaultShowUnread) return
     if (routeState.unreadOnly) return
+    if (routeState.selection.type === 'starred') return
 
     navigate(
       buildPath(routeState.selection, routeState.entryId, true, routeState.contentType, { explicitUnreadParam: true }),
@@ -82,8 +84,9 @@ export function useSelection(): UseSelectionReturn {
   )
 
   const selectStarred = useCallback((options?: NavigateOptions) => {
-    navigate(buildPath({ type: 'starred' }, null, routeState.unreadOnly, routeState.contentType, { explicitUnreadParam: unreadParamPresent }), options)
-  }, [navigate, routeState.unreadOnly, routeState.contentType, unreadParamPresent])
+    // Starred view always shows all starred entries regardless of the current unread filter.
+    navigate(buildPath({ type: 'starred' }, null, false, routeState.contentType, { explicitUnreadParam: false }), options)
+  }, [navigate, routeState.contentType])
 
   const selectEntry = useCallback(
     (entryId: string | null, options?: NavigateOptions) => {

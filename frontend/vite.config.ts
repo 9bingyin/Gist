@@ -62,6 +62,21 @@ export default defineConfig({
         // Opt out of auto-preload by routing all requests through fetch-event
         importScripts: ['sw-preload-fix.js'],
         runtimeCaching: [
+          // Navigation requests (SPA page loads): NetworkFirst ensures fresh HTML is fetched
+          // and cached, with graceful fallback to cached index.html when offline.
+          // This fixes HarmonyOS ArkWeb's ERR_FAILED (-2) when SW navigation-fallback
+          // returns an empty/undefined response for deep URLs with query strings.
+          {
+            urlPattern: ({ request }) => request.mode === 'navigate',
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'navigation-cache',
+              networkTimeoutSeconds: 10,
+              cacheableResponse: {
+                statuses: [200],
+              },
+            },
+          },
           {
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
             handler: 'CacheFirst',

@@ -34,6 +34,10 @@ export function EntryContent({ entryId, isMobile, onBack }: EntryContentProps) {
 
   // Track entries marked as read to trigger list removal on switch
   const markedAsReadRef = useRef<Set<string>>(new Set())
+  // Guard: auto-mark-as-read should only run once per mount (on initial entry load).
+  // Without this, toggling to unread via the button re-triggers the effect because
+  // entry.read changes, immediately overriding the user's choice.
+  const autoReadDoneRef = useRef(false)
 
   const autoTranslate = aiSettings?.autoTranslate ?? false
   const targetLanguage = aiSettings?.summaryLanguage ?? 'zh-CN'
@@ -93,7 +97,10 @@ export function EntryContent({ entryId, isMobile, onBack }: EntryContentProps) {
   // Mark as read when entry is loaded
   // Use skipInvalidate to prevent list item from disappearing immediately
   useEffect(() => {
-    if (entry && !entry.read) {
+    if (autoReadDoneRef.current) return
+    if (!entry) return
+    autoReadDoneRef.current = true
+    if (!entry.read) {
       markedAsReadRef.current.add(entry.id)
       markAsRead({ id: entry.id, read: true, skipInvalidate: true })
     }
@@ -118,6 +125,22 @@ export function EntryContent({ entryId, isMobile, onBack }: EntryContentProps) {
       markAsStarred({ id: entry.id, starred: !entry.starred })
     }
   }, [entry, markAsStarred])
+
+  const handleToggleRead = useCallback(() => {
+    if (entry) {
+      const newRead = !entry.read
+      // skipInvalidate: don't refresh the list immediately — entry stays visible.
+      // Sync markedAsReadRef so the on-unmount removal (removeFromUnreadList) is consistent:
+      //   marking read  → add to ref, entry removed from unread list on navigation away
+      //   marking unread → remove from ref, entry NOT removed from unread list on navigation away
+      markAsRead({ id: entry.id, read: newRead, skipInvalidate: true })
+      if (newRead) {
+        markedAsReadRef.current.add(entry.id)
+      } else {
+        markedAsReadRef.current.delete(entry.id)
+      }
+    }
+  }, [entry, markAsRead])
 
   // Determine display content
   const displayContent = combinedTranslatedContent ?? baseContent
@@ -148,6 +171,7 @@ export function EntryContent({ entryId, isMobile, onBack }: EntryContentProps) {
         error={readableError}
         onToggleReadable={handleToggleReadable}
         onToggleStarred={handleToggleStarred}
+        onToggleRead={handleToggleRead}
         isLoadingSummary={isLoadingSummary}
         hasSummary={!!aiSummary}
         onToggleSummary={handleToggleSummary}
