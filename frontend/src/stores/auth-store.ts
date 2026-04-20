@@ -21,12 +21,15 @@ interface AuthStore {
   state: AuthState
   user: AuthUser | null
   error: string | null
+  shouldRedirectToRoot: boolean
 
   // Actions
   initialize: () => Promise<void>
   login: (identifier: string, password: string) => Promise<void>
   register: (username: string, nickname: string, email: string, password: string) => Promise<void>
   logout: () => Promise<void>
+  handleUnauthorized: () => void
+  consumeRootRedirect: () => void
   retry: () => void
   clearError: () => void
   setUser: (user: AuthUser) => void
@@ -35,13 +38,14 @@ interface AuthStore {
 export const useAuthStore = create<AuthStore>((set, get) => {
   // Set up unauthorized callback
   setOnUnauthorized(() => {
-    get().logout()
+    get().handleUnauthorized()
   })
 
   return {
     state: 'loading',
     user: null,
     error: null,
+    shouldRedirectToRoot: false,
 
     initialize: async () => {
       try {
@@ -70,9 +74,7 @@ export const useAuthStore = create<AuthStore>((set, get) => {
             set({ state: 'network-error', user: null })
             return
           }
-          // Token invalid, clear it
-          clearAuthToken()
-          set({ state: 'unauthenticated', user: null })
+          get().handleUnauthorized()
         }
       } catch (err) {
         if (isNetworkError(err)) {
@@ -121,7 +123,16 @@ export const useAuthStore = create<AuthStore>((set, get) => {
         // Ignore errors, still clear local state
       }
       clearAuthToken()
-      set({ state: 'unauthenticated', user: null })
+      set({ state: 'unauthenticated', user: null, shouldRedirectToRoot: true })
+    },
+
+    handleUnauthorized: () => {
+      clearAuthToken()
+      set({ state: 'unauthenticated', user: null, error: null, shouldRedirectToRoot: true })
+    },
+
+    consumeRootRedirect: () => {
+      set({ shouldRedirectToRoot: false })
     },
 
     retry: () => {

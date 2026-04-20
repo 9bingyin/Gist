@@ -39,6 +39,7 @@ func TestJWTAuthMiddleware(t *testing.T) {
 	t.Run("InvalidToken", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
 		req.Header.Set("Authorization", "Bearer invalid-token")
+		req.AddCookie(&http.Cookie{Name: gh.AuthCookieName, Value: "stale-cookie"})
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
 
@@ -47,6 +48,18 @@ func TestJWTAuthMiddleware(t *testing.T) {
 		err := middleware(handler)(c)
 		require.NoError(t, err)
 		require.Equal(t, http.StatusUnauthorized, rec.Code)
+
+		cookies := rec.Result().Cookies()
+		var authCookie *http.Cookie
+		for _, cookie := range cookies {
+			if cookie.Name == gh.AuthCookieName {
+				authCookie = cookie
+				break
+			}
+		}
+		require.NotNil(t, authCookie)
+		require.Equal(t, "", authCookie.Value)
+		require.Equal(t, -1, authCookie.MaxAge)
 	})
 
 	t.Run("ValidateTokenError", func(t *testing.T) {

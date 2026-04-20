@@ -2,6 +2,7 @@ package http_test
 
 import (
 	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"gist/backend/internal/handler"
@@ -116,6 +117,70 @@ func TestNewRouter_SwaggerDisabled(t *testing.T) {
 	require.True(t, hasRoute(e, http.MethodGet, "/api/feeds"))
 	require.True(t, hasRoute(e, http.MethodGet, "/icons/:filename"))
 	require.True(t, hasRoute(e, http.MethodGet, "/api/proxy/image/:encoded"))
+}
+
+func TestNewRouter_LogoutRouteIsPublic(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	folderService := mock.NewMockFolderService(ctrl)
+	feedService := mock.NewMockFeedService(ctrl)
+	entryService := mock.NewMockEntryService(ctrl)
+	opmlService := mock.NewMockOPMLService(ctrl)
+	iconService := mock.NewMockIconService(ctrl)
+	proxyService := mock.NewMockProxyService(ctrl)
+	settingsService := mock.NewMockSettingsService(ctrl)
+	aiService := mock.NewMockAIService(ctrl)
+	authService := mock.NewMockAuthService(ctrl)
+	domainRateLimitService := mock.NewMockDomainRateLimitService(ctrl)
+	refreshService := mock.NewMockRefreshService(ctrl)
+	readabilityService := mock.NewMockReadabilityService(ctrl)
+	importTaskService := mock.NewMockImportTaskService(ctrl)
+
+	folderHandler := handler.NewFolderHandler(folderService)
+	feedHandler := handler.NewFeedHandler(feedService, refreshService)
+	entryHandler := handler.NewEntryHandler(entryService, readabilityService)
+	opmlHandler := handler.NewOPMLHandler(opmlService, importTaskService)
+	iconHandler := handler.NewIconHandler(iconService)
+	proxyHandler := handler.NewProxyHandler(proxyService)
+	settingsHandler := handler.NewSettingsHandler(settingsService, network.NewClientFactoryForTest(&http.Client{}))
+	aiHandler := handler.NewAIHandler(aiService)
+	authHandler := handler.NewAuthHandler(authService)
+	domainRateLimitHandler := handler.NewDomainRateLimitHandler(domainRateLimitService)
+
+	e := gh.NewRouter(
+		folderHandler,
+		feedHandler,
+		entryHandler,
+		opmlHandler,
+		iconHandler,
+		proxyHandler,
+		settingsHandler,
+		aiHandler,
+		authHandler,
+		domainRateLimitHandler,
+		authService,
+		"",
+		false,
+	)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/logout", nil)
+	rec := httptest.NewRecorder()
+
+	e.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	cookies := rec.Result().Cookies()
+	var authCookie *http.Cookie
+	for _, cookie := range cookies {
+		if cookie.Name == gh.AuthCookieName {
+			authCookie = cookie
+			break
+		}
+	}
+	require.NotNil(t, authCookie)
+	require.Equal(t, -1, authCookie.MaxAge)
 }
 
 func hasRoute(e *echo.Echo, method, path string) bool {

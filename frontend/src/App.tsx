@@ -426,7 +426,31 @@ function AuthenticatedApp() {
 }
 
 function AppContent() {
-  const { isLoading, isAuthenticated, needsRegistration, needsLogin, isNetworkError, error, login, register, retry, clearError } = useAuth()
+  const [location, navigate] = useLocation()
+  const {
+    isLoading,
+    isAuthenticated,
+    needsRegistration,
+    needsLogin,
+    isNetworkError,
+    error,
+    shouldRedirectToRoot,
+    login,
+    register,
+    retry,
+    clearError,
+    consumeRootRedirect,
+  } = useAuth()
+
+  useEffect(() => {
+    if (!shouldRedirectToRoot) {
+      return
+    }
+    if (location !== '/') {
+      navigate('/', { replace: true })
+    }
+    consumeRootRedirect()
+  }, [shouldRedirectToRoot, location, navigate, consumeRootRedirect])
 
   if (isLoading) {
     return <LoadingScreen />

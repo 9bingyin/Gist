@@ -68,13 +68,13 @@ func (h *AuthHandler) RegisterPublicRoutes(g *echo.Group) {
 	g.GET("/auth/status", h.GetStatus)
 	g.POST("/auth/register", h.Register)
 	g.POST("/auth/login", h.Login)
+	g.POST("/auth/logout", h.Logout)
 }
 
 // RegisterProtectedRoutes registers routes that require authentication.
 func (h *AuthHandler) RegisterProtectedRoutes(g *echo.Group) {
 	g.GET("/auth/me", h.GetCurrentUser)
 	g.PUT("/auth/profile", h.UpdateProfile)
-	g.POST("/auth/logout", h.Logout)
 }
 
 // GetStatus checks if a user has been registered.
