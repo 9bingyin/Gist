@@ -398,11 +398,6 @@ const docTemplate = `{
         },
         "/auth/logout": {
             "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
                 "description": "Clear authentication cookie and log out the user",
                 "produces": [
                     "application/json"

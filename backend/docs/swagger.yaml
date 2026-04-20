@@ -859,8 +859,6 @@ paths:
             additionalProperties:
               type: string
             type: object
-      security:
-      - BearerAuth: []
       summary: Logout
       tags:
       - auth

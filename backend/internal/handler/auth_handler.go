@@ -233,7 +233,6 @@ func (h *AuthHandler) UpdateProfile(c echo.Context) error {
 // @Description Clear authentication cookie and log out the user
 // @Tags auth
 // @Produce json
-// @Security BearerAuth
 // @Success 200 {object} map[string]string
 // @Router /auth/logout [post]
 func (h *AuthHandler) Logout(c echo.Context) error {
