@@ -5,6 +5,7 @@ import './index.css'
 import App from './App.tsx'
 import { queryClient } from '@/lib/queryClient'
 import { I18nProvider } from '@/components/i18n-provider'
+import { setupViewportHeightSync } from '@/lib/viewport'
 
 const BOOT_READY_ATTR = 'data-gist-boot-ready'
 const BOOT_SOFT_PARAM = '_boot_soft'
@@ -68,6 +69,8 @@ logBoot('main entry executed', {
   is_standalone: isStandalone,
   visibility_state: document.visibilityState,
 })
+
+setupViewportHeightSync()
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker

@@ -37,6 +37,7 @@
 
 :root {
   text-autospace: normal;
+  --app-dvh: 100dvh;
 
   --background: 0 0% 100%;
   --foreground: 240 10% 3.9%;
@@ -104,8 +105,9 @@ html {
   /* Prevent pinch-to-zoom and browser default swipe navigation */
   touch-action: pan-x pan-y;
   overscroll-behavior-x: none;
+  background-color: theme(colors.background);
   width: 100%;
-  min-height: 100%;
+  min-height: var(--app-dvh);
   overflow-x: clip;
 }
 
@@ -114,26 +116,25 @@ body {
   color: theme(colors.foreground);
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   width: 100%;
-  min-height: 100%;
+  min-height: var(--app-dvh);
   margin: 0;
   overflow-x: clip;
 }
 
 #root {
   width: 100%;
-  min-height: 100dvh;
+  min-height: var(--app-dvh);
   overflow-x: clip;
+  background-color: theme(colors.background);
 }
 
 /* Dynamic viewport height for mobile browsers */
 .h-dvh {
-  height: 100dvh;
+  height: var(--app-dvh);
 }
 
-@supports not (height: 100dvh) {
-  .h-dvh {
-    height: 100vh;
-  }
+.min-h-dvh {
+  min-height: var(--app-dvh);
 }
 
 /* PWA Safe Area Support - utility classes for components that need safe area padding */
