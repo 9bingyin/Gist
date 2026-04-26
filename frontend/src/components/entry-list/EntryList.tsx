@@ -103,8 +103,13 @@ export function EntryList({
     const node = containerRef.current
     if (!node) return
 
+    let frameId: number | null = null
+
     const updateWidth = () => {
-      setContainerWidth(node.clientWidth)
+      const nextWidth = node.clientWidth
+      setContainerWidth((currentWidth) => (
+        currentWidth === nextWidth ? currentWidth : nextWidth
+      ))
     }
 
     updateWidth()
@@ -113,13 +118,24 @@ export function EntryList({
       return
     }
 
+    const scheduleWidthUpdate = () => {
+      if (frameId !== null) return
+      frameId = requestAnimationFrame(() => {
+        frameId = null
+        updateWidth()
+      })
+    }
+
     const observer = new ResizeObserver(() => {
-      updateWidth()
+      scheduleWidthUpdate()
     })
     observer.observe(node)
 
     return () => {
       observer.disconnect()
+      if (frameId !== null) {
+        cancelAnimationFrame(frameId)
+      }
     }
   }, [])
 
