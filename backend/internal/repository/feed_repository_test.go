@@ -233,6 +233,27 @@ func TestFeedRepository_UpdateType(t *testing.T) {
 	require.Equal(t, "picture", feed.Type)
 }
 
+func TestFeedRepository_UpdateViewMode(t *testing.T) {
+	db := testutil.NewTestDB(t)
+	repo := repository.NewFeedRepository(db)
+	ctx := context.Background()
+
+	id := testutil.SeedFeed(t, db, model.Feed{Title: "Feed", URL: "u"})
+
+	mode := "readability"
+	err := repo.UpdateViewMode(ctx, id, &mode)
+	require.NoError(t, err)
+
+	feed, _ := repo.GetByID(ctx, id)
+	require.NotNil(t, feed.ViewMode)
+	require.Equal(t, "readability", *feed.ViewMode)
+
+	err = repo.UpdateViewMode(ctx, id, nil)
+	require.NoError(t, err)
+	feed, _ = repo.GetByID(ctx, id)
+	require.Nil(t, feed.ViewMode)
+}
+
 func TestFeedRepository_UpdateTypeByFolderID(t *testing.T) {
 	db := testutil.NewTestDB(t)
 	repo := repository.NewFeedRepository(db)

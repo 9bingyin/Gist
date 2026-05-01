@@ -674,7 +674,11 @@ export function EntryList({
             onToggleUnreadOnly={onToggleUnreadOnly}
             onMarkAllRead={onMarkAllRead}
             viewMenuFeedId={selection.type === 'feed' ? selection.feedId : undefined}
-            viewMenuDefaultMode={(generalSettings?.autoReadability ?? false) ? 'readability' : 'normal'}
+            viewMenuDefaultMode={
+              selection.type === 'feed'
+                ? (feedsMap.get(selection.feedId)?.viewMode ?? ((generalSettings?.autoReadability ?? false) ? 'readability' : 'normal'))
+                : ((generalSettings?.autoReadability ?? false) ? 'readability' : 'normal')
+            }
             scrollToTopScope="entrylist"
             isMobile={isMobile}
             onMenuClick={onMenuClick}
@@ -783,7 +787,11 @@ export function EntryList({
         onToggleUnreadOnly={onToggleUnreadOnly}
         onMarkAllRead={onMarkAllRead}
         viewMenuFeedId={selection.type === 'feed' ? selection.feedId : undefined}
-        viewMenuDefaultMode={(generalSettings?.autoReadability ?? false) ? 'readability' : 'normal'}
+        viewMenuDefaultMode={
+          selection.type === 'feed'
+            ? (feedsMap.get(selection.feedId)?.viewMode ?? ((generalSettings?.autoReadability ?? false) ? 'readability' : 'normal'))
+            : ((generalSettings?.autoReadability ?? false) ? 'readability' : 'normal')
+        }
         scrollToTopScope="entrylist"
         isMobile={isMobile}
         onMenuClick={onMenuClick}

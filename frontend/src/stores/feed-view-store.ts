@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import type { Feed } from '@/types/api'
 
 export type FeedViewMode = 'normal' | 'readability' | 'browser'
 
@@ -41,6 +42,7 @@ interface FeedViewStore {
   getExplicitMode: (feedId: string) => FeedViewMode | undefined
   getEffectiveMode: (feedId: string, fallback: FeedViewMode) => FeedViewMode
   setMode: (feedId: string, mode: FeedViewMode) => void
+  syncModesFromFeeds: (feeds: Feed[]) => void
 }
 
 export const useFeedViewStore = create<FeedViewStore>((set, get) => ({
@@ -61,6 +63,17 @@ export const useFeedViewStore = create<FeedViewStore>((set, get) => ({
       return { modes: next }
     })
   },
+
+  syncModesFromFeeds: (feeds: Feed[]) => {
+    const next: Record<string, FeedViewMode> = {}
+    for (const feed of feeds) {
+      if (feed.viewMode === 'normal' || feed.viewMode === 'readability' || feed.viewMode === 'browser') {
+        next[feed.id] = feed.viewMode
+      }
+    }
+    set({ modes: next })
+    persistModes(next)
+  },
 }))
 
 export const feedViewActions = {
@@ -68,4 +81,5 @@ export const feedViewActions = {
   getEffectiveMode: (feedId: string, fallback: FeedViewMode) =>
     useFeedViewStore.getState().getEffectiveMode(feedId, fallback),
   setMode: (feedId: string, mode: FeedViewMode) => useFeedViewStore.getState().setMode(feedId, mode),
+  syncModesFromFeeds: (feeds: Feed[]) => useFeedViewStore.getState().syncModesFromFeeds(feeds),
 }

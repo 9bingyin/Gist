@@ -24,6 +24,7 @@ type FeedRepository interface {
 	UpdateIconPath(ctx context.Context, id int64, iconPath string) error
 	UpdateErrorMessage(ctx context.Context, id int64, errorMessage *string) error
 	UpdateType(ctx context.Context, id int64, feedType string) error
+	UpdateViewMode(ctx context.Context, id int64, viewMode *string) error
 	UpdateTypeByFolderID(ctx context.Context, folderID int64, feedType string) error
 	Delete(ctx context.Context, id int64) error
 	DeleteBatch(ctx context.Context, ids []int64) (int64, error)
@@ -48,8 +49,8 @@ func (r *feedRepository) Create(ctx context.Context, feed model.Feed) (model.Fee
 	}
 	_, err := r.db.ExecContext(
 		ctx,
-		`INSERT INTO feeds (id, folder_id, title, url, site_url, description, summary_prompt_reminder, type, etag, last_modified, error_message, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO feeds (id, folder_id, title, url, site_url, description, summary_prompt_reminder, icon_path, type, view_mode, etag, last_modified, error_message, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		feed.ID,
 		nullableInt64(feed.FolderID),
 		feed.Title,
@@ -57,7 +58,9 @@ func (r *feedRepository) Create(ctx context.Context, feed model.Feed) (model.Fee
 		nullableString(feed.SiteURL),
 		nullableString(feed.Description),
 		nullableString(feed.SummaryPromptReminder),
+		nullableString(feed.IconPath),
 		feed.Type,
+		nullableString(feed.ViewMode),
 		nullableString(feed.ETag),
 		nullableString(feed.LastModified),
 		nullableString(feed.ErrorMessage),
@@ -73,7 +76,7 @@ func (r *feedRepository) Create(ctx context.Context, feed model.Feed) (model.Fee
 }
 
 func (r *feedRepository) GetByID(ctx context.Context, id int64) (model.Feed, error) {
-	row := r.db.QueryRowContext(ctx, `SELECT id, folder_id, title, url, site_url, description, summary_prompt_reminder, icon_path, type, etag, last_modified, error_message, created_at, updated_at FROM feeds WHERE id = ?`, id)
+	row := r.db.QueryRowContext(ctx, `SELECT id, folder_id, title, url, site_url, description, summary_prompt_reminder, icon_path, type, view_mode, etag, last_modified, error_message, created_at, updated_at FROM feeds WHERE id = ?`, id)
 	return scanFeed(row)
 }
 
@@ -86,7 +89,7 @@ func (r *feedRepository) GetByIDs(ctx context.Context, ids []int64) ([]model.Fee
 	for i, id := range ids {
 		args[i] = id
 	}
-	rows, err := r.db.QueryContext(ctx, `SELECT id, folder_id, title, url, site_url, description, summary_prompt_reminder, icon_path, type, etag, last_modified, error_message, created_at, updated_at FROM feeds WHERE id IN (`+placeholders+`)`, args...)
+	rows, err := r.db.QueryContext(ctx, `SELECT id, folder_id, title, url, site_url, description, summary_prompt_reminder, icon_path, type, view_mode, etag, last_modified, error_message, created_at, updated_at FROM feeds WHERE id IN (`+placeholders+`)`, args...)
 	if err != nil {
 		return nil, fmt.Errorf("get feeds by ids: %w", err)
 	}
@@ -107,7 +110,7 @@ func (r *feedRepository) GetByIDs(ctx context.Context, ids []int64) ([]model.Fee
 }
 
 func (r *feedRepository) FindByURL(ctx context.Context, url string) (*model.Feed, error) {
-	row := r.db.QueryRowContext(ctx, `SELECT id, folder_id, title, url, site_url, description, summary_prompt_reminder, icon_path, type, etag, last_modified, error_message, created_at, updated_at FROM feeds WHERE url = ?`, url)
+	row := r.db.QueryRowContext(ctx, `SELECT id, folder_id, title, url, site_url, description, summary_prompt_reminder, icon_path, type, view_mode, etag, last_modified, error_message, created_at, updated_at FROM feeds WHERE url = ?`, url)
 	feed, err := scanFeed(row)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -119,10 +122,10 @@ func (r *feedRepository) FindByURL(ctx context.Context, url string) (*model.Feed
 }
 
 func (r *feedRepository) List(ctx context.Context, folderID *int64) ([]model.Feed, error) {
-	query := `SELECT id, folder_id, title, url, site_url, description, summary_prompt_reminder, icon_path, type, etag, last_modified, error_message, created_at, updated_at FROM feeds ORDER BY title`
+	query := `SELECT id, folder_id, title, url, site_url, description, summary_prompt_reminder, icon_path, type, view_mode, etag, last_modified, error_message, created_at, updated_at FROM feeds ORDER BY title`
 	args := []interface{}{}
 	if folderID != nil {
-		query = `SELECT id, folder_id, title, url, site_url, description, summary_prompt_reminder, icon_path, type, etag, last_modified, error_message, created_at, updated_at FROM feeds WHERE folder_id = ? ORDER BY title`
+		query = `SELECT id, folder_id, title, url, site_url, description, summary_prompt_reminder, icon_path, type, view_mode, etag, last_modified, error_message, created_at, updated_at FROM feeds WHERE folder_id = ? ORDER BY title`
 		args = append(args, *folderID)
 	}
 	rows, err := r.db.QueryContext(ctx, query, args...)
@@ -147,7 +150,7 @@ func (r *feedRepository) List(ctx context.Context, folderID *int64) ([]model.Fee
 }
 
 func (r *feedRepository) ListWithoutIcon(ctx context.Context) ([]model.Feed, error) {
-	rows, err := r.db.QueryContext(ctx, `SELECT id, folder_id, title, url, site_url, description, summary_prompt_reminder, icon_path, type, etag, last_modified, error_message, created_at, updated_at FROM feeds WHERE icon_path IS NULL OR icon_path = ''`)
+	rows, err := r.db.QueryContext(ctx, `SELECT id, folder_id, title, url, site_url, description, summary_prompt_reminder, icon_path, type, view_mode, etag, last_modified, error_message, created_at, updated_at FROM feeds WHERE icon_path IS NULL OR icon_path = ''`)
 	if err != nil {
 		return nil, fmt.Errorf("list feeds without icon: %w", err)
 	}
@@ -172,13 +175,14 @@ func (r *feedRepository) Update(ctx context.Context, feed model.Feed) (model.Fee
 	now := time.Now().UTC()
 	_, err := r.db.ExecContext(
 		ctx,
-		`UPDATE feeds SET folder_id = ?, title = ?, url = ?, site_url = ?, description = ?, summary_prompt_reminder = ?, etag = ?, last_modified = ?, error_message = ?, updated_at = ? WHERE id = ?`,
+		`UPDATE feeds SET folder_id = ?, title = ?, url = ?, site_url = ?, description = ?, summary_prompt_reminder = ?, view_mode = ?, etag = ?, last_modified = ?, error_message = ?, updated_at = ? WHERE id = ?`,
 		nullableInt64(feed.FolderID),
 		feed.Title,
 		feed.URL,
 		nullableString(feed.SiteURL),
 		nullableString(feed.Description),
 		nullableString(feed.SummaryPromptReminder),
+		nullableString(feed.ViewMode),
 		nullableString(feed.ETag),
 		nullableString(feed.LastModified),
 		nullableString(feed.ErrorMessage),
@@ -254,6 +258,20 @@ func (r *feedRepository) Delete(ctx context.Context, id int64) error {
 	return nil
 }
 
+func (r *feedRepository) UpdateViewMode(ctx context.Context, id int64, viewMode *string) error {
+	_, err := r.db.ExecContext(
+		ctx,
+		`UPDATE feeds SET view_mode = ?, updated_at = ? WHERE id = ?`,
+		nullableString(viewMode),
+		formatTime(time.Now().UTC()),
+		id,
+	)
+	if err != nil {
+		return fmt.Errorf("update feed view mode: %w", err)
+	}
+	return nil
+}
+
 func (r *feedRepository) DeleteBatch(ctx context.Context, ids []int64) (int64, error) {
 	if len(ids) == 0 {
 		return 0, nil
@@ -297,6 +315,7 @@ func scanFeed(scanner interface {
 	var summaryPromptReminder sql.NullString
 	var iconPath sql.NullString
 	var feedType sql.NullString
+	var viewMode sql.NullString
 	var etag sql.NullString
 	var lastModified sql.NullString
 	var errorMessage sql.NullString
@@ -312,6 +331,7 @@ func scanFeed(scanner interface {
 		&summaryPromptReminder,
 		&iconPath,
 		&feedType,
+		&viewMode,
 		&etag,
 		&lastModified,
 		&errorMessage,
@@ -339,6 +359,9 @@ func scanFeed(scanner interface {
 		feed.Type = feedType.String
 	} else {
 		feed.Type = "article"
+	}
+	if viewMode.Valid {
+		feed.ViewMode = &viewMode.String
 	}
 	if etag.Valid {
 		feed.ETag = &etag.String

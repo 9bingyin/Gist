@@ -261,6 +261,20 @@ func (mr *MockFeedRepositoryMockRecorder) UpdateType(ctx, id, feedType any) *gom
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateType", reflect.TypeOf((*MockFeedRepository)(nil).UpdateType), ctx, id, feedType)
 }
 
+// UpdateViewMode mocks base method.
+func (m *MockFeedRepository) UpdateViewMode(ctx context.Context, id int64, viewMode *string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateViewMode", ctx, id, viewMode)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateViewMode indicates an expected call of UpdateViewMode.
+func (mr *MockFeedRepositoryMockRecorder) UpdateViewMode(ctx, id, viewMode any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateViewMode", reflect.TypeOf((*MockFeedRepository)(nil).UpdateViewMode), ctx, id, viewMode)
+}
+
 // UpdateTypeByFolderID mocks base method.
 func (m *MockFeedRepository) UpdateTypeByFolderID(ctx context.Context, folderID int64, feedType string) error {
 	m.ctrl.T.Helper()

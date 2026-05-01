@@ -126,6 +126,13 @@ export function Sidebar({
   const { data: unreadCountsData } = useUnreadCounts()
 
   // Handlers for menu actions
+  // Stable handler for add button click
+  const handleAddButtonClick = useCallback(() => {
+    if (onAddClick) {
+      onAddClick(contentType)
+    }
+  }, [onAddClick, contentType])
+
   const handleEditFeed = useCallback((feedId: string) => {
     const feed = allFeeds.find((f) => f.id === feedId)
     if (feed) setEditingFeed(feed)
@@ -242,7 +249,7 @@ export function Sidebar({
       <SidebarHeader
         avatarUrl={user?.avatarUrl}
         userName={user?.nickname || user?.username}
-        onAddClick={() => onAddClick?.(contentType)}
+        onAddClick={handleAddButtonClick}
         isStarredSelected={isStarredSelected}
         onStarredClick={onSelectStarred}
         onProfileClick={() => setIsProfileOpen(true)}

@@ -241,6 +241,53 @@ func TestFeedHandler_UpdateType_Success(t *testing.T) {
 	require.Equal(t, http.StatusNoContent, rec.Code)
 }
 
+func TestFeedHandler_UpdateViewMode_Success(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock.NewMockFeedService(ctrl)
+	mockRefreshService := mock.NewMockRefreshService(ctrl)
+	h := handler.NewFeedHandlerHelper(mockService, mockRefreshService)
+
+	e := newTestEcho()
+	reqBody := map[string]interface{}{
+		"viewMode": "browser",
+	}
+	req := newJSONRequest(http.MethodPatch, "/feeds/123/view-mode", reqBody)
+	c, rec := newTestContext(e, req)
+	setPathParams(c, map[string]string{"id": "123"})
+
+	mode := "browser"
+	mockService.EXPECT().
+		UpdateViewMode(gomock.Any(), int64(123), &mode).
+		Return(nil)
+
+	err := h.UpdateViewMode(c)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusNoContent, rec.Code)
+}
+
+func TestFeedHandler_UpdateViewMode_InvalidMode(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock.NewMockFeedService(ctrl)
+	mockRefreshService := mock.NewMockRefreshService(ctrl)
+	h := handler.NewFeedHandlerHelper(mockService, mockRefreshService)
+
+	e := newTestEcho()
+	reqBody := map[string]interface{}{
+		"viewMode": "invalid",
+	}
+	req := newJSONRequest(http.MethodPatch, "/feeds/123/view-mode", reqBody)
+	c, rec := newTestContext(e, req)
+	setPathParams(c, map[string]string{"id": "123"})
+
+	err := h.UpdateViewMode(c)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
 func TestFeedHandler_DeleteBatch_Success(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

@@ -36,6 +36,7 @@ type FeedService interface {
 	List(ctx context.Context, folderID *int64) ([]model.Feed, error)
 	Update(ctx context.Context, id int64, title string, folderID *int64, summaryPromptReminder *string) (model.Feed, error)
 	UpdateType(ctx context.Context, id int64, feedType string) error
+	UpdateViewMode(ctx context.Context, id int64, viewMode *string) error
 	Delete(ctx context.Context, id int64) error
 	DeleteBatch(ctx context.Context, ids []int64) error
 }
@@ -351,6 +352,28 @@ func (s *feedService) UpdateType(ctx context.Context, id int64, feedType string)
 		return err
 	}
 	logger.Info("feed type updated", "module", "service", "action", "update", "resource", "feed", "result", "ok", "feed_id", id, "type", feedType)
+	return nil
+}
+
+func (s *feedService) UpdateViewMode(ctx context.Context, id int64, viewMode *string) error {
+	if viewMode != nil {
+		if *viewMode != "normal" && *viewMode != "readability" && *viewMode != "browser" {
+			return ErrInvalid
+		}
+	}
+
+	if _, err := s.feeds.GetByID(ctx, id); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
+		return fmt.Errorf("get feed: %w", err)
+	}
+
+	if err := s.feeds.UpdateViewMode(ctx, id, viewMode); err != nil {
+		logger.Error("feed update view mode failed", "module", "service", "action", "update", "resource", "feed", "result", "failed", "feed_id", id, "view_mode", viewMode, "error", err)
+		return err
+	}
+	logger.Info("feed view mode updated", "module", "service", "action", "update", "resource", "feed", "result", "ok", "feed_id", id, "view_mode", viewMode)
 	return nil
 }
 
