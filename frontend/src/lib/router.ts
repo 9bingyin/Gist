@@ -131,5 +131,6 @@ export function buildPath(
  * Check if current path is add-feed page
  */
 export function isAddFeedPath(pathname: string): boolean {
-  return pathname === '/add-feed'
+  // Handle both '/add-feed' and '/add-feed?...'
+  return pathname.startsWith('/add-feed')
 }

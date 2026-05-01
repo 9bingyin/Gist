@@ -50,17 +50,19 @@ export function useSelection(): UseSelectionReturn {
   // If user didn't explicitly specify unread filter, apply default from settings.
   // We write it into the URL so it behaves consistently across navigation.
   // Starred view always shows all starred entries, so skip this effect for it.
+  // Skip for add-feed page which is not a selection route.
   useEffect(() => {
     if (unreadParamPresent) return
     if (!defaultShowUnread) return
     if (routeState.unreadOnly) return
     if (routeState.selection.type === 'starred') return
+    if (location.startsWith('/add-feed')) return
 
     navigate(
       buildPath(routeState.selection, routeState.entryId, true, routeState.contentType, { explicitUnreadParam: true }),
       { replace: true }
     )
-  }, [unreadParamPresent, defaultShowUnread, routeState.selection, routeState.entryId, routeState.unreadOnly, routeState.contentType, navigate])
+  }, [unreadParamPresent, defaultShowUnread, routeState.selection, routeState.entryId, routeState.unreadOnly, routeState.contentType, navigate, location])
 
   const selectAll = useCallback(
     (contentType?: ContentType, options?: NavigateOptions) => {
