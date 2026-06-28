@@ -2,17 +2,14 @@ import type { ContentType } from './api'
 
 export type AIProvider = 'openai' | 'anthropic' | 'compatible';
 
-export type ReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'minimal' | 'none' | '';
+export type RequestOptions = Record<string, unknown>;
 
 export interface AISettings {
   provider: AIProvider;
   apiKey: string;
   baseUrl: string;
   model: string;
-  thinkingSupported: boolean;
-  thinking: boolean;
-  thinkingBudget: number;
-  reasoningEffort: ReasoningEffort;
+  requestOptions: RequestOptions;
   summaryLanguage: string;
   autoTranslate: boolean;
   autoSummary: boolean;
@@ -24,10 +21,7 @@ export interface AITestRequest {
   apiKey: string;
   baseUrl: string;
   model: string;
-  thinkingSupported: boolean;
-  thinking: boolean;
-  thinkingBudget: number;
-  reasoningEffort: ReasoningEffort;
+  requestOptions: RequestOptions;
 }
 
 export interface AITestResponse {
@@ -42,6 +36,7 @@ export interface GeneralSettings {
   markReadOnScroll: boolean;
   defaultShowUnread: boolean;
   keepReadUntilExit: boolean;
+  markReadOnScroll: boolean;
 }
 
 export type ProxyType = 'http' | 'socks5';

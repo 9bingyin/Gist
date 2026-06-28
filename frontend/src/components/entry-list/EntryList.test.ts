@@ -2,11 +2,9 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import {
   selectionScrollKey,
   entryListScrollPositions,
-  entryListMeasurementsCache,
 } from './scroll-key'
 import type { SelectionType } from '@/hooks/useSelection'
 import type { ContentType } from '@/types/api'
-import type { VirtualItem } from '@tanstack/react-virtual'
 
 describe('selectionScrollKey', () => {
   const contentTypes: ContentType[] = ['article', 'picture', 'notification']
@@ -72,7 +70,6 @@ describe('selectionScrollKey', () => {
 describe('scroll position caches across unmount/remount', () => {
   beforeEach(() => {
     entryListScrollPositions.clear()
-    entryListMeasurementsCache.clear()
   })
 
   it('should preserve scroll position after cache is populated (simulates unmount/remount)', () => {
@@ -82,7 +79,7 @@ describe('scroll position caches across unmount/remount', () => {
     entryListScrollPositions.set(key, 1500)
 
     // Simulate: component unmounts (picture mode), then remounts.
-    // On remount, virtualizer reads initialOffset from cache.
+    // On remount, EntryList restores scrollTop from cache.
     expect(entryListScrollPositions.get(key)).toBe(1500)
   })
 
@@ -97,7 +94,7 @@ describe('scroll position caches across unmount/remount', () => {
     expect(entryListScrollPositions.get(articleKey)).toBe(800)
     expect(entryListScrollPositions.get(notificationKey)).toBe(2000)
 
-    // Picture key was never saved, returns undefined (virtualizer defaults to 0)
+    // Picture key was never saved, returns undefined (EntryList defaults to 0)
     const pictureKey = selectionScrollKey({ type: 'all' }, 'picture')
     expect(entryListScrollPositions.get(pictureKey)).toBeUndefined()
   })
@@ -111,45 +108,5 @@ describe('scroll position caches across unmount/remount', () => {
 
     expect(entryListScrollPositions.get(feedA)).toBe(500)
     expect(entryListScrollPositions.get(feedB)).toBe(3000)
-  })
-
-  it('should preserve measurements cache across unmount/remount', () => {
-    const key = selectionScrollKey({ type: 'all' }, 'article')
-    const measurements = [
-      { index: 0, start: 0, end: 95, size: 95, key: '0', lane: 0 },
-      { index: 1, start: 95, end: 205, size: 110, key: '1', lane: 0 },
-      { index: 2, start: 205, end: 300, size: 95, key: '2', lane: 0 },
-    ] as VirtualItem[]
-    const snapshot = {
-      entryIdsKey: '1:2:3',
-      measurements,
-    }
-
-    // Simulate: onChange saves measurements when scrolling stops
-    entryListMeasurementsCache.set(key, snapshot)
-
-    // Simulate: remount reads cache for initialMeasurementsCache
-    const restored = entryListMeasurementsCache.get(key)
-    expect(restored).toEqual(snapshot)
-    expect(restored?.measurements).toHaveLength(3)
-    expect(restored?.measurements[1]?.size).toBe(110)
-  })
-
-  it('should not leak measurements between content types', () => {
-    const articleKey = selectionScrollKey({ type: 'all' }, 'article')
-    const notificationKey = selectionScrollKey({ type: 'all' }, 'notification')
-
-    const articleMeasurements = [
-      { index: 0, start: 0, end: 100, size: 100, key: '0', lane: 0 },
-    ] as VirtualItem[]
-    const snapshot = {
-      entryIdsKey: '1',
-      measurements: articleMeasurements,
-    }
-
-    entryListMeasurementsCache.set(articleKey, snapshot)
-
-    expect(entryListMeasurementsCache.get(articleKey)).toEqual(snapshot)
-    expect(entryListMeasurementsCache.get(notificationKey)).toBeUndefined()
   })
 })

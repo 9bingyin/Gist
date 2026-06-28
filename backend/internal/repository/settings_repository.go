@@ -4,6 +4,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"time"
 
 	"gist/backend/internal/model"
@@ -13,6 +14,7 @@ import (
 type SettingsRepository interface {
 	Get(ctx context.Context, key string) (*model.Setting, error)
 	Set(ctx context.Context, key, value string) error
+	SetMany(ctx context.Context, values map[string]string) error
 	GetByPrefix(ctx context.Context, prefix string) ([]model.Setting, error)
 	Delete(ctx context.Context, key string) error
 	DeleteByPrefix(ctx context.Context, prefix string) (int64, error)
@@ -56,6 +58,32 @@ func (r *settingsRepository) Set(ctx context.Context, key, value string) error {
 		ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
 	`, key, value, now)
 	return err
+}
+
+// SetMany creates or updates multiple settings in one transaction.
+func (r *settingsRepository) SetMany(ctx context.Context, values map[string]string) error {
+	if len(values) == 0 {
+		return nil
+	}
+
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	for key, value := range values {
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO settings (key, value, updated_at)
+			VALUES (?, ?, ?)
+			ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+		`, key, value, now); err != nil {
+			return fmt.Errorf("set setting %s: %w", key, err)
+		}
+	}
+
+	return tx.Commit()
 }
 
 // GetByPrefix retrieves all settings with keys starting with the given prefix.

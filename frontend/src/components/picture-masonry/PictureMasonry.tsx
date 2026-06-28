@@ -1,4 +1,4 @@
-import { useMemo, useRef, useEffect, useCallback } from 'react'
+import { useMemo, useRef, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { VirtuosoMasonry } from '@virtuoso.dev/masonry'
 import { useEntriesInfinite, useUnreadCounts } from '@/hooks/useEntries'
@@ -10,6 +10,8 @@ import { selectionToParams, type SelectionType } from '@/hooks/useSelection'
 import { flattenUniqueEntries } from '@/lib/entry-pagination'
 import { useImageDimensionsStore } from '@/stores/image-dimensions-store'
 import { PictureItem } from './PictureItem'
+import { useGeneralSettings } from '@/hooks/useGeneralSettings'
+import { useMasonryScrollMarkRead } from './useMasonryScrollMarkRead'
 import { EntryListHeader } from '@/components/entry-list/EntryListHeader'
 import type { ContentType, Entry, Feed } from '@/types/api'
 
@@ -31,8 +33,35 @@ interface MasonryItem {
   feed?: Feed
 }
 
-interface MasonryContext {
-  feedsMap: Map<string, Feed>
+function getSelectionKey(selection: SelectionType): string {
+  switch (selection.type) {
+    case 'feed':
+      return selection.feedId
+    case 'folder':
+      return selection.folderId
+    case 'all':
+    case 'starred':
+      return selection.type
+  }
+}
+
+function findScrollableElement(root: HTMLElement | null): HTMLElement | null {
+  if (!root) return null
+
+  const candidates = [root, ...Array.from(root.querySelectorAll<HTMLElement>('*'))]
+  return candidates.find((element) => {
+    const { overflowY } = getComputedStyle(element)
+    return overflowY === 'auto' || overflowY === 'scroll'
+  }) ?? null
+}
+
+function MasonryItemContent({ data: item }: { data: MasonryItem }) {
+  if (!item?.entry) return null
+  return (
+    <div data-entry-id={item.entry.id}>
+      <PictureItem entry={item.entry} feed={item.feed} />
+    </div>
+  )
 }
 
 export function PictureMasonry({
@@ -51,6 +80,7 @@ export function PictureMasonry({
   const params = selectionToParams(selection, contentType)
   const wrapperRef = useRef<HTMLDivElement>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const [scrollElement, setScrollElement] = useState<HTMLElement | null>(null)
 
   // Swipe gesture: Right swipe opens sidebar (only on mobile)
   useSwipeGesture(wrapperRef, {
@@ -62,29 +92,19 @@ export function PictureMasonry({
     enabled: Boolean(isMobile && onMenuClick),
   })
 
-  // scrollContainerRef points to an overflow-hidden wrapper.
-  // The actual scrollable element is a child: either VirtuosoMasonry's internal
-  // scroller or the overflow-auto div used during loading/empty states.
   useEffect(() => {
     const handler = (e: Event) => {
       const eventScope = (e as CustomEvent<string | undefined>).detail
       if (eventScope && eventScope !== 'picture') return
-      const container = scrollContainerRef.current
+      const container = findScrollableElement(scrollContainerRef.current)
       if (!container) return
-      // Find the first scrollable descendant
-      for (const child of container.querySelectorAll('*')) {
-        const { overflowY } = getComputedStyle(child)
-        if (overflowY === 'auto' || overflowY === 'scroll') {
-          ;(child as HTMLElement).scrollTo({ top: 0, behavior: 'smooth' })
-          return
-        }
-      }
+      container.scrollTo({ top: 0, behavior: 'smooth' })
     }
     window.addEventListener('scrolltotop', handler)
     return () => window.removeEventListener('scrolltotop', handler)
   }, [])
 
-  const { containerRef, currentColumn, isReady } = useMasonryColumn(isMobile)
+  const { currentColumn, isReady } = useMasonryColumn(isMobile, scrollContainerRef)
   const loadFromDB = useImageDimensionsStore((state) => state.loadFromDB)
   const clearFailed = useImageDimensionsStore((state) => state.clearFailed)
 
@@ -96,6 +116,8 @@ export function PictureMasonry({
     unreadOnly,
     hasThumbnail: true,
   })
+  const { data: generalSettings } = useGeneralSettings()
+  const markReadOnScroll = generalSettings?.markReadOnScroll ?? false
 
   const feedsMap = useMemo(() => {
     const map = new Map<string, Feed>()
@@ -115,22 +137,16 @@ export function PictureMasonry({
 
   const entries = useMemo(() => flattenUniqueEntries(data?.pages), [data])
 
-  // Generate a stable key representing the current filter context
-  const virtuosoKey = useMemo(() => {
-    const selectionKey =
-      selection.type === 'feed'
-        ? selection.feedId
-        : selection.type === 'folder'
-          ? selection.folderId
-          : selection.type
-    return `${selectionKey}-${unreadOnly}`
-  }, [selection, unreadOnly])
+  const filterKey = useMemo(
+    () => `${getSelectionKey(selection)}-${unreadOnly}`,
+    [selection, unreadOnly]
+  )
 
   // Clear failed images on mount and when filter context changes,
   // giving images a fresh chance to load (failures are often transient)
   useEffect(() => {
     clearFailed()
-  }, [virtuosoKey, clearFailed])
+  }, [filterKey, clearFailed])
 
   // Load cached dimensions from IndexedDB
   useEffect(() => {
@@ -142,19 +158,15 @@ export function PictureMasonry({
     }
   }, [entries, loadFromDB])
 
-  const items: MasonryItem[] = useMemo(() => {
-    return entries.map((entry) => ({
+  const items: MasonryItem[] = useMemo(
+    () => entries.map((entry) => ({
       entry,
       feed: feedsMap.get(entry.feedId),
-    }))
-  }, [entries, feedsMap])
-
-  const context: MasonryContext = useMemo(
-    () => ({ feedsMap }),
-    [feedsMap]
+    })),
+    [entries, feedsMap]
   )
 
-  // Infinite scroll by listening to VirtuosoMasonry's internal scroll container
+  // Infinite scroll by listening to VirtuosoMasonry's internal scroll container.
   useEffect(() => {
     const wrapper = scrollContainerRef.current
     if (!wrapper || !isReady) return
@@ -171,18 +183,17 @@ export function PictureMasonry({
     }
 
     const setupScrollListener = () => {
-      // VirtuosoMasonry creates a div with overflow-y: scroll
-      const scroller = wrapper.querySelector('[style*="overflow"]') as HTMLElement
-      if (!scroller) return false
+      const nextScrollEl = findScrollableElement(wrapper)
+      if (!nextScrollEl || nextScrollEl === scrollEl) return Boolean(scrollEl)
 
-      scrollEl = scroller
-      scroller.addEventListener('scroll', handleScroll, { passive: true })
+      scrollEl?.removeEventListener('scroll', handleScroll)
+      scrollEl = nextScrollEl
+      setScrollElement(nextScrollEl)
+      scrollEl.addEventListener('scroll', handleScroll, { passive: true })
       return true
     }
 
-    // Try to find immediately
     if (!setupScrollListener()) {
-      // If not found, use MutationObserver to wait for VirtuosoMasonry to render
       observer = new MutationObserver(() => {
         if (setupScrollListener() && observer) {
           observer.disconnect()
@@ -194,22 +205,26 @@ export function PictureMasonry({
 
     return () => {
       observer?.disconnect()
-      if (scrollEl) {
-        scrollEl.removeEventListener('scroll', handleScroll)
-      }
+      scrollEl?.removeEventListener('scroll', handleScroll)
+      setScrollElement((current) => (current === scrollEl ? null : current))
     }
   }, [hasNextPage, isFetchingNextPage, fetchNextPage, isReady])
 
   // Reset scroll on selection/filter change
   useEffect(() => {
-    const wrapper = scrollContainerRef.current
-    if (!wrapper) return
-    const scroller = wrapper.querySelector('[style*="overflow"]') as HTMLElement
-    if (scroller) {
-      scroller.scrollTop = 0
-    }
+    const scrollEl = findScrollableElement(scrollContainerRef.current)
+    if (!scrollEl) return
+    scrollEl.scrollTop = 0
   }, [selection, unreadOnly])
 
+  const { endPaddingHeight: scrollReadEndPaddingHeight } = useMasonryScrollMarkRead({
+    scrollElement,
+    entries,
+    enabled: markReadOnScroll,
+    unreadOnly,
+    hasNextPage: Boolean(hasNextPage),
+    resetKey: `${filterKey}\u0000${markReadOnScroll}`,
+  })
   const title = useMemo(() => {
     switch (selection.type) {
       case 'all':
@@ -242,15 +257,6 @@ export function PictureMasonry({
     }
   }, [unreadCounts, selection, feeds, contentType])
 
-  const ItemContent = useCallback(
-    ({ data: item }: { data: MasonryItem; context: MasonryContext }) => {
-      // Guard against undefined data during list refresh
-      if (!item?.entry) return null
-      return <PictureItem entry={item.entry} feed={item.feed} />
-    },
-    []
-  )
-
   return (
     <div ref={wrapperRef} className="flex h-full flex-col">
       <EntryListHeader
@@ -267,31 +273,26 @@ export function PictureMasonry({
         sidebarVisible={sidebarVisible}
       />
 
-      {/* Masonry container */}
       <div
-        ref={(el) => {
-          scrollContainerRef.current = el
-          // eslint-disable-next-line react-hooks/immutability
-          ;(containerRef as React.MutableRefObject<HTMLDivElement | null>).current = el
-        }}
-        className="min-h-0 flex-1 overflow-hidden"
+        ref={scrollContainerRef}
+        className="min-h-0 flex-1 overflow-hidden [overflow-anchor:none]"
       >
         {isLoading ? (
           <div className="h-full overflow-auto p-4">
             <MasonrySkeleton />
           </div>
-        ) : items.length === 0 ? (
+        ) : entries.length === 0 ? (
           <div className="h-full overflow-auto p-4">
             <EmptyState />
           </div>
         ) : isReady ? (
           <VirtuosoMasonry
-            key={virtuosoKey}
+            key={filterKey}
             data={items}
             columnCount={currentColumn}
-            ItemContent={ItemContent}
-            context={context}
+            ItemContent={MasonryItemContent}
             className="h-full p-4"
+            style={{ paddingBottom: scrollReadEndPaddingHeight || undefined }}
           />
         ) : null}
         {isFetchingNextPage && <LoadingMore />}
@@ -302,7 +303,7 @@ export function PictureMasonry({
 
 function MasonrySkeleton() {
   return (
-    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
       {Array.from({ length: 12 }, (_, i) => (
         <div key={i} className="animate-pulse">
           <div

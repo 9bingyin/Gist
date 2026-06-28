@@ -57,6 +57,21 @@ func (s *settingsRepoStub) Set(ctx context.Context, key, value string) error {
 	return nil
 }
 
+func (s *settingsRepoStub) SetMany(ctx context.Context, values map[string]string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for key := range values {
+		if err := s.setErr[key]; err != nil {
+			return err
+		}
+	}
+	for key, value := range values {
+		s.data[key] = value
+	}
+	return nil
+}
+
 func (s *settingsRepoStub) GetByPrefix(ctx context.Context, prefix string) ([]model.Setting, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -7,7 +7,7 @@ import (
 
 const (
 	AppName    = "Gist"
-	AppVersion = "1.0.0"
+	AppVersion = "1.2.0"
 	AppRepo    = "https://github.com/9bingyin/Gist"
 )
 
@@ -30,6 +30,7 @@ type Config struct {
 	StaticDir     string
 	LogLevel      string
 	EnableSwagger bool
+	PprofAddr     string
 }
 
 func Load() Config {
@@ -56,6 +57,10 @@ func Load() Config {
 	}
 
 	enableSwagger := os.Getenv("GIST_SWAGGER") == "true"
+	pprofAddr := os.Getenv("GIST_PPROF_ADDR")
+	if os.Getenv("GIST_ENABLE_PPROF") == "true" && pprofAddr == "" {
+		pprofAddr = "127.0.0.1:6060"
+	}
 
 	return Config{
 		Addr:          addr,
@@ -64,6 +69,7 @@ func Load() Config {
 		StaticDir:     filepath.Clean(staticDir),
 		LogLevel:      logLevel,
 		EnableSwagger: enableSwagger,
+		PprofAddr:     pprofAddr,
 	}
 }
 

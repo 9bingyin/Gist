@@ -58,16 +58,11 @@ definitions:
         type: string
       rateLimit:
         type: integer
-      reasoningEffort:
-        type: string
+      requestOptions:
+        additionalProperties: {}
+        type: object
       summaryLanguage:
         type: string
-      thinking:
-        type: boolean
-      thinkingBudget:
-        type: integer
-      thinkingSupported:
-        type: boolean
     type: object
   internal_handler.aiSettingsResponse:
     properties:
@@ -85,16 +80,11 @@ definitions:
         type: string
       rateLimit:
         type: integer
-      reasoningEffort:
-        type: string
+      requestOptions:
+        additionalProperties: {}
+        type: object
       summaryLanguage:
         type: string
-      thinking:
-        type: boolean
-      thinkingBudget:
-        type: integer
-      thinkingSupported:
-        type: boolean
     type: object
   internal_handler.aiTestRequest:
     properties:
@@ -106,14 +96,9 @@ definitions:
         type: string
       provider:
         type: string
-      reasoningEffort:
-        type: string
-      thinking:
-        type: boolean
-      thinkingBudget:
-        type: integer
-      thinkingSupported:
-        type: boolean
+      requestOptions:
+        additionalProperties: {}
+        type: object
     type: object
   internal_handler.aiTestResponse:
     properties:
@@ -360,6 +345,8 @@ definitions:
         type: boolean
       fallbackUserAgent:
         type: string
+      markReadOnScroll:
+        type: boolean
     type: object
   internal_handler.generalSettingsResponse:
     properties:
@@ -367,6 +354,8 @@ definitions:
         type: boolean
       fallbackUserAgent:
         type: string
+      markReadOnScroll:
+        type: boolean
     type: object
   internal_handler.iconClearResponse:
     properties:
@@ -543,6 +532,15 @@ definitions:
     properties:
       type:
         type: string
+    type: object
+  internal_handler.updateManyReadRequest:
+    properties:
+      ids:
+        items:
+          type: string
+        type: array
+      read:
+        type: boolean
     type: object
   internal_handler.updateProfileRequest:
     properties:
@@ -806,6 +804,10 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/internal_handler.errorResponse'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/internal_handler.errorResponse'
         "504":
           description: Gateway Timeout
           schema:
@@ -859,8 +861,6 @@ paths:
             additionalProperties:
               type: string
             type: object
-      security:
-      - BearerAuth: []
       summary: Logout
       tags:
       - auth
@@ -1182,6 +1182,30 @@ paths:
           schema:
             $ref: '#/definitions/internal_handler.errorResponse'
       summary: Mark all as read
+      tags:
+      - entries
+  /entries/read:
+    patch:
+      consumes:
+      - application/json
+      description: Mark entries as read or unread by ID list
+      parameters:
+      - description: Read status for entries
+        in: body
+        name: read
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.updateManyReadRequest'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_handler.errorResponse'
+      summary: Update read status for entries
       tags:
       - entries
   /entries/readability-cache:
@@ -1780,8 +1804,8 @@ paths:
       - settings
   /settings/general:
     get:
-      description: Get general application settings including fallback user agent
-        and auto readability
+      description: Get general application settings including fallback user agent,
+        auto readability, and mark-read-on-scroll
       produces:
       - application/json
       responses:

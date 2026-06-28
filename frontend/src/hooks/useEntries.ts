@@ -4,6 +4,7 @@ import {
   listEntries,
   getEntry,
   updateEntryReadStatus,
+  updateManyEntryReadStatus,
   updateEntryStarred,
   markAllAsRead,
   getUnreadCounts,
@@ -14,6 +15,10 @@ import type { Entry, EntryListParams, MarkAllReadParams } from '@/types/api'
 
 function entriesQueryKey(params: EntryListParams) {
   return ['entries', params] as const
+}
+
+function uniqueStrings(values: string[]): string[] {
+  return Array.from(new Set(values))
 }
 
 export function useEntriesInfinite(params: Omit<EntryListParams, 'offset'>) {
@@ -52,6 +57,12 @@ interface MarkAsReadOptions {
   id: string
   read: boolean
   /** Skip invalidating entries query (for lightbox to avoid list refresh during viewing) */
+  skipInvalidate?: boolean
+}
+
+interface MarkManyAsReadOptions {
+  ids: string[]
+  read: boolean
   skipInvalidate?: boolean
 }
 
@@ -113,6 +124,79 @@ export function useMarkAsRead() {
       // Rollback to previous values on error
       if (context?.previousEntry) {
         queryClient.setQueryData(['entry', id], context.previousEntry)
+      }
+      if (context?.previousEntries) {
+        for (const [queryKey, data] of context.previousEntries) {
+          queryClient.setQueryData(queryKey, data)
+        }
+      }
+    },
+  })
+}
+
+export function useMarkManyAsRead() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({ ids, read }: MarkManyAsReadOptions) => {
+      const uniqueIds = uniqueStrings(ids)
+      if (uniqueIds.length === 0) return
+      await updateManyEntryReadStatus(uniqueIds, read)
+    },
+
+    onMutate: async ({ ids, read }) => {
+      const uniqueIds = uniqueStrings(ids)
+      await Promise.all(uniqueIds.map((id) => queryClient.cancelQueries({ queryKey: ['entry', id] })))
+      await queryClient.cancelQueries({ queryKey: ['entries'] })
+
+      const previousEntriesById = new Map(
+        uniqueIds.map((id) => [id, queryClient.getQueryData<Entry>(['entry', id])] as const)
+      )
+      const previousEntries = queryClient.getQueriesData<{ pages: { entries: Entry[] }[] }>({
+        queryKey: ['entries'],
+      })
+      const idSet = new Set(uniqueIds)
+
+      for (const id of uniqueIds) {
+        queryClient.setQueryData(['entry', id], (old: Entry | undefined) => {
+          if (!old) return old
+          return { ...old, read }
+        })
+      }
+
+      queryClient.setQueriesData<{ pages: { entries: Entry[] }[] }>(
+        { queryKey: ['entries'] },
+        (old) => {
+          if (!old) return old
+          return {
+            ...old,
+            pages: old.pages.map((page) => ({
+              ...page,
+              entries: page.entries.map((entry) =>
+                idSet.has(entry.id) ? { ...entry, read } : entry
+              ),
+            })),
+          }
+        }
+      )
+
+      return { previousEntriesById, previousEntries }
+    },
+
+    onSuccess: (_, { skipInvalidate }) => {
+      queryClient.invalidateQueries({ queryKey: ['unreadCounts'] })
+      if (!skipInvalidate) {
+        queryClient.invalidateQueries({ queryKey: ['entries'] })
+      }
+    },
+
+    onError: (_, { ids }, context) => {
+      const uniqueIds = uniqueStrings(ids)
+      for (const id of uniqueIds) {
+        const previousEntry = context?.previousEntriesById.get(id)
+        if (previousEntry) {
+          queryClient.setQueryData(['entry', id], previousEntry)
+        }
       }
       if (context?.previousEntries) {
         for (const [queryKey, data] of context.previousEntries) {

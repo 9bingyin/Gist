@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"context"
+	"errors"
 	"gist/backend/internal/service"
 	"testing"
 
@@ -17,8 +18,7 @@ func TestSettingsService_GetAISettings_Defaults(t *testing.T) {
 	settings, err := svc.GetAISettings(context.Background())
 	require.NoError(t, err)
 	require.Equal(t, ai.ProviderOpenAI, settings.Provider)
-	require.Equal(t, 10000, settings.ThinkingBudget)
-	require.Equal(t, "medium", settings.ReasoningEffort)
+	require.Empty(t, settings.RequestOptions)
 	require.Equal(t, "zh-CN", settings.SummaryLanguage)
 	require.Equal(t, ai.DefaultRateLimit, settings.RateLimit)
 }
@@ -29,9 +29,7 @@ func TestSettingsService_GetAISettings_MaskedKey(t *testing.T) {
 	repo.data[service.KeyAIAPIKey] = "sk-test-1234567890"
 	repo.data[service.KeyAIBaseURL] = "https://api.example.com"
 	repo.data[service.KeyAIModel] = "gpt-4"
-	repo.data[service.KeyAIThinking] = "true"
-	repo.data[service.KeyAIThinkingBudget] = "9000"
-	repo.data[service.KeyAIReasoningEffort] = "high"
+	repo.data[service.KeyAIRequestOptions] = `{"temperature":0.2,"extra_body":{"trace":true},"stop":["END"]}`
 	repo.data[service.KeyAISummaryLanguage] = "en-US"
 	repo.data[service.KeyAIAutoTranslate] = "true"
 	repo.data[service.KeyAIAutoSummary] = "true"
@@ -44,9 +42,19 @@ func TestSettingsService_GetAISettings_MaskedKey(t *testing.T) {
 	require.NotEmpty(t, settings.APIKey)
 	require.Equal(t, ai.ProviderOpenAI, settings.Provider)
 	require.Equal(t, "gpt-4", settings.Model)
-	require.True(t, settings.Thinking)
-	require.Equal(t, 9000, settings.ThinkingBudget)
+	require.Equal(t, map[string]any{"temperature": 0.2, "extra_body": map[string]any{"trace": true}, "stop": []any{"END"}}, settings.RequestOptions)
 	require.Equal(t, 5, settings.RateLimit)
+}
+
+func TestSettingsService_GetAISettings_InvalidRequestOptions(t *testing.T) {
+	repo := newSettingsRepoStub()
+	repo.data[service.KeyAIRequestOptions] = `{invalid json`
+
+	svc := service.NewSettingsService(repo, ai.NewRateLimiter(0))
+	settings, err := svc.GetAISettings(context.Background())
+
+	require.Nil(t, settings)
+	require.ErrorContains(t, err, "unmarshal request options")
 }
 
 func TestSettingsService_SetAISettings_StoresAndUpdatesLimiter(t *testing.T) {
@@ -59,9 +67,7 @@ func TestSettingsService_SetAISettings_StoresAndUpdatesLimiter(t *testing.T) {
 		APIKey:          "sk-realkey-123",
 		BaseURL:         "https://api.example.com",
 		Model:           "gpt-4",
-		Thinking:        true,
-		ThinkingBudget:  5000,
-		ReasoningEffort: "high",
+		RequestOptions:  map[string]any{"temperature": 0.2},
 		SummaryLanguage: "en-US",
 		AutoTranslate:   true,
 		AutoSummary:     true,
@@ -80,6 +86,7 @@ func TestSettingsService_SetAISettings_StoresAndUpdatesLimiter(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "sk-existing", repo.data[service.KeyAIAPIKey])
 	require.Equal(t, ai.DefaultRateLimit, limiter.GetLimit())
+	require.JSONEq(t, `{"temperature":0.2}`, repo.data[service.KeyAIRequestOptions])
 }
 
 func TestSettingsService_GeneralSettings(t *testing.T) {
@@ -89,9 +96,6 @@ func TestSettingsService_GeneralSettings(t *testing.T) {
 	err := svc.SetGeneralSettings(context.Background(), &service.GeneralSettings{
 		FallbackUserAgent: "UA-Test",
 		AutoReadability:   true,
-		MarkReadOnScroll:  true,
-		DefaultShowUnread: true,
-		KeepReadUntilExit: true,
 	})
 	require.NoError(t, err)
 
@@ -99,12 +103,24 @@ func TestSettingsService_GeneralSettings(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "UA-Test", settings.FallbackUserAgent)
 	require.True(t, settings.AutoReadability)
-	require.True(t, settings.MarkReadOnScroll)
-	require.True(t, settings.DefaultShowUnread)
-	require.True(t, settings.KeepReadUntilExit)
 
 	ua := svc.GetFallbackUserAgent(context.Background())
 	require.Equal(t, "UA-Test", ua)
+}
+
+func TestSettingsService_GeneralSettings_SetManyErrorIsAtomic(t *testing.T) {
+	repo := newSettingsRepoStub()
+	svc := service.NewSettingsService(repo, ai.NewRateLimiter(0))
+
+	repo.setErr[service.KeyMarkReadOnScroll] = errors.New("write failed")
+
+	err := svc.SetGeneralSettings(context.Background(), &service.GeneralSettings{
+		FallbackUserAgent: "UA-Test",
+		AutoReadability:   true,
+		MarkReadOnScroll:  true,
+	})
+	require.Error(t, err)
+	require.Empty(t, repo.data)
 }
 
 func TestSettingsService_ClearAnubisCookies(t *testing.T) {
@@ -125,11 +141,11 @@ func TestSettingsService_TestAI_InvalidConfig(t *testing.T) {
 	repo := newSettingsRepoStub()
 	svc := service.NewSettingsService(repo, ai.NewRateLimiter(0))
 
-	_, err := svc.TestAI(context.Background(), ai.ProviderOpenAI, "", "", "", false, false, 0, "")
+	_, err := svc.TestAI(context.Background(), ai.ProviderOpenAI, "", "", "", nil)
 	require.Error(t, err)
 
 	repo.data[service.KeyAIAPIKey] = ""
-	_, err = svc.TestAI(context.Background(), ai.ProviderOpenAI, "***", "", "gpt-4", false, false, 0, "")
+	_, err = svc.TestAI(context.Background(), ai.ProviderOpenAI, "***", "", "gpt-4", nil)
 	require.ErrorIs(t, err, ai.ErrMissingAPIKey)
 }
 

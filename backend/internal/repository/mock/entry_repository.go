@@ -190,6 +190,20 @@ func (mr *MockEntryRepositoryMockRecorder) MarkAllAsRead(ctx, feedID, folderID, 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkAllAsRead", reflect.TypeOf((*MockEntryRepository)(nil).MarkAllAsRead), ctx, feedID, folderID, contentType)
 }
 
+// UpdateManyReadStatus mocks base method.
+func (m *MockEntryRepository) UpdateManyReadStatus(ctx context.Context, ids []int64, read bool) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateManyReadStatus", ctx, ids, read)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateManyReadStatus indicates an expected call of UpdateManyReadStatus.
+func (mr *MockEntryRepositoryMockRecorder) UpdateManyReadStatus(ctx, ids, read any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateManyReadStatus", reflect.TypeOf((*MockEntryRepository)(nil).UpdateManyReadStatus), ctx, ids, read)
+}
+
 // UpdateReadStatus mocks base method.
 func (m *MockEntryRepository) UpdateReadStatus(ctx context.Context, id int64, read bool) error {
 	m.ctrl.T.Helper()

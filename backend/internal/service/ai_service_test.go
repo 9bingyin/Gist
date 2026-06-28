@@ -413,6 +413,7 @@ func TestAIService_TranslateBlocks_ContextCancelledDuringProcessing(t *testing.T
 
 	// Create context that will be cancelled
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	// Start TranslateBlocks
 	blockInfos, resultCh, errCh, err := svc.TranslateBlocks(ctx, 1, "<p>Block 1</p><p>Block 2</p><p>Block 3</p>", "title", false)

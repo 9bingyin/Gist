@@ -113,3 +113,17 @@ func (mr *MockSettingsRepositoryMockRecorder) Set(ctx, key, value any) *gomock.C
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Set", reflect.TypeOf((*MockSettingsRepository)(nil).Set), ctx, key, value)
 }
+
+// SetMany mocks base method.
+func (m *MockSettingsRepository) SetMany(ctx context.Context, values map[string]string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SetMany", ctx, values)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SetMany indicates an expected call of SetMany.
+func (mr *MockSettingsRepositoryMockRecorder) SetMany(ctx, values any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetMany", reflect.TypeOf((*MockSettingsRepository)(nil).SetMany), ctx, values)
+}

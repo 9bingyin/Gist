@@ -64,6 +64,7 @@ func TestHandler_RegisterRoutes(t *testing.T) {
 	assertRoute(t, routes, http.MethodGet, "/entries")
 	assertRoute(t, routes, http.MethodGet, "/entries/:id")
 	assertRoute(t, routes, http.MethodPatch, "/entries/:id/read")
+	assertRoute(t, routes, http.MethodPatch, "/entries/read")
 	assertRoute(t, routes, http.MethodPatch, "/entries/:id/starred")
 	assertRoute(t, routes, http.MethodPost, "/entries/:id/fetch-readable")
 	assertRoute(t, routes, http.MethodPost, "/entries/mark-read")

@@ -46,54 +46,6 @@ function LoadingScreen() {
   )
 }
 
-function AppBootstrapShell() {
-  return (
-    <div className="flex h-dvh flex-col bg-background lg:flex-row">
-      <aside className="hidden w-72 shrink-0 border-r border-border/60 bg-muted/20 px-5 py-6 lg:flex lg:flex-col">
-        <div className="h-8 w-28 rounded-full bg-muted" />
-        <div className="mt-8 space-y-3">
-          {Array.from({ length: 6 }, (_, index) => (
-            <div key={index} className="h-10 rounded-xl bg-muted/80" />
-          ))}
-        </div>
-      </aside>
-      <div className="flex min-h-0 min-w-0 flex-1">
-        <section className="flex min-w-0 flex-1 flex-col border-r border-border/60 lg:max-w-md">
-          <div className="border-b border-border/60 px-4 py-4 sm:px-6">
-            <div className="h-6 w-40 rounded bg-muted" />
-          </div>
-          <div className="flex-1 space-y-px overflow-hidden px-2 py-2">
-            {Array.from({ length: 6 }, (_, index) => (
-              <div key={index} className="rounded-2xl px-3 py-4">
-                <div className="h-3 w-24 rounded bg-muted" />
-                <div className="mt-3 h-4 w-5/6 rounded bg-muted" />
-                <div className="mt-2 h-3 w-full rounded bg-muted/80" />
-                <div className="mt-2 h-3 w-2/3 rounded bg-muted/80" />
-              </div>
-            ))}
-          </div>
-        </section>
-        <section className="hidden min-w-0 flex-1 px-6 py-10 lg:block">
-          <div className="mx-auto max-w-3xl space-y-5">
-            <div className="h-10 w-3/4 rounded bg-muted" />
-            <div className="flex gap-4">
-              <div className="h-4 w-24 rounded bg-muted" />
-              <div className="h-4 w-32 rounded bg-muted" />
-            </div>
-            <div className="h-px w-full bg-border/60" />
-            {Array.from({ length: 8 }, (_, index) => (
-              <div
-                key={index}
-                className={`h-4 rounded bg-muted/80 ${index % 3 === 2 ? 'w-4/5' : 'w-full'}`}
-              />
-            ))}
-          </div>
-        </section>
-      </div>
-    </div>
-  )
-}
-
 function EntryContentPlaceholder({ message }: { message: string }) {
   return (
     <div className="flex h-full flex-col">
@@ -430,7 +382,7 @@ function AuthenticatedApp() {
   if (location === '/') {
     // 等待 appearanceSettings 加载完成再跳转，避免先跳 article 再跳正确类型
     if (isAppearanceLoading) {
-      return <AppBootstrapShell />
+      return <div className="h-full bg-background" />
     }
     const defaultType = visibleContentTypes[0] ?? 'article'
     return <Redirect to={`/all?type=${defaultType}`} replace />
@@ -438,7 +390,7 @@ function AuthenticatedApp() {
 
   // 等待 appearanceSettings 加载完成，避免显示默认三视图的闪烁
   if (isAppearanceLoading) {
-    return <AppBootstrapShell />
+    return <div className="h-full bg-background" />
   }
 
   // Sidebar component (shared between mobile and desktop)
@@ -462,13 +414,13 @@ function AuthenticatedApp() {
 
     if (isAddFeedPath(location)) {
       mobileContent = (
-        <div className="fixed inset-0 overflow-hidden safe-area-top">
+        <div className="h-dvh safe-area-top">
           <AddFeedPage onClose={handleCloseAddFeed} contentType={addFeedContentType} />
         </div>
       )
     } else if (contentType === 'picture') {
       mobileContent = (
-        <div className="fixed inset-0 flex flex-col overflow-hidden safe-area-top">
+        <div className="h-dvh flex flex-col overflow-hidden safe-area-top">
           <PictureMasonry
             selection={selection}
             contentType={contentType}
@@ -485,10 +437,8 @@ function AuthenticatedApp() {
       // browsers auto-hide the address bar / toolbar on scroll.
       // Only one panel is in document flow at a time; the other is hidden.
       mobileContent = (
-        <div className="relative min-h-dvh">
-          {/* List view - in document flow for window scroll.
-               Hidden (display:none) when detail is open so it doesn't
-               interfere with window scroll or virtualizer calculations. */}
+        <div className="relative h-dvh w-screen max-w-full overflow-hidden">
+          {/* List view - always rendered to preserve scroll position */}
           <div className={cn(
             'bg-background',
             mobileDetailOpen && 'hidden'
@@ -601,7 +551,31 @@ function AuthenticatedApp() {
 }
 
 function AppContent() {
-  const { isLoading, isAuthenticated, needsRegistration, needsLogin, isNetworkError, error, login, register, retry, clearError } = useAuth()
+  const [location, navigate] = useLocation()
+  const {
+    isLoading,
+    isAuthenticated,
+    needsRegistration,
+    needsLogin,
+    isNetworkError,
+    error,
+    shouldRedirectToRoot,
+    login,
+    register,
+    retry,
+    clearError,
+    consumeRootRedirect,
+  } = useAuth()
+
+  useEffect(() => {
+    if (!shouldRedirectToRoot) {
+      return
+    }
+    if (location !== '/') {
+      navigate('/', { replace: true })
+    }
+    consumeRootRedirect()
+  }, [shouldRedirectToRoot, location, navigate, consumeRootRedirect])
 
   if (isLoading) {
     return <LoadingScreen />
@@ -628,12 +602,14 @@ function AppContent() {
 
 function App() {
   return (
-    <TooltipProvider delayDuration={300}>
-      <Router>
-        <AppContent />
-        <UpdateNotice />
-      </Router>
-    </TooltipProvider>
+    <div className="app-shell">
+      <TooltipProvider delayDuration={300}>
+        <Router>
+          <AppContent />
+          <UpdateNotice />
+        </Router>
+      </TooltipProvider>
+    </div>
   )
 }
 

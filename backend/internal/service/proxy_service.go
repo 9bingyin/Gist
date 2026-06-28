@@ -2,14 +2,18 @@
 package service
 
 import (
+	"bytes"
 	"context"
+	"encoding/xml"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/Noooste/azuretls-client"
+	"github.com/gabriel-vasile/mimetype"
 
 	"gist/backend/internal/config"
 	"gist/backend/pkg/logger"
@@ -24,6 +28,7 @@ var (
 	ErrRequestTimeout   = fmt.Errorf("request timeout")
 	ErrFetchFailed      = fmt.Errorf("fetch failed")
 	ErrUpstreamRejected = fmt.Errorf("upstream rejected")
+	ErrInvalidImage     = fmt.Errorf("invalid image")
 )
 
 type ProxyResult struct {
@@ -141,15 +146,41 @@ func (s *proxyService) doFetch(ctx context.Context, session *azuretls.Session, i
 		return nil, ErrFetchFailed
 	}
 
-	contentType := resp.Header.Get("Content-Type")
-	if contentType == "" {
-		contentType = "application/octet-stream"
+	contentType, err := detectProxyImageContentType(data)
+	if err != nil {
+		logger.Warn("proxy invalid image", "module", "service", "action", "fetch", "resource", "proxy", "result", "failed", "host", parsedURL.Host, "error", err)
+		return nil, err
 	}
 
 	return &ProxyResult{
 		Data:        data,
 		ContentType: contentType,
 	}, nil
+}
+
+func detectProxyImageContentType(data []byte) (string, error) {
+	mtype := mimetype.Detect(data)
+	contentType := strings.ToLower(mtype.String())
+	if strings.HasPrefix(contentType, "image/") {
+		return contentType, nil
+	}
+	if isSVGDocument(data) {
+		return "image/svg+xml", nil
+	}
+	return "", fmt.Errorf("%w: %s", ErrInvalidImage, contentType)
+}
+
+func isSVGDocument(data []byte) bool {
+	decoder := xml.NewDecoder(bytes.NewReader(data))
+	for {
+		token, err := decoder.Token()
+		if err != nil {
+			return false
+		}
+		if start, ok := token.(xml.StartElement); ok {
+			return strings.EqualFold(start.Name.Local, "svg")
+		}
+	}
 }
 
 // buildReferer constructs the Referer header value

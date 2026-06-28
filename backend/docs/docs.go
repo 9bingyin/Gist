@@ -335,6 +335,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/internal_handler.errorResponse"
                         }
                     },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.errorResponse"
+                        }
+                    },
                     "504": {
                         "description": "Gateway Timeout",
                         "schema": {
@@ -398,11 +404,6 @@ const docTemplate = `{
         },
         "/auth/logout": {
             "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
                 "description": "Clear authentication cookie and log out the user",
                 "produces": [
                     "application/json"
@@ -713,6 +714,43 @@ const docTemplate = `{
                         "required": true,
                         "schema": {
                             "$ref": "#/definitions/internal_handler.markAllReadRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.errorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/entries/read": {
+            "patch": {
+                "description": "Mark entries as read or unread by ID list",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "entries"
+                ],
+                "summary": "Update read status for entries",
+                "parameters": [
+                    {
+                        "description": "Read status for entries",
+                        "name": "read",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.updateManyReadRequest"
                         }
                     }
                 ],
@@ -1812,7 +1850,7 @@ const docTemplate = `{
         },
         "/settings/general": {
             "get": {
-                "description": "Get general application settings including fallback user agent and auto readability",
+                "description": "Get general application settings including fallback user agent, auto readability, and mark-read-on-scroll",
                 "produces": [
                     "application/json"
                 ],
@@ -2120,20 +2158,12 @@ const docTemplate = `{
                 "rateLimit": {
                     "type": "integer"
                 },
-                "reasoningEffort": {
-                    "type": "string"
+                "requestOptions": {
+                    "type": "object",
+                    "additionalProperties": {}
                 },
                 "summaryLanguage": {
                     "type": "string"
-                },
-                "thinking": {
-                    "type": "boolean"
-                },
-                "thinkingBudget": {
-                    "type": "integer"
-                },
-                "thinkingSupported": {
-                    "type": "boolean"
                 }
             }
         },
@@ -2161,20 +2191,12 @@ const docTemplate = `{
                 "rateLimit": {
                     "type": "integer"
                 },
-                "reasoningEffort": {
-                    "type": "string"
+                "requestOptions": {
+                    "type": "object",
+                    "additionalProperties": {}
                 },
                 "summaryLanguage": {
                     "type": "string"
-                },
-                "thinking": {
-                    "type": "boolean"
-                },
-                "thinkingBudget": {
-                    "type": "integer"
-                },
-                "thinkingSupported": {
-                    "type": "boolean"
                 }
             }
         },
@@ -2193,17 +2215,9 @@ const docTemplate = `{
                 "provider": {
                     "type": "string"
                 },
-                "reasoningEffort": {
-                    "type": "string"
-                },
-                "thinking": {
-                    "type": "boolean"
-                },
-                "thinkingBudget": {
-                    "type": "integer"
-                },
-                "thinkingSupported": {
-                    "type": "boolean"
+                "requestOptions": {
+                    "type": "object",
+                    "additionalProperties": {}
                 }
             }
         },
@@ -2585,6 +2599,9 @@ const docTemplate = `{
                 },
                 "fallbackUserAgent": {
                     "type": "string"
+                },
+                "markReadOnScroll": {
+                    "type": "boolean"
                 }
             }
         },
@@ -2596,6 +2613,9 @@ const docTemplate = `{
                 },
                 "fallbackUserAgent": {
                     "type": "string"
+                },
+                "markReadOnScroll": {
+                    "type": "boolean"
                 }
             }
         },
@@ -2870,6 +2890,20 @@ const docTemplate = `{
             "properties": {
                 "type": {
                     "type": "string"
+                }
+            }
+        },
+        "internal_handler.updateManyReadRequest": {
+            "type": "object",
+            "properties": {
+                "ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "read": {
+                    "type": "boolean"
                 }
             }
         },

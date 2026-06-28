@@ -160,16 +160,12 @@ func (f *ClientFactory) newTransport(proxyURL, ipStack string) *http.Transport {
 	dialFunc := f.makeDialFunc(ipStack)
 
 	if proxyURL == "" {
-		return &http.Transport{
-			DialContext: dialFunc,
-		}
+		return newOneShotTransport(dialFunc, nil)
 	}
 
 	parsed, err := url.Parse(proxyURL)
 	if err != nil {
-		return &http.Transport{
-			DialContext: dialFunc,
-		}
+		return newOneShotTransport(dialFunc, nil)
 	}
 
 	// Check if it's a SOCKS proxy
@@ -188,23 +184,24 @@ func (f *ClientFactory) newTransport(proxyURL, ipStack string) *http.Transport {
 		// Create SOCKS5 dialer with custom dial function
 		dialer, err := proxy.SOCKS5("tcp", parsed.Host, auth, &ipStackDialer{ipStack: ipStack})
 		if err != nil {
-			return &http.Transport{
-				DialContext: dialFunc,
-			}
+			return newOneShotTransport(dialFunc, nil)
 		}
 
 		// Create transport with SOCKS5 dialer
-		return &http.Transport{
-			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-				return dialer.Dial(network, addr)
-			},
-		}
+		return newOneShotTransport(func(ctx context.Context, network, addr string) (net.Conn, error) {
+			return dialer.Dial(network, addr)
+		}, nil)
 	}
 
 	// For HTTP/HTTPS proxies, use standard http.ProxyURL with custom dial
+	return newOneShotTransport(dialFunc, http.ProxyURL(parsed))
+}
+
+func newOneShotTransport(dialContext func(ctx context.Context, network, addr string) (net.Conn, error), proxy func(*http.Request) (*url.URL, error)) *http.Transport {
 	return &http.Transport{
-		Proxy:       http.ProxyURL(parsed),
-		DialContext: dialFunc,
+		Proxy:             proxy,
+		DialContext:       dialContext,
+		DisableKeepAlives: true,
 	}
 }
 

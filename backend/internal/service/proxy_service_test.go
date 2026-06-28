@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"gist/backend/internal/service"
@@ -12,6 +13,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 )
+
+var testPNGData = []byte{0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A}
 
 func TestBuildReferer(t *testing.T) {
 	parsed, _ := http.NewRequest(http.MethodGet, "https://example.com/img.png", nil)
@@ -41,7 +44,7 @@ func TestProxyService_FetchImage_InvalidProtocol(t *testing.T) {
 func TestProxyService_FetchImage_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "image/png")
-		_, _ = w.Write([]byte("image-data"))
+		_, _ = w.Write(testPNGData)
 	}))
 	defer server.Close()
 
@@ -51,12 +54,12 @@ func TestProxyService_FetchImage_Success(t *testing.T) {
 	result, err := svc.FetchImage(context.Background(), server.URL+"/img.png", "")
 	require.NoError(t, err)
 	require.Equal(t, "image/png", result.ContentType)
-	require.Equal(t, []byte("image-data"), result.Data)
+	require.Equal(t, testPNGData, result.Data)
 }
 
-func TestProxyService_FetchImage_DefaultContentType(t *testing.T) {
+func TestProxyService_FetchImage_InvalidImage(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "")
+		w.Header().Set("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("data"))
 	}))
@@ -65,9 +68,42 @@ func TestProxyService_FetchImage_DefaultContentType(t *testing.T) {
 	clientFactory := network.NewClientFactoryForTest(&http.Client{})
 	svc := service.NewProxyService(clientFactory, nil)
 
-	result, err := svc.FetchImage(context.Background(), server.URL+"/img.png", "")
+	_, err := svc.FetchImage(context.Background(), server.URL+"/img.png", "")
+	require.ErrorIs(t, err, service.ErrInvalidImage)
+}
+
+func TestProxyService_FetchImage_SVG(t *testing.T) {
+	svgData := []byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"></svg>`)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/svg+xml")
+		_, _ = w.Write(svgData)
+	}))
+	defer server.Close()
+
+	clientFactory := network.NewClientFactoryForTest(&http.Client{})
+	svc := service.NewProxyService(clientFactory, nil)
+
+	result, err := svc.FetchImage(context.Background(), server.URL+"/img.svg", "")
 	require.NoError(t, err)
-	require.Equal(t, "application/octet-stream", result.ContentType)
+	require.Equal(t, "image/svg+xml", result.ContentType)
+	require.Equal(t, svgData, result.Data)
+}
+
+func TestProxyService_FetchImage_SVGWithLongPrefixFallback(t *testing.T) {
+	svgData := []byte(`<?xml version="1.0"?><!DOCTYPE svg><!-- ` + strings.Repeat("prefix", 700) + ` --><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"></svg>`)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/xml")
+		_, _ = w.Write(svgData)
+	}))
+	defer server.Close()
+
+	clientFactory := network.NewClientFactoryForTest(&http.Client{})
+	svc := service.NewProxyService(clientFactory, nil)
+
+	result, err := svc.FetchImage(context.Background(), server.URL+"/img.svg", "")
+	require.NoError(t, err)
+	require.Equal(t, "image/svg+xml", result.ContentType)
+	require.Equal(t, svgData, result.Data)
 }
 
 func TestProxyService_FetchImage_UpstreamRejected(t *testing.T) {

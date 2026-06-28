@@ -1,6 +1,7 @@
 package handler_test
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -54,13 +55,20 @@ func TestSettingsHandler_UpdateAISettings_Success(t *testing.T) {
 		"provider": "openai",
 		"baseUrl":  "https://api.openai.com/v1",
 		"model":    "gpt-4",
+		"requestOptions": map[string]any{
+			"temperature": 0.2,
+			"extra_body":  map[string]any{"trace": true},
+		},
 	}
 	req := newJSONRequest(http.MethodPut, "/settings/ai", reqBody)
 	c, rec := newTestContext(e, req)
 
 	mockService.EXPECT().
 		SetAISettings(gomock.Any(), gomock.Any()).
-		Return(nil)
+		DoAndReturn(func(_ context.Context, settings *service.AISettings) error {
+			require.Equal(t, map[string]any{"temperature": 0.2, "extra_body": map[string]any{"trace": true}}, settings.RequestOptions)
+			return nil
+		})
 
 	mockService.EXPECT().
 		GetAISettings(gomock.Any()).
@@ -147,10 +155,7 @@ func TestSettingsHandler_GetGeneralSettings_Success(t *testing.T) {
 	c, rec := newTestContext(e, req)
 
 	settings := &service.GeneralSettings{
-		AutoReadability:   true,
-		MarkReadOnScroll:  true,
-		DefaultShowUnread: true,
-		KeepReadUntilExit: true,
+		AutoReadability: true,
 	}
 
 	mockService.EXPECT().
@@ -163,9 +168,6 @@ func TestSettingsHandler_GetGeneralSettings_Success(t *testing.T) {
 	var resp handler.GeneralSettingsResponse
 	assertJSONResponse(t, rec, http.StatusOK, &resp)
 	require.True(t, resp.AutoReadability)
-	require.True(t, resp.MarkReadOnScroll)
-	require.True(t, resp.DefaultShowUnread)
-	require.True(t, resp.KeepReadUntilExit)
 }
 
 func TestSettingsHandler_UpdateGeneralSettings_Success(t *testing.T) {
@@ -177,21 +179,22 @@ func TestSettingsHandler_UpdateGeneralSettings_Success(t *testing.T) {
 
 	e := newTestEcho()
 	reqBody := map[string]interface{}{
-		"autoReadability":   true,
-		"markReadOnScroll":  true,
-		"defaultShowUnread": true,
-		"keepReadUntilExit": true,
+		"autoReadability": true,
 	}
 	req := newJSONRequest(http.MethodPut, "/settings/general", reqBody)
 	c, rec := newTestContext(e, req)
 
 	mockService.EXPECT().
-		SetGeneralSettings(gomock.Any(), gomock.Any()).
-		Return(nil)
+		SetGeneralSettings(gomock.Any(), gomock.AssignableToTypeOf(&service.GeneralSettings{})).
+		DoAndReturn(func(_ context.Context, settings *service.GeneralSettings) error {
+			require.True(t, settings.AutoReadability)
+			require.True(t, settings.MarkReadOnScroll)
+			return nil
+		})
 
 	mockService.EXPECT().
 		GetGeneralSettings(gomock.Any()).
-		Return(&service.GeneralSettings{AutoReadability: true, MarkReadOnScroll: true, DefaultShowUnread: true, KeepReadUntilExit: true}, nil)
+		Return(&service.GeneralSettings{AutoReadability: true}, nil)
 
 	err := h.UpdateGeneralSettings(c)
 	require.NoError(t, err)
@@ -267,12 +270,16 @@ func TestSettingsHandler_TestAI_Success(t *testing.T) {
 		"apiKey":   "sk-test",
 		"baseUrl":  "https://api.openai.com/v1",
 		"model":    "gpt-4",
+		"requestOptions": map[string]any{
+			"temperature": 0.2,
+			"extra_body":  map[string]any{"trace": true},
+		},
 	}
 	req := newJSONRequest(http.MethodPost, "/settings/ai/test", reqBody)
 	c, rec := newTestContext(e, req)
 
 	mockService.EXPECT().
-		TestAI(gomock.Any(), "openai", "sk-test", "https://api.openai.com/v1", "gpt-4", false, false, 0, "").
+		TestAI(gomock.Any(), "openai", "sk-test", "https://api.openai.com/v1", "gpt-4", map[string]any{"temperature": 0.2, "extra_body": map[string]any{"trace": true}}).
 		Return("OK", nil)
 
 	err := h.TestAI(c)
@@ -321,7 +328,7 @@ func TestSettingsHandler_TestAI_AnthropicBaseURLOptional(t *testing.T) {
 	c, rec := newTestContext(e, req)
 
 	mockService.EXPECT().
-		TestAI(gomock.Any(), "anthropic", "sk-ant-test", "", "claude-sonnet-4-20250514", false, false, 0, "").
+		TestAI(gomock.Any(), "anthropic", "sk-ant-test", "", "claude-sonnet-4-20250514", map[string]any(nil)).
 		Return("OK", nil)
 
 	err := h.TestAI(c)

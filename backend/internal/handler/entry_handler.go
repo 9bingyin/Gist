@@ -13,6 +13,8 @@ import (
 	"gist/backend/pkg/logger"
 )
 
+const maxEntryReadBatchIDs = 1000
+
 type EntryHandler struct {
 	service            service.EntryService
 	readabilityService service.ReadabilityService
@@ -25,6 +27,7 @@ func NewEntryHandler(service service.EntryService, readabilityService service.Re
 func (h *EntryHandler) RegisterRoutes(g *echo.Group) {
 	g.GET("/entries", h.List)
 	g.GET("/entries/:id", h.GetByID)
+	g.PATCH("/entries/read", h.UpdateManyReadStatus)
 	g.PATCH("/entries/:id/read", h.UpdateReadStatus)
 	g.PATCH("/entries/:id/starred", h.UpdateStarredStatus)
 	g.POST("/entries/:id/fetch-readable", h.FetchReadable)
@@ -64,6 +67,11 @@ type updateReadRequest struct {
 	Read bool `json:"read"`
 }
 
+type updateManyReadRequest struct {
+	Read bool     `json:"read"`
+	IDs  []string `json:"ids"`
+}
+
 type updateStarredRequest struct {
 	Starred bool `json:"starred"`
 }
@@ -84,6 +92,31 @@ type markAllReadRequest struct {
 
 type unreadCountsResponse struct {
 	Counts map[string]int `json:"counts"`
+}
+
+func parseEntryIDList(rawIDs []string) ([]int64, string) {
+	if len(rawIDs) == 0 {
+		return nil, "ids required"
+	}
+	if len(rawIDs) > maxEntryReadBatchIDs {
+		return nil, "too many ids"
+	}
+
+	ids := make([]int64, 0, len(rawIDs))
+	seen := make(map[int64]struct{}, len(rawIDs))
+	for _, rawID := range rawIDs {
+		id, err := strconv.ParseInt(rawID, 10, 64)
+		if err != nil || id <= 0 {
+			return nil, "invalid id"
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		ids = append(ids, id)
+	}
+
+	return ids, ""
 }
 
 // List returns a list of entries.
@@ -238,6 +271,35 @@ func (h *EntryHandler) UpdateReadStatus(c echo.Context) error {
 	}
 
 	logger.Info("entry read status updated", "module", "handler", "action", "update", "resource", "entry", "result", "ok", "entry_id", id, "read", req.Read)
+	return c.NoContent(http.StatusNoContent)
+}
+
+// UpdateManyReadStatus updates the read status of multiple entries.
+// @Summary Update read status for entries
+// @Description Mark entries as read or unread by ID list
+// @Tags entries
+// @Accept json
+// @Produce json
+// @Param read body updateManyReadRequest true "Read status for entries"
+// @Success 204 "No Content"
+// @Failure 400 {object} errorResponse
+// @Router /entries/read [patch]
+func (h *EntryHandler) UpdateManyReadStatus(c echo.Context) error {
+	var req updateManyReadRequest
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, errorResponse{Error: "invalid request"})
+	}
+	ids, validationError := parseEntryIDList(req.IDs)
+	if validationError != "" {
+		return c.JSON(http.StatusBadRequest, errorResponse{Error: validationError})
+	}
+
+	if err := h.service.MarkManyAsRead(c.Request().Context(), ids, req.Read); err != nil {
+		logger.Error("entries read status update failed", "module", "handler", "action", "update", "resource", "entry", "result", "failed", "count", len(ids), "read", req.Read, "error", err)
+		return writeServiceError(c, err)
+	}
+
+	logger.Info("entries read status updated", "module", "handler", "action", "update", "resource", "entry", "result", "ok", "count", len(ids), "read", req.Read)
 	return c.NoContent(http.StatusNoContent)
 }
 

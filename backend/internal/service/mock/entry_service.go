@@ -173,3 +173,17 @@ func (mr *MockEntryServiceMockRecorder) MarkAsStarred(ctx, id, starred any) *gom
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkAsStarred", reflect.TypeOf((*MockEntryService)(nil).MarkAsStarred), ctx, id, starred)
 }
+
+// MarkManyAsRead mocks base method.
+func (m *MockEntryService) MarkManyAsRead(ctx context.Context, ids []int64, read bool) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MarkManyAsRead", ctx, ids, read)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// MarkManyAsRead indicates an expected call of MarkManyAsRead.
+func (mr *MockEntryServiceMockRecorder) MarkManyAsRead(ctx, ids, read any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkManyAsRead", reflect.TypeOf((*MockEntryService)(nil).MarkManyAsRead), ctx, ids, read)
+}

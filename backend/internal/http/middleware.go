@@ -125,6 +125,7 @@ func JWTAuthMiddleware(authService service.AuthService) echo.MiddlewareFunc {
 			// Validate token
 			valid, err := authService.ValidateToken(token)
 			if err != nil || !valid {
+				clearAuthCookie(c)
 				logger.Warn("auth invalid",
 					"module", "http",
 					"action", "request",
@@ -142,4 +143,17 @@ func JWTAuthMiddleware(authService service.AuthService) echo.MiddlewareFunc {
 			return next(c)
 		}
 	}
+}
+
+func clearAuthCookie(c echo.Context) {
+	cookie := &http.Cookie{
+		Name:     AuthCookieName,
+		Value:    "",
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   c.Request().TLS != nil,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   -1,
+	}
+	c.SetCookie(cookie)
 }

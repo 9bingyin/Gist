@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { useAuthStore } from '@/stores/auth-store'
 
 export function useAuth() {
-  const { state, user, error, initialize, login, register, logout, retry, clearError } = useAuthStore()
+  const { state, user, error, shouldRedirectToRoot, initialize, login, register, logout, retry, clearError, consumeRootRedirect } = useAuthStore()
 
   useEffect(() => {
     if (state === 'loading') {
@@ -43,6 +43,7 @@ export function useAuth() {
     isNetworkError: state === 'network-error',
     user,
     error,
+    shouldRedirectToRoot,
 
     // Actions
     login,
@@ -50,5 +51,6 @@ export function useAuth() {
     logout,
     retry,
     clearError,
+    consumeRootRedirect,
   }
 }

@@ -3,6 +3,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -235,21 +236,13 @@ func (s *aiService) getAIConfig(ctx context.Context) (ai.Config, error) {
 		return cfg, fmt.Errorf("AI model is not configured")
 	}
 
-	// Get thinking settings
-	if settingsMap["ai.thinking_supported"] == "true" {
-		cfg.ThinkingSupported = true
+	if val := settingsMap["ai.request_options"]; val != "" {
+		var requestOptions map[string]any
+		if err := json.Unmarshal([]byte(val), &requestOptions); err != nil {
+			return cfg, fmt.Errorf("parse request options: %w", err)
+		}
+		cfg.RequestOptions = requestOptions
 	}
-	if settingsMap["ai.thinking"] == "true" {
-		cfg.Thinking = true
-	}
-
-	if val := settingsMap["ai.thinking_budget"]; val != "" {
-		var budget int
-		fmt.Sscanf(val, "%d", &budget)
-		cfg.ThinkingBudget = budget
-	}
-
-	cfg.ReasoningEffort = settingsMap["ai.reasoning_effort"]
 
 	return cfg, nil
 }

@@ -37,6 +37,7 @@
 
 :root {
   text-autospace: normal;
+  --app-dvh: 100dvh;
 
   --background: 0 0% 100%;
   --foreground: 240 10% 3.9%;
@@ -69,6 +70,12 @@
   --duration-sidebar-collapse: 220ms;
 }
 
+@media (display-mode: standalone) {
+  :root {
+    --app-dvh: 100lvh;
+  }
+}
+
 .dark {
   --background: 240 10% 3.9%;
   --foreground: 0 0% 98%;
@@ -93,7 +100,6 @@
   --sidebar-foreground: 240 4.8% 95.9%;
   --item-active: color-mix(in oklch, hsl(var(--foreground)) 15%, transparent);
   --item-hover: color-mix(in oklch, hsl(var(--foreground)) 10%, transparent);
-  scrollbar-color: hsl(var(--muted-foreground) / 0.4) transparent;
 }
 
 * {
@@ -102,24 +108,17 @@
 
 html {
   /* Prevent horizontal swipe-to-navigate (back/forward) */
-  overscroll-behavior-x: none;
+  overscroll-behavior: none;
+  background-color: theme(colors.background);
+  width: 100%;
+  height: var(--app-dvh);
+  overflow: hidden;
 }
 
 body {
   background-color: theme(colors.background);
   color: theme(colors.foreground);
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  /* Disable double-tap zoom while preserving native scroll, a prerequisite for
-   * mobile browsers to auto-hide the address bar when scrolling content. */
-  touch-action: manipulation;
-}
-
-/* PWA (add-to-home-screen) mode: browser chrome is already gone, prevent
- * overscroll-bounce from conflicting with any in-app pull-to-refresh. */
-@media (display-mode: standalone) {
-  body {
-    overscroll-behavior-y: none;
-  }
 }
 
 /* Dynamic viewport height for mobile browsers */
@@ -134,9 +133,6 @@ body {
 @supports not (height: 100dvh) {
   .h-dvh {
     height: 100vh;
-  }
-  .min-h-dvh {
-    min-height: 100vh;
   }
 }
 
@@ -472,11 +468,6 @@ body {
   background: hsl(var(--primary));
 }
 
-/* Fix for Radix UI ScrollArea viewport forcing table display which expands width */
-.entry-content-viewport>div {
-  display: block !important;
-}
-
 /* Table wrapper - isolate layout calculation to prevent iOS Safari crash */
 .entry-content .prose .article-table-wrapper {
   /* iOS 16+: isolate layout and paint to prevent tables from affecting outer layout */
@@ -502,32 +493,6 @@ body {
 .dark .entry-content .prose pre.shiki span {
   color: var(--shiki-dark);
   background-color: transparent;
-}
-
-/* Mobile detail view slide-in/out animations */
-@keyframes mobile-detail-enter {
-  from { transform: translateX(100%); }
-  to { transform: translateX(0); }
-}
-
-@keyframes mobile-detail-exit {
-  from { transform: translateX(0); }
-  to { transform: translateX(100%); }
-}
-
-.animate-mobile-detail-enter {
-  animation: mobile-detail-enter 300ms ease-out forwards;
-}
-
-.animate-mobile-detail-exit {
-  animation: mobile-detail-exit 300ms ease-out forwards;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .animate-mobile-detail-enter,
-  .animate-mobile-detail-exit {
-    animation: none;
-  }
 }
 
 /* Scrollbar */

@@ -674,7 +674,7 @@ func (s *settingsServiceStub) SetAISettings(ctx context.Context, settings *servi
 	return nil
 }
 
-func (s *settingsServiceStub) TestAI(ctx context.Context, provider, apiKey, baseURL, model string, thinkingSupported, thinking bool, thinkingBudget int, reasoningEffort string) (string, error) {
+func (s *settingsServiceStub) TestAI(ctx context.Context, provider, apiKey, baseURL, model string, requestOptions map[string]any) (string, error) {
 	return "", nil
 }
 

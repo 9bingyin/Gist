@@ -5,31 +5,26 @@ import (
 
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
-	"github.com/openai/openai-go/v3/shared"
 )
 
 // CompatibleProvider implements Provider for OpenAI-compatible APIs.
 // This supports services like OpenRouter, Azure OpenAI, Ollama, etc.
 type CompatibleProvider struct {
-	client            openai.Client
-	model             string
-	thinkingSupported bool
-	thinking          bool
-	reasoningEffort   string
+	client         openai.Client
+	model          string
+	requestOptions map[string]any
 }
 
 // NewCompatibleProvider creates a new OpenAI-compatible provider.
-func NewCompatibleProvider(apiKey, baseURL, model string, thinkingSupported, thinking bool, reasoningEffort string) (*CompatibleProvider, error) {
+func NewCompatibleProvider(apiKey, baseURL, model string, requestOptions map[string]any) (*CompatibleProvider, error) {
 	client := openai.NewClient(
 		option.WithAPIKey(apiKey),
 		option.WithBaseURL(baseURL),
 	)
 	return &CompatibleProvider{
-		client:            client,
-		model:             model,
-		thinkingSupported: thinkingSupported,
-		thinking:          thinking,
-		reasoningEffort:   reasoningEffort,
+		client:         client,
+		model:          model,
+		requestOptions: requestOptions,
 	}, nil
 }
 
@@ -43,10 +38,7 @@ func (p *CompatibleProvider) Test(ctx context.Context) (string, error) {
 		MaxCompletionTokens: openai.Int(50),
 	}
 
-	// Only pass reasoning params when the model supports thinking and enabled
-	if p.thinkingSupported && p.thinking && p.reasoningEffort != "" {
-		params.ReasoningEffort = shared.ReasoningEffort(p.reasoningEffort)
-	}
+	applyRequestOptions(&params, p.requestOptions)
 
 	resp, err := p.client.Chat.Completions.New(ctx, params)
 	if err != nil {
@@ -84,10 +76,7 @@ func (p *CompatibleProvider) SummarizeStream(ctx context.Context, systemPrompt, 
 			Messages: messages,
 		}
 
-		// Only pass reasoning params when the model supports thinking and enabled
-		if p.thinkingSupported && p.thinking && p.reasoningEffort != "" {
-			params.ReasoningEffort = shared.ReasoningEffort(p.reasoningEffort)
-		}
+		applyRequestOptions(&params, p.requestOptions)
 
 		stream := p.client.Chat.Completions.NewStreaming(ctx, params)
 		defer stream.Close()
@@ -129,10 +118,7 @@ func (p *CompatibleProvider) Complete(ctx context.Context, systemPrompt, content
 		Messages: messages,
 	}
 
-	// Only pass reasoning params when the model supports thinking and enabled
-	if p.thinkingSupported && p.thinking && p.reasoningEffort != "" {
-		params.ReasoningEffort = shared.ReasoningEffort(p.reasoningEffort)
-	}
+	applyRequestOptions(&params, p.requestOptions)
 
 	resp, err := p.client.Chat.Completions.New(ctx, params)
 	if err != nil {

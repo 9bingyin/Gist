@@ -134,6 +134,52 @@ func TestEntryHandler_UpdateRead_Success(t *testing.T) {
 	require.Equal(t, http.StatusNoContent, rec.Code)
 }
 
+func TestEntryHandler_UpdateManyRead_Success(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock.NewMockEntryService(ctrl)
+	h := handler.NewEntryHandlerHelper(mockService, nil)
+
+	e := newTestEcho()
+	reqBody := map[string]interface{}{
+		"ids":  []string{"123", "456", "123"},
+		"read": true,
+	}
+	req := newJSONRequest(http.MethodPatch, "/entries/read", reqBody)
+	c, rec := newTestContext(e, req)
+
+	mockService.EXPECT().
+		MarkManyAsRead(gomock.Any(), []int64{123, 456}, true).
+		Return(nil)
+
+	err := h.UpdateManyReadStatus(c)
+	require.NoError(t, err)
+
+	require.Equal(t, http.StatusNoContent, rec.Code)
+}
+
+func TestEntryHandler_UpdateManyRead_InvalidID(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock.NewMockEntryService(ctrl)
+	h := handler.NewEntryHandlerHelper(mockService, nil)
+
+	e := newTestEcho()
+	reqBody := map[string]interface{}{
+		"ids":  []string{"bad"},
+		"read": true,
+	}
+	req := newJSONRequest(http.MethodPatch, "/entries/read", reqBody)
+	c, rec := newTestContext(e, req)
+
+	err := h.UpdateManyReadStatus(c)
+	require.NoError(t, err)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
 func TestEntryHandler_UpdateStarred_Success(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

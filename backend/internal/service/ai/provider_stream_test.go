@@ -19,7 +19,7 @@ func TestOpenAIProvider_ResponsesEndpoints(t *testing.T) {
 	server := newOpenAITestServer(t)
 	defer server.Close()
 
-	provider, err := ai.NewOpenAIProvider("key", server.URL+"/v1/", "gpt-4o-mini", false, false, "")
+	provider, err := ai.NewOpenAIProvider("key", server.URL+"/v1/", "gpt-4o-mini", nil)
 	require.NoError(t, err)
 
 	testAndCompleteProvider(t, provider, "response-text")
@@ -31,7 +31,7 @@ func TestCompatibleProvider_ChatEndpoints(t *testing.T) {
 	server := newOpenAITestServer(t)
 	defer server.Close()
 
-	provider, err := ai.NewCompatibleProvider("key", server.URL+"/v1/", "gpt-4o-mini", false, false, "")
+	provider, err := ai.NewCompatibleProvider("key", server.URL+"/v1/", "gpt-4o-mini", nil)
 	require.NoError(t, err)
 
 	testAndCompleteProvider(t, provider, "chat-response")
@@ -43,7 +43,7 @@ func TestAnthropicProvider_MessageEndpoints(t *testing.T) {
 	server := newAnthropicTestServer(t)
 	defer server.Close()
 
-	provider, err := ai.NewAnthropicProvider("key", server.URL+"/", "claude-3-sonnet", false, false, 0)
+	provider, err := ai.NewAnthropicProvider("key", server.URL+"/", "claude-3-sonnet", nil)
 	require.NoError(t, err)
 
 	testProvider(t, provider, "claude-response")
@@ -57,6 +57,82 @@ func TestAnthropicProvider_MessageEndpoints(t *testing.T) {
 
 	streamText := readStream(t, provider, "sys", "content")
 	require.Equal(t, "claude-stream", streamText)
+}
+
+func TestOpenAIProvider_RequestOptionsAreMerged(t *testing.T) {
+	bodies := make([]map[string]any, 0, 3)
+	server := newOpenAITestServerWithHook(t, func(_ string, body []byte) {
+		bodies = append(bodies, decodeBody(t, body))
+	})
+	defer server.Close()
+
+	provider, err := ai.NewOpenAIProvider("key", server.URL+"/v1/", "gpt-4o-mini", map[string]any{
+		"custom_flag": "enabled",
+		"metadata":    map[string]any{"source": "test"},
+	})
+	require.NoError(t, err)
+
+	testAndCompleteProvider(t, provider, "response-text")
+	require.Equal(t, "response-stream", readStream(t, provider, "sys", "content"))
+
+	require.Len(t, bodies, 3)
+	for _, body := range bodies {
+		require.Equal(t, "enabled", body["custom_flag"])
+		require.Equal(t, map[string]any{"source": "test"}, body["metadata"])
+	}
+}
+
+func TestCompatibleProvider_RequestOptionsAreMerged(t *testing.T) {
+	bodies := make([]map[string]any, 0, 3)
+	server := newOpenAITestServerWithHook(t, func(_ string, body []byte) {
+		bodies = append(bodies, decodeBody(t, body))
+	})
+	defer server.Close()
+
+	provider, err := ai.NewCompatibleProvider("key", server.URL+"/v1/", "gpt-4o-mini", map[string]any{
+		"custom_flag": "enabled",
+		"extra_body":  map[string]any{"trace": true},
+	})
+	require.NoError(t, err)
+
+	testAndCompleteProvider(t, provider, "chat-response")
+	require.Equal(t, "chat-stream", readStream(t, provider, "sys", "content"))
+
+	require.Len(t, bodies, 3)
+	for _, body := range bodies {
+		require.Equal(t, "enabled", body["custom_flag"])
+		require.Equal(t, map[string]any{"trace": true}, body["extra_body"])
+	}
+}
+
+func TestAnthropicProvider_RequestOptionsAreMerged(t *testing.T) {
+	bodies := make([]map[string]any, 0, 3)
+	server := newAnthropicTestServerWithHook(t, func(body []byte) {
+		bodies = append(bodies, decodeBody(t, body))
+	})
+	defer server.Close()
+
+	provider, err := ai.NewAnthropicProvider("key", server.URL+"/", "claude-3-sonnet", map[string]any{
+		"custom_flag": "enabled",
+		"metadata":    map[string]any{"user_id": "test"},
+	})
+	require.NoError(t, err)
+
+	testProvider(t, provider, "claude-response")
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	got, err := provider.Complete(ctx, "sys", "content")
+	require.NoError(t, err)
+	require.Equal(t, "claude-stream", got)
+
+	require.Equal(t, "claude-stream", readStream(t, provider, "sys", "content"))
+
+	require.Len(t, bodies, 3)
+	for _, body := range bodies {
+		require.Equal(t, "enabled", body["custom_flag"])
+		require.Equal(t, map[string]any{"user_id": "test"}, body["metadata"])
+	}
 }
 
 func testAndCompleteProvider(t *testing.T, provider ai.Provider, expected string) {
@@ -102,8 +178,16 @@ func readStream(t *testing.T, provider ai.Provider, systemPrompt, content string
 
 func newOpenAITestServer(t *testing.T) *httptest.Server {
 	t.Helper()
+	return newOpenAITestServerWithHook(t, nil)
+}
+
+func newOpenAITestServerWithHook(t *testing.T, hook func(path string, body []byte)) *httptest.Server {
+	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body := readBody(t, r)
+		if hook != nil {
+			hook(r.URL.Path, body)
+		}
 		stream := isStreamRequest(body)
 
 		switch r.URL.Path {
@@ -129,6 +213,11 @@ func newOpenAITestServer(t *testing.T) *httptest.Server {
 
 func newAnthropicTestServer(t *testing.T) *httptest.Server {
 	t.Helper()
+	return newAnthropicTestServerWithHook(t, nil)
+}
+
+func newAnthropicTestServerWithHook(t *testing.T, hook func(body []byte)) *httptest.Server {
+	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/messages" {
 			http.NotFound(w, r)
@@ -136,6 +225,9 @@ func newAnthropicTestServer(t *testing.T) *httptest.Server {
 		}
 
 		body := readBody(t, r)
+		if hook != nil {
+			hook(body)
+		}
 		if isStreamRequest(body) {
 			writeAnthropicStream(w)
 			return
@@ -150,6 +242,13 @@ func readBody(t *testing.T, r *http.Request) []byte {
 	require.NoError(t, err)
 	_ = r.Body.Close()
 	return body
+}
+
+func decodeBody(t *testing.T, body []byte) map[string]any {
+	t.Helper()
+	var payload map[string]any
+	require.NoError(t, json.Unmarshal(body, &payload))
+	return payload
 }
 
 func isStreamRequest(body []byte) bool {

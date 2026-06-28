@@ -6,6 +6,7 @@ import { useFeeds } from '@/hooks/useFeeds'
 import { useFolders } from '@/hooks/useFolders'
 import { useAISettings } from '@/hooks/useAISettings'
 import { useGeneralSettings } from '@/hooks/useGeneralSettings'
+import { useGeneralSettings } from '@/hooks/useGeneralSettings'
 import { useSwipeGesture } from '@/hooks/useSwipeGesture'
 import { selectionToParams, type SelectionType } from '@/hooks/useSelection'
 import { flattenUniqueEntries } from '@/lib/entry-pagination'
@@ -18,9 +19,13 @@ import { EntryListHeader } from './EntryListHeader'
 import { needsTranslation as needsTranslationAsync } from '@/lib/language-detect-async'
 import { translateArticlesBatch, cancelAllBatchTranslations } from '@/services/translation-service'
 import { translationActions } from '@/stores/translation-store'
-import { selectionScrollKey, entryListScrollPositions } from './scroll-key'
+import {
+  selectionScrollKey,
+  entryListScrollPositions,
+} from './scroll-key'
 import { useScrollToTop } from '@/hooks/useScrollToTop'
 import { useFeedViewStore } from '@/stores/feed-view-store'
+import { useScrollMarkRead } from './useScrollMarkRead'
 import type { Entry, Feed, Folder, ContentType } from '@/types/api'
 
 interface EntryListProps {
@@ -39,8 +44,6 @@ interface EntryListProps {
   onToggleSidebar?: () => void
   sidebarVisible?: boolean
 }
-
-const ESTIMATED_ITEM_HEIGHT = 100
 const TOP_BAR_HEIGHT = 56
 const SCROLL_PADDING_COUNT = 5
 const MARK_READ_BUTTON_STORAGE_KEY = 'gist.markAllReadButtonPos'
@@ -119,6 +122,7 @@ export function EntryList({
   const { data: folders = [] } = useFolders()
   const { data: aiSettings } = useAISettings()
   const { data: generalSettings } = useGeneralSettings()
+  const { data: generalSettings } = useGeneralSettings()
   const { data: unreadCounts } = useUnreadCounts()
   const { mutate: markAsRead } = useMarkAsRead()
   const removeFromUnreadList = useRemoveFromUnreadList()
@@ -145,6 +149,7 @@ export function EntryList({
 
   const autoTranslate = aiSettings?.autoTranslate ?? false
   const targetLanguage = aiSettings?.summaryLanguage ?? 'zh-CN'
+  const markReadOnScroll = generalSettings?.markReadOnScroll ?? false
 
   // Save/restore scroll position per selection+contentType
   const scrollKey = selectionScrollKey(selection, contentType)
@@ -183,6 +188,16 @@ export function EntryList({
     node.scrollTop = saved ?? 0
   }, [isMobile, isActive, scrollKey])
 
+  const maybeFetchNextPage = useCallback(() => {
+    const node = containerRef.current
+    if (!node || !hasNextPage || isFetchingNextPage) return
+
+    const distanceToBottom = node.scrollHeight - node.scrollTop - node.clientHeight
+    if (distanceToBottom <= 600) {
+      fetchNextPage()
+    }
+  }, [fetchNextPage, hasNextPage, isFetchingNextPage])
+
   useEffect(() => {
     if (isMobile) {
       // Only track window scroll when this list is the active view
@@ -197,12 +212,13 @@ export function EntryList({
     if (!node) return
     const handleScroll = () => {
       entryListScrollPositions.set(scrollKey, node.scrollTop)
+      maybeFetchNextPage()
     }
     node.addEventListener('scroll', handleScroll, { passive: true })
     return () => {
       node.removeEventListener('scroll', handleScroll)
     }
-  }, [isMobile, isActive, scrollKey])
+  }, [isMobile, isActive, maybeFetchNextPage, scrollKey])
 
   // Cancel pending translations and reset state when list changes
   useEffect(() => {
@@ -373,13 +389,9 @@ export function EntryList({
   }, [getFeedExplicitViewMode, keepReadUntilExit, markAsRead, onSelectEntry])
 
   useEffect(() => {
-    const lastItem = virtualItems.at(-1)
-    if (!lastItem) return
+    maybeFetchNextPage()
+  }, [entries.length, maybeFetchNextPage])
 
-    if (lastItem.index >= entries.length - 5 && hasNextPage && !isFetchingNextPage) {
-      fetchNextPage()
-    }
-  }, [virtualItems, entries.length, hasNextPage, isFetchingNextPage, fetchNextPage])
 
   // Function to trigger batch translation for pending entries
   const triggerBatchTranslation = useCallback(() => {
@@ -467,27 +479,48 @@ export function EntryList({
     [autoTranslate, targetLanguage, queueEntryForTranslation]
   )
 
-  // Trigger translation for visible items and selected entry
+  // Trigger translation for real visible items and selected entry
   useEffect(() => {
     if (!autoTranslate) return
 
-    const visibleEntryIds = new Set<string>()
-    for (const virtualRow of virtualItems) {
-      const entry = entries[virtualRow.index]
-      if (entry) {
-        visibleEntryIds.add(entry.id)
+    const node = containerRef.current
+    if (!node || typeof IntersectionObserver === 'undefined') {
+      for (const entry of entries.slice(0, 20)) {
         scheduleTranslation(entry)
       }
+      return
     }
 
-    // Selected entry may be outside the visible range, still needs translation
-    if (selectedEntryId && !visibleEntryIds.has(selectedEntryId)) {
+    const observer = new IntersectionObserver(
+      (items) => {
+        for (const item of items) {
+          if (!item.isIntersecting) continue
+
+          const index = Number((item.target as HTMLElement).dataset.index)
+          const entry = entries[index]
+          if (entry) {
+            scheduleTranslation(entry)
+          }
+        }
+      },
+      { root: node, rootMargin: '200px 0px' }
+    )
+
+    for (const item of node.querySelectorAll<HTMLElement>('[data-index]')) {
+      observer.observe(item)
+    }
+
+    if (selectedEntryId) {
       const selectedEntry = entries.find((e) => e.id === selectedEntryId)
       if (selectedEntry) {
         scheduleTranslation(selectedEntry)
       }
     }
-  }, [virtualItems, entries, autoTranslate, scheduleTranslation, selectedEntryId])
+
+    return () => {
+      observer.disconnect()
+    }
+  }, [entries, autoTranslate, scheduleTranslation, selectedEntryId])
 
   const title = useMemo(() => {
     switch (selection.type) {
@@ -800,11 +833,12 @@ export function EntryList({
         sidebarVisible={sidebarVisible}
       />
 
-      <ScrollAreaPrimitive.Root className="relative min-h-0 flex-1 overflow-hidden">
+      <div className="relative min-h-0 flex-1 overflow-hidden">
         <div
           ref={containerRef}
+          data-testid="entry-list-viewport"
           className={cn(
-            'h-full overflow-y-auto [overflow-anchor:none]',
+            'h-full w-full overflow-x-hidden overflow-y-auto rounded-[inherit] [overflow-anchor:none]',
             // On desktop keep scroll containment; on mobile omit it so Chrome
             // Android can promote this div to "implicit root scroller" and
             // auto-hide the address bar.  Chrome explicitly rejects elements
@@ -865,9 +899,7 @@ export function EntryList({
           {isFetchingNextPage && <LoadingMore />}
 
         </div>
-        <ScrollBar />
-        <ScrollAreaPrimitive.Corner />
-      </ScrollAreaPrimitive.Root>
+      </div>
 
       {showMarkAllReadFooter && (
         <button

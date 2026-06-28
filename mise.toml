@@ -1,7 +1,0 @@
-[tools]
-bun = "latest"
-go = "latest"
-"go:github.com/swaggo/swag/cmd/swag" = "latest"
-"go:go.uber.org/mock/mockgen" = "latest"
-golangci-lint = "latest"
-sqlite = "latest"

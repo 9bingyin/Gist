@@ -72,7 +72,7 @@ export const PictureItem = memo(function PictureItem({
   }
 
   return (
-    <div className="p-2">
+    <div className="p-1 sm:p-1.5">
       <div
         className="cursor-pointer overflow-hidden bg-card shadow-sm transition-shadow hover:shadow-md"
         onClick={handleClick}

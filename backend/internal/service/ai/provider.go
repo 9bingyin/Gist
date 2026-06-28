@@ -21,14 +21,11 @@ type Provider interface {
 
 // Config holds the configuration for an AI provider.
 type Config struct {
-	Provider          string // openai, anthropic, compatible
-	APIKey            string
-	BaseURL           string // required for openai/compatible, optional for anthropic
-	Model             string
-	ThinkingSupported bool   // whether the model supports thinking/reasoning
-	Thinking          bool   // enable thinking/reasoning (only effective when ThinkingSupported=true)
-	ThinkingBudget    int    // Anthropic budget_tokens
-	ReasoningEffort   string // OpenAI/Compatible reasoning_effort
+	Provider       string // openai, anthropic, compatible
+	APIKey         string
+	BaseURL        string // required for openai/compatible, optional for anthropic
+	Model          string
+	RequestOptions map[string]any // extra request JSON parameters
 }
 
 // ProviderType constants
@@ -59,14 +56,14 @@ func NewProvider(cfg Config) (Provider, error) {
 		if cfg.BaseURL == "" {
 			return nil, ErrMissingBaseURL
 		}
-		return NewOpenAIProvider(cfg.APIKey, cfg.BaseURL, cfg.Model, cfg.ThinkingSupported, cfg.Thinking, cfg.ReasoningEffort)
+		return NewOpenAIProvider(cfg.APIKey, cfg.BaseURL, cfg.Model, cfg.RequestOptions)
 	case ProviderAnthropic:
-		return NewAnthropicProvider(cfg.APIKey, cfg.BaseURL, cfg.Model, cfg.ThinkingSupported, cfg.Thinking, cfg.ThinkingBudget)
+		return NewAnthropicProvider(cfg.APIKey, cfg.BaseURL, cfg.Model, cfg.RequestOptions)
 	case ProviderCompatible:
 		if cfg.BaseURL == "" {
 			return nil, ErrMissingBaseURL
 		}
-		return NewCompatibleProvider(cfg.APIKey, cfg.BaseURL, cfg.Model, cfg.ThinkingSupported, cfg.Thinking, cfg.ReasoningEffort)
+		return NewCompatibleProvider(cfg.APIKey, cfg.BaseURL, cfg.Model, cfg.RequestOptions)
 	default:
 		return nil, ErrInvalidProvider
 	}

@@ -31,6 +31,9 @@ func TestClientFactory_NewHTTPClient(t *testing.T) {
 	client := factory.NewHTTPClient(ctx, 5*time.Second)
 	require.NotNil(t, client)
 	require.Equal(t, 5*time.Second, client.Timeout)
+	transport, ok := client.Transport.(*http.Transport)
+	require.True(t, ok)
+	require.True(t, transport.DisableKeepAlives)
 }
 
 func TestClientFactory_NewClientFactoryForTest(t *testing.T) {
@@ -83,6 +86,7 @@ func TestClientFactory_NewHTTPTransport_Proxy(t *testing.T) {
 	tr := factory.NewHTTPTransport(context.Background())
 	require.NotNil(t, tr)
 	require.NotNil(t, tr.Proxy)
+	require.True(t, tr.DisableKeepAlives)
 
 	req := httptest.NewRequest(http.MethodGet, "http://example.com", nil)
 	pu, err := tr.Proxy(req)
@@ -97,6 +101,7 @@ func TestClientFactory_NewHTTPTransport_InvalidProxy(t *testing.T) {
 	tr := factory.NewHTTPTransport(context.Background())
 	require.NotNil(t, tr)
 	require.Nil(t, tr.Proxy)
+	require.True(t, tr.DisableKeepAlives)
 }
 
 func TestClientFactory_NewHTTPTransport_SOCKS(t *testing.T) {
@@ -106,6 +111,7 @@ func TestClientFactory_NewHTTPTransport_SOCKS(t *testing.T) {
 	tr := factory.NewHTTPTransport(context.Background())
 	require.NotNil(t, tr)
 	require.Nil(t, tr.Proxy)
+	require.True(t, tr.DisableKeepAlives)
 }
 
 func TestClientFactory_NewAzureSession(t *testing.T) {

@@ -161,7 +161,7 @@ export default defineConfig({
             if (id.includes('@radix-ui/')) return 'radix-vendor'
             if (id.includes('/motion/') || id.includes('/framer-motion/')) return 'motion-vendor'
             if (id.includes('/i18next/') || id.includes('/react-i18next/')) return 'i18n-vendor'
-            if (id.includes('/clsx/') || id.includes('/tailwind-merge/') || id.includes('/class-variance-authority/') || id.includes('/zustand/') || id.includes('/wouter/')) return 'utils-vendor'
+            if (id.includes('/clsx/') || id.includes('/tailwind-merge/') || id.includes('/zustand/') || id.includes('/wouter/')) return 'utils-vendor'
             if (id.includes('/unified/') || id.includes('/rehype-parse/') || id.includes('/rehype-sanitize/') || id.includes('/rehype-stringify/') || id.includes('/hast-util-to-jsx-runtime/')) return 'html-parser-vendor'
             if (id.includes('@virtuoso.dev/masonry')) return 'masonry-vendor'
             if (id.includes('/embla-carousel')) return 'carousel-vendor'

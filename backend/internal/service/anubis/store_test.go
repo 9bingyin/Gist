@@ -48,6 +48,18 @@ func (s *settingsRepoStub) Set(ctx context.Context, key, value string) error {
 	return nil
 }
 
+func (s *settingsRepoStub) SetMany(ctx context.Context, values map[string]string) error {
+	for key := range values {
+		if err := s.setErr[key]; err != nil {
+			return err
+		}
+	}
+	for key, value := range values {
+		s.data[key] = value
+	}
+	return nil
+}
+
 func (s *settingsRepoStub) Delete(ctx context.Context, key string) error {
 	if err := s.deleteErr[key]; err != nil {
 		return err

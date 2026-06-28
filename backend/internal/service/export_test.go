@@ -28,12 +28,11 @@ const (
 	KeyAIAPIKey          = keyAIAPIKey
 	KeyAIBaseURL         = keyAIBaseURL
 	KeyAIModel           = keyAIModel
-	KeyAIThinking        = keyAIThinking
-	KeyAIThinkingBudget  = keyAIThinkingBudget
-	KeyAIReasoningEffort = keyAIReasoningEffort
+	KeyAIRequestOptions  = keyAIRequestOptions
 	KeyAIAutoTranslate   = keyAIAutoTranslate
 	KeyAIAutoSummary     = keyAIAutoSummary
 	KeyAIRateLimit       = keyAIRateLimit
+	KeyMarkReadOnScroll  = keyMarkReadOnScroll
 	KeyNetworkEnabled    = keyNetworkEnabled
 	KeyNetworkType       = keyNetworkType
 	KeyNetworkHost       = keyNetworkHost

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/http/pprof"
 	"os"
 	"os/signal"
 	"sync"
@@ -113,6 +114,7 @@ func main() {
 	domainRateLimitHandler := handler.NewDomainRateLimitHandler(domainRateLimitService)
 
 	router := transport.NewRouter(folderHandler, feedHandler, entryHandler, opmlHandler, iconHandler, proxyHandler, settingsHandler, aiHandler, authHandler, domainRateLimitHandler, authService, cfg.StaticDir, cfg.EnableSwagger)
+	pprofServer := startPprofServer(cfg.PprofAddr)
 
 	// Start background scheduler (15 minutes interval)
 	sched := scheduler.New(refreshService, 15*time.Minute)
@@ -146,6 +148,11 @@ func main() {
 			logger.Warn("backfill stop timeout")
 		}
 
+		if pprofServer != nil {
+			if err := pprofServer.Shutdown(ctx); err != nil {
+				logger.Error("pprof shutdown", "module", "server", "action", "shutdown", "resource", "pprof", "result", "failed", "error", err)
+			}
+		}
 		// Gracefully shutdown the HTTP server
 		if err := router.Shutdown(ctx); err != nil {
 			logger.Error("server shutdown", "error", err)
@@ -158,4 +165,32 @@ func main() {
 	}
 
 	logger.Info("server stopped")
+}
+
+func startPprofServer(addr string) *http.Server {
+	if addr == "" {
+		return nil
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/debug/pprof/", pprof.Index)
+	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+
+	server := &http.Server{
+		Addr:              addr,
+		Handler:           mux,
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+
+	go func() {
+		logger.Info("pprof server started", "module", "server", "action", "start", "resource", "pprof", "result", "ok", "addr", addr)
+		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			logger.Error("pprof server failed", "module", "server", "action", "start", "resource", "pprof", "result", "failed", "addr", addr, "error", err)
+		}
+	}()
+
+	return server
 }

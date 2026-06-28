@@ -3,7 +3,6 @@ import { useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useCodeHighlight } from '@/hooks/useCodeHighlight'
 import { useEntryMeta } from '@/hooks/useEntryMeta'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { isSafeUrl } from '@/lib/url'
 import { ArticleContent } from '@/components/ui/article-content'
 import type { ArticleContentBlock } from '@/components/ui/article-content'
@@ -139,6 +138,6 @@ export function EntryContentBody({
     >
       {articleBody}
       {scrollNode && <BackToTopButton scrollNode={scrollNode} />}
-    </ScrollArea>
+    </div>
   )
 }

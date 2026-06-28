@@ -32,6 +32,7 @@ type EntryRepository interface {
 	GetByID(ctx context.Context, id int64) (model.Entry, error)
 	List(ctx context.Context, filter EntryListFilter) ([]model.Entry, error)
 	UpdateReadStatus(ctx context.Context, id int64, read bool) error
+	UpdateManyReadStatus(ctx context.Context, ids []int64, read bool) error
 	UpdateStarredStatus(ctx context.Context, id int64, starred bool) error
 	UpdateReadableContent(ctx context.Context, id int64, content string) error
 	MarkAllAsRead(ctx context.Context, feedID *int64, folderID *int64, contentType *string) error
@@ -141,11 +142,15 @@ func (r *entryRepository) List(ctx context.Context, filter EntryListFilter) ([]m
 	return entries, nil
 }
 
-func (r *entryRepository) UpdateReadStatus(ctx context.Context, id int64, read bool) error {
-	readInt := 0
-	if read {
-		readInt = 1
+func boolToInt(value bool) int {
+	if value {
+		return 1
 	}
+	return 0
+}
+
+func (r *entryRepository) UpdateReadStatus(ctx context.Context, id int64, read bool) error {
+	readInt := boolToInt(read)
 
 	_, err := r.db.ExecContext(
 		ctx,
@@ -153,6 +158,29 @@ func (r *entryRepository) UpdateReadStatus(ctx context.Context, id int64, read b
 		readInt,
 		formatTime(time.Now()),
 		id,
+	)
+	return err
+}
+
+func (r *entryRepository) UpdateManyReadStatus(ctx context.Context, ids []int64, read bool) error {
+	if len(ids) == 0 {
+		return nil
+	}
+
+	readInt := boolToInt(read)
+
+	args := make([]interface{}, 0, len(ids)+2)
+	args = append(args, readInt, formatTime(time.Now()))
+	placeholders := make([]string, len(ids))
+	for i, id := range ids {
+		placeholders[i] = "?"
+		args = append(args, id)
+	}
+
+	_, err := r.db.ExecContext(
+		ctx,
+		`UPDATE entries SET read = ?, updated_at = ? WHERE id IN (`+strings.Join(placeholders, ",")+")",
+		args...,
 	)
 	return err
 }

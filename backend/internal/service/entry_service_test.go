@@ -316,6 +316,38 @@ func TestEntryService_MarkAsRead_NotFound(t *testing.T) {
 	require.ErrorIs(t, err, service.ErrNotFound)
 }
 
+func TestEntryService_MarkManyAsRead_Success(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockEntries := mock.NewMockEntryRepository(ctrl)
+	mockFeeds := mock.NewMockFeedRepository(ctrl)
+	mockFolders := mock.NewMockFolderRepository(ctrl)
+	svc := service.NewEntryService(mockEntries, mockFeeds, mockFolders)
+	ctx := context.Background()
+
+	ids := []int64{123, 456}
+	mockEntries.EXPECT().
+		UpdateManyReadStatus(ctx, ids, true).
+		Return(nil)
+
+	err := svc.MarkManyAsRead(ctx, ids, true)
+	require.NoError(t, err)
+}
+
+func TestEntryService_MarkManyAsRead_EmptyIDs(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockEntries := mock.NewMockEntryRepository(ctrl)
+	mockFeeds := mock.NewMockFeedRepository(ctrl)
+	mockFolders := mock.NewMockFolderRepository(ctrl)
+	svc := service.NewEntryService(mockEntries, mockFeeds, mockFolders)
+
+	err := svc.MarkManyAsRead(context.Background(), nil, true)
+	require.NoError(t, err)
+}
+
 func TestEntryService_MarkAsStarred_Success(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

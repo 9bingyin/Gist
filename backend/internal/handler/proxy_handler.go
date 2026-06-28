@@ -23,6 +23,7 @@ func safeHost(rawURL string) string {
 }
 
 const cacheMaxAge = 86400 // 1 day
+const svgContentSecurityPolicy = "default-src 'none'; style-src 'unsafe-inline'; script-src 'none'; sandbox"
 
 type ProxyHandler struct {
 	proxyService service.ProxyService
@@ -47,6 +48,7 @@ func (h *ProxyHandler) RegisterRoutes(g *echo.Group) {
 // @Param ref query string false "Base64 URL-safe encoded article URL (used as Referer for CDN anti-hotlinking)"
 // @Success 200 {file} binary
 // @Failure 400 {object} errorResponse
+// @Failure 502 {object} errorResponse
 // @Failure 500 {object} errorResponse
 // @Failure 504 {object} errorResponse
 // @Router /api/proxy/image/{encoded} [get]
@@ -83,6 +85,9 @@ func (h *ProxyHandler) ProxyImage(c echo.Context) error {
 	c.Response().Header().Set("Content-Type", result.ContentType)
 	c.Response().Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d", cacheMaxAge))
 	c.Response().Header().Set("X-Content-Type-Options", "nosniff")
+	if strings.EqualFold(result.ContentType, "image/svg+xml") {
+		c.Response().Header().Set("Content-Security-Policy", svgContentSecurityPolicy)
+	}
 
 	return c.Blob(http.StatusOK, result.ContentType, result.Data)
 }
@@ -95,6 +100,8 @@ func (h *ProxyHandler) handleServiceError(c echo.Context, err error) error {
 		return Error(c, http.StatusBadRequest, "Invalid protocol")
 	case errors.Is(err, service.ErrRequestTimeout):
 		return Error(c, http.StatusGatewayTimeout, "Request timeout")
+	case errors.Is(err, service.ErrInvalidImage):
+		return Error(c, http.StatusBadGateway, "Invalid image")
 	case errors.Is(err, service.ErrUpstreamRejected):
 		// Upstream rejected the request, return 502 and prevent caching
 		c.Response().Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")

@@ -6,9 +6,9 @@ import (
 	"database/sql"
 	"errors"
 
-	"gist/backend/pkg/logger"
 	"gist/backend/internal/model"
 	"gist/backend/internal/repository"
+	"gist/backend/pkg/logger"
 )
 
 type EntryListParams struct {
@@ -26,6 +26,7 @@ type EntryService interface {
 	List(ctx context.Context, params EntryListParams) ([]model.Entry, error)
 	GetByID(ctx context.Context, id int64) (model.Entry, error)
 	MarkAsRead(ctx context.Context, id int64, read bool) error
+	MarkManyAsRead(ctx context.Context, ids []int64, read bool) error
 	MarkAsStarred(ctx context.Context, id int64, starred bool) error
 	MarkAllAsRead(ctx context.Context, feedID *int64, folderID *int64, contentType *string) error
 	GetUnreadCounts(ctx context.Context) (map[int64]int, error)
@@ -134,6 +135,19 @@ func (s *entryService) MarkAsRead(ctx context.Context, id int64, read bool) erro
 		return err
 	}
 	logger.Info("entry read updated", "module", "service", "action", "update", "resource", "entry", "result", "ok", "entry_id", id, "read", read)
+	return nil
+}
+
+func (s *entryService) MarkManyAsRead(ctx context.Context, ids []int64, read bool) error {
+	if len(ids) == 0 {
+		return nil
+	}
+
+	if err := s.entries.UpdateManyReadStatus(ctx, ids, read); err != nil {
+		logger.Error("entries update read failed", "module", "service", "action", "update", "resource", "entry", "result", "failed", "count", len(ids), "read", read, "error", err)
+		return err
+	}
+	logger.Info("entries read updated", "module", "service", "action", "update", "resource", "entry", "result", "ok", "count", len(ids), "read", read)
 	return nil
 }
 

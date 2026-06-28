@@ -44,6 +44,34 @@ func TestProxyHandler_ProxyImage_Success(t *testing.T) {
 	require.Equal(t, "image-data", rec.Body.String())
 }
 
+func TestProxyHandler_ProxyImage_SVGSecurityHeaders(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock.NewMockProxyService(ctrl)
+	h := handler.NewProxyHandlerHelper(mockService)
+
+	imageURL := "https://example.com/img.svg"
+	encoded := base64.URLEncoding.EncodeToString([]byte(imageURL))
+	svgData := []byte(`<svg xmlns="http://www.w3.org/2000/svg"></svg>`)
+
+	mockService.EXPECT().
+		FetchImage(gomock.Any(), imageURL, "").
+		Return(&service.ProxyResult{Data: svgData, ContentType: "image/svg+xml"}, nil)
+
+	e := newTestEcho()
+	req := newJSONRequest(http.MethodGet, "/proxy/image/"+encoded, nil)
+	c, rec := newTestContext(e, req)
+	setPathParams(c, map[string]string{"encoded": encoded})
+
+	err := h.ProxyImage(c)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, "image/svg+xml", rec.Header().Get("Content-Type"))
+	require.Equal(t, "default-src 'none'; style-src 'unsafe-inline'; script-src 'none'; sandbox", rec.Header().Get("Content-Security-Policy"))
+	require.Equal(t, string(svgData), rec.Body.String())
+}
+
 func TestProxyHandler_ProxyImage_MissingEncoded(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -94,6 +122,7 @@ func TestProxyHandler_ProxyImage_ErrorMapping(t *testing.T) {
 	}{
 		{name: "invalid_url", err: service.ErrInvalidURL, status: http.StatusBadRequest},
 		{name: "invalid_protocol", err: service.ErrInvalidProtocol, status: http.StatusBadRequest},
+		{name: "invalid_image", err: service.ErrInvalidImage, status: http.StatusBadGateway},
 		{name: "timeout", err: service.ErrRequestTimeout, status: http.StatusGatewayTimeout},
 		{name: "upstream_rejected", err: service.ErrUpstreamRejected, status: http.StatusBadGateway, cacheControl: "no-store, no-cache, must-revalidate"},
 		{name: "default", err: errors.New("boom"), status: http.StatusInternalServerError},

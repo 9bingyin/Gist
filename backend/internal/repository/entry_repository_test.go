@@ -235,6 +235,38 @@ func TestEntryRepository_UpdateStatus(t *testing.T) {
 	require.True(t, fetched.Starred)
 }
 
+func TestEntryRepository_UpdateManyReadStatus(t *testing.T) {
+	db := testutil.NewTestDB(t)
+	repo := repository.NewEntryRepository(db)
+	ctx := context.Background()
+
+	feedID := testutil.SeedFeed(t, db, model.Feed{Title: "Feed", URL: "u"})
+	entryID1 := testutil.SeedEntry(t, db, model.Entry{FeedID: feedID, Read: false})
+	entryID2 := testutil.SeedEntry(t, db, model.Entry{FeedID: feedID, Read: false})
+	entryID3 := testutil.SeedEntry(t, db, model.Entry{FeedID: feedID, Read: false})
+
+	err := repo.UpdateManyReadStatus(ctx, []int64{entryID1, entryID2}, true)
+	require.NoError(t, err)
+
+	fetched1, err := repo.GetByID(ctx, entryID1)
+	require.NoError(t, err)
+	fetched2, err := repo.GetByID(ctx, entryID2)
+	require.NoError(t, err)
+	fetched3, err := repo.GetByID(ctx, entryID3)
+	require.NoError(t, err)
+
+	require.True(t, fetched1.Read)
+	require.True(t, fetched2.Read)
+	require.False(t, fetched3.Read)
+
+	err = repo.UpdateManyReadStatus(ctx, []int64{entryID1}, false)
+	require.NoError(t, err)
+
+	fetched1, err = repo.GetByID(ctx, entryID1)
+	require.NoError(t, err)
+	require.False(t, fetched1.Read)
+}
+
 func TestEntryRepository_MarkAllAsRead(t *testing.T) {
 	db := testutil.NewTestDB(t)
 	repo := repository.NewEntryRepository(db)

@@ -482,6 +482,13 @@ export async function updateEntryReadStatus(id: string, read: boolean): Promise<
   })
 }
 
+export async function updateManyEntryReadStatus(ids: string[], read: boolean): Promise<void> {
+  return request<void>('/api/entries/read', {
+    method: 'PATCH',
+    body: JSON.stringify({ ids, read }),
+  })
+}
+
 export async function fetchReadableContent(id: string): Promise<string> {
   const response = await request<{ readableContent: string }>(`/api/entries/${id}/fetch-readable`, {
     method: 'POST',
