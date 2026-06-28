@@ -159,3 +159,17 @@ func (mr *MockFeedServiceMockRecorder) UpdateType(ctx, id, feedType any) *gomock
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateType", reflect.TypeOf((*MockFeedService)(nil).UpdateType), ctx, id, feedType)
 }
+
+// UpdateViewMode mocks base method.
+func (m *MockFeedService) UpdateViewMode(ctx context.Context, id int64, viewMode *string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateViewMode", ctx, id, viewMode)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateViewMode indicates an expected call of UpdateViewMode.
+func (mr *MockFeedServiceMockRecorder) UpdateViewMode(ctx, id, viewMode any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateViewMode", reflect.TypeOf((*MockFeedService)(nil).UpdateViewMode), ctx, id, viewMode)
+}

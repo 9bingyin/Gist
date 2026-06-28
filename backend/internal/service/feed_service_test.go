@@ -478,6 +478,24 @@ func TestFeedService_Update_Delete_UpdateType_DeleteBatch(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestFeedService_UpdateType(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockFeeds := mock.NewMockFeedRepository(ctrl)
+
+	mockFeeds.EXPECT().GetByID(gomock.Any(), int64(1)).Return(model.Feed{ID: 1}, nil)
+	mockFeeds.EXPECT().UpdateType(gomock.Any(), int64(1), "picture").Return(nil)
+	svc := service.NewFeedService(mockFeeds, nil, nil, nil, nil, nil, nil)
+	err := svc.UpdateType(context.Background(), 1, "picture")
+	require.NoError(t, err)
+
+	mockFeeds.EXPECT().GetByID(gomock.Any(), int64(2)).Return(model.Feed{ID: 2}, nil)
+	mockFeeds.EXPECT().UpdateType(gomock.Any(), int64(2), "invalid").Return(errors.New("update type error"))
+	err = svc.UpdateType(context.Background(), 2, "invalid")
+	require.Error(t, err)
+}
+
 func TestFeedService_DeleteBatch_RepositoryError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

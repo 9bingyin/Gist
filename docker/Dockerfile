@@ -10,9 +10,12 @@ RUN bun run build
 FROM golang:1.26.3 AS backend-builder
 WORKDIR /app/backend
 COPY backend/go.mod backend/go.sum ./
-RUN go mod download
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
 COPY backend/ ./
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -v -o gist-server ./cmd/server/main.go
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -v -o gist-server ./cmd/server/main.go
 
 # Stage 3: Final Image
 FROM alpine:latest
@@ -24,7 +27,8 @@ RUN apk add --no-cache ca-certificates tzdata su-exec \
 COPY --from=backend-builder /app/backend/gist-server .
 COPY --from=frontend-builder /app/frontend/dist ./static
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh \
+RUN sed -i 's/\r$//' /usr/local/bin/entrypoint.sh \
+    && chmod +x /usr/local/bin/entrypoint.sh \
     && mkdir -p /app/data && chown -R gist:gist /app
 
 ENV GIST_ADDR=:8080
@@ -34,5 +38,5 @@ ENV GIST_LOG_LEVEL=info
 ENV TZ=Asia/Shanghai
 
 EXPOSE 8080
-ENTRYPOINT ["entrypoint.sh"]
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["./gist-server"]

@@ -31,6 +31,10 @@ type updateTypeRequest struct {
 	Type string `json:"type"`
 }
 
+type updateViewModeRequest struct {
+	ViewMode *string `json:"viewMode"`
+}
+
 type feedConflictResponse struct {
 	Error        string       `json:"error" example:"feed_exists"`
 	ExistingFeed feedResponse `json:"existingFeed"`
@@ -56,6 +60,7 @@ type feedResponse struct {
 	SummaryPromptReminder *string `json:"summaryPromptReminder,omitempty"`
 	IconPath              *string `json:"iconPath,omitempty"`
 	Type                  string  `json:"type"`
+	ViewMode              *string `json:"viewMode,omitempty"`
 	ETag                  *string `json:"etag,omitempty"`
 	LastModified          *string `json:"lastModified,omitempty"`
 	ErrorMessage          *string `json:"errorMessage,omitempty"`
@@ -90,6 +95,7 @@ func (h *FeedHandler) RegisterRoutes(g *echo.Group) {
 	g.GET("/feeds", h.List)
 	g.PUT("/feeds/:id", h.Update)
 	g.PATCH("/feeds/:id/type", h.UpdateType)
+	g.PATCH("/feeds/:id/view-mode", h.UpdateViewMode)
 	g.DELETE("/feeds/:id", h.Delete)
 	g.DELETE("/feeds", h.DeleteBatch)
 }
@@ -267,6 +273,37 @@ func (h *FeedHandler) UpdateType(c echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
+// UpdateViewMode updates the view mode of a feed.
+// @Summary Update feed view mode
+// @Description Change the per-feed view mode (normal/readability/browser)
+// @Tags feeds
+// @Accept json
+// @Param id path int true "Feed ID"
+// @Param request body updateViewModeRequest true "View mode update request"
+// @Success 204 "No Content"
+// @Failure 400 {object} errorResponse
+// @Failure 404 {object} errorResponse
+// @Router /feeds/{id}/view-mode [patch]
+func (h *FeedHandler) UpdateViewMode(c echo.Context) error {
+	id, err := parseIDParam(c, "id")
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, errorResponse{Error: "invalid request"})
+	}
+	var req updateViewModeRequest
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, errorResponse{Error: "invalid request"})
+	}
+	if req.ViewMode != nil && !isValidFeedViewMode(*req.ViewMode) {
+		return c.JSON(http.StatusBadRequest, errorResponse{Error: "viewMode must be normal, readability, or browser"})
+	}
+	if err := h.service.UpdateViewMode(c.Request().Context(), id, req.ViewMode); err != nil {
+		logger.Error("feed update view mode failed", "module", "handler", "action", "update", "resource", "feed", "result", "failed", "feed_id", id, "view_mode", req.ViewMode, "error", err)
+		return writeServiceError(c, err)
+	}
+	logger.Info("feed view mode updated", "module", "handler", "action", "update", "resource", "feed", "result", "ok", "feed_id", id, "view_mode", req.ViewMode)
+	return c.NoContent(http.StatusNoContent)
+}
+
 // Delete deletes a feed.
 // @Summary Delete a feed
 // @Description Unsubscribe from a feed
@@ -377,6 +414,7 @@ func toFeedResponse(feed model.Feed) feedResponse {
 		SummaryPromptReminder: feed.SummaryPromptReminder,
 		IconPath:              feed.IconPath,
 		Type:                  feed.Type,
+		ViewMode:              feed.ViewMode,
 		ETag:                  feed.ETag,
 		LastModified:          feed.LastModified,
 		ErrorMessage:          feed.ErrorMessage,

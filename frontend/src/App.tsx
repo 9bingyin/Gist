@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useState, useMemo, useEffect } from 'react'
+import { Suspense, lazy, useCallback, useState, useMemo, useEffect, useLayoutEffect, useRef } from 'react'
 import { Router, useLocation, Redirect } from 'wouter'
 import { useTranslation } from 'react-i18next'
 import { ThreeColumnLayout } from '@/components/layout/three-column-layout'
@@ -13,7 +13,7 @@ import { ImagePreview } from '@/components/ui/image-preview'
 import { LoginPage, RegisterPage, NetworkErrorPage } from '@/components/auth'
 import { UpdateNotice } from '@/components/update-notice'
 import { useSelection, selectionToParams } from '@/hooks/useSelection'
-import { useMarkAllAsRead, useEntry } from '@/hooks/useEntries'
+import { useMarkAllAsRead, useUnreadCounts, useEntry } from '@/hooks/useEntries'
 import { useMobileLayout } from '@/hooks/useMobileLayout'
 import { useAuth } from '@/hooks/useAuth'
 import { useFeeds } from '@/hooks/useFeeds'
@@ -22,8 +22,10 @@ import { useAppearanceSettings } from '@/hooks/useAppearanceSettings'
 import { useTitle, buildTitle } from '@/hooks/useTitle'
 import { useUISettingKey, useUISettingActions, hasSidebarVisibilitySetting, setUISetting } from '@/hooks/useUISettings'
 import { useRefreshStatus } from '@/hooks/useRefreshStatus'
+import { getEntryScrollPosition } from '@/hooks/useEntryContentScroll'
 import { isAddFeedPath } from '@/lib/router'
 import { cn } from '@/lib/utils'
+
 import type { ContentType, Feed, Folder } from '@/types/api'
 
 const defaultContentTypes: ContentType[] = ['article', 'picture', 'notification']
@@ -35,7 +37,7 @@ const LazyEntryContent = lazy(async () => {
 function LoadingScreen() {
   const { t } = useTranslation()
   return (
-    <div className="flex h-full w-full items-center justify-center overflow-x-clip bg-background">
+    <div className="flex min-h-dvh items-center justify-center bg-background">
       <div className="flex flex-col items-center gap-4">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
         <p className="text-sm text-muted-foreground">{t('entry.loading')}</p>
@@ -112,6 +114,46 @@ function AuthenticatedApp() {
     closeSidebar,
   } = useMobileLayout()
 
+  // Mobile detail view transition: controls whether the detail panel is mounted
+  // and whether it is animating out (exiting). The detail renders in document flow
+  // (not inside a fixed/overflow-hidden container) so that window is the scroll
+  // container, which is required for mobile browsers to auto-hide the address bar.
+  const [mobileDetailOpen, setMobileDetailOpen] = useState(mobileView === 'detail')
+  const prevMobileViewRef = useRef(mobileView)
+  // Ref so the useLayoutEffect below can read the latest selectedEntryId without
+  // needing it in its deps (selectedEntryId is declared after this effect).
+  const selectedEntryIdRef = useRef<string | null>(null)
+  // useLayoutEffect to apply list/detail visibility synchronously before the browser
+  // paints, eliminating the flash of blank content during transitions.
+  useLayoutEffect(() => {
+    const prev = prevMobileViewRef.current
+    prevMobileViewRef.current = mobileView
+    if (mobileView === 'detail') {
+      setMobileDetailOpen(true)
+      // Do NOT scrollTo here — the detail div is still display:none at this
+      // point, so the document has no height and window.scrollTo would fail.
+      // Scroll restore happens in the mobileDetailOpen effect below.
+    } else if (prev === 'detail') {
+      // Immediately show list so it is visible while the detail slides out.
+      // Scroll restoration is handled by EntryList's useLayoutEffect (isActive → true).
+      setMobileDetailOpen(false)
+    }
+  }, [mobileView])
+
+  // Restore (or reset) window scroll AFTER the detail div becomes visible.
+  // setMobileDetailOpen(true) triggers a synchronous re-render; this effect
+  // fires on that second render when the detail div is block and has height.
+  useLayoutEffect(() => {
+    if (!mobileDetailOpen) return
+    const id = selectedEntryIdRef.current
+    const saved = id ? getEntryScrollPosition(id) : undefined
+    if (saved != null && saved > 0) {
+      window.scrollTo(0, saved)
+    } else {
+      window.scrollTo(0, 0)
+    }
+  }, [mobileDetailOpen])
+
   const {
     selection,
     selectAll,
@@ -124,6 +166,9 @@ function AuthenticatedApp() {
     toggleUnreadOnly,
     contentType,
   } = useSelection()
+
+  // Keep ref in sync so the mobileView useLayoutEffect can read it
+  selectedEntryIdRef.current = selectedEntryId
 
   const { mutate: markAllAsRead } = useMarkAllAsRead()
   const [addFeedContentType, setAddFeedContentType] = useState<ContentType>('article')
@@ -159,6 +204,7 @@ function AuthenticatedApp() {
   const { data: folders = [] } = useFolders()
   const { data: appearanceSettings, isLoading: isAppearanceLoading } = useAppearanceSettings()
   const { data: entry } = useEntry(selectedEntryId)
+  const { data: unreadCounts } = useUnreadCounts()
 
   const feedsMap = useMemo(() => {
     const map = new Map<string, Feed>()
@@ -217,6 +263,81 @@ function AuthenticatedApp() {
   const handleMarkAllRead = useCallback(() => {
     markAllAsRead(selectionToParams(selection, contentType))
   }, [markAllAsRead, selection, contentType])
+
+  const handleMarkAllReadAndGoNextFeed = useCallback(() => {
+    if (selection.type !== 'feed' && selection.type !== 'folder') {
+      handleMarkAllRead()
+      return
+    }
+
+    const candidates = feeds.filter((f) => f.type === contentType)
+    if (candidates.length === 0) {
+      handleMarkAllRead()
+      return
+    }
+
+    const currentFeedId = selection.type === 'feed' ? selection.feedId : null
+
+    let startIndex = 0
+    if (selection.type === 'feed') {
+      const idx = candidates.findIndex((f) => f.id === selection.feedId)
+      startIndex = idx >= 0 ? idx + 1 : 0
+    } else {
+      // folder: start after the last feed belonging to this folder in the current ordering
+      let lastIdx = -1
+      for (let i = 0; i < candidates.length; i += 1) {
+        if (candidates[i]?.folderId === selection.folderId) {
+          lastIdx = i
+        }
+      }
+      startIndex = lastIdx >= 0 ? lastIdx + 1 : 0
+    }
+
+    const counts = unreadCounts?.counts ?? {}
+    let nextFeedId: string | null = null
+
+    const shouldSkipFeed = (feed: Feed) => {
+      if (selection.type === 'folder') {
+        return feed.folderId === selection.folderId
+      }
+      if (currentFeedId) {
+        return feed.id === currentFeedId
+      }
+      return false
+    }
+
+    // Prefer next feed with unread items
+    for (let offset = 0; offset < candidates.length; offset += 1) {
+      const idx = (startIndex + offset) % candidates.length
+      const feed = candidates[idx]
+      if (!feed) continue
+      if (shouldSkipFeed(feed)) continue
+      if ((counts[feed.id] ?? 0) > 0) {
+        nextFeedId = feed.id
+        break
+      }
+    }
+
+    // Fallback: next in ordering
+    if (!nextFeedId) {
+      for (let offset = 0; offset < candidates.length; offset += 1) {
+        const idx = (startIndex + offset) % candidates.length
+        const feed = candidates[idx]
+        if (!feed) continue
+        if (shouldSkipFeed(feed)) continue
+        nextFeedId = feed.id
+        break
+      }
+    }
+
+    markAllAsRead(selectionToParams(selection, contentType), {
+      onSuccess: () => {
+        if (nextFeedId) {
+          handleSelectFeed(nextFeedId)
+        }
+      },
+    })
+  }, [selection, contentType, feeds, unreadCounts?.counts, markAllAsRead, handleSelectFeed, handleMarkAllRead])
 
   const handleSelectAll = useCallback((type?: ContentType) => {
     closeSidebar()
@@ -293,13 +414,13 @@ function AuthenticatedApp() {
 
     if (isAddFeedPath(location)) {
       mobileContent = (
-        <div className="h-full safe-area-top">
+        <div className="h-dvh safe-area-top">
           <AddFeedPage onClose={handleCloseAddFeed} contentType={addFeedContentType} />
         </div>
       )
     } else if (contentType === 'picture') {
       mobileContent = (
-        <div className="h-full flex flex-col overflow-hidden safe-area-top">
+        <div className="h-dvh flex flex-col overflow-hidden safe-area-top">
           <PictureMasonry
             selection={selection}
             contentType={contentType}
@@ -312,33 +433,36 @@ function AuthenticatedApp() {
         </div>
       )
     } else {
-      // List and detail views rendered together, controlled by CSS
+      // Both list and detail use window as the scroll container so that mobile
+      // browsers auto-hide the address bar / toolbar on scroll.
+      // Only one panel is in document flow at a time; the other is hidden.
       mobileContent = (
-        <div className="relative h-full w-screen max-w-full overflow-hidden">
+        <div className="relative h-dvh w-screen max-w-full overflow-hidden">
           {/* List view - always rendered to preserve scroll position */}
           <div className={cn(
-            'absolute inset-0 flex flex-col overflow-hidden bg-background safe-area-top',
-            mobileView === 'detail' && 'invisible'
+            'bg-background',
+            mobileDetailOpen && 'hidden'
           )}>
             <EntryList
               selection={selection}
               selectedEntryId={selectedEntryId}
               onSelectEntry={selectEntry}
               onMarkAllRead={handleMarkAllRead}
+              onMarkAllReadAndGoNextFeed={handleMarkAllReadAndGoNextFeed}
               unreadOnly={unreadOnly}
               onToggleUnreadOnly={toggleUnreadOnly}
               contentType={contentType}
               isMobile
+              isActive={!mobileDetailOpen}
               onMenuClick={openSidebar}
             />
           </div>
-          {/* Detail view - slides in from right */}
+          {/* Detail view - shown only when an entry is selected (tap to enter) */}
           <div className={cn(
-            'absolute inset-0 bg-background transition-transform duration-300 ease-out safe-area-top',
-            mobileView === 'detail' ? 'translate-x-0' : 'translate-x-full'
+            'absolute inset-0 bg-background safe-area-top',
+            mobileDetailOpen ? 'block' : 'hidden'
           )}>
-            {mobileEntryContent}
-          </div>
+            {mobileEntryContent}          </div>
         </div>
       )
     }
@@ -409,6 +533,7 @@ function AuthenticatedApp() {
             selectedEntryId={selectedEntryId}
             onSelectEntry={selectEntry}
             onMarkAllRead={handleMarkAllRead}
+            onMarkAllReadAndGoNextFeed={handleMarkAllReadAndGoNextFeed}
             unreadOnly={unreadOnly}
             onToggleUnreadOnly={toggleUnreadOnly}
             contentType={contentType}

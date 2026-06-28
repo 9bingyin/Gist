@@ -5,6 +5,12 @@ import { cn } from '@/lib/utils'
 
 const UPDATE_CHECK_INTERVAL = 60 * 60 * 1000 // 1 hour
 
+function shouldDisableServiceWorker(): boolean {
+  if (typeof navigator === 'undefined') return false
+  const ua = navigator.userAgent.toLowerCase()
+  return ua.includes('harmonyos') || ua.includes('arkweb') || ua.includes('huaweibrowser')
+}
+
 function registerPeriodicSync(period: number, swUrl: string, r: ServiceWorkerRegistration) {
   if (period <= 0) return
 
@@ -24,6 +30,8 @@ function registerPeriodicSync(period: number, swUrl: string, r: ServiceWorkerReg
 }
 
 export function UpdateNotice() {
+  if (shouldDisableServiceWorker()) return null
+
   const { t } = useTranslation()
 
   const {

@@ -107,8 +107,7 @@
 }
 
 html {
-  /* Prevent pinch-to-zoom and browser default swipe navigation */
-  touch-action: pan-x pan-y;
+  /* Prevent horizontal swipe-to-navigate (back/forward) */
   overscroll-behavior: none;
   background-color: theme(colors.background);
   width: 100%;
@@ -120,28 +119,21 @@ body {
   background-color: theme(colors.background);
   color: theme(colors.foreground);
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  width: 100%;
-  height: var(--app-dvh);
-  margin: 0;
-  overflow: hidden;
 }
 
-#root {
-  width: 100%;
-  height: var(--app-dvh);
-  overflow: hidden;
-  background-color: theme(colors.background);
-}
-
-.app-shell {
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-  background-color: theme(colors.background);
-}
-
+/* Dynamic viewport height for mobile browsers */
 .h-dvh {
-  height: var(--app-dvh);
+  height: 100dvh;
+}
+
+.min-h-dvh {
+  min-height: 100dvh;
+}
+
+@supports not (height: 100dvh) {
+  .h-dvh {
+    height: 100vh;
+  }
 }
 
 /* PWA Safe Area Support - utility classes for components that need safe area padding */
@@ -501,4 +493,37 @@ body {
 .dark .entry-content .prose pre.shiki span {
   color: var(--shiki-dark);
   background-color: transparent;
+}
+
+/* Scrollbar */
+:root {
+  scrollbar-color: hsl(var(--border)) transparent;
+  scrollbar-width: thin;
+}
+
+*::-webkit-scrollbar {
+  width: 4px !important;
+  height: 4px !important;
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+  border-radius: 9999px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.5);
+}
+
+.dark *::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.3);
+}
+
+.dark *::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.5);
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
 }

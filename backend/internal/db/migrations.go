@@ -89,9 +89,22 @@ func Migrate(db *sql.DB) error {
 }
 
 func runMigrations(db *sql.DB) error {
-	// Migration 1: Add read column to entries if not exists
 	var count int
+
+	// Migration XX: Add view_mode column to feeds for per-feed view mode
 	err := db.QueryRow(`
+			SELECT COUNT(*) FROM pragma_table_info('feeds') WHERE name = 'view_mode'
+		`).Scan(&count)
+	if err != nil {
+		return fmt.Errorf("check feeds view_mode column: %w", err)
+	}
+	if count == 0 {
+		if _, err := db.Exec(`ALTER TABLE feeds ADD COLUMN view_mode TEXT`); err != nil {
+			return fmt.Errorf("add feeds view_mode column: %w", err)
+		}
+	}
+	// Migration 1: Add read column to entries if not exists
+	err = db.QueryRow(`
 		SELECT COUNT(*) FROM pragma_table_info('entries') WHERE name = 'read'
 	`).Scan(&count)
 	if err != nil {

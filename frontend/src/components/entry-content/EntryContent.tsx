@@ -8,6 +8,7 @@ import { useScrollToTop } from '@/hooks/useScrollToTop'
 import { useReadability } from '@/hooks/useReadability'
 import { useAISummary } from '@/hooks/useAISummary'
 import { useAITranslation } from '@/hooks/useAITranslation'
+import { useFeedViewStore } from '@/stores/feed-view-store'
 import { EntryContentHeader } from './EntryContentHeader'
 import { EntryContentBody } from './EntryContentBody'
 
@@ -25,17 +26,33 @@ export function EntryContent({ entryId, isMobile, onBack }: EntryContentProps) {
   const { mutate: markAsRead } = useMarkAsRead()
   const { mutate: markAsStarred } = useMarkAsStarred()
   const removeFromUnreadList = useRemoveFromUnreadList()
-  const { scrollRef, isAtTop, scrollNode } = useEntryContentScroll(entryId)
+  // On mobile, use window as the scroll container so the browser can auto-hide
+  // the address bar. On desktop, use the inner ScrollArea div.
+  const { scrollRef, isAtTop, scrollNode } = useEntryContentScroll(entryId, !!isMobile)
 
-  useScrollToTop(scrollNode, 'entrycontent')
+  useScrollToTop(isMobile ? 'window' : scrollNode, 'entrycontent')
 
   // Track entries marked as read to trigger list removal on switch
   const markedAsReadRef = useRef<Set<string>>(new Set())
+  // Guard: auto-mark-as-read should only run once per mount (on initial entry load).
+  // Without this, toggling to unread via the button re-triggers the effect because
+  // entry.read changes, immediately overriding the user's choice.
+  const autoReadDoneRef = useRef(false)
 
   const autoTranslate = aiSettings?.autoTranslate ?? false
   const targetLanguage = aiSettings?.summaryLanguage ?? 'zh-CN'
-  const autoReadability = generalSettings?.autoReadability ?? false
+  const feedViewModeExplicit = useFeedViewStore((s) =>
+    entry ? s.getExplicitMode(entry.feedId) : undefined
+  )
+  const autoReadabilityFromSettings = generalSettings?.autoReadability ?? false
+  const autoReadability =
+    feedViewModeExplicit === 'readability'
+      ? true
+      : feedViewModeExplicit
+        ? false
+        : autoReadabilityFromSettings
   const autoSummary = aiSettings?.autoSummary ?? false
+  const keepReadUntilExit = generalSettings?.keepReadUntilExit ?? false
 
   // Readability hook
   const {
@@ -80,7 +97,10 @@ export function EntryContent({ entryId, isMobile, onBack }: EntryContentProps) {
   // Mark as read when entry is loaded
   // Use skipInvalidate to prevent list item from disappearing immediately
   useEffect(() => {
-    if (entry && !entry.read) {
+    if (autoReadDoneRef.current) return
+    if (!entry) return
+    autoReadDoneRef.current = true
+    if (!entry.read) {
       markedAsReadRef.current.add(entry.id)
       markAsRead({ id: entry.id, read: true, skipInvalidate: true })
     }
@@ -92,17 +112,35 @@ export function EntryContent({ entryId, isMobile, onBack }: EntryContentProps) {
     const markedAsReadSet = markedAsReadRef.current
     return () => {
       if (markedAsReadSet.size > 0) {
-        removeFromUnreadList(markedAsReadSet)
+        if (!keepReadUntilExit) {
+          removeFromUnreadList(markedAsReadSet)
+        }
         markedAsReadSet.clear()
       }
     }
-  }, [removeFromUnreadList])
+  }, [keepReadUntilExit, removeFromUnreadList])
 
   const handleToggleStarred = useCallback(() => {
     if (entry) {
       markAsStarred({ id: entry.id, starred: !entry.starred })
     }
   }, [entry, markAsStarred])
+
+  const handleToggleRead = useCallback(() => {
+    if (entry) {
+      const newRead = !entry.read
+      // skipInvalidate: don't refresh the list immediately — entry stays visible.
+      // Sync markedAsReadRef so the on-unmount removal (removeFromUnreadList) is consistent:
+      //   marking read  → add to ref, entry removed from unread list on navigation away
+      //   marking unread → remove from ref, entry NOT removed from unread list on navigation away
+      markAsRead({ id: entry.id, read: newRead, skipInvalidate: true })
+      if (newRead) {
+        markedAsReadRef.current.add(entry.id)
+      } else {
+        markedAsReadRef.current.delete(entry.id)
+      }
+    }
+  }, [entry, markAsRead])
 
   // Determine display content
   const displayContent = combinedTranslatedContent ?? baseContent
@@ -121,7 +159,9 @@ export function EntryContent({ entryId, isMobile, onBack }: EntryContentProps) {
   }
 
   return (
-    <div className="relative flex h-full w-full flex-col overflow-hidden">
+    // Mobile: no h-full/overflow-hidden — content flows into document for window scroll.
+    // Desktop: h-full overflow-hidden for contained three-column layout.
+    <div className={isMobile ? 'flex flex-col' : 'relative flex h-full w-full flex-col overflow-hidden'}>
       <EntryContentHeader
         entry={entry}
         displayTitle={displayTitle}
@@ -131,6 +171,7 @@ export function EntryContent({ entryId, isMobile, onBack }: EntryContentProps) {
         error={readableError}
         onToggleReadable={handleToggleReadable}
         onToggleStarred={handleToggleStarred}
+        onToggleRead={handleToggleRead}
         isLoadingSummary={isLoadingSummary}
         hasSummary={!!aiSummary}
         onToggleSummary={handleToggleSummary}
@@ -152,6 +193,7 @@ export function EntryContent({ entryId, isMobile, onBack }: EntryContentProps) {
         aiSummary={aiSummary}
         isLoadingSummary={isLoadingSummary}
         summaryError={summaryError}
+        isMobile={isMobile}
       />
     </div>
   )

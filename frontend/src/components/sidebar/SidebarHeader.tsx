@@ -58,7 +58,11 @@ export function SidebarHeader({
         <button
           type="button"
           className={actionButtonStyles}
-          onClick={onAddClick}
+          onClick={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            onAddClick?.()
+          }}
           aria-label={t('actions.add_feed')}
         >
           <AddIcon className="size-5 text-muted-foreground" />

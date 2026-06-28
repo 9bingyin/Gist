@@ -7,6 +7,7 @@ import { queryClient } from '@/lib/queryClient'
 import { I18nProvider } from '@/components/i18n-provider'
 
 const BOOT_READY_ATTR = 'data-gist-boot-ready'
+const BOOT_DONE_ATTR = 'data-gist-booted'
 const BOOT_SOFT_PARAM = '_boot_soft'
 const BOOT_HARD_PARAM = '_boot_hard'
 const bootStartTime = performance.now()
@@ -21,9 +22,42 @@ function logBoot(message: string, detail?: unknown): void {
   console.info('[boot]', message, detail)
 }
 
+function isHarmonyArkWeb(): boolean {
+  if (typeof navigator === 'undefined') return false
+  const ua = navigator.userAgent.toLowerCase()
+  return ua.includes('harmonyos') || ua.includes('arkweb') || ua.includes('huaweibrowser')
+}
+
+async function disableServiceWorkerForHarmony(): Promise<void> {
+  if (!isHarmonyArkWeb()) return
+  if (!('serviceWorker' in navigator)) return
+
+  try {
+    const registrations = await navigator.serviceWorker.getRegistrations()
+    if (registrations.length === 0) return
+
+    await Promise.all(registrations.map((registration) => registration.unregister()))
+    logBoot('service worker disabled for Harmony/ArkWeb', { count: registrations.length })
+  } catch (error) {
+    console.warn('[boot] failed to disable service worker for Harmony/ArkWeb', error)
+  }
+
+  try {
+    if ('caches' in window) {
+      const keys = await caches.keys()
+      await Promise.all(keys.map((key) => caches.delete(key)))
+      logBoot('cache storage cleared for Harmony/ArkWeb', { count: keys.length })
+    }
+  } catch (error) {
+    console.warn('[boot] failed to clear cache storage for Harmony/ArkWeb', error)
+  }
+}
+
 function markBootReady(): void {
   window.__GIST_BOOT_READY__ = true
   document.documentElement.setAttribute(BOOT_READY_ATTR, '1')
+  // Signal the watchdog in index.html that boot completed to avoid recovery reload loops.
+  document.documentElement.setAttribute(BOOT_DONE_ATTR, '1')
 
   const url = new URL(window.location.href)
   let changed = false
@@ -69,6 +103,8 @@ logBoot('main entry executed', {
   visibility_state: document.visibilityState,
 })
 
+void disableServiceWorkerForHarmony()
+
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker
     .getRegistration()
@@ -90,15 +126,18 @@ if ('serviceWorker' in navigator) {
     })
 }
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <I18nProvider>
-        <App />
-      </I18nProvider>
-    </QueryClientProvider>
-  </StrictMode>,
+const appTree = (
+  <QueryClientProvider client={queryClient}>
+    <I18nProvider>
+      <App />
+    </I18nProvider>
+  </QueryClientProvider>
 )
+
+// Avoid double render/fetch on initial load in dev by only enabling StrictMode during development.
+const rootNode = import.meta.env.DEV ? <StrictMode>{appTree}</StrictMode> : appTree
+
+createRoot(document.getElementById('root')!).render(rootNode)
 
 requestAnimationFrame(() => {
   requestAnimationFrame(() => {

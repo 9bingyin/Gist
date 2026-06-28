@@ -54,13 +54,11 @@ type aiTestResponse struct {
 type generalSettingsResponse struct {
 	FallbackUserAgent string `json:"fallbackUserAgent"`
 	AutoReadability   bool   `json:"autoReadability"`
-	MarkReadOnScroll  bool   `json:"markReadOnScroll"`
 }
 
 type generalSettingsRequest struct {
 	FallbackUserAgent string `json:"fallbackUserAgent"`
 	AutoReadability   bool   `json:"autoReadability"`
-	MarkReadOnScroll  bool   `json:"markReadOnScroll"`
 }
 
 type networkSettingsResponse struct {
@@ -272,7 +270,6 @@ func (h *SettingsHandler) GetGeneralSettings(c echo.Context) error {
 	return c.JSON(http.StatusOK, generalSettingsResponse{
 		FallbackUserAgent: settings.FallbackUserAgent,
 		AutoReadability:   settings.AutoReadability,
-		MarkReadOnScroll:  settings.MarkReadOnScroll,
 	})
 }
 
@@ -296,7 +293,6 @@ func (h *SettingsHandler) UpdateGeneralSettings(c echo.Context) error {
 	settings := &service.GeneralSettings{
 		FallbackUserAgent: req.FallbackUserAgent,
 		AutoReadability:   req.AutoReadability,
-		MarkReadOnScroll:  req.MarkReadOnScroll,
 	}
 
 	if err := h.service.SetGeneralSettings(c.Request().Context(), settings); err != nil {

@@ -27,7 +27,7 @@ export function LoginPage({ onLogin, error, onClearError }: LoginPageProps) {
   }
 
   return (
-    <div className="flex h-full w-full items-center justify-center overflow-x-clip overflow-y-auto bg-background p-4 py-6">
+    <div className="flex min-h-dvh items-center justify-center bg-background p-4">
       <div className="w-full max-w-sm space-y-6">
         {/* Logo and Title */}
         <div className="text-center">

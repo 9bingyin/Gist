@@ -28,6 +28,8 @@ vi.mock('react-i18next', () => ({
 vi.mock('@/hooks/useEntries', () => ({
   useEntriesInfinite: vi.fn(),
   useUnreadCounts: vi.fn(() => ({ data: undefined })),
+  useMarkAsRead: vi.fn(() => ({ mutate: vi.fn() })),
+  useRemoveFromUnreadList: vi.fn(() => vi.fn()),
   useMarkManyAsRead: vi.fn(() => ({ mutate: mockMarkManyAsRead })),
   useRemoveFromUnreadList: vi.fn(() => mockRemoveFromUnreadList),
 }))
@@ -42,10 +44,6 @@ vi.mock('@/hooks/useFolders', () => ({
 
 vi.mock('@/hooks/useAISettings', () => ({
   useAISettings: vi.fn(),
-}))
-
-vi.mock('@/hooks/useGeneralSettings', () => ({
-  useGeneralSettings: vi.fn(() => ({ data: { markReadOnScroll: false } })),
 }))
 
 vi.mock('@/hooks/useSelection', () => ({

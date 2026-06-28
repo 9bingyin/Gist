@@ -59,6 +59,9 @@ func registerStatic(e *echo.Echo, dir string) {
 		}
 
 		setStaticHeaders(c.Response().Header(), "index.html")
+		// Explicitly set charset so browsers (especially HarmonyOS ArkWeb) don't
+		// need to sniff encoding from the HTML bytes.
+		c.Response().Header().Set("Content-Type", "text/html; charset=utf-8")
 		logger.Debug("static fallback", "module", "http", "action", "fetch", "resource", "http", "result", "ok", "path", requestPath)
 		return c.File(indexPath)
 	})
@@ -76,4 +79,7 @@ func setStaticHeaders(header nethttp.Header, cleanPath string) {
 	case "index.html", "sw.js", "manifest.webmanifest":
 		header.Set("Cache-Control", "no-cache")
 	}
+	// Prevent MIME-type sniffing, which can cause HarmonyOS ArkWeb and other strict
+	// browsers to misinterpret responses and fail navigation requests.
+	header.Set("X-Content-Type-Options", "nosniff")
 }

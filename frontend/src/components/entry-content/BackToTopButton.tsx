@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react'
 import { cn } from '@/lib/utils'
 
 interface BackToTopButtonProps {
-  scrollNode: HTMLDivElement
+  /** Inner scroll container (desktop). When omitted, uses window scroll (mobile). */
+  scrollNode?: HTMLDivElement | null
   threshold?: number
 }
 
@@ -11,21 +12,28 @@ export function BackToTopButton({
   threshold = 300
 }: BackToTopButtonProps) {
   const [isVisible, setIsVisible] = useState(false)
+  const useWindow = !scrollNode
 
   useEffect(() => {
     const handleScroll = () => {
-      setIsVisible(scrollNode.scrollTop > threshold)
+      const scrollTop = useWindow ? window.scrollY : scrollNode!.scrollTop
+      setIsVisible(scrollTop > threshold)
     }
 
     // Initial check
     handleScroll()
 
-    scrollNode.addEventListener('scroll', handleScroll, { passive: true })
-    return () => scrollNode.removeEventListener('scroll', handleScroll)
-  }, [scrollNode, threshold])
+    const target = useWindow ? window : scrollNode!
+    target.addEventListener('scroll', handleScroll, { passive: true })
+    return () => target.removeEventListener('scroll', handleScroll)
+  }, [scrollNode, threshold, useWindow])
 
   const handleClick = () => {
-    scrollNode.scrollTo({ top: 0, behavior: 'smooth' })
+    if (useWindow) {
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    } else {
+      scrollNode!.scrollTo({ top: 0, behavior: 'smooth' })
+    }
   }
 
   return (
