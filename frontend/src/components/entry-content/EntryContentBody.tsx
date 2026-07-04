@@ -128,13 +128,11 @@ export function EntryContentBody({
     )
   }
 
-  // Desktop: wrap in ScrollArea for contained scrolling in the three-column layout.
+  // Desktop: use an inner scroll container for contained scrolling in the three-column layout.
   return (
-    <ScrollArea
+    <div
       ref={scrollRef}
-      className="flex-1"
-      scrollbarClassName="mt-12"
-      viewportClassName="entry-content-viewport"
+      className="entry-content-viewport mt-12 flex-1 overflow-y-auto"
     >
       {articleBody}
       {scrollNode && <BackToTopButton scrollNode={scrollNode} />}

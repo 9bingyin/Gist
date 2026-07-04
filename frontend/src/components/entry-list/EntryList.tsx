@@ -6,14 +6,11 @@ import { useFeeds } from '@/hooks/useFeeds'
 import { useFolders } from '@/hooks/useFolders'
 import { useAISettings } from '@/hooks/useAISettings'
 import { useGeneralSettings } from '@/hooks/useGeneralSettings'
-import { useGeneralSettings } from '@/hooks/useGeneralSettings'
 import { useSwipeGesture } from '@/hooks/useSwipeGesture'
 import { selectionToParams, type SelectionType } from '@/hooks/useSelection'
 import { flattenUniqueEntries } from '@/lib/entry-pagination'
 import { stripHtml } from '@/lib/html-utils'
 import { cn } from '@/lib/utils'
-import * as ScrollAreaPrimitive from '@radix-ui/react-scroll-area'
-import { ScrollBar } from '@/components/ui/scroll-area'
 import { EntryListItem } from './EntryListItem'
 import { EntryListHeader } from './EntryListHeader'
 import { needsTranslation as needsTranslationAsync } from '@/lib/language-detect-async'
@@ -25,7 +22,6 @@ import {
 } from './scroll-key'
 import { useScrollToTop } from '@/hooks/useScrollToTop'
 import { useFeedViewStore } from '@/stores/feed-view-store'
-import { useScrollMarkRead } from './useScrollMarkRead'
 import type { Entry, Feed, Folder, ContentType } from '@/types/api'
 
 interface EntryListProps {
@@ -46,6 +42,7 @@ interface EntryListProps {
 }
 const TOP_BAR_HEIGHT = 56
 const SCROLL_PADDING_COUNT = 5
+const ESTIMATED_ITEM_HEIGHT = 116
 const MARK_READ_BUTTON_STORAGE_KEY = 'gist.markAllReadButtonPos'
 
 type StoredButtonPosition = { xRatio: number; yRatio: number }
@@ -122,7 +119,6 @@ export function EntryList({
   const { data: folders = [] } = useFolders()
   const { data: aiSettings } = useAISettings()
   const { data: generalSettings } = useGeneralSettings()
-  const { data: generalSettings } = useGeneralSettings()
   const { data: unreadCounts } = useUnreadCounts()
   const { mutate: markAsRead } = useMarkAsRead()
   const removeFromUnreadList = useRemoveFromUnreadList()
@@ -149,7 +145,7 @@ export function EntryList({
 
   const autoTranslate = aiSettings?.autoTranslate ?? false
   const targetLanguage = aiSettings?.summaryLanguage ?? 'zh-CN'
-  const markReadOnScroll = generalSettings?.markReadOnScroll ?? false
+  const defaultFeedViewMode = (generalSettings?.autoReadability ?? false) ? 'readability' : 'normal'
 
   // Save/restore scroll position per selection+contentType
   const scrollKey = selectionScrollKey(selection, contentType)
@@ -709,8 +705,8 @@ export function EntryList({
             viewMenuFeedId={selection.type === 'feed' ? selection.feedId : undefined}
             viewMenuDefaultMode={
               selection.type === 'feed'
-                ? (feedsMap.get(selection.feedId)?.viewMode ?? ((generalSettings?.autoReadability ?? false) ? 'readability' : 'normal'))
-                : ((generalSettings?.autoReadability ?? false) ? 'readability' : 'normal')
+                ? (feedsMap.get(selection.feedId)?.viewMode ?? defaultFeedViewMode)
+                : defaultFeedViewMode
             }
             scrollToTopScope="entrylist"
             isMobile={isMobile}
@@ -757,7 +753,7 @@ export function EntryList({
                       onClick={() => handleEntryClick(entry)}
                       autoTranslate={autoTranslate}
                       targetLanguage={targetLanguage}
-                      markReadOnScroll={generalSettings?.markReadOnScroll ?? false}
+                      markReadOnScroll={markReadOnScrollEnabled}
                       scrollRootRef={null}
                       topOffset={TOP_BAR_HEIGHT}
                       onMarkRead={handleMarkReadOnScroll}
@@ -822,8 +818,8 @@ export function EntryList({
         viewMenuFeedId={selection.type === 'feed' ? selection.feedId : undefined}
         viewMenuDefaultMode={
           selection.type === 'feed'
-            ? (feedsMap.get(selection.feedId)?.viewMode ?? ((generalSettings?.autoReadability ?? false) ? 'readability' : 'normal'))
-            : ((generalSettings?.autoReadability ?? false) ? 'readability' : 'normal')
+            ? (feedsMap.get(selection.feedId)?.viewMode ?? defaultFeedViewMode)
+            : defaultFeedViewMode
         }
         scrollToTopScope="entrylist"
         isMobile={isMobile}
@@ -885,7 +881,7 @@ export function EntryList({
                       onClick={() => handleEntryClick(entry)}
                       autoTranslate={autoTranslate}
                       targetLanguage={targetLanguage}
-                      markReadOnScroll={generalSettings?.markReadOnScroll ?? false}
+                      markReadOnScroll={markReadOnScrollEnabled}
                       scrollRootRef={containerRef}
                       topOffset={TOP_BAR_HEIGHT}
                       onMarkRead={handleMarkReadOnScroll}

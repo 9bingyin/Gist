@@ -36,7 +36,6 @@ export interface GeneralSettings {
   markReadOnScroll: boolean;
   defaultShowUnread: boolean;
   keepReadUntilExit: boolean;
-  markReadOnScroll: boolean;
 }
 
 export type ProxyType = 'http' | 'socks5';

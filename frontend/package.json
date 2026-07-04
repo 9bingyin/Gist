@@ -21,6 +21,7 @@
     "@shikijs/transformers": "^4.1.0",
     "@tailwindcss/vite": "^4.3.0",
     "@tanstack/react-query": "^5.100.14",
+    "@tanstack/react-virtual": "^3.13.18",
     "@virtuoso.dev/masonry": "^1.4.3",
     "clsx": "^2.1.1",
     "eld": "^2.0.3",
