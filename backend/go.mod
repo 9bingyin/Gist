@@ -5,6 +5,7 @@ go 1.25.5
 require (
 	codeberg.org/readeck/go-readability/v2 v2.1.1
 	github.com/Noooste/azuretls-client v1.13.2
+	github.com/Noooste/utls v1.3.21
 	github.com/anthropics/anthropic-sdk-go v1.45.0
 	github.com/bwmarrin/snowflake v0.3.0
 	github.com/gabriel-vasile/mimetype v1.4.13
@@ -29,7 +30,6 @@ require (
 	github.com/Noooste/fhttp v1.0.15 // indirect
 	github.com/Noooste/go-socks4 v0.0.2 // indirect
 	github.com/Noooste/uquic-go v1.0.5 // indirect
-	github.com/Noooste/utls v1.3.21 // indirect
 	github.com/Noooste/websocket v1.0.3 // indirect
 	github.com/PuerkitoBio/goquery v1.12.0 // indirect
 	github.com/andybalholm/brotli v1.2.1 // indirect

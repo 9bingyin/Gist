@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Noooste/azuretls-client"
+	tls "github.com/Noooste/utls"
 	"golang.org/x/net/proxy"
 
 	"gist/backend/pkg/logger"
@@ -87,6 +88,7 @@ func (f *ClientFactory) NewAzureSession(ctx context.Context, timeout time.Durati
 	session := azuretls.NewSession()
 	session.Browser = azuretls.Chrome
 	session.SetTimeout(timeout)
+	session.ModifyConfig = useStandardCertificateVerification
 
 	proxyURL := f.proxyProvider.GetProxyURL(ctx)
 	if proxyURL != "" {
@@ -94,6 +96,15 @@ func (f *ClientFactory) NewAzureSession(ctx context.Context, timeout time.Durati
 	}
 
 	return session
+}
+
+func useStandardCertificateVerification(config *tls.Config) error {
+	// azuretls caches automatically discovered certificate pins globally. Those
+	// pins become stale when a CDN rotates certificates, while browsers normally
+	// rely on the CA chain and hostname verification instead.
+	config.InsecureSkipVerify = false
+	config.VerifyPeerCertificate = nil
+	return nil
 }
 
 // GetProxyURL returns the current proxy URL.
