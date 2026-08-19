@@ -27,6 +27,7 @@ function applyTheme(theme: Theme) {
   const systemDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
   const isDark = theme === "dark" || (theme === "system" && systemDark);
 
+  root.dataset.theme = isDark ? "dark" : "light";
   root.classList.toggle("dark", isDark);
 }
 

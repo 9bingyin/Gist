@@ -6,15 +6,56 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
     />
-    <meta name="theme-color" content="#ED5B2D" />
+    <meta name="color-scheme" content="light dark" />
+    <meta
+      name="theme-color"
+      media="(prefers-color-scheme: light)"
+      content="#FFFFFF"
+    />
+    <meta
+      name="theme-color"
+      media="(prefers-color-scheme: dark)"
+      content="#09090B"
+    />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta
-      name="apple-mobile-web-app-status-bar-style"
-      content="black-translucent"
-    />
+    <!-- iOS 27 applies an uncontrollable hard edge blur to translucent PWA status bars. -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="Gist" />
     <meta name="description" content="A modern RSS reader" />
+    <script>
+      (() => {
+        let theme = "system";
+        try {
+          theme = localStorage.getItem("gist-theme") || "system";
+        } catch {
+          // Use the system theme when storage is unavailable.
+        }
+
+        const isDark =
+          theme === "dark" ||
+          (theme !== "light" &&
+            window.matchMedia("(prefers-color-scheme: dark)").matches);
+        const root = document.documentElement;
+        root.dataset.theme = isDark ? "dark" : "light";
+        root.classList.toggle("dark", isDark);
+      })();
+    </script>
+    <style>
+      :root {
+        background-color: #ffffff;
+      }
+
+      :root[data-theme="dark"] {
+        background-color: #09090b;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme]) {
+          background-color: #09090b;
+        }
+      }
+    </style>
     <link rel="icon" href="/favicon.ico" sizes="48x48" />
     <link rel="icon" href="/logo.svg" sizes="any" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon-180x180.png" />
