@@ -8,12 +8,14 @@ import {
 } from "react";
 import { useMarkManyAsRead, useRemoveFromUnreadList } from "@/hooks/useEntries";
 import type { Entry } from "@/types/api";
+import type { ScrollSurface } from "./scroll-surface";
 
 const MARK_READ_ON_SCROLL_BATCH_DELAY_MS = 200;
 const MARK_READ_ON_SCROLL_GRACE_MS = 1000;
 
 interface UseScrollMarkReadOptions {
-  containerRef: RefObject<HTMLDivElement | null>;
+  surface: ScrollSurface;
+  contentRootRef: RefObject<HTMLDivElement | null>;
   entries: Entry[];
   enabled: boolean;
   unreadOnly: boolean;
@@ -26,7 +28,8 @@ interface UseScrollMarkReadResult {
 }
 
 export function useScrollMarkRead({
-  containerRef,
+  surface,
+  contentRootRef,
   entries,
   enabled,
   unreadOnly,
@@ -70,13 +73,13 @@ export function useScrollMarkRead({
   }, [endPaddingHeight]);
 
   const measureScrollLayout = useCallback(() => {
-    const node = containerRef.current;
-    if (!node) return;
+    const contentRoot = contentRootRef.current;
+    if (!contentRoot) return;
 
-    const containerHeight = node.clientHeight;
+    const containerHeight = surface.getViewportRect().height;
     const naturalScrollHeight = Math.max(
       0,
-      node.scrollHeight - endPaddingHeightRef.current,
+      contentRoot.scrollHeight - endPaddingHeightRef.current,
     );
     const naturalContentOverflows = naturalScrollHeight > containerHeight + 1;
 
@@ -90,26 +93,33 @@ export function useScrollMarkRead({
 
       return { containerHeight, naturalContentOverflows };
     });
-  }, [containerRef]);
+  }, [contentRootRef, surface]);
 
   useEffect(() => {
-    const node = containerRef.current;
-    if (!node) return;
+    const contentRoot = contentRootRef.current;
+    if (!contentRoot) return;
 
     measureScrollLayout();
+    const handleResize = () => measureScrollLayout();
+    if (surface.kind === "document") {
+      window.addEventListener("resize", handleResize);
+    }
 
-    if (typeof ResizeObserver === "undefined") return;
+    if (typeof ResizeObserver === "undefined") {
+      return () => window.removeEventListener("resize", handleResize);
+    }
 
     const observer = new ResizeObserver(measureScrollLayout);
-    observer.observe(node);
-    for (const child of Array.from(node.children)) {
+    observer.observe(contentRoot);
+    for (const child of Array.from(contentRoot.children)) {
       observer.observe(child);
     }
 
     return () => {
       observer.disconnect();
+      window.removeEventListener("resize", handleResize);
     };
-  }, [containerRef, measureScrollLayout]);
+  }, [contentRootRef, measureScrollLayout, surface.kind]);
 
   useEffect(() => {
     measureScrollLayout();
@@ -174,7 +184,6 @@ export function useScrollMarkRead({
     const pendingEntries = pendingReadEntries.current;
     if (pendingEntries.size === 0) return;
 
-    const node = containerRef.current;
     const ids = Array.from(pendingEntries.keys());
     const removedHeight = Array.from(pendingEntries.values()).reduce(
       (sum, height) => sum + height,
@@ -191,14 +200,10 @@ export function useScrollMarkRead({
 
           removeFromUnreadList(new Set(ids));
 
-          if (!node || removedHeight <= 0) return;
+          if (removedHeight <= 0) return;
           requestAnimationFrame(() => {
-            if (
-              session.current !== currentSession ||
-              containerRef.current !== node
-            )
-              return;
-            node.scrollTop = Math.max(0, node.scrollTop - removedHeight);
+            if (session.current !== currentSession) return;
+            surface.scrollBy(-removedHeight);
           });
         },
         onError: () => {
@@ -209,7 +214,7 @@ export function useScrollMarkRead({
         },
       },
     );
-  }, [containerRef, markManyAsRead, removeFromUnreadList, unreadOnly]);
+  }, [markManyAsRead, removeFromUnreadList, surface, unreadOnly]);
 
   const queueRead = useCallback(
     (entryId: string, removedHeight: number) => {
@@ -228,15 +233,25 @@ export function useScrollMarkRead({
   );
 
   useEffect(() => {
-    const node = containerRef.current;
-    if (!enabled || !node || typeof IntersectionObserver === "undefined")
+    const contentRoot = contentRootRef.current;
+    if (
+      !enabled ||
+      !contentRoot ||
+      typeof IntersectionObserver === "undefined"
+    ) {
       return;
+    }
 
     const unreadIds = new Set(
       entries.filter((entry) => !entry.read).map((entry) => entry.id),
     );
     if (unreadIds.size === 0) return;
 
+    const viewport = surface.getViewportRect();
+    const rootMargin =
+      surface.kind === "document"
+        ? `-${Math.ceil(viewport.top)}px 0px 0px 0px`
+        : "0px";
     const observer = new IntersectionObserver(
       (items) => {
         for (const item of items) {
@@ -246,16 +261,16 @@ export function useScrollMarkRead({
             !entryId ||
             !unreadIds.has(entryId) ||
             markedReadIds.current.has(entryId)
-          )
+          ) {
             continue;
+          }
 
           if (item.isIntersecting) {
             seenEntryIds.current.add(entryId);
             continue;
           }
 
-          const rootTop =
-            item.rootBounds?.top ?? node.getBoundingClientRect().top;
+          const rootTop = item.rootBounds?.top ?? surface.getViewportRect().top;
           if (
             !seenEntryIds.current.has(entryId) ||
             item.boundingClientRect.bottom > rootTop
@@ -269,30 +284,38 @@ export function useScrollMarkRead({
           queueRead(entryId, removedHeight);
         }
       },
-      { root: node, threshold: 0 },
+      {
+        root: surface.getIntersectionRoot(),
+        rootMargin,
+        threshold: 0,
+      },
     );
 
-    const rootRect = node.getBoundingClientRect();
-    for (const item of node.querySelectorAll<HTMLElement>("[data-entry-id]")) {
+    const visibleRect = surface.getViewportRect();
+    for (const item of contentRoot.querySelectorAll<HTMLElement>(
+      "[data-entry-id]",
+    )) {
       const entryId = item.dataset.entryId;
       if (
         !entryId ||
         !unreadIds.has(entryId) ||
         markedReadIds.current.has(entryId)
-      )
+      ) {
         continue;
+      }
 
       const itemRect = item.getBoundingClientRect();
-      if (itemRect.bottom > rootRect.top && itemRect.top < rootRect.bottom) {
+      if (
+        itemRect.bottom > visibleRect.top &&
+        itemRect.top < visibleRect.bottom
+      ) {
         seenEntryIds.current.add(entryId);
       }
       observer.observe(item);
     }
 
-    return () => {
-      observer.disconnect();
-    };
-  }, [containerRef, entries, enabled, observerVersion, queueRead]);
+    return () => observer.disconnect();
+  }, [contentRootRef, entries, enabled, observerVersion, queueRead, surface]);
 
   return { endPaddingHeight };
 }

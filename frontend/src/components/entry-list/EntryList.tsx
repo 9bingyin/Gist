@@ -25,7 +25,9 @@ import {
 import { translationActions } from "@/stores/translation-store";
 import { selectionScrollKey, entryListScrollPositions } from "./scroll-key";
 import { useScrollToTop } from "@/hooks/useScrollToTop";
+import { cn } from "@/lib/utils";
 import { useScrollMarkRead } from "./useScrollMarkRead";
+import { useEntryListScrollSurface } from "./scroll-surface";
 import type { Entry, Feed, Folder, ContentType } from "@/types/api";
 
 interface EntryListProps {
@@ -41,6 +43,7 @@ interface EntryListProps {
   isTablet?: boolean;
   onToggleSidebar?: () => void;
   sidebarVisible?: boolean;
+  isActive?: boolean;
 }
 
 export function EntryList({
@@ -56,15 +59,34 @@ export function EntryList({
   isTablet,
   onToggleSidebar,
   sidebarVisible,
+  isActive = true,
 }: EntryListProps) {
   "use no memo";
 
   const { t } = useTranslation();
   const params = selectionToParams(selection, contentType);
   const containerRef = useRef<HTMLDivElement>(null);
+  const headerRef = useRef<HTMLDivElement>(null);
   const listWrapperRef = useRef<HTMLDivElement>(null);
+  const usesDocumentScroll = Boolean(isMobile);
+  const scrollSurface = useEntryListScrollSurface({
+    documentScroll: usesDocumentScroll,
+    containerRef,
+    headerRef,
+  });
+  const scrollToTop = useCallback(() => {
+    scrollSurface.scrollTo(0, "smooth");
+  }, [scrollSurface]);
 
-  useScrollToTop(containerRef, "entrylist");
+  useScrollToTop(scrollToTop, "entrylist", isActive);
+
+  const handleMenuClick = useCallback(() => {
+    entryListScrollPositions.set(
+      selectionScrollKey(selection, contentType),
+      scrollSurface.getScrollTop(),
+    );
+    onMenuClick?.();
+  }, [contentType, onMenuClick, scrollSurface, selection]);
 
   const { data: feeds = [] } = useFeeds();
   const { data: folders = [] } = useFolders();
@@ -76,7 +98,7 @@ export function EntryList({
 
   // Swipe gesture: Right swipe opens sidebar (only on mobile)
   useSwipeGesture(listWrapperRef, {
-    onSwipeRight: () => onMenuClick?.(),
+    onSwipeRight: handleMenuClick,
     enabledDirections: ["right"],
     threshold: 100,
     preventScroll: true,
@@ -101,38 +123,41 @@ export function EntryList({
   // Restore scroll position on same-mount key change (e.g., article -> notification)
   // and remount (e.g., returning from picture mode).
   useLayoutEffect(() => {
-    const node = containerRef.current;
-    if (!node) return;
+    if (!isActive) return;
 
     const saved = entryListScrollPositions.get(scrollKey);
-    node.scrollTop = saved ?? 0;
-  }, [scrollKey]);
+    scrollSurface.scrollTo(saved ?? 0);
+    return () => {
+      entryListScrollPositions.set(scrollKey, scrollSurface.getScrollTop());
+    };
+  }, [isActive, scrollKey, scrollSurface]);
 
   const maybeFetchNextPage = useCallback(() => {
-    const node = containerRef.current;
-    if (!node || !hasNextPage || isFetchingNextPage) return;
+    if (!isActive || !hasNextPage || isFetchingNextPage) return;
 
-    const distanceToBottom =
-      node.scrollHeight - node.scrollTop - node.clientHeight;
-    if (distanceToBottom <= 600) {
+    if (scrollSurface.getDistanceToBottom() <= 600) {
       fetchNextPage();
     }
-  }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
+  }, [fetchNextPage, hasNextPage, isActive, isFetchingNextPage, scrollSurface]);
+
+  const handleSelectEntry = useCallback(
+    (entryId: string) => {
+      entryListScrollPositions.set(scrollKey, scrollSurface.getScrollTop());
+      onSelectEntry(entryId);
+    },
+    [onSelectEntry, scrollKey, scrollSurface],
+  );
 
   useEffect(() => {
-    const node = containerRef.current;
-    if (!node) return;
+    if (!isActive) return;
 
     const handleScroll = () => {
-      entryListScrollPositions.set(scrollKey, node.scrollTop);
+      entryListScrollPositions.set(scrollKey, scrollSurface.getScrollTop());
       maybeFetchNextPage();
     };
 
-    node.addEventListener("scroll", handleScroll, { passive: true });
-    return () => {
-      node.removeEventListener("scroll", handleScroll);
-    };
-  }, [maybeFetchNextPage, scrollKey]);
+    return scrollSurface.subscribe(handleScroll);
+  }, [isActive, maybeFetchNextPage, scrollKey, scrollSurface]);
 
   // Cancel pending translations and reset state when list changes
   useEffect(() => {
@@ -180,9 +205,10 @@ export function EntryList({
 
   const entries = useMemo(() => flattenUniqueEntries(data?.pages), [data]);
   const { endPaddingHeight: scrollReadEndPaddingHeight } = useScrollMarkRead({
-    containerRef,
+    surface: scrollSurface,
+    contentRootRef: containerRef,
     entries,
-    enabled: markReadOnScroll,
+    enabled: markReadOnScroll && isActive,
     unreadOnly,
     hasNextPage: Boolean(hasNextPage),
     resetKey: `${scrollKey}\u0000${unreadOnly}\u0000${markReadOnScroll}`,
@@ -290,7 +316,7 @@ export function EntryList({
 
   // Trigger translation for real visible items and selected entry
   useEffect(() => {
-    if (!autoTranslate) return;
+    if (!autoTranslate || !isActive) return;
 
     const node = containerRef.current;
     if (!node || typeof IntersectionObserver === "undefined") {
@@ -312,7 +338,10 @@ export function EntryList({
           }
         }
       },
-      { root: node, rootMargin: "200px 0px" },
+      {
+        root: scrollSurface.getIntersectionRoot(),
+        rootMargin: "200px 0px",
+      },
     );
 
     for (const item of node.querySelectorAll<HTMLElement>("[data-index]")) {
@@ -329,7 +358,14 @@ export function EntryList({
     return () => {
       observer.disconnect();
     };
-  }, [entries, autoTranslate, scheduleTranslation, selectedEntryId]);
+  }, [
+    entries,
+    autoTranslate,
+    isActive,
+    scheduleTranslation,
+    scrollSurface,
+    selectedEntryId,
+  ]);
 
   const title = useMemo(() => {
     switch (selection.type) {
@@ -378,26 +414,52 @@ export function EntryList({
   }, [unreadCounts, selection, feeds, contentType]);
 
   return (
-    <div ref={listWrapperRef} className="flex h-full flex-col">
-      <EntryListHeader
-        title={title}
-        unreadCount={unreadCount}
-        unreadOnly={unreadOnly}
-        onToggleUnreadOnly={onToggleUnreadOnly}
-        onMarkAllRead={onMarkAllRead}
-        scrollToTopScope="entrylist"
-        isMobile={isMobile}
-        onMenuClick={onMenuClick}
-        isTablet={isTablet}
-        onToggleSidebar={onToggleSidebar}
-        sidebarVisible={sidebarVisible}
-      />
+    <div
+      ref={listWrapperRef}
+      className={cn(
+        usesDocumentScroll
+          ? "entry-list-document min-h-[var(--app-dvh)]"
+          : "flex h-full flex-col",
+      )}
+    >
+      <div
+        ref={headerRef}
+        className={cn(
+          usesDocumentScroll &&
+            "sticky top-0 z-20 bg-background [transform:translateZ(0)]",
+        )}
+      >
+        <EntryListHeader
+          title={title}
+          unreadCount={unreadCount}
+          unreadOnly={unreadOnly}
+          onToggleUnreadOnly={onToggleUnreadOnly}
+          onMarkAllRead={onMarkAllRead}
+          scrollToTopScope="entrylist"
+          isMobile={isMobile}
+          onMenuClick={handleMenuClick}
+          isTablet={isTablet}
+          onToggleSidebar={onToggleSidebar}
+          sidebarVisible={sidebarVisible}
+        />
+      </div>
 
-      <div className="relative min-h-0 flex-1 overflow-hidden">
+      <div
+        className={cn(
+          usesDocumentScroll
+            ? "min-h-[calc(var(--app-dvh)-3.5rem)]"
+            : "relative min-h-0 flex-1 overflow-hidden",
+        )}
+      >
         <div
           ref={containerRef}
           data-testid="entry-list-viewport"
-          className="h-full w-full overflow-x-hidden overflow-y-auto rounded-[inherit] overscroll-y-contain [overflow-anchor:none]"
+          className={cn(
+            "w-full overflow-x-hidden rounded-[inherit] [overflow-anchor:none]",
+            usesDocumentScroll
+              ? "overflow-y-visible"
+              : "h-full overflow-y-auto overscroll-y-contain",
+          )}
         >
           {isLoading ? (
             <EntryListSkeleton />
@@ -413,7 +475,7 @@ export function EntryList({
                   entry={entry}
                   feed={feedsMap.get(entry.feedId)}
                   isSelected={entry.id === selectedEntryId}
-                  onClick={() => onSelectEntry(entry.id)}
+                  onClick={() => handleSelectEntry(entry.id)}
                   autoTranslate={autoTranslate}
                   targetLanguage={targetLanguage}
                 />

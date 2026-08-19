@@ -104,6 +104,24 @@ describe("useScrollToTop", () => {
     }).not.toThrow();
   });
 
+  it("should call an active document scroll action", () => {
+    const scrollAction = vi.fn();
+    renderHook(() => useScrollToTop(scrollAction, "entrylist", true));
+
+    act(() => dispatchScrollToTop("entrylist"));
+
+    expect(scrollAction).toHaveBeenCalledOnce();
+  });
+
+  it("should ignore an inactive document scroll action", () => {
+    const scrollAction = vi.fn();
+    renderHook(() => useScrollToTop(scrollAction, "entrylist", false));
+
+    act(() => dispatchScrollToTop());
+
+    expect(scrollAction).not.toHaveBeenCalled();
+  });
+
   it("should isolate multiple listeners with different scopes", () => {
     const listDiv = createScrollableDiv();
     const contentDiv = createScrollableDiv();

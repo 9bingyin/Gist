@@ -8,19 +8,28 @@ export function dispatchScrollToTop(scope?: string) {
   window.dispatchEvent(new CustomEvent(SCROLL_TO_TOP_EVENT, { detail: scope }));
 }
 
-// Listen for scroll-to-top events and scroll the target element to top.
-// Only responds when:
-// 1. The event has no scope (broadcast), or the scope matches this listener's scope
-// 2. The element is visible (checked via CSS visibility)
+type ScrollToTopTarget =
+  | RefObject<HTMLElement | null>
+  | HTMLElement
+  | (() => void)
+  | null;
+
+// Listen for scroll-to-top events and scroll the active target to top.
+// Element targets retain the visibility check used by overlapping mobile views.
 export function useScrollToTop(
-  scrollTarget: RefObject<HTMLElement | null> | HTMLElement | null,
+  scrollTarget: ScrollToTopTarget,
   scope?: string,
+  enabled = true,
 ) {
   useEffect(() => {
     const handler = (e: Event) => {
       const eventScope = (e as CustomEvent<string | undefined>).detail;
-      // If event has a scope, only respond if it matches
-      if (eventScope && eventScope !== scope) return;
+      if (!enabled || (eventScope && eventScope !== scope)) return;
+
+      if (typeof scrollTarget === "function") {
+        scrollTarget();
+        return;
+      }
 
       const el =
         scrollTarget && "current" in scrollTarget
@@ -37,5 +46,5 @@ export function useScrollToTop(
 
     window.addEventListener(SCROLL_TO_TOP_EVENT, handler);
     return () => window.removeEventListener(SCROLL_TO_TOP_EVENT, handler);
-  }, [scrollTarget, scope]);
+  }, [enabled, scrollTarget, scope]);
 }

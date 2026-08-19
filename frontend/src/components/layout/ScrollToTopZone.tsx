@@ -1,9 +1,8 @@
 import { dispatchScrollToTop } from "@/hooks/useScrollToTop";
 
-// Transparent tap zone covering the iOS safe-area-inset-top region (status bar area).
-// On iOS PWA standalone mode, this area is within the web view (viewport-fit=cover).
-// On Android or devices without safe area, env(safe-area-inset-top) resolves to 0,
-// making the element invisible and non-interactive.
+// Compatibility tap zone for edge-to-edge WebKit viewports.
+// The default contained PWA viewport resolves the inset to 0 and lets iOS handle
+// status-bar taps through the main document scroll view.
 export function ScrollToTopZone() {
   return (
     <div

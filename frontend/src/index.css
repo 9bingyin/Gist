@@ -146,6 +146,32 @@ body {
   background-color: theme(colors.background);
 }
 
+/* Mobile article lists use the WKWebView document scroll view, like X/Twitter. */
+html.mobile-document-scroll {
+  height: auto;
+  min-height: var(--app-dvh);
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+body.mobile-document-scroll {
+  height: auto;
+  min-height: var(--app-dvh);
+  overflow: visible;
+}
+
+html.mobile-document-scroll #root,
+html.mobile-document-scroll .app-shell {
+  height: auto;
+  min-height: var(--app-dvh);
+  overflow: visible;
+}
+
+html.mobile-document-scroll-locked,
+body.mobile-document-scroll-locked {
+  overflow: hidden;
+}
+
 .h-dvh {
   height: var(--app-dvh);
 }

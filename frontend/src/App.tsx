@@ -22,6 +22,7 @@ import { UpdateNotice } from "@/components/update-notice";
 import { useSelection, selectionToParams } from "@/hooks/useSelection";
 import { useMarkAllAsRead, useEntry } from "@/hooks/useEntries";
 import { useMobileLayout } from "@/hooks/useMobileLayout";
+import { useMobileDocumentScrollMode } from "@/hooks/useMobileDocumentScrollMode";
 import { useAuth } from "@/hooks/useAuth";
 import { useFeeds } from "@/hooks/useFeeds";
 import { useFolders } from "@/hooks/useFolders";
@@ -269,6 +270,14 @@ function AuthenticatedApp() {
     }
   }, [visibleContentTypes, contentType, selectAll]);
 
+  const usesMobileDocumentScroll =
+    isMobile && !isAddFeedPath(location) && contentType !== "picture";
+  useMobileDocumentScrollMode({
+    enabled: usesMobileDocumentScroll,
+    locked:
+      usesMobileDocumentScroll && (mobileView === "detail" || sidebarOpen),
+  });
+
   const entryContent = selectedEntryId ? (
     <Suspense fallback={<EntryContentFallback />}>
       <LazyEntryContent key={selectedEntryId} entryId={selectedEntryId} />
@@ -350,13 +359,15 @@ function AuthenticatedApp() {
     } else {
       // List and detail views rendered together, controlled by CSS
       mobileContent = (
-        <div className="relative h-full w-screen max-w-full overflow-hidden">
-          {/* List view - always rendered to preserve scroll position */}
-          <div
+        <div className="mobile-reading-stack relative min-h-[var(--app-dvh)] w-screen max-w-full bg-background">
+          {/* The list stays mounted in normal document flow to preserve state. */}
+          <section
             className={cn(
-              "absolute inset-0 flex flex-col overflow-hidden bg-background safe-area-top",
-              mobileView === "detail" && "invisible",
+              "mobile-list-page min-h-[var(--app-dvh)] bg-background",
+              mobileView === "detail" && "pointer-events-none select-none",
             )}
+            aria-hidden={mobileView === "detail"}
+            inert={mobileView === "detail" ? true : undefined}
           >
             <EntryList
               selection={selection}
@@ -367,18 +378,23 @@ function AuthenticatedApp() {
               onToggleUnreadOnly={toggleUnreadOnly}
               contentType={contentType}
               isMobile
+              isActive={mobileView === "list"}
               onMenuClick={openSidebar}
             />
-          </div>
-          {/* Detail view - slides in from right */}
-          <div
+          </section>
+          {/* Detail remains an internal scroller and slides over the document list. */}
+          <section
             className={cn(
-              "absolute inset-0 bg-background transition-transform duration-300 ease-out safe-area-top",
-              mobileView === "detail" ? "translate-x-0" : "translate-x-full",
+              "mobile-detail-page fixed inset-0 z-30 h-[var(--app-dvh)] overflow-hidden bg-background transition-transform duration-300 ease-out",
+              mobileView === "detail"
+                ? "translate-x-0"
+                : "pointer-events-none translate-x-full",
             )}
+            aria-hidden={mobileView !== "detail"}
+            inert={mobileView !== "detail" ? true : undefined}
           >
             {mobileEntryContent}
-          </div>
+          </section>
         </div>
       );
     }

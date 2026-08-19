@@ -5,7 +5,9 @@ import { describe, expect, it } from "vitest";
 const indexHtml = readFileSync(resolve(process.cwd(), "index.html"), "utf8");
 
 describe("iOS PWA metadata", () => {
-  it("keeps web content outside the iOS 27 translucent status bar", () => {
+  it("keeps the iOS 27 PWA viewport inside the system safe area", () => {
+    expect(indexHtml).toContain("viewport-fit=contain");
+    expect(indexHtml).not.toContain("viewport-fit=cover");
     expect(indexHtml).toContain(
       'name="apple-mobile-web-app-status-bar-style" content="default"',
     );

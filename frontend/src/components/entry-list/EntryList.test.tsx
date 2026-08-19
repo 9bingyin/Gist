@@ -102,6 +102,7 @@ vi.mock("./EntryListHeader", () => ({
 }));
 
 import { EntryList } from "./EntryList";
+import { entryListScrollPositions } from "./scroll-key";
 import { useEntriesInfinite } from "@/hooks/useEntries";
 import { useAISettings } from "@/hooks/useAISettings";
 import { useGeneralSettings } from "@/hooks/useGeneralSettings";
@@ -277,6 +278,7 @@ describe("EntryList translation scheduling", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.clearAllMocks();
+    entryListScrollPositions.clear();
 
     mockRenderedEntryListItem.mockReset();
     mockNeedsTranslation.mockResolvedValue(true);
@@ -514,6 +516,23 @@ describe("EntryList translation scheduling", () => {
     expect(fetchNextPage).toHaveBeenCalled();
   });
 
+  it("切换列表时不会用新位置覆盖旧列表位置", () => {
+    entryListScrollPositions.set("starred:article", 40);
+    const { rerender } = render(<EntryList {...defaultProps} />);
+    const viewport = screen.getByTestId("entry-list-viewport");
+    Object.defineProperty(viewport, "scrollTop", {
+      configurable: true,
+      writable: true,
+      value: 300,
+    });
+    fireEvent.scroll(viewport);
+
+    rerender(<EntryList {...defaultProps} selection={{ type: "starred" }} />);
+
+    expect(entryListScrollPositions.get("all:article")).toBe(300);
+    expect(viewport.scrollTop).toBe(40);
+  });
+
   it("开启滚动标已读后，条目滚出顶部时批量标为已读", async () => {
     vi.mocked(useGeneralSettings).mockReturnValue({
       data: { markReadOnScroll: true },
@@ -678,6 +697,75 @@ describe("EntryList translation scheduling", () => {
         delete (HTMLElement.prototype as { scrollHeight?: number })
           .scrollHeight;
       }
+    }
+  });
+
+  it("移动端短列表不会因页面最小高度追加底部空白", async () => {
+    vi.mocked(useGeneralSettings).mockReturnValue({
+      data: { markReadOnScroll: true },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+    vi.mocked(useEntriesInfinite).mockReturnValue({
+      data: {
+        pages: [{ entries: [makeEntry("1"), makeEntry("2")], hasMore: false }],
+      },
+      fetchNextPage: vi.fn(),
+      hasNextPage: false,
+      isFetchingNextPage: false,
+      isLoading: false,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+    const originalClientHeight = Object.getOwnPropertyDescriptor(
+      document.documentElement,
+      "clientHeight",
+    );
+    const originalScrollHeight = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      "scrollHeight",
+    );
+    const originalScrollTo = window.scrollTo;
+
+    try {
+      Object.defineProperty(document.documentElement, "clientHeight", {
+        configurable: true,
+        value: 800,
+      });
+      Object.defineProperty(HTMLElement.prototype, "scrollHeight", {
+        configurable: true,
+        get() {
+          return this instanceof HTMLElement &&
+            this.dataset.testid === "entry-list-viewport"
+            ? 160
+            : 800;
+        },
+      });
+      window.scrollTo = vi.fn();
+
+      render(<EntryList {...defaultProps} isMobile />);
+      await act(async () => Promise.resolve());
+
+      const viewport = screen.getByTestId("entry-list-viewport");
+      expect(viewport.querySelector('[aria-hidden="true"]')).toBeNull();
+    } finally {
+      if (originalClientHeight) {
+        Object.defineProperty(
+          document.documentElement,
+          "clientHeight",
+          originalClientHeight,
+        );
+      } else {
+        Reflect.deleteProperty(document.documentElement, "clientHeight");
+      }
+      if (originalScrollHeight) {
+        Object.defineProperty(
+          HTMLElement.prototype,
+          "scrollHeight",
+          originalScrollHeight,
+        );
+      } else {
+        Reflect.deleteProperty(HTMLElement.prototype, "scrollHeight");
+      }
+      window.scrollTo = originalScrollTo;
     }
   });
 
@@ -852,6 +940,52 @@ describe("EntryList translation scheduling", () => {
     const viewport = screen.getByTestId("entry-list-viewport");
     expect(viewport.className).toContain("overflow-y-auto");
     expect(viewport.className).toContain("overflow-x-hidden");
+  });
+
+  it("移动列表使用主文档滚动并从窗口触发分页", () => {
+    const fetchNextPage = vi.fn();
+    vi.mocked(useEntriesInfinite).mockReturnValue({
+      data: { pages: [{ entries: allEntries, hasMore: true }] },
+      fetchNextPage,
+      hasNextPage: true,
+      isFetchingNextPage: false,
+      isLoading: false,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+    const originalScrollY = Object.getOwnPropertyDescriptor(window, "scrollY");
+    const originalScrollTo = window.scrollTo;
+
+    try {
+      Object.defineProperties(document.documentElement, {
+        clientHeight: { configurable: true, value: 1000 },
+        scrollHeight: { configurable: true, value: 2000 },
+      });
+      Object.defineProperty(document.body, "scrollHeight", {
+        configurable: true,
+        value: 2000,
+      });
+      Object.defineProperty(window, "scrollY", {
+        configurable: true,
+        value: 500,
+      });
+      window.scrollTo = vi.fn();
+
+      render(<EntryList {...defaultProps} isMobile />);
+      fireEvent.scroll(window);
+
+      const viewport = screen.getByTestId("entry-list-viewport");
+      expect(viewport.className).toContain("overflow-y-visible");
+      expect(viewport.className).not.toContain("overflow-y-auto");
+      expect(fetchNextPage).toHaveBeenCalled();
+    } finally {
+      Reflect.deleteProperty(document.documentElement, "clientHeight");
+      Reflect.deleteProperty(document.documentElement, "scrollHeight");
+      Reflect.deleteProperty(document.body, "scrollHeight");
+      if (originalScrollY) {
+        Object.defineProperty(window, "scrollY", originalScrollY);
+      }
+      window.scrollTo = originalScrollTo;
+    }
   });
 
   it("渲染列表时也会去重重复文章", () => {
