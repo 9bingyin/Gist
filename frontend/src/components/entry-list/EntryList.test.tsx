@@ -335,6 +335,21 @@ describe("EntryList translation scheduling", () => {
     vi.useRealTimers();
   });
 
+  it("移动端文档滚动使用固定顶栏并覆盖顶部合成间隙", () => {
+    render(<EntryList {...defaultProps} isMobile isActive={false} />);
+
+    const header = screen.getByTestId("entry-list-header");
+    expect(header.classList.contains("fixed")).toBe(true);
+    expect(header.classList.contains("inset-x-0")).toBe(true);
+    expect(header.classList.contains("top-0")).toBe(true);
+    expect(header.classList.contains("sticky")).toBe(false);
+
+    const backdrop = header.querySelector('[aria-hidden="true"]');
+    expect(backdrop?.classList.contains("-top-2")).toBe(true);
+    expect(backdrop?.classList.contains("bg-background")).toBe(true);
+    expect(header.nextElementSibling?.classList.contains("h-14")).toBe(true);
+  });
+
   it("会为可视区外的选中文章安排翻译", async () => {
     render(<EntryList {...defaultProps} selectedEntryId="4" />);
 

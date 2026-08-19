@@ -22,4 +22,10 @@ describe("app shell viewport sizing", () => {
     expect(cssSource).toContain("overflow-y: auto;");
     expect(cssSource).toContain("mobile-document-scroll-locked");
   });
+
+  it("does not change root overflow when the mobile sidebar opens", () => {
+    expect(appSource).toContain(
+      'locked: usesMobileDocumentScroll && mobileView === "detail"',
+    );
+  });
 });

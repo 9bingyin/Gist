@@ -424,25 +424,33 @@ export function EntryList({
     >
       <div
         ref={headerRef}
-        className={cn(
-          usesDocumentScroll &&
-            "sticky top-0 z-20 bg-background [transform:translateZ(0)]",
-        )}
+        data-testid="entry-list-header"
+        className={cn(usesDocumentScroll && "fixed inset-x-0 top-0 z-20")}
       >
-        <EntryListHeader
-          title={title}
-          unreadCount={unreadCount}
-          unreadOnly={unreadOnly}
-          onToggleUnreadOnly={onToggleUnreadOnly}
-          onMarkAllRead={onMarkAllRead}
-          scrollToTopScope="entrylist"
-          isMobile={isMobile}
-          onMenuClick={handleMenuClick}
-          isTablet={isTablet}
-          onToggleSidebar={onToggleSidebar}
-          sidebarVisible={sidebarVisible}
-        />
+        {/* Hide short WebKit compositor gaps during momentum scrolling. */}
+        {usesDocumentScroll && (
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-0 -top-2 -bottom-px bg-background"
+          />
+        )}
+        <div className={cn(usesDocumentScroll && "relative")}>
+          <EntryListHeader
+            title={title}
+            unreadCount={unreadCount}
+            unreadOnly={unreadOnly}
+            onToggleUnreadOnly={onToggleUnreadOnly}
+            onMarkAllRead={onMarkAllRead}
+            scrollToTopScope="entrylist"
+            isMobile={isMobile}
+            onMenuClick={handleMenuClick}
+            isTablet={isTablet}
+            onToggleSidebar={onToggleSidebar}
+            sidebarVisible={sidebarVisible}
+          />
+        </div>
       </div>
+      {usesDocumentScroll && <div aria-hidden="true" className="h-14" />}
 
       <div
         className={cn(

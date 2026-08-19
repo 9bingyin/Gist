@@ -475,7 +475,7 @@ function SidebarScrollArea({
   return (
     <div
       ref={ref}
-      className="h-full overflow-y-auto px-1 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] space-y-1"
+      className="h-full overflow-y-auto overscroll-y-contain px-1 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] space-y-1"
     >
       {children}
     </div>

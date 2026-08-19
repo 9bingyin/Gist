@@ -1,6 +1,11 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
+
+const BLOCK_BACKGROUND_SCROLL_OPTIONS = {
+  capture: true,
+  passive: false,
+} as const;
 
 interface SheetProps {
   open: boolean;
@@ -9,22 +14,48 @@ interface SheetProps {
 }
 
 export function Sheet({ open, onOpenChange, children }: SheetProps) {
-  // Handle escape key and body scroll lock
+  const contentRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     if (!open) return;
 
-    document.body.style.overflow = "hidden";
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
         onOpenChange(false);
       }
     };
+    const preventBackgroundScroll = (event: TouchEvent | WheelEvent) => {
+      const target = event.target;
+      if (target instanceof Node && contentRef.current?.contains(target)) {
+        return;
+      }
+      event.preventDefault();
+    };
+
     document.addEventListener("keydown", handleKeyDown);
+    document.addEventListener(
+      "touchmove",
+      preventBackgroundScroll,
+      BLOCK_BACKGROUND_SCROLL_OPTIONS,
+    );
+    document.addEventListener(
+      "wheel",
+      preventBackgroundScroll,
+      BLOCK_BACKGROUND_SCROLL_OPTIONS,
+    );
 
     return () => {
-      document.body.style.overflow = "";
       document.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener(
+        "touchmove",
+        preventBackgroundScroll,
+        BLOCK_BACKGROUND_SCROLL_OPTIONS,
+      );
+      document.removeEventListener(
+        "wheel",
+        preventBackgroundScroll,
+        BLOCK_BACKGROUND_SCROLL_OPTIONS,
+      );
     };
   }, [open, onOpenChange]);
 
@@ -39,13 +70,14 @@ export function Sheet({ open, onOpenChange, children }: SheetProps) {
         >
           {/* Overlay */}
           <motion.div
+            data-slot="sheet-overlay"
             variants={{
               open: { opacity: 1 },
               closed: { opacity: 0 },
             }}
             transition={{ duration: 0.2 }}
             className={cn(
-              "fixed z-50 bg-black/50",
+              "fixed z-50 bg-black/50 touch-none overscroll-none",
               // Extend to cover safe area (notch/home indicator)
               "top-[calc(-1*env(safe-area-inset-top,0px))]",
               "bottom-[calc(-1*env(safe-area-inset-bottom,0px))]",
@@ -57,6 +89,8 @@ export function Sheet({ open, onOpenChange, children }: SheetProps) {
 
           {/* Sheet content */}
           <motion.div
+            ref={contentRef}
+            data-slot="sheet-content"
             drag="x"
             dragConstraints={{ left: 0, right: 0 }}
             dragElastic={{ left: 0.1, right: 0 }}
@@ -73,7 +107,7 @@ export function Sheet({ open, onOpenChange, children }: SheetProps) {
             className={cn(
               "fixed inset-y-0 left-0 z-50 bg-sidebar shadow-xl",
               "w-[280px] safe-area-top",
-              "touch-none",
+              "touch-pan-y overscroll-y-contain",
             )}
           >
             {children}

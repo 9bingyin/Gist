@@ -274,8 +274,9 @@ function AuthenticatedApp() {
     isMobile && !isAddFeedPath(location) && contentType !== "picture";
   useMobileDocumentScrollMode({
     enabled: usesMobileDocumentScroll,
-    locked:
-      usesMobileDocumentScroll && (mobileView === "detail" || sidebarOpen),
+    // Changing root overflow destabilizes viewport-pinned UI in iOS WebKit.
+    // Only the full-screen detail view needs a document lock.
+    locked: usesMobileDocumentScroll && mobileView === "detail",
   });
 
   const entryContent = selectedEntryId ? (
