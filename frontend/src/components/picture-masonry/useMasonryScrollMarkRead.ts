@@ -1,12 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMarkManyAsRead, useRemoveFromUnreadList } from "@/hooks/useEntries";
 import type { Entry } from "@/types/api";
+import type {
+  ScrollSurface,
+  ScrollViewportRect,
+} from "@/components/entry-list/scroll-surface";
 
 const MARK_READ_ON_SCROLL_BATCH_DELAY_MS = 200;
 const MARK_READ_ON_SCROLL_GRACE_MS = 1000;
 
 interface UseMasonryScrollMarkReadOptions {
   scrollElement: HTMLElement | null;
+  scrollSurface: ScrollSurface;
   entries: Entry[];
   enabled: boolean;
   unreadOnly: boolean;
@@ -25,9 +30,9 @@ interface AnchorSnapshot {
 
 function findVisibleAnchor(
   root: HTMLElement,
+  viewport: ScrollViewportRect,
   excludingIds: Set<string>,
 ): AnchorSnapshot | null {
-  const rootRect = root.getBoundingClientRect();
   let anchor: AnchorSnapshot | null = null;
 
   for (const item of root.querySelectorAll<HTMLElement>("[data-entry-id]")) {
@@ -35,7 +40,7 @@ function findVisibleAnchor(
     if (!entryId || excludingIds.has(entryId)) continue;
 
     const rect = item.getBoundingClientRect();
-    if (rect.bottom <= rootRect.top || rect.top >= rootRect.bottom) continue;
+    if (rect.bottom <= viewport.top || rect.top >= viewport.bottom) continue;
     if (!anchor || rect.top < anchor.top) {
       anchor = { id: entryId, top: rect.top };
     }
@@ -56,6 +61,7 @@ function findEntryElement(
 
 export function useMasonryScrollMarkRead({
   scrollElement,
+  scrollSurface,
   entries,
   enabled,
   unreadOnly,
@@ -105,10 +111,10 @@ export function useMasonryScrollMarkRead({
   const measureScrollLayout = useCallback(() => {
     if (!scrollElement) return;
 
-    const viewportHeight = scrollElement.clientHeight;
+    const viewportHeight = scrollSurface.getViewportRect().height;
     const naturalScrollHeight = Math.max(
       0,
-      scrollElement.scrollHeight - endPaddingHeightRef.current,
+      scrollSurface.getScrollHeight() - endPaddingHeightRef.current,
     );
     const naturalContentOverflows = naturalScrollHeight > viewportHeight + 1;
 
@@ -122,7 +128,7 @@ export function useMasonryScrollMarkRead({
 
       return { viewportHeight, naturalContentOverflows };
     });
-  }, [scrollElement]);
+  }, [scrollElement, scrollSurface]);
 
   useEffect(() => {
     if (!scrollElement) return;
@@ -225,7 +231,11 @@ export function useMasonryScrollMarkRead({
       pendingIds.clear();
 
       const idSet = new Set(ids);
-      const anchor = findVisibleAnchor(node, idSet);
+      const anchor = findVisibleAnchor(
+        node,
+        scrollSurface.getViewportRect(),
+        idSet,
+      );
       const currentSession = session.current;
 
       markManyAsRead(
@@ -246,8 +256,9 @@ export function useMasonryScrollMarkRead({
               const nextAnchor = findEntryElement(node, anchor.id);
               if (!nextAnchor) return;
 
-              node.scrollTop +=
-                nextAnchor.getBoundingClientRect().top - anchor.top;
+              scrollSurface.scrollBy(
+                nextAnchor.getBoundingClientRect().top - anchor.top,
+              );
             });
           },
           onError: () => {
@@ -259,7 +270,7 @@ export function useMasonryScrollMarkRead({
         },
       );
     },
-    [markManyAsRead, removeFromUnreadList, unreadOnly],
+    [markManyAsRead, removeFromUnreadList, scrollSurface, unreadOnly],
   );
 
   const queueRead = useCallback(
@@ -307,7 +318,7 @@ export function useMasonryScrollMarkRead({
           }
 
           const rootTop =
-            item.rootBounds?.top ?? scrollElement.getBoundingClientRect().top;
+            item.rootBounds?.top ?? scrollSurface.getViewportRect().top;
           if (
             !seenEntryIds.current.has(entryId) ||
             item.boundingClientRect.bottom > rootTop
@@ -319,12 +330,12 @@ export function useMasonryScrollMarkRead({
           queueRead(entryId);
         }
       },
-      { root: scrollElement, threshold: 0 },
+      { root: scrollSurface.getIntersectionRoot(), threshold: 0 },
     );
 
     const observedItems = new WeakMap<Element, string>();
     const observeEntryItems = () => {
-      const rootRect = scrollElement.getBoundingClientRect();
+      const viewport = scrollSurface.getViewportRect();
       for (const item of scrollElement.querySelectorAll<HTMLElement>(
         "[data-entry-id]",
       )) {
@@ -338,7 +349,7 @@ export function useMasonryScrollMarkRead({
         if (observedItems.get(item) === entryId) continue;
 
         const itemRect = item.getBoundingClientRect();
-        if (itemRect.bottom > rootRect.top && itemRect.top < rootRect.bottom) {
+        if (itemRect.bottom > viewport.top && itemRect.top < viewport.bottom) {
           seenEntryIds.current.add(entryId);
         }
 
@@ -364,7 +375,14 @@ export function useMasonryScrollMarkRead({
       mutationObserver?.disconnect();
       observer.disconnect();
     };
-  }, [enabled, entries, observerVersion, queueRead, scrollElement]);
+  }, [
+    enabled,
+    entries,
+    observerVersion,
+    queueRead,
+    scrollElement,
+    scrollSurface,
+  ]);
 
   return { endPaddingHeight };
 }

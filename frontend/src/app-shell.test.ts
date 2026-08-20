@@ -16,11 +16,14 @@ describe("app shell viewport sizing", () => {
     expect(cssSource).toContain("--app-dvh: 100lvh;");
   });
 
-  it("allows the mobile article list to use document scrolling", () => {
+  it("allows mobile feed views to use document scrolling", () => {
     expect(cssSource).toContain("html.mobile-document-scroll");
     expect(cssSource).toContain("min-height: var(--app-dvh);");
     expect(cssSource).toContain("overflow-y: auto;");
     expect(cssSource).toContain("mobile-document-scroll-locked");
+    expect(appSource).toContain(
+      "const usesMobileDocumentScroll = isMobile && !isAddFeedPath(location)",
+    );
   });
 
   it("does not change root overflow when the mobile sidebar opens", () => {

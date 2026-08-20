@@ -25,6 +25,7 @@ import {
 import { translationActions } from "@/stores/translation-store";
 import { selectionScrollKey, entryListScrollPositions } from "./scroll-key";
 import { useScrollToTop } from "@/hooks/useScrollToTop";
+import { MobileDocumentHeader } from "@/components/layout/MobileDocumentHeader";
 import { cn } from "@/lib/utils";
 import { useScrollMarkRead } from "./useScrollMarkRead";
 import { useEntryListScrollSurface } from "./scroll-surface";
@@ -422,35 +423,25 @@ export function EntryList({
           : "flex h-full flex-col",
       )}
     >
-      <div
-        ref={headerRef}
-        data-testid="entry-list-header"
-        className={cn(usesDocumentScroll && "fixed inset-x-0 top-0 z-20")}
+      <MobileDocumentHeader
+        enabled={usesDocumentScroll}
+        headerRef={headerRef}
+        testId="entry-list-header"
       >
-        {/* Hide short WebKit compositor gaps during momentum scrolling. */}
-        {usesDocumentScroll && (
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-x-0 -top-2 -bottom-px bg-background"
-          />
-        )}
-        <div className={cn(usesDocumentScroll && "relative")}>
-          <EntryListHeader
-            title={title}
-            unreadCount={unreadCount}
-            unreadOnly={unreadOnly}
-            onToggleUnreadOnly={onToggleUnreadOnly}
-            onMarkAllRead={onMarkAllRead}
-            scrollToTopScope="entrylist"
-            isMobile={isMobile}
-            onMenuClick={handleMenuClick}
-            isTablet={isTablet}
-            onToggleSidebar={onToggleSidebar}
-            sidebarVisible={sidebarVisible}
-          />
-        </div>
-      </div>
-      {usesDocumentScroll && <div aria-hidden="true" className="h-14" />}
+        <EntryListHeader
+          title={title}
+          unreadCount={unreadCount}
+          unreadOnly={unreadOnly}
+          onToggleUnreadOnly={onToggleUnreadOnly}
+          onMarkAllRead={onMarkAllRead}
+          scrollToTopScope="entrylist"
+          isMobile={isMobile}
+          onMenuClick={handleMenuClick}
+          isTablet={isTablet}
+          onToggleSidebar={onToggleSidebar}
+          sidebarVisible={sidebarVisible}
+        />
+      </MobileDocumentHeader>
 
       <div
         className={cn(

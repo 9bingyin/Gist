@@ -270,8 +270,7 @@ function AuthenticatedApp() {
     }
   }, [visibleContentTypes, contentType, selectAll]);
 
-  const usesMobileDocumentScroll =
-    isMobile && !isAddFeedPath(location) && contentType !== "picture";
+  const usesMobileDocumentScroll = isMobile && !isAddFeedPath(location);
   useMobileDocumentScrollMode({
     enabled: usesMobileDocumentScroll,
     // Changing root overflow destabilizes viewport-pinned UI in iOS WebKit.
@@ -345,7 +344,7 @@ function AuthenticatedApp() {
       );
     } else if (contentType === "picture") {
       mobileContent = (
-        <div className="h-full flex flex-col overflow-hidden safe-area-top">
+        <div className="min-h-[var(--app-dvh)] bg-background">
           <PictureMasonry
             selection={selection}
             contentType={contentType}

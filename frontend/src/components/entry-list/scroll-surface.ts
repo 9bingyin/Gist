@@ -20,7 +20,7 @@ export interface ScrollSurface {
 
 interface UseEntryListScrollSurfaceOptions {
   documentScroll: boolean;
-  containerRef: RefObject<HTMLDivElement | null>;
+  containerRef: RefObject<HTMLElement | null>;
   headerRef: RefObject<HTMLDivElement | null>;
 }
 

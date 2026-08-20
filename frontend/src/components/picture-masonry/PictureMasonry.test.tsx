@@ -7,11 +7,13 @@ const {
   mockRemoveFromUnreadList,
   mockFetchNextPage,
   mockVisibleEntryCount,
+  mockWindowScrollTo,
 } = vi.hoisted(() => ({
   mockMarkManyAsRead: vi.fn(),
   mockRemoveFromUnreadList: vi.fn(),
   mockFetchNextPage: vi.fn(),
   mockVisibleEntryCount: { value: Number.POSITIVE_INFINITY },
+  mockWindowScrollTo: vi.fn(),
 }));
 
 vi.mock("react-i18next", () => ({
@@ -24,6 +26,7 @@ vi.mock("@virtuoso.dev/masonry", () => ({
     ItemContent,
     className,
     style,
+    useWindowScroll,
   }: {
     data: Array<{ entry: Entry }>;
     ItemContent: React.ComponentType<{
@@ -33,9 +36,11 @@ vi.mock("@virtuoso.dev/masonry", () => ({
     }>;
     className?: string;
     style?: React.CSSProperties;
+    useWindowScroll?: boolean;
   }) => (
     <div
       data-testid="picture-masonry-scroll"
+      data-window-scroll={useWindowScroll ? "true" : "false"}
       className={className}
       style={{ overflowY: "auto", height: 400, ...style }}
     >
@@ -125,11 +130,11 @@ const defaultProps = {
   onMarkAllRead: vi.fn(),
 };
 
-function mockEntries(nextEntries: Entry[] = entries) {
+function mockEntries(nextEntries: Entry[] = entries, hasNextPage = false) {
   vi.mocked(useEntriesInfinite).mockReturnValue({
-    data: { pages: [{ entries: nextEntries, hasMore: false }] },
+    data: { pages: [{ entries: nextEntries, hasMore: hasNextPage }] },
     fetchNextPage: mockFetchNextPage,
-    hasNextPage: false,
+    hasNextPage,
     isFetchingNextPage: false,
     isLoading: false,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -256,6 +261,7 @@ describe("PictureMasonry scroll mark read", () => {
   let originalIntersectionObserver: typeof IntersectionObserver | undefined;
   let originalResizeObserver: typeof ResizeObserver | undefined;
   let originalMutationObserver: typeof MutationObserver | undefined;
+  let originalWindowScrollTo: typeof window.scrollTo;
 
   beforeEach(() => {
     vi.useFakeTimers();
@@ -264,6 +270,8 @@ describe("PictureMasonry scroll mark read", () => {
     originalResizeObserver = globalThis.ResizeObserver;
     globalThis.ResizeObserver = undefined as unknown as typeof ResizeObserver;
     originalMutationObserver = globalThis.MutationObserver;
+    originalWindowScrollTo = window.scrollTo;
+    window.scrollTo = mockWindowScrollTo;
     mockVisibleEntryCount.value = Number.POSITIVE_INFINITY;
     mockEntries();
     vi.mocked(useGeneralSettings).mockReturnValue({
@@ -277,7 +285,141 @@ describe("PictureMasonry scroll mark read", () => {
     globalThis.IntersectionObserver = originalIntersectionObserver!;
     globalThis.ResizeObserver = originalResizeObserver!;
     globalThis.MutationObserver = originalMutationObserver!;
+    window.scrollTo = originalWindowScrollTo;
     vi.useRealTimers();
+  });
+
+  it("移动端使用文档滚动和固定顶栏", () => {
+    render(<PictureMasonry {...defaultProps} isMobile />);
+
+    const header = screen.getByTestId("picture-masonry-header");
+    expect(header.classList.contains("fixed")).toBe(true);
+    expect(header.classList.contains("inset-x-0")).toBe(true);
+    expect(header.classList.contains("top-0")).toBe(true);
+    expect(header.querySelector('[aria-hidden="true"]')).not.toBeNull();
+    expect(header.nextElementSibling?.classList.contains("h-14")).toBe(true);
+    expect(
+      screen.getByTestId("picture-masonry-scroll").dataset.windowScroll,
+    ).toBe("true");
+  });
+
+  it("移动端文档滚动接近底部时继续分页", () => {
+    mockEntries(entries, true);
+    const root = document.documentElement;
+    const originalClientHeight = Object.getOwnPropertyDescriptor(
+      root,
+      "clientHeight",
+    );
+    const originalScrollHeight = Object.getOwnPropertyDescriptor(
+      root,
+      "scrollHeight",
+    );
+    const originalScrollY = Object.getOwnPropertyDescriptor(window, "scrollY");
+
+    try {
+      Object.defineProperty(root, "clientHeight", {
+        configurable: true,
+        value: 700,
+      });
+      Object.defineProperty(root, "scrollHeight", {
+        configurable: true,
+        value: 1000,
+      });
+      Object.defineProperty(window, "scrollY", {
+        configurable: true,
+        value: 100,
+      });
+
+      render(<PictureMasonry {...defaultProps} isMobile />);
+
+      expect(mockFetchNextPage).toHaveBeenCalledTimes(1);
+    } finally {
+      if (originalClientHeight) {
+        Object.defineProperty(root, "clientHeight", originalClientHeight);
+      } else {
+        Reflect.deleteProperty(root, "clientHeight");
+      }
+      if (originalScrollHeight) {
+        Object.defineProperty(root, "scrollHeight", originalScrollHeight);
+      } else {
+        Reflect.deleteProperty(root, "scrollHeight");
+      }
+      if (originalScrollY) {
+        Object.defineProperty(window, "scrollY", originalScrollY);
+      } else {
+        Reflect.deleteProperty(window, "scrollY");
+      }
+    }
+  });
+
+  it("移动端会在分页判断前清除上一个视图的滚动位置", () => {
+    mockEntries(entries, true);
+    const root = document.documentElement;
+    const originalClientHeight = Object.getOwnPropertyDescriptor(
+      root,
+      "clientHeight",
+    );
+    const originalScrollHeight = Object.getOwnPropertyDescriptor(
+      root,
+      "scrollHeight",
+    );
+    const originalScrollY = Object.getOwnPropertyDescriptor(window, "scrollY");
+    let scrollY = 1200;
+
+    try {
+      Object.defineProperty(root, "clientHeight", {
+        configurable: true,
+        value: 700,
+      });
+      Object.defineProperty(root, "scrollHeight", {
+        configurable: true,
+        value: 2000,
+      });
+      Object.defineProperty(window, "scrollY", {
+        configurable: true,
+        get: () => scrollY,
+      });
+      mockWindowScrollTo.mockImplementation((options: ScrollToOptions) => {
+        scrollY = options.top ?? 0;
+      });
+
+      render(<PictureMasonry {...defaultProps} isMobile />);
+
+      expect(scrollY).toBe(0);
+      expect(mockFetchNextPage).not.toHaveBeenCalled();
+    } finally {
+      if (originalClientHeight) {
+        Object.defineProperty(root, "clientHeight", originalClientHeight);
+      } else {
+        Reflect.deleteProperty(root, "clientHeight");
+      }
+      if (originalScrollHeight) {
+        Object.defineProperty(root, "scrollHeight", originalScrollHeight);
+      } else {
+        Reflect.deleteProperty(root, "scrollHeight");
+      }
+      if (originalScrollY) {
+        Object.defineProperty(window, "scrollY", originalScrollY);
+      } else {
+        Reflect.deleteProperty(window, "scrollY");
+      }
+    }
+  });
+
+  it("移动端文档滚动保持滚动标已读", async () => {
+    vi.mocked(useGeneralSettings).mockReturnValue({
+      data: { markReadOnScroll: true },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+    installScrollMarkObserver();
+
+    render(<PictureMasonry {...defaultProps} isMobile />);
+    await flushMarkReadBatch();
+
+    expect(mockMarkManyAsRead).toHaveBeenCalledWith(
+      { ids: ["1", "2", "3"], read: true, skipInvalidate: true },
+      expect.any(Object),
+    );
   });
 
   it("开启滚动标已读后，图片项滚出顶部时批量标为已读", async () => {

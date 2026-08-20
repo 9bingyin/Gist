@@ -1,4 +1,11 @@
-import { useMemo, useRef, useEffect, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { VirtuosoMasonry } from "@virtuoso.dev/masonry";
 import { useEntriesInfinite, useUnreadCounts } from "@/hooks/useEntries";
@@ -8,11 +15,15 @@ import { useMasonryColumn } from "@/hooks/useMasonryColumn";
 import { useSwipeGesture } from "@/hooks/useSwipeGesture";
 import { selectionToParams, type SelectionType } from "@/hooks/useSelection";
 import { flattenUniqueEntries } from "@/lib/entry-pagination";
+import { cn } from "@/lib/utils";
 import { useImageDimensionsStore } from "@/stores/image-dimensions-store";
 import { PictureItem } from "./PictureItem";
 import { useGeneralSettings } from "@/hooks/useGeneralSettings";
+import { useScrollToTop } from "@/hooks/useScrollToTop";
 import { useMasonryScrollMarkRead } from "./useMasonryScrollMarkRead";
 import { EntryListHeader } from "@/components/entry-list/EntryListHeader";
+import { MobileDocumentHeader } from "@/components/layout/MobileDocumentHeader";
+import { useEntryListScrollSurface } from "@/components/entry-list/scroll-surface";
 import type { ContentType, Entry, Feed } from "@/types/api";
 
 interface PictureMasonryProps {
@@ -84,8 +95,26 @@ export function PictureMasonry({
   const { t } = useTranslation();
   const params = selectionToParams(selection, contentType);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const headerRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const [scrollElement, setScrollElement] = useState<HTMLElement | null>(null);
+  const scrollElementRef = useRef<HTMLElement>(null);
+  const [internalScroller, setInternalScroller] = useState<HTMLElement | null>(
+    null,
+  );
+  const usesDocumentScroll = Boolean(isMobile);
+  const scrollElement = usesDocumentScroll
+    ? document.documentElement
+    : internalScroller;
+  const scrollSurface = useEntryListScrollSurface({
+    documentScroll: usesDocumentScroll,
+    containerRef: scrollElementRef,
+    headerRef,
+  });
+  const scrollToTop = useCallback(() => {
+    scrollSurface.scrollTo(0, "smooth");
+  }, [scrollSurface]);
+
+  useScrollToTop(scrollToTop, "picture");
 
   // Swipe gesture: Right swipe opens sidebar (only on mobile)
   useSwipeGesture(wrapperRef, {
@@ -96,18 +125,6 @@ export function PictureMasonry({
     startFrom: { left: 32 },
     enabled: Boolean(isMobile && onMenuClick),
   });
-
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const eventScope = (e as CustomEvent<string | undefined>).detail;
-      if (eventScope && eventScope !== "picture") return;
-      const container = findScrollableElement(scrollContainerRef.current);
-      if (!container) return;
-      container.scrollTo({ top: 0, behavior: "smooth" });
-    };
-    window.addEventListener("scrolltotop", handler);
-    return () => window.removeEventListener("scrolltotop", handler);
-  }, []);
 
   const { currentColumn, isReady } = useMasonryColumn(
     isMobile,
@@ -176,19 +193,20 @@ export function PictureMasonry({
     [entries, feedsMap],
   );
 
-  // Infinite scroll by listening to VirtuosoMasonry's internal scroll container.
+  // Reset before passive scroll effects can inspect a previous view's position.
+  useLayoutEffect(() => {
+    if (!scrollElement) return;
+    scrollSurface.scrollTo(0);
+  }, [filterKey, scrollElement, scrollSurface]);
+
+  // Virtuoso creates its own scroller on desktop and uses the document on mobile.
   useEffect(() => {
     const wrapper = scrollContainerRef.current;
     if (!wrapper || !isReady) return;
 
-    let scrollEl: HTMLElement | null = null;
-    let observer: MutationObserver | null = null;
-
     const handleScroll = () => {
-      if (!scrollEl) return;
-      const { scrollTop, scrollHeight, clientHeight } = scrollEl;
       if (
-        scrollHeight - scrollTop - clientHeight < 300 &&
+        scrollSurface.getDistanceToBottom() < 300 &&
         hasNextPage &&
         !isFetchingNextPage
       ) {
@@ -196,14 +214,26 @@ export function PictureMasonry({
       }
     };
 
-    const setupScrollListener = () => {
-      const nextScrollEl = findScrollableElement(wrapper);
-      if (!nextScrollEl || nextScrollEl === scrollEl) return Boolean(scrollEl);
+    if (usesDocumentScroll) {
+      const unsubscribe = scrollSurface.subscribe(handleScroll);
+      handleScroll();
+      return unsubscribe;
+    }
 
-      scrollEl?.removeEventListener("scroll", handleScroll);
-      scrollEl = nextScrollEl;
-      setScrollElement(nextScrollEl);
-      scrollEl.addEventListener("scroll", handleScroll, { passive: true });
+    let internalScroller: HTMLElement | null = null;
+    let observer: MutationObserver | null = null;
+
+    const setupScrollListener = () => {
+      const nextScroller = findScrollableElement(wrapper);
+      if (!nextScroller || nextScroller === internalScroller) {
+        return Boolean(internalScroller);
+      }
+
+      internalScroller?.removeEventListener("scroll", handleScroll);
+      internalScroller = nextScroller;
+      scrollElementRef.current = nextScroller;
+      setInternalScroller(nextScroller);
+      nextScroller.addEventListener("scroll", handleScroll, { passive: true });
       return true;
     };
 
@@ -219,21 +249,26 @@ export function PictureMasonry({
 
     return () => {
       observer?.disconnect();
-      scrollEl?.removeEventListener("scroll", handleScroll);
-      setScrollElement((current) => (current === scrollEl ? null : current));
+      internalScroller?.removeEventListener("scroll", handleScroll);
+      scrollElementRef.current = null;
+      setInternalScroller((current) =>
+        current === internalScroller ? null : current,
+      );
     };
-  }, [hasNextPage, isFetchingNextPage, fetchNextPage, isReady]);
-
-  // Reset scroll on selection/filter change
-  useEffect(() => {
-    const scrollEl = findScrollableElement(scrollContainerRef.current);
-    if (!scrollEl) return;
-    scrollEl.scrollTop = 0;
-  }, [selection, unreadOnly]);
+  }, [
+    fetchNextPage,
+    filterKey,
+    hasNextPage,
+    isFetchingNextPage,
+    isReady,
+    scrollSurface,
+    usesDocumentScroll,
+  ]);
 
   const { endPaddingHeight: scrollReadEndPaddingHeight } =
     useMasonryScrollMarkRead({
       scrollElement,
+      scrollSurface,
       entries,
       enabled: markReadOnScroll,
       unreadOnly,
@@ -277,31 +312,51 @@ export function PictureMasonry({
   }, [unreadCounts, selection, feeds, contentType]);
 
   return (
-    <div ref={wrapperRef} className="flex h-full flex-col">
-      <EntryListHeader
-        title={title}
-        unreadCount={unreadCount}
-        unreadOnly={unreadOnly}
-        onToggleUnreadOnly={onToggleUnreadOnly}
-        onMarkAllRead={onMarkAllRead}
-        scrollToTopScope="picture"
-        isMobile={isMobile}
-        onMenuClick={onMenuClick}
-        isTablet={isTablet}
-        onToggleSidebar={onToggleSidebar}
-        sidebarVisible={sidebarVisible}
-      />
+    <div
+      ref={wrapperRef}
+      className={cn(
+        usesDocumentScroll ? "min-h-[var(--app-dvh)]" : "flex h-full flex-col",
+      )}
+    >
+      <MobileDocumentHeader
+        enabled={usesDocumentScroll}
+        headerRef={headerRef}
+        testId="picture-masonry-header"
+      >
+        <EntryListHeader
+          title={title}
+          unreadCount={unreadCount}
+          unreadOnly={unreadOnly}
+          onToggleUnreadOnly={onToggleUnreadOnly}
+          onMarkAllRead={onMarkAllRead}
+          scrollToTopScope="picture"
+          isMobile={isMobile}
+          onMenuClick={onMenuClick}
+          isTablet={isTablet}
+          onToggleSidebar={onToggleSidebar}
+          sidebarVisible={sidebarVisible}
+        />
+      </MobileDocumentHeader>
 
       <div
         ref={scrollContainerRef}
-        className="min-h-0 flex-1 overflow-hidden [overflow-anchor:none]"
+        className={cn(
+          "[overflow-anchor:none]",
+          usesDocumentScroll
+            ? "min-h-[calc(var(--app-dvh)-3.5rem)]"
+            : "min-h-0 flex-1 overflow-hidden",
+        )}
       >
         {isLoading ? (
-          <div className="h-full overflow-auto p-4">
+          <div
+            className={cn("p-4", !usesDocumentScroll && "h-full overflow-auto")}
+          >
             <MasonrySkeleton />
           </div>
         ) : entries.length === 0 ? (
-          <div className="h-full overflow-auto p-4">
+          <div
+            className={cn("p-4", !usesDocumentScroll && "h-full overflow-auto")}
+          >
             <EmptyState />
           </div>
         ) : isReady ? (
@@ -310,7 +365,8 @@ export function PictureMasonry({
             data={items}
             columnCount={currentColumn}
             ItemContent={MasonryItemContent}
-            className="h-full p-4"
+            useWindowScroll={usesDocumentScroll}
+            className={cn("p-4", !usesDocumentScroll && "h-full")}
             style={{ paddingBottom: scrollReadEndPaddingHeight || undefined }}
           />
         ) : null}
