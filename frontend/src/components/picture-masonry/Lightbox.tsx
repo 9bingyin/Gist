@@ -5,6 +5,11 @@ import useEmblaCarousel from "embla-carousel-react";
 import { Play } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { isVideoThumbnail } from "@/lib/media-utils";
+import {
+  isIOSStandalonePWA,
+  MEDIA_OVERLAY_CLASSNAME,
+  MEDIA_OVERLAY_TOP_END_CLASSNAME,
+} from "@/lib/media-overlay";
 import { formatRelativeTime } from "@/lib/date-utils";
 import { stripHtml } from "@/lib/html-utils";
 import {
@@ -144,17 +149,10 @@ export function Lightbox() {
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, close, emblaApi]);
 
-  // Prevent body scroll when open. iOS PWA avoids position: fixed to prevent white bar.
+  // Prevent body scroll when open. iOS PWA avoids root overflow / position:fixed
+  // — those shift the visual viewport and pin overlays under the status bar.
   useEffect(() => {
-    const isIOS =
-      /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-    const isStandalone =
-      (typeof window.matchMedia === "function" &&
-        window.matchMedia("(display-mode: standalone)").matches) ||
-      (navigator as Navigator & { standalone?: boolean }).standalone === true;
-    // iOS PWA uses touchmove lock to avoid position: fixed viewport bugs.
-    const isIOSPWA = isIOS && isStandalone;
+    const isIOSPWA = isIOSStandalonePWA();
 
     const unlockScroll = () => {
       const storedTop = document.body.style.top;
@@ -163,7 +161,6 @@ export function Lightbox() {
       document.body.style.left = "";
       document.body.style.right = "";
       document.body.style.overflow = "";
-      document.documentElement.style.overflow = "";
 
       if (touchMoveHandlerRef.current) {
         document.removeEventListener("touchmove", touchMoveHandlerRef.current);
@@ -186,8 +183,6 @@ export function Lightbox() {
       scrollLockYRef.current = window.scrollY;
 
       if (isIOSPWA) {
-        document.documentElement.style.overflow = "hidden";
-        document.body.style.overflow = "hidden";
         const handler = (e: TouchEvent) => {
           e.preventDefault();
         };
@@ -263,13 +258,13 @@ export function Lightbox() {
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.2 }}
-          className="fixed inset-0 z-50 flex flex-col bg-black/90 h-dvh"
+          className={MEDIA_OVERLAY_CLASSNAME}
           onClick={handleOverlayClick}
         >
           {/* Content container */}
           <div className="flex min-h-0 flex-1 flex-col">
             {/* Top right buttons */}
-            <div className="absolute right-[calc(1rem+env(safe-area-inset-right,0px))] top-[calc(1rem+env(safe-area-inset-top,0px))] z-10 flex gap-2">
+            <div className={cn(MEDIA_OVERLAY_TOP_END_CLASSNAME, "flex gap-2")}>
               {/* Star button */}
               <button
                 type="button"

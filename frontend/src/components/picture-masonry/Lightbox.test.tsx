@@ -205,8 +205,9 @@ describe("Lightbox", () => {
     it("should not render content when closed", () => {
       render(<Lightbox />, { wrapper: createWrapper() });
 
-      // Lightbox should not be visible when closed (no h-dvh container)
+      // Lightbox should not be visible when closed
       expect(screen.queryByText("Test Feed")).toBeNull();
+      expect(document.querySelector(".fixed.inset-0.bg-black")).toBeNull();
     });
 
     it("should render content when open", () => {
@@ -286,7 +287,7 @@ describe("Lightbox", () => {
       expect(document.body.style.right).toBe("0px");
     });
 
-    it("should prevent touchmove on iOS PWA without position:fixed", () => {
+    it("should prevent touchmove on iOS PWA without root overflow lock", () => {
       const restoreEnv = setIOSPWA();
       const addListenerSpy = vi.spyOn(document, "addEventListener");
       const removeListenerSpy = vi.spyOn(document, "removeEventListener");
@@ -297,9 +298,10 @@ describe("Lightbox", () => {
 
       const { unmount } = render(<Lightbox />, { wrapper: createWrapper() });
 
+      // iOS PWA must not lock root overflow — that pins overlays under the status bar.
       expect(document.body.style.position).toBe("");
-      expect(document.body.style.overflow).toBe("hidden");
-      expect(document.documentElement.style.overflow).toBe("hidden");
+      expect(document.body.style.overflow).toBe("");
+      expect(document.documentElement.style.overflow).toBe("");
 
       const addCall = addListenerSpy.mock.calls.find(
         ([eventName]) => eventName === "touchmove",
@@ -324,6 +326,20 @@ describe("Lightbox", () => {
       addListenerSpy.mockRestore();
       removeListenerSpy.mockRestore();
       restoreEnv();
+    });
+
+    it("renders an opaque full-screen overlay above list chrome", () => {
+      useLightboxStore
+        .getState()
+        .open(mockImageEntry, mockFeed, [mockImageEntry.thumbnailUrl!]);
+
+      const { container } = render(<Lightbox />, { wrapper: createWrapper() });
+
+      const overlay = container.querySelector(".fixed.inset-0.bg-black");
+      expect(overlay).not.toBeNull();
+      expect(overlay?.className).toContain("z-[100]");
+      expect(overlay?.className).not.toContain("bg-black/90");
+      expect(overlay?.className).not.toContain("h-dvh");
     });
 
     it("should set body top based on scroll position", () => {

@@ -390,6 +390,44 @@ describe("ImagePreview", () => {
       expect(document.body.style.overflow).toBe("hidden");
     });
 
+    it("should prevent touchmove on iOS PWA without root overflow lock", () => {
+      const originalNavigator = navigator;
+      const originalMatchMedia = window.matchMedia;
+
+      vi.stubGlobal("navigator", {
+        userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)",
+        platform: "iPhone",
+        maxTouchPoints: 5,
+        standalone: true,
+      });
+      window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+        matches: query === "(display-mode: standalone)",
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      }));
+
+      const addListenerSpy = vi.spyOn(document, "addEventListener");
+
+      useImagePreviewStore.getState().open(mockImages);
+      render(<ImagePreview />);
+
+      expect(document.body.style.position).toBe("");
+      expect(document.body.style.overflow).toBe("");
+      expect(document.documentElement.style.overflow).toBe("");
+      expect(
+        addListenerSpy.mock.calls.some(([eventName]) => eventName === "touchmove"),
+      ).toBe(true);
+
+      addListenerSpy.mockRestore();
+      vi.stubGlobal("navigator", originalNavigator);
+      window.matchMedia = originalMatchMedia;
+    });
+
     it("should unlock body scroll when closed", () => {
       useImagePreviewStore.getState().open(mockImages);
 
@@ -406,6 +444,20 @@ describe("ImagePreview", () => {
 
       expect(document.body.style.position).toBe("");
       expect(document.body.style.overflow).toBe("");
+    });
+  });
+
+  describe("overlay chrome", () => {
+    it("renders an opaque full-screen overlay above list chrome", () => {
+      useImagePreviewStore.getState().open(mockImages);
+
+      const { container } = render(<ImagePreview />);
+
+      const overlay = container.querySelector(".fixed.inset-0.bg-black");
+      expect(overlay).not.toBeNull();
+      expect(overlay?.className).toContain("z-[100]");
+      expect(overlay?.className).not.toContain("bg-black/90");
+      expect(overlay?.className).not.toContain("h-dvh");
     });
   });
 
