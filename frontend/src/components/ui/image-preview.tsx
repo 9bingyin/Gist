@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import useEmblaCarousel from "embla-carousel-react";
 import { cn } from "@/lib/utils";
 import {
+  applyIOSPWAOverlayInsets,
   isIOSStandalonePWA,
   MEDIA_OVERLAY_CLASSNAME,
   MEDIA_OVERLAY_TOP_END_CLASSNAME,
@@ -104,6 +105,7 @@ export function ImagePreview() {
   // — those shift the visual viewport and pin overlays under the status bar.
   useEffect(() => {
     const isIOSPWA = isIOSStandalonePWA();
+    applyIOSPWAOverlayInsets();
 
     const unlockScroll = () => {
       const storedTop = document.body.style.top;

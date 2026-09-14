@@ -14,6 +14,8 @@ describe("app shell viewport sizing", () => {
   it("uses large viewport height in standalone PWA mode", () => {
     expect(cssSource).toContain("@media (display-mode: standalone)");
     expect(cssSource).toContain("--app-dvh: 100lvh;");
+    expect(cssSource).toContain("html.ios-standalone-pwa");
+    expect(cssSource).toContain("--ios-pwa-top-fallback: 54px;");
   });
 
   it("allows mobile feed views to use document scrolling", () => {

@@ -76,6 +76,12 @@
   }
 }
 
+/* iOS PWA: env(safe-area-inset-top) is often 0 with viewport-fit=contain,
+   but the webview still draws under the status bar / Dynamic Island. */
+html.ios-standalone-pwa {
+  --ios-pwa-top-fallback: 54px;
+}
+
 .dark {
   --background: 240 10% 3.9%;
   --foreground: 0 0% 98%;
