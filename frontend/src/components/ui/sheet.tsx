@@ -1,11 +1,7 @@
 import { useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useBlockBackgroundScroll } from "@/hooks/useBlockBackgroundScroll";
 import { cn } from "@/lib/utils";
-
-const BLOCK_BACKGROUND_SCROLL_OPTIONS = {
-  capture: true,
-  passive: false,
-} as const;
 
 interface SheetProps {
   open: boolean;
@@ -15,6 +11,7 @@ interface SheetProps {
 
 export function Sheet({ open, onOpenChange, children }: SheetProps) {
   const contentRef = useRef<HTMLDivElement>(null);
+  useBlockBackgroundScroll(open, contentRef);
 
   useEffect(() => {
     if (!open) return;
@@ -24,39 +21,9 @@ export function Sheet({ open, onOpenChange, children }: SheetProps) {
         onOpenChange(false);
       }
     };
-    const preventBackgroundScroll = (event: TouchEvent | WheelEvent) => {
-      const target = event.target;
-      if (target instanceof Node && contentRef.current?.contains(target)) {
-        return;
-      }
-      event.preventDefault();
-    };
 
     document.addEventListener("keydown", handleKeyDown);
-    document.addEventListener(
-      "touchmove",
-      preventBackgroundScroll,
-      BLOCK_BACKGROUND_SCROLL_OPTIONS,
-    );
-    document.addEventListener(
-      "wheel",
-      preventBackgroundScroll,
-      BLOCK_BACKGROUND_SCROLL_OPTIONS,
-    );
-
-    return () => {
-      document.removeEventListener("keydown", handleKeyDown);
-      document.removeEventListener(
-        "touchmove",
-        preventBackgroundScroll,
-        BLOCK_BACKGROUND_SCROLL_OPTIONS,
-      );
-      document.removeEventListener(
-        "wheel",
-        preventBackgroundScroll,
-        BLOCK_BACKGROUND_SCROLL_OPTIONS,
-      );
-    };
+    return () => document.removeEventListener("keydown", handleKeyDown);
   }, [open, onOpenChange]);
 
   return (
