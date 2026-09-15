@@ -49,7 +49,7 @@ const DialogContent = React.forwardRef<
       className={cn(
         "fixed z-[200] bg-background",
         fullscreen
-          ? "inset-0 flex h-[var(--app-dvh)] max-h-[var(--app-dvh)] w-full max-w-none flex-col overflow-hidden rounded-none border-0 p-0"
+          ? "inset-0 z-[201] flex w-full max-w-none flex-col overflow-y-auto overscroll-y-contain touch-pan-y rounded-none border-0 p-0"
           : [
               "left-1/2 top-1/2 w-full max-w-lg -translate-x-1/2 -translate-y-1/2",
               "rounded-xl border border-border shadow-lg",

@@ -35,6 +35,25 @@ describe("useBlockBackgroundScroll", () => {
     outside.remove();
   });
 
+  it("allows scrolling inside fullscreen dialogs opened over the locked surface", () => {
+    const allowRef = createRef<HTMLDivElement>();
+    const allowed = document.createElement("div");
+    const dialog = document.createElement("div");
+    dialog.setAttribute("role", "dialog");
+    const outside = document.createElement("div");
+    document.body.append(allowed, dialog, outside);
+    allowRef.current = allowed;
+
+    renderHook(() => useBlockBackgroundScroll(true, allowRef));
+
+    expect(dispatchScrollGesture(dialog, "wheel").defaultPrevented).toBe(false);
+    expect(dispatchScrollGesture(outside, "wheel").defaultPrevented).toBe(true);
+
+    allowed.remove();
+    dialog.remove();
+    outside.remove();
+  });
+
   it("does not intercept scrolling when disabled", () => {
     const allowRef = createRef<HTMLDivElement>();
     renderHook(() => useBlockBackgroundScroll(false, allowRef));
