@@ -26,18 +26,21 @@ describe("media overlay chrome", () => {
     expect(MEDIA_OVERLAY_CLASSNAME).not.toContain("h-dvh");
   });
 
-  it("offsets controls with safe-area insets and an iOS PWA fallback", () => {
+  it("offsets controls with safe-area insets only, without the shell fallback", () => {
     expect(MEDIA_OVERLAY_TOP_END_CLASSNAME).toContain(
-      "env(safe-area-inset-top,0px)",
+      "top-[calc(1rem+env(safe-area-inset-top,0px))]",
     );
-    expect(MEDIA_OVERLAY_TOP_END_CLASSNAME).toContain(
-      "--ios-pwa-top-fallback,0px",
+    expect(MEDIA_OVERLAY_TOP_END_CLASSNAME).not.toContain(
+      "--ios-pwa-top-fallback",
     );
     expect(MEDIA_OVERLAY_TOP_END_CLASSNAME).toContain(
       "env(safe-area-inset-right,0px)",
     );
     expect(MEDIA_OVERLAY_TOP_START_CLASSNAME).toContain(
-      "env(safe-area-inset-left,0px)",
+      "top-[calc(1rem+env(safe-area-inset-top,0px))]",
+    );
+    expect(MEDIA_OVERLAY_TOP_START_CLASSNAME).not.toContain(
+      "--ios-pwa-top-fallback",
     );
   });
 
