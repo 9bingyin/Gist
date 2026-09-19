@@ -204,11 +204,15 @@ describe("ImagePreview", () => {
       // Find the carousel container (the one that wraps embla slides)
       // It should be the parent of the flex container with slide items
       const carouselContainer = container.querySelector(
-        ".overflow-hidden.touch-manipulation",
+        ".overflow-hidden.touch-none",
       );
 
       // The carousel container should exist
       expect(carouselContainer).not.toBeNull();
+
+      // The carousel must not hand vertical pans to the document scroller.
+      expect(carouselContainer?.className).toContain("touch-none");
+      expect(carouselContainer?.querySelector(".touch-pan-y")).toBeNull();
 
       // Find its parent (the flex container that was causing the bug)
       const carouselWrapper = carouselContainer?.parentElement;
@@ -419,9 +423,11 @@ describe("ImagePreview", () => {
       expect(document.body.style.position).toBe("");
       expect(document.body.style.overflow).toBe("");
       expect(document.documentElement.style.overflow).toBe("");
-      expect(
-        addListenerSpy.mock.calls.some(([eventName]) => eventName === "touchmove"),
-      ).toBe(true);
+
+      const addCall = addListenerSpy.mock.calls.find(
+        ([eventName]) => eventName === "touchmove",
+      );
+      expect(addCall?.[2]).toEqual({ capture: true, passive: false });
 
       addListenerSpy.mockRestore();
       vi.stubGlobal("navigator", originalNavigator);

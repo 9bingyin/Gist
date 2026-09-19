@@ -28,7 +28,7 @@ export function isIOSStandalonePWA(): boolean {
 
 /** Shared overlay chrome for Lightbox / ImagePreview. */
 export const MEDIA_OVERLAY_CLASSNAME =
-  "fixed inset-0 z-[100] flex flex-col bg-black";
+  "fixed inset-0 z-[100] flex flex-col bg-black touch-none overscroll-none";
 
 export const MEDIA_OVERLAY_TOP_END_CLASSNAME =
   "absolute right-[calc(1rem+env(safe-area-inset-right,0px))] top-[calc(1rem+max(env(safe-area-inset-top,0px),var(--ios-pwa-top-fallback,0px)))] z-10";
