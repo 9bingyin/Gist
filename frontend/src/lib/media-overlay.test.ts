@@ -16,6 +16,8 @@ describe("media overlay chrome", () => {
     expect(MEDIA_OVERLAY_CLASSNAME).toContain("inset-0");
     expect(MEDIA_OVERLAY_CLASSNAME).toContain("bg-black");
     expect(MEDIA_OVERLAY_CLASSNAME).toContain("z-[100]");
+    expect(MEDIA_OVERLAY_CLASSNAME).toContain("touch-none");
+    expect(MEDIA_OVERLAY_CLASSNAME).toContain("overscroll-none");
     expect(MEDIA_OVERLAY_CLASSNAME).not.toContain("bg-black/90");
     expect(MEDIA_OVERLAY_CLASSNAME).not.toContain("h-dvh");
   });
