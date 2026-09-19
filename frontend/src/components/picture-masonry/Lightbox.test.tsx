@@ -229,8 +229,9 @@ describe("Lightbox", () => {
    * Problem: When lightbox is open, the background page could still be scrolled
    * on mobile devices using touch gestures.
    *
-   * Fix: Non-iOS PWA uses position: fixed to lock scroll. iOS PWA uses
-   * touchmove prevention to avoid viewport shrink/white bar issues.
+   * Fix: Non-iOS PWA uses position: fixed to lock scroll. iOS PWA pins
+   * window.scrollY and prevents touchmove, then holds that offset through
+   * overlay teardown so WebKit cannot jump the document list.
    */
   describe("BUG: background page scrollable on mobile touch", () => {
     const setIOSPWA = () => {
@@ -307,7 +308,7 @@ describe("Lightbox", () => {
         ([eventName]) => eventName === "touchmove",
       );
       expect(addCall).toBeDefined();
-      expect(addCall?.[2]).toEqual({ passive: false });
+      expect(addCall?.[2]).toEqual({ capture: true, passive: false });
 
       act(() => {
         useLightboxStore.getState().close();
