@@ -7,6 +7,15 @@ export function isIOSDevice(): boolean {
   );
 }
 
+/** iPadOS 13+ reports a desktop Macintosh UA with touch points. */
+export function isIPadDevice(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return (
+    /iPad/.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
+  );
+}
+
 /** Detect installed PWA / standalone display mode. */
 export function isStandaloneDisplay(): boolean {
   if (typeof window === "undefined") return false;
@@ -43,8 +52,10 @@ export const MEDIA_OVERLAY_TOP_START_CLASSNAME =
  */
 export function applyIOSPWAOverlayInsets(): void {
   if (typeof document === "undefined") return;
+  const standalone = isIOSStandalonePWA();
+  document.documentElement.classList.toggle("ios-standalone-pwa", standalone);
   document.documentElement.classList.toggle(
-    "ios-standalone-pwa",
-    isIOSStandalonePWA(),
+    "ios-ipad-standalone",
+    standalone && isIPadDevice(),
   );
 }

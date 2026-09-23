@@ -16,6 +16,13 @@ describe("app shell viewport sizing", () => {
     expect(cssSource).toContain("--app-dvh: 100lvh;");
     expect(cssSource).toContain("html.ios-standalone-pwa");
     expect(cssSource).toContain("--ios-pwa-top-fallback: 54px;");
+    expect(cssSource).toContain("--ios-pwa-shell-top: 32px;");
+    expect(cssSource).toContain(
+      "html.ios-standalone-pwa:not(.mobile-document-scroll) .safe-area-top",
+    );
+    expect(cssSource).toContain(
+      "padding-top: max(\n    env(safe-area-inset-top, 0px),\n    var(--ios-pwa-shell-top, 0px)\n  );",
+    );
   });
 
   it("allows mobile feed views to use document scrolling", () => {
