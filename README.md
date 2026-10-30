@@ -80,7 +80,7 @@ docker run -d \
 
 ### 前置依赖
 
-- Go 1.25+
+- Go 1.26+
 - [Bun](https://bun.sh/)
 
 ### 后端
