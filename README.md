@@ -80,8 +80,7 @@ docker run -d \
 
 ### 前置依赖
 
-- Go 1.26+
-- [Bun](https://bun.com/) 1.4.4+
+安装 [Nix](https://nix.dev/install-nix)，启用 Flakes 后在项目根目录运行 `nix develop`。本地、CI 和 Docker 构建使用同一份 `flake.lock` 定义工具链；项目依赖仍由 Bun 和 Go 管理。
 
 ### 构建前端并启动服务
 

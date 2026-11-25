@@ -9,10 +9,10 @@
   "scripts": {
     "build": "NODE_ENV=production bun scripts/build.ts",
     "typecheck": "bun check",
-    "lint": "eslint .",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "lint": "bun --bun run eslint .",
+    "test": "bun --bun run vitest run",
+    "test:watch": "bun --bun run vitest",
+    "test:coverage": "bun --bun run vitest run --coverage"
   },
   "dependencies": {
     "@radix-ui/react-context-menu": "^2.2.16",

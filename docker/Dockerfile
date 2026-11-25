@@ -1,20 +1,28 @@
-# Stage 1: Frontend Builder
-FROM oven/bun:1.4.4 AS frontend-builder
+# Shared build toolchain
+FROM nixos/nix:2.36.0 AS toolchain
+ENV NIX_CONFIG="experimental-features = nix-command flakes"
+WORKDIR /toolchain
+COPY flake.nix flake.lock ./
+RUN nix develop --no-update-lock-file path:/toolchain#ci --command true
+
+# Frontend builder
+FROM toolchain AS frontend-builder
 WORKDIR /app/frontend
 COPY frontend/package.json frontend/bun.lock ./
-RUN bun install --frozen-lockfile
+RUN nix develop --no-update-lock-file path:/toolchain#ci --command bun install --frozen-lockfile
 COPY frontend/ ./
-RUN bun run build
+RUN nix develop --no-update-lock-file path:/toolchain#ci --command bun run build
 
-# Stage 2: Backend Builder
-FROM golang:1.26.3 AS backend-builder
+# Backend builder
+FROM toolchain AS backend-builder
 WORKDIR /app/backend
 COPY backend/go.mod backend/go.sum ./
-RUN go mod download
+RUN nix develop --no-update-lock-file path:/toolchain#ci --command go mod download
 COPY backend/ ./
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -v -o gist-server ./cmd/server/main.go
+RUN nix develop --no-update-lock-file path:/toolchain#ci --command \
+    env CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -v -o gist-server ./cmd/server
 
-# Stage 3: Final Image
+# Alpine runtime
 FROM alpine:latest
 WORKDIR /app
 RUN apk add --no-cache ca-certificates tzdata su-exec \

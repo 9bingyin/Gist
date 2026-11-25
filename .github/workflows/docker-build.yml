@@ -8,6 +8,8 @@ on:
       - "frontend/**"
       - "backend/**"
       - "docker/**"
+      - "flake.nix"
+      - "flake.lock"
       - ".dockerignore"
       - ".github/workflows/docker-build.yml"
   workflow_dispatch:

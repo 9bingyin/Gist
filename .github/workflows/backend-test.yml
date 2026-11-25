@@ -6,12 +6,16 @@ on:
       - main
     paths:
       - "backend/**"
+      - "flake.nix"
+      - "flake.lock"
       - ".github/workflows/backend-test.yml"
   pull_request:
     branches:
       - main
     paths:
       - "backend/**"
+      - "flake.nix"
+      - "flake.lock"
       - ".github/workflows/backend-test.yml"
   workflow_dispatch:
 
@@ -19,23 +23,22 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+defaults:
+  run:
+    working-directory: backend
+    shell: nix develop --no-update-lock-file .#ci --command bash --noprofile --norc -eo pipefail {0}
+
 jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: backend
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
 
-      - name: Set up Go
-        uses: actions/setup-go@v7
-        with:
-          go-version: "1.26"
-          cache-dependency-path: backend/go.sum
+      - name: Install Nix
+        uses: cachix/install-nix-action@v32
 
       - name: Download dependencies
         run: go mod download
@@ -61,14 +64,8 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
 
-      - name: Set up Go
-        uses: actions/setup-go@v7
-        with:
-          go-version: "1.26"
-          cache-dependency-path: backend/go.sum
+      - name: Install Nix
+        uses: cachix/install-nix-action@v32
 
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v9
-        with:
-          version: latest
-          working-directory: backend
+        run: make lint

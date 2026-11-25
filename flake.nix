@@ -36,17 +36,29 @@
             settings.global.excludes = [ "backend/docs/**" ];
           };
 
-          devShells.default = pkgs.mkShell {
-            packages = with pkgs; [
-              go
-              bun
-              go-swag
-              golangci-lint
-              mockgen
-              sqlite
-              gopls
-              gotools
-            ];
+          devShells = {
+            ci = pkgs.mkShell {
+              packages = with pkgs; [
+                go
+                bun
+                golangci-lint
+              ];
+              GOTOOLCHAIN = "local";
+            };
+
+            default = pkgs.mkShell {
+              packages = with pkgs; [
+                go
+                bun
+                golangci-lint
+                go-swag
+                mockgen
+                sqlite
+                gopls
+                gotools
+              ];
+              GOTOOLCHAIN = "local";
+            };
           };
         };
     };

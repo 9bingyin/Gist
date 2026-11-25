@@ -6,12 +6,16 @@ on:
       - main
     paths:
       - "frontend/**"
+      - "flake.nix"
+      - "flake.lock"
       - ".github/workflows/frontend-test.yml"
   pull_request:
     branches:
       - main
     paths:
       - "frontend/**"
+      - "flake.nix"
+      - "flake.lock"
       - ".github/workflows/frontend-test.yml"
   workflow_dispatch:
 
@@ -19,22 +23,22 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+defaults:
+  run:
+    working-directory: frontend
+    shell: nix develop --no-update-lock-file .#ci --command bash --noprofile --norc -eo pipefail {0}
+
 jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: frontend
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
 
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
+      - name: Install Nix
+        uses: cachix/install-nix-action@v32
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -55,18 +59,13 @@ jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: frontend
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
 
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
+      - name: Install Nix
+        uses: cachix/install-nix-action@v32
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
