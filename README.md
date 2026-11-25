@@ -81,22 +81,16 @@ docker run -d \
 ### 前置依赖
 
 - Go 1.26+
-- [Bun](https://bun.sh/)
+- [Bun](https://bun.com/) 1.4.4+
 
-### 后端
+### 构建前端并启动服务
+
+从项目根目录执行，启动后访问 `http://localhost:8080`：
 
 ```bash
+(cd frontend && bun install && bun run build)
 cd backend
-go mod download
-go run ./cmd/server/main.go
-```
-
-### 前端
-
-```bash
-cd frontend
-bun install
-bun run dev
+go run ./cmd/server
 ```
 
 ### 测试
@@ -107,8 +101,9 @@ cd backend
 make test    # 运行测试 (含 race 检测)
 make lint    # 运行 golangci-lint
 
-# 前端
+# 前端（无需启动后端）
 cd frontend
+bun run typecheck
 bun run test
 bun run lint
 ```

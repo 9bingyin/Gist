@@ -72,7 +72,7 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Type check
-        run: bun run tsc -b
+        run: bun run typecheck
 
       - name: Run ESLint
         run: bun run lint

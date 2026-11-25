@@ -1,55 +1,60 @@
-import { useRegisterSW } from "virtual:pwa-register/react";
+import { useEffect, useRef, useState } from "react";
+import type { Workbox } from "workbox-window";
 import { useTranslation } from "react-i18next";
 import { Download } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const UPDATE_CHECK_INTERVAL = 60 * 60 * 1000; // 1 hour
-
-function registerPeriodicSync(
-  period: number,
-  swUrl: string,
-  r: ServiceWorkerRegistration,
-) {
-  if (period <= 0) return;
-
-  setInterval(async () => {
-    if ("onLine" in navigator && !navigator.onLine) return;
-
-    const resp = await fetch(swUrl, {
-      cache: "no-store",
-      headers: {
-        cache: "no-store",
-        "cache-control": "no-cache",
-      },
-    });
-
-    if (resp?.status === 200) await r.update();
-  }, period);
-}
+const UPDATE_CHECK_INTERVAL = 60 * 60 * 1000;
 
 export function UpdateNotice() {
   const { t } = useTranslation();
+  const [needRefresh, setNeedRefresh] = useState(false);
+  const workbox = useRef<Workbox | null>(null);
 
-  const {
-    needRefresh: [needRefresh],
-    updateServiceWorker,
-  } = useRegisterSW({
-    onRegisteredSW(swUrl, r) {
-      if (UPDATE_CHECK_INTERVAL <= 0) return;
-      if (r?.active?.state === "activated") {
-        registerPeriodicSync(UPDATE_CHECK_INTERVAL, swUrl, r);
-      } else if (r?.installing) {
-        r.installing.addEventListener("statechange", (e) => {
-          const sw = e.target as ServiceWorker;
-          if (sw.state === "activated")
-            registerPeriodicSync(UPDATE_CHECK_INTERVAL, swUrl, r);
-        });
-      }
-    },
-  });
+  useEffect(() => {
+    if (
+      process.env.NODE_ENV !== "production" ||
+      !("serviceWorker" in navigator)
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+    let timer: number | undefined;
+    const onWaiting = () => setNeedRefresh(true);
+    const onControlling = (event: { isUpdate?: boolean }) => {
+      if (event.isUpdate) window.location.reload();
+    };
+
+    void import("workbox-window")
+      .then(async ({ Workbox }) => {
+        if (cancelled) return;
+        const worker = new Workbox("/sw.js", { scope: "/" });
+        workbox.current = worker;
+        worker.addEventListener("waiting", onWaiting);
+        worker.addEventListener("controlling", onControlling);
+        const registration = await worker.register();
+        if (!registration || cancelled) return;
+        timer = window.setInterval(() => {
+          if (navigator.onLine) void registration.update().catch(() => {});
+        }, UPDATE_CHECK_INTERVAL);
+      })
+      .catch((error: unknown) => {
+        if (!cancelled)
+          console.error("Service worker registration failed", error);
+      });
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      workbox.current?.removeEventListener("waiting", onWaiting);
+      workbox.current?.removeEventListener("controlling", onControlling);
+      workbox.current = null;
+    };
+  }, []);
 
   const handleClick = () => {
-    updateServiceWorker(true);
+    workbox.current?.messageSkipWaiting();
   };
 
   if (!needRefresh) return null;

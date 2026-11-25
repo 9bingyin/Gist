@@ -1,6 +1,6 @@
 import type { ApiErrorResponse } from "@/types/api";
 
-export const API_BASE_URL = import.meta.env.VITE_API_URL ?? "";
+export const API_BASE_URL = process.env.PUBLIC_API_URL ?? "";
 const TOKEN_KEY = "gist_auth_token";
 
 export class ApiError extends Error {
