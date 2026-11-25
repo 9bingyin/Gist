@@ -60,8 +60,8 @@
   --radius: 0.5rem;
   --sidebar: 240 4.8% 95.9%;
   --sidebar-foreground: 240 5.9% 10%;
-  --item-active: color-mix(in oklch, hsl(var(--foreground)) 12%, transparent);
-  --item-hover: color-mix(in oklch, hsl(var(--foreground)) 8%, transparent);
+  --item-active: hsl(var(--foreground) / 12%);
+  --item-hover: hsl(var(--foreground) / 8%);
 
   /* iOS-style easing curves */
   --ease-ios: cubic-bezier(0.22, 0.61, 0.36, 1);
@@ -118,8 +118,8 @@ html.ios-standalone-pwa:not(.mobile-document-scroll) .safe-area-top {
   --ring: 240 4.9% 83.9%;
   --sidebar: 240 5.9% 10%;
   --sidebar-foreground: 240 4.8% 95.9%;
-  --item-active: color-mix(in oklch, hsl(var(--foreground)) 15%, transparent);
-  --item-hover: color-mix(in oklch, hsl(var(--foreground)) 10%, transparent);
+  --item-active: hsl(var(--foreground) / 15%);
+  --item-hover: hsl(var(--foreground) / 10%);
 }
 
 * {
