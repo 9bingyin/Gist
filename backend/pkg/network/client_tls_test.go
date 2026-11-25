@@ -42,7 +42,8 @@ func TestClientFactory_NewAzureSession_IgnoresStaleDynamicPin(t *testing.T) {
 
 	provider := &tlsTestProvider{}
 	factory := network.NewClientFactory(provider, provider)
-	session := factory.NewAzureSession(context.Background(), time.Second)
+	session, err := factory.NewAzureSession(context.Background(), time.Second)
+	require.NoError(t, err)
 	t.Cleanup(session.Close)
 
 	// Isolate the test and preload a deliberately stale pin for the server.
@@ -78,7 +79,8 @@ func TestClientFactory_NewAzureSession_RejectsUntrustedCertificate(t *testing.T)
 
 	provider := &tlsTestProvider{}
 	factory := network.NewClientFactory(provider, provider)
-	session := factory.NewAzureSession(context.Background(), time.Second)
+	session, err := factory.NewAzureSession(context.Background(), time.Second)
+	require.NoError(t, err)
 	t.Cleanup(session.Close)
 	session.PinManager = azuretls.NewPinManager()
 	require.NoError(t, session.AddPins(serverURL, []string{"stale-pin"}))

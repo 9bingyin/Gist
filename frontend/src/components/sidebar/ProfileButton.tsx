@@ -1,6 +1,7 @@
 import * as React from "react";
 import { useTranslation } from "react-i18next";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence } from "motion/react";
+import { LogOut, Settings, Star, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
@@ -11,7 +12,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { RootPortal } from "@/components/ui/portal";
-import useMeasure from "react-use-measure";
 
 const menuItemStyles = cn(
   "group relative flex cursor-pointer select-none items-center gap-2",
@@ -55,115 +55,127 @@ const UserAvatar = React.forwardRef<
     {avatarUrl ? (
       <img className="size-full object-cover" src={avatarUrl} alt="" />
     ) : (
-      <svg
-        className="size-full p-1 text-muted-foreground"
-        fill="currentColor"
-        viewBox="0 0 24 24"
-      >
-        <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4 1.79-4 4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
-      </svg>
+      <User className="size-full p-1 text-muted-foreground" />
     )}
   </span>
 ));
 
 UserAvatar.displayName = "UserAvatar";
 
+const AVATAR_SIZE = 56;
+const AVATAR_INITIAL_SCALE = 24 / AVATAR_SIZE;
+
 const TransitionAvatar = React.forwardRef<
   HTMLButtonElement,
   {
     stage: "zoom-in" | "";
     avatarUrl?: string;
-  } & React.HTMLAttributes<HTMLButtonElement>
->(({ stage, avatarUrl, className, ...props }, forwardRef) => {
-  const [measureRef, { x, y }, forceRefresh] = useMeasure();
-  const zoomIn = stage === "zoom-in";
+  } & React.ButtonHTMLAttributes<HTMLButtonElement>
+>(
+  (
+    { stage, avatarUrl, className, onPointerDown, onClick, ...props },
+    forwardRef,
+  ) => {
+    const avatarRef = React.useRef<HTMLSpanElement>(null);
+    const [origin, setOrigin] = React.useState<{ x: number; y: number } | null>(
+      null,
+    );
+    const zoomIn = stage === "zoom-in";
 
-  return (
-    <>
-      <button
-        {...props}
-        ref={forwardRef}
-        className={cn(
-          "group relative inline-flex items-center justify-center rounded-md size-8 outline-none focus-visible:ring-0 select-none",
-          className,
-        )}
-        onPointerDown={React.useCallback(
-          (e: React.PointerEvent<HTMLButtonElement>) => {
-            forceRefresh();
-            props.onPointerDown?.(e);
-          },
-          // eslint-disable-next-line react-hooks/exhaustive-deps
-          [forceRefresh, props.onPointerDown],
-        )}
-        onClick={React.useCallback(
-          (e: React.MouseEvent<HTMLButtonElement>) => {
-            forceRefresh();
-            props.onClick?.(e);
-          },
-          // eslint-disable-next-line react-hooks/exhaustive-deps
-          [forceRefresh, props.onClick],
-        )}
-      >
-        <UserAvatar
-          ref={measureRef}
-          className="size-6 border-0"
-          avatarUrl={avatarUrl}
-        />
-      </button>
+    const measure = React.useCallback(() => {
+      const rect = avatarRef.current?.getBoundingClientRect();
+      if (!rect || (rect.x === 0 && rect.y === 0)) return;
+      setOrigin({ x: rect.x, y: rect.y });
+    }, []);
 
-      <RootPortal>
-        <AnimatePresence>
-          {zoomIn && x !== 0 && y !== 0 && (
-            <motion.div
-              initial={{
-                left: x,
-                top: y,
-                width: 24,
-                height: 24,
-                opacity: 0.5,
-              }}
-              animate={{
-                left: x - 16,
-                top: y,
-                width: 56,
-                height: 56,
-                opacity: 1,
-              }}
-              exit={{
-                left: x,
-                top: y,
-                width: 24,
-                height: 24,
-                opacity: 0,
-              }}
-              transition={{
-                duration: 0.2,
-                ease: [0.4, 0, 0.2, 1], // Standard Ease
-              }}
-              className="fixed p-0 border-0 pointer-events-none rounded-full overflow-hidden bg-muted z-[100] transform-gpu shadow-xl select-none"
-            >
-              {avatarUrl ? (
-                <img
-                  className="size-full object-cover"
-                  src={avatarUrl}
-                  alt=""
-                />
-              ) : (
-                <svg
-                  className="size-full p-1 text-muted-foreground"
-                  fill="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4 1.79-4 4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
-                </svg>
-              )}
-            </motion.div>
+    const handlePointerDown = React.useCallback(
+      (e: React.PointerEvent<HTMLButtonElement>) => {
+        measure();
+        onPointerDown?.(e);
+      },
+      [measure, onPointerDown],
+    );
+
+    const handleClick = React.useCallback(
+      (e: React.MouseEvent<HTMLButtonElement>) => {
+        measure();
+        onClick?.(e);
+      },
+      [measure, onClick],
+    );
+
+    return (
+      <>
+        <button
+          type="button"
+          {...props}
+          ref={forwardRef}
+          className={cn(
+            "group relative inline-flex items-center justify-center rounded-md size-8 outline-none focus-visible:ring-2 focus-visible:ring-ring select-none",
+            className,
           )}
-        </AnimatePresence>
-      </RootPortal>
-    </>
-  );
-});
+          onPointerDown={handlePointerDown}
+          onClick={handleClick}
+        >
+          <UserAvatar
+            ref={avatarRef}
+            className="size-6 border-0"
+            avatarUrl={avatarUrl}
+          />
+        </button>
+
+        <RootPortal>
+          <AnimatePresence>
+            {zoomIn && origin && (
+              <motion.div
+                style={{
+                  left: origin.x - 16,
+                  top: origin.y,
+                  width: AVATAR_SIZE,
+                  height: AVATAR_SIZE,
+                  transformOrigin: "top center",
+                }}
+                initial={{
+                  x: 0,
+                  y: 0,
+                  scale: AVATAR_INITIAL_SCALE,
+                  opacity: 0.5,
+                }}
+                animate={{
+                  x: 0,
+                  y: 0,
+                  scale: 1,
+                  opacity: 1,
+                }}
+                exit={{
+                  x: 0,
+                  y: 0,
+                  scale: AVATAR_INITIAL_SCALE,
+                  opacity: 0,
+                }}
+                transition={{
+                  duration: 0.2,
+                  ease: [0.4, 0, 0.2, 1],
+                }}
+                className="fixed p-0 border-0 pointer-events-none rounded-full overflow-hidden bg-muted z-[100] transform-gpu shadow-xl select-none"
+              >
+                {avatarUrl ? (
+                  <img
+                    className="size-full object-cover"
+                    src={avatarUrl}
+                    alt=""
+                  />
+                ) : (
+                  <User className="size-full p-2 text-muted-foreground" />
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </RootPortal>
+      </>
+    );
+  },
+);
 TransitionAvatar.displayName = "TransitionAvatar";
 
 export function ProfileButton({
@@ -188,15 +200,14 @@ export function ProfileButton({
         <TransitionAvatar
           stage={isOpen ? "zoom-in" : ""}
           avatarUrl={avatarUrl}
+          aria-label={t("user.profile")}
         />
       </DropdownMenuTrigger>
 
       <DropdownMenuContent
         className={cn(
-          "min-w-[240px] p-1 overflow-visible !animate-none",
+          "min-w-[240px] p-1 overflow-visible",
           "backdrop-blur-2xl",
-          "motion-scale-in-75 motion-duration-150 motion-ease-out",
-          "data-[state=closed]:motion-scale-out-95 data-[state=closed]:motion-opacity-out-0",
           "border-border/40",
           "bg-[linear-gradient(to_bottom_right,_hsl(var(--background)_/_0.98),_hsl(var(--background)_/_0.95))]",
           "shadow-[0_6px_20px_rgba(0,0,0,0.08),_0_4px_12px_rgba(0,0,0,0.05),_0_2px_6px_rgba(0,0,0,0.04),_0_4px_16px_hsl(var(--primary)_/_0.06),_0_2px_8px_hsl(var(--primary)_/_0.04),_0_1px_3px_rgba(0,0,0,0.03)]",
@@ -221,19 +232,7 @@ export function ProfileButton({
         {/* Profile */}
         <DropdownMenuItem className={menuItemStyles} onSelect={onProfileClick}>
           <span className="inline-flex size-4 items-center justify-center">
-            <svg
-              className={iconStyles}
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={1.5}
-                d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"
-              />
-            </svg>
+            <User className={iconStyles} strokeWidth={1.5} />
           </span>
           <span>{t("user.profile")}</span>
         </DropdownMenuItem>
@@ -244,19 +243,7 @@ export function ProfileButton({
           onSelect={onStarredClick}
         >
           <span className="inline-flex size-4 items-center justify-center">
-            <svg
-              className={iconStyles}
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={1.5}
-                d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z"
-              />
-            </svg>
+            <Star className={iconStyles} strokeWidth={1.5} />
           </span>
           <span>{t("sidebar.starred")}</span>
           {starredCount > 0 && (
@@ -271,25 +258,7 @@ export function ProfileButton({
         {/* Settings */}
         <DropdownMenuItem className={menuItemStyles} onSelect={onSettingsClick}>
           <span className="inline-flex size-4 items-center justify-center">
-            <svg
-              className={iconStyles}
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={1.5}
-                d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-              />
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={1.5}
-                d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-              />
-            </svg>
+            <Settings className={iconStyles} strokeWidth={1.5} />
           </span>
           <span>{t("settings.title")}</span>
         </DropdownMenuItem>
@@ -299,19 +268,7 @@ export function ProfileButton({
         {/* Logout */}
         <DropdownMenuItem className={menuItemStyles} onSelect={onLogoutClick}>
           <span className="inline-flex size-4 items-center justify-center">
-            <svg
-              className={iconStyles}
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={1.5}
-                d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
-              />
-            </svg>
+            <LogOut className={iconStyles} strokeWidth={1.5} />
           </span>
           <span>{t("user.logout")}</span>
         </DropdownMenuItem>

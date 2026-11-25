@@ -118,12 +118,13 @@ func (mr *MockEntryServiceMockRecorder) GetUnreadCounts(ctx any) *gomock.Call {
 }
 
 // List mocks base method.
-func (m *MockEntryService) List(ctx context.Context, params service.EntryListParams) ([]model.Entry, error) {
+func (m *MockEntryService) List(ctx context.Context, params service.EntryListParams) ([]model.Entry, bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "List", ctx, params)
 	ret0, _ := ret[0].([]model.Entry)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret1, _ := ret[1].(bool)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
 // List indicates an expected call of List.

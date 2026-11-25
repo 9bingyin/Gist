@@ -4,6 +4,8 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"fmt"
 	"time"
 
 	"gist/backend/internal/model"
@@ -13,7 +15,6 @@ import (
 type AITranslationRepository interface {
 	Get(ctx context.Context, entryID int64, isReadability bool, language string) (*model.AITranslation, error)
 	Save(ctx context.Context, entryID int64, isReadability bool, language, content string) error
-	DeleteByEntryID(ctx context.Context, entryID int64) error
 	DeleteAll(ctx context.Context) (int64, error)
 }
 
@@ -26,16 +27,11 @@ func NewAITranslationRepository(db dbtx) AITranslationRepository {
 }
 
 func (r *aiTranslationRepository) Get(ctx context.Context, entryID int64, isReadability bool, language string) (*model.AITranslation, error) {
-	isReadabilityInt := 0
-	if isReadability {
-		isReadabilityInt = 1
-	}
-
 	row := r.db.QueryRowContext(
 		ctx,
 		`SELECT id, entry_id, is_readability, language, content, created_at
 		 FROM ai_translations WHERE entry_id = ? AND is_readability = ? AND language = ?`,
-		entryID, isReadabilityInt, language,
+		entryID, boolToInt(isReadability), language,
 	)
 
 	var t model.AITranslation
@@ -43,7 +39,7 @@ func (r *aiTranslationRepository) Get(ctx context.Context, entryID int64, isRead
 	var createdAt string
 
 	err := row.Scan(&t.ID, &t.EntryID, &isReadabilityDB, &t.Language, &t.Content, &createdAt)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
@@ -51,7 +47,10 @@ func (r *aiTranslationRepository) Get(ctx context.Context, entryID int64, isRead
 	}
 
 	t.IsReadability = isReadabilityDB == 1
-	t.CreatedAt, _ = parseTime(createdAt)
+	t.CreatedAt, err = parseTime(createdAt)
+	if err != nil {
+		return nil, fmt.Errorf("parse ai_translation created_at: %w", err)
+	}
 
 	return &t, nil
 }
@@ -60,11 +59,6 @@ func (r *aiTranslationRepository) Save(ctx context.Context, entryID int64, isRea
 	id := snowflake.NextID()
 	now := formatTime(time.Now())
 
-	isReadabilityInt := 0
-	if isReadability {
-		isReadabilityInt = 1
-	}
-
 	_, err := r.db.ExecContext(
 		ctx,
 		`INSERT INTO ai_translations (id, entry_id, is_readability, language, content, created_at)
@@ -72,13 +66,8 @@ func (r *aiTranslationRepository) Save(ctx context.Context, entryID int64, isRea
 		 ON CONFLICT(entry_id, is_readability, language) DO UPDATE SET
 		   content = excluded.content,
 		   created_at = excluded.created_at`,
-		id, entryID, isReadabilityInt, language, content, now,
+		id, entryID, boolToInt(isReadability), language, content, now,
 	)
-	return err
-}
-
-func (r *aiTranslationRepository) DeleteByEntryID(ctx context.Context, entryID int64) error {
-	_, err := r.db.ExecContext(ctx, `DELETE FROM ai_translations WHERE entry_id = ?`, entryID)
 	return err
 }
 

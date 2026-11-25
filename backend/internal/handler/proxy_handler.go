@@ -4,26 +4,21 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
-	"net/url"
 	"strings"
 
 	"github.com/labstack/echo/v4"
 
 	"gist/backend/internal/service"
 	"gist/backend/pkg/logger"
+	"gist/backend/pkg/network"
 )
 
-func safeHost(rawURL string) string {
-	parsed, err := url.Parse(rawURL)
-	if err != nil {
-		return ""
-	}
-	return parsed.Host
-}
-
-const cacheMaxAge = 86400 // 1 day
-const svgContentSecurityPolicy = "default-src 'none'; style-src 'unsafe-inline'; script-src 'none'; sandbox"
+const (
+	cacheMaxAge              = 86400 // 1 day
+	svgContentSecurityPolicy = "default-src 'none'; style-src 'unsafe-inline'; script-src 'none'; sandbox"
+)
 
 type ProxyHandler struct {
 	proxyService service.ProxyService
@@ -59,7 +54,6 @@ func (h *ProxyHandler) ProxyImage(c echo.Context) error {
 		return Error(c, http.StatusBadRequest, "URL is required")
 	}
 
-	// Decode Base64 URL-safe
 	decoded, err := base64.URLEncoding.DecodeString(encoded)
 	if err != nil {
 		logger.Debug("proxy image invalid encoding", "module", "handler", "action", "request", "resource", "proxy", "result", "failed", "error", err)
@@ -67,7 +61,6 @@ func (h *ProxyHandler) ProxyImage(c echo.Context) error {
 	}
 	imageURL := string(decoded)
 
-	// Decode referer URL if provided (for CDN anti-hotlinking)
 	var refererURL string
 	if refEncoded := c.QueryParam("ref"); refEncoded != "" {
 		if refDecoded, err := base64.URLEncoding.DecodeString(refEncoded); err == nil {
@@ -77,16 +70,27 @@ func (h *ProxyHandler) ProxyImage(c echo.Context) error {
 
 	result, err := h.proxyService.FetchImage(c.Request().Context(), imageURL, refererURL)
 	if err != nil {
-		logger.Warn("proxy image fetch failed", "module", "handler", "action", "fetch", "resource", "proxy", "result", "failed", "host", safeHost(imageURL), "error", err)
+		logger.Warn("proxy image fetch failed", "module", "handler", "action", "fetch", "resource", "proxy", "result", "failed", "host", network.ExtractHost(imageURL), "error", err)
 		return h.handleServiceError(c, err)
 	}
+	if result.Body != nil {
+		defer result.Body.Close()
+	}
 
-	logger.Debug("proxy image fetched", "module", "handler", "action", "fetch", "resource", "proxy", "result", "ok", "host", safeHost(imageURL), "content_type", strings.ToLower(result.ContentType))
+	logger.Debug("proxy image fetched", "module", "handler", "action", "fetch", "resource", "proxy", "result", "ok", "host", network.ExtractHost(imageURL), "content_type", strings.ToLower(result.ContentType))
 	c.Response().Header().Set("Content-Type", result.ContentType)
 	c.Response().Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d", cacheMaxAge))
 	c.Response().Header().Set("X-Content-Type-Options", "nosniff")
 	if strings.EqualFold(result.ContentType, "image/svg+xml") {
 		c.Response().Header().Set("Content-Security-Policy", svgContentSecurityPolicy)
+	}
+
+	if result.Body != nil {
+		c.Response().WriteHeader(http.StatusOK)
+		if _, err := io.Copy(c.Response().Writer, result.Body); err != nil {
+			logger.Debug("proxy image stream write failed", "module", "handler", "action", "fetch", "resource", "proxy", "result", "failed", "host", network.ExtractHost(imageURL), "error", err)
+		}
+		return nil
 	}
 
 	return c.Blob(http.StatusOK, result.ContentType, result.Data)
@@ -103,7 +107,6 @@ func (h *ProxyHandler) handleServiceError(c echo.Context, err error) error {
 	case errors.Is(err, service.ErrInvalidImage):
 		return Error(c, http.StatusBadGateway, "Invalid image")
 	case errors.Is(err, service.ErrUpstreamRejected):
-		// Upstream rejected the request, return 502 and prevent caching
 		c.Response().Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
 		return Error(c, http.StatusBadGateway, "Upstream rejected")
 	default:

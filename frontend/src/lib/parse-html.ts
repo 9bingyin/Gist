@@ -5,7 +5,6 @@ import { toJsxRuntime } from "hast-util-to-jsx-runtime";
 import { Fragment, jsx, jsxs } from "react/jsx-runtime";
 import rehypeParse from "rehype-parse";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
-import rehypeStringify from "rehype-stringify";
 import { unified } from "unified";
 import { visit } from "unist-util-visit";
 import { NON_CONTENT_TAG_NAMES } from "./html-content-tags";
@@ -25,12 +24,6 @@ const EMOJI_CLASS_PATTERNS = [
 
 // Check if a string contains emoji characters
 function isEmojiChar(str: string): boolean {
-  // Match common emoji ranges:
-  // - Miscellaneous Symbols (U+2600-U+26FF)
-  // - Dingbats (U+2700-U+27BF)
-  // - Miscellaneous Symbols and Arrows (U+2B00-U+2BFF)
-  // - Variation Selectors (U+FE00-U+FEFF)
-  // - Supplemental Symbols (U+1F000-U+1FFFF)
   const emojiRegex =
     /[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|[\u{2B00}-\u{2BFF}]|[\u{FE00}-\u{FEFF}]|[\u{1F000}-\u{1FFFF}]/u;
   return emojiRegex.test(str);
@@ -46,18 +39,15 @@ function rehypeEmojiImages() {
       if (node.tagName !== "img" || !parent || index === undefined) return;
 
       const props = node.properties || {};
-      // className in hast is an array
       const classNames = Array.isArray(props.className) ? props.className : [];
       const className = classNames.join(" ");
       const alt = String(props.alt || "");
 
-      // Check if this is an emoji image by class name
       const isEmojiClass = EMOJI_CLASS_PATTERNS.some((pattern) =>
         className.toLowerCase().includes(pattern),
       );
 
       if (isEmojiClass && alt && isEmojiChar(alt)) {
-        // Replace img with text node containing the emoji
         const textNode: Text = { type: "text", value: alt };
         parent.children.splice(index, 1, textNode);
       }
@@ -95,13 +85,13 @@ function rehypeTrimEndBrElement() {
  * This prevents tags like <style> from leaking raw CSS into article body text
  * after sanitize strips the tag wrapper.
  */
-function rehypeDropNonContentElements() {
-  const blockedTagNames: ReadonlySet<string> = new Set(NON_CONTENT_TAG_NAMES);
+const BLOCKED_TAG_NAMES: ReadonlySet<string> = new Set(NON_CONTENT_TAG_NAMES);
 
+function rehypeDropNonContentElements() {
   return (tree: Root) => {
     visit(tree, "element", (node: Element, index, parent) => {
       if (!parent || index === undefined) return;
-      if (!blockedTagNames.has(node.tagName)) return;
+      if (!BLOCKED_TAG_NAMES.has(node.tagName)) return;
 
       parent.children.splice(index, 1);
       return index;
@@ -109,16 +99,11 @@ function rehypeDropNonContentElements() {
   };
 }
 
-/**
- * Parse HTML string to React components
- */
-export function parseHtml(content: string, options?: ParseHtmlOptions) {
-  const { components } = options || {};
-
-  // Configure sanitization schema
-  const rehypeSchema: Schema = { ...defaultSchema };
-  rehypeSchema.tagNames = [
-    ...rehypeSchema.tagNames!,
+// Module-level sanitization schema (built once and reused)
+const rehypeSchema: Schema = {
+  ...defaultSchema,
+  tagNames: [
+    ...(defaultSchema.tagNames ?? []),
     "video",
     "source",
     "audio",
@@ -126,11 +111,11 @@ export function parseHtml(content: string, options?: ParseHtmlOptions) {
     "figcaption",
     "details",
     "summary",
-  ];
-
-  rehypeSchema.attributes = {
-    ...rehypeSchema.attributes,
-    "*": [...rehypeSchema.attributes!["*"]!, "style", "className"],
+  ],
+  attributes: {
+    ...defaultSchema.attributes,
+    code: [...(defaultSchema.attributes?.code ?? []), "className"],
+    pre: [...(defaultSchema.attributes?.pre ?? []), "className"],
     video: [
       "src",
       "poster",
@@ -150,43 +135,68 @@ export function parseHtml(content: string, options?: ParseHtmlOptions) {
       "width",
       "height",
       "loading",
-      "srcset",
+      "srcSet",
       "sizes",
       "className",
     ],
-  };
+  },
+};
 
-  // Build the processing pipeline
-  const pipeline = unified()
-    .use(rehypeParse, { fragment: true })
-    .use(rehypeDropNonContentElements)
-    .use(rehypeSanitize, rehypeSchema)
-    .use(rehypeEmojiImages)
-    .use(rehypeTrimEndBrElement)
-    .use(rehypeStringify);
+// Frozen module-level unified pipeline (built once and reused across all parses)
+const htmlPipeline = unified()
+  .use(rehypeParse, { fragment: true })
+  .use(rehypeDropNonContentElements)
+  .use(rehypeSanitize, rehypeSchema)
+  .use(rehypeEmojiImages)
+  .use(rehypeTrimEndBrElement)
+  .freeze();
 
-  // Parse and process the HTML
-  const tree = pipeline.parse(content);
-  const hastTree = pipeline.runSync(tree, content);
+/**
+ * Extract decoded image src strings directly from a parsed HAST tree.
+ */
+export function extractImagesFromHast(tree: Root): string[] {
+  const srcs: string[] = [];
+  visit(tree, "element", (node: Element) => {
+    if (node.tagName !== "img") return;
+    const src = node.properties?.src;
+    if (typeof src === "string" && src.trim()) {
+      srcs.push(src);
+    }
+  });
+  return srcs;
+}
+
+/**
+ * Render a parsed HAST tree into React elements.
+ */
+export function renderHast(hastTree: Root, components?: Components) {
+  return toJsxRuntime(hastTree, {
+    Fragment,
+    ignoreInvalidStyle: true,
+    jsx: (type, props, key) => {
+      const actualKey = props?.key ?? key;
+      return jsx(type as React.ElementType, props, actualKey);
+    },
+    jsxs: (type, props, key) => {
+      const actualKey = props?.key ?? key;
+      return jsxs(type as React.ElementType, props, actualKey);
+    },
+    passNode: true,
+    components,
+  });
+}
+
+/**
+ * Parse HTML string to HAST and React components
+ */
+export function parseHtml(content: string, options?: ParseHtmlOptions) {
+  const { components } = options || {};
+
+  const tree = htmlPipeline.parse(content);
+  const hastTree = htmlPipeline.runSync(tree, content);
 
   return {
     hastTree,
-    toContent: () =>
-      toJsxRuntime(hastTree, {
-        Fragment,
-        ignoreInvalidStyle: true,
-        jsx: (type, props, key) => {
-          // Prefer key from props (set by custom components) over auto-generated key
-          const actualKey = props?.key ?? key;
-          // Type cast needed: hast-util-to-jsx-runtime's type is broader than React's jsx expects
-          return jsx(type as React.ElementType, props, actualKey);
-        },
-        jsxs: (type, props, key) => {
-          const actualKey = props?.key ?? key;
-          return jsxs(type as React.ElementType, props, actualKey);
-        },
-        passNode: true,
-        components,
-      }),
+    toContent: () => renderHast(hastTree, components),
   };
 }

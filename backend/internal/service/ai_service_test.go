@@ -17,7 +17,7 @@ import (
 
 func TestAIService_GetSummaryLanguage(t *testing.T) {
 	repo := newSettingsRepoStub()
-	svc := service.NewAIService(&summaryRepoStub{}, &translationRepoStub{}, &listTranslationRepoStub{}, repo, ai.NewRateLimiter(100))
+	svc := service.NewAIService(&summaryRepoStub{}, &translationRepoStub{}, &listTranslationRepoStub{}, repo, ai.NewRateLimiter(100), nil, nil, nil)
 
 	lang := svc.GetSummaryLanguage(context.Background())
 	require.Equal(t, "zh-CN", lang, "expected default language")
@@ -33,7 +33,7 @@ func TestAIService_SaveSummaryAndTranslation_UsesLanguage(t *testing.T) {
 
 	summaryRepo := &summaryRepoStub{}
 	translationRepo := &translationRepoStub{}
-	svc := service.NewAIService(summaryRepo, translationRepo, &listTranslationRepoStub{}, repo, ai.NewRateLimiter(100))
+	svc := service.NewAIService(summaryRepo, translationRepo, &listTranslationRepoStub{}, repo, ai.NewRateLimiter(100), nil, nil, nil)
 
 	err := svc.SaveSummary(context.Background(), 1, false, "summary")
 	require.NoError(t, err, "SaveSummary should not fail")
@@ -48,7 +48,7 @@ func TestAIService_ClearAllCache_ErrorPropagation(t *testing.T) {
 	summaryRepo := &summaryRepoStub{deleteAllErr: errors.New("summary delete failed")}
 	translationRepo := &translationRepoStub{}
 	listRepo := &listTranslationRepoStub{}
-	svc := service.NewAIService(summaryRepo, translationRepo, listRepo, newSettingsRepoStub(), ai.NewRateLimiter(100))
+	svc := service.NewAIService(summaryRepo, translationRepo, listRepo, newSettingsRepoStub(), ai.NewRateLimiter(100), nil, nil, nil)
 
 	_, _, _, err := svc.ClearAllCache(context.Background())
 	require.Error(t, err, "expected summary clear error")
@@ -69,30 +69,30 @@ func TestAIService_ClearAllCache_ErrorPropagation(t *testing.T) {
 
 func TestAIService_Summarize_MissingConfig(t *testing.T) {
 	repo := newSettingsRepoStub()
-	svc := service.NewAIService(&summaryRepoStub{}, &translationRepoStub{}, &listTranslationRepoStub{}, repo, ai.NewRateLimiter(100))
+	svc := service.NewAIService(&summaryRepoStub{}, &translationRepoStub{}, &listTranslationRepoStub{}, repo, ai.NewRateLimiter(100), nil, nil, nil)
 
-	_, _, err := svc.Summarize(context.Background(), 1, "content", "title", false)
+	_, err := svc.Summarize(context.Background(), 1, "content", "title", false)
 	require.Error(t, err, "expected error for missing config")
 }
 
 func TestAIService_TranslateBlocks_EmptyContent(t *testing.T) {
-	svc := service.NewAIService(&summaryRepoStub{}, &translationRepoStub{}, &listTranslationRepoStub{}, newSettingsRepoStub(), ai.NewRateLimiter(100))
+	svc := service.NewAIService(&summaryRepoStub{}, &translationRepoStub{}, &listTranslationRepoStub{}, newSettingsRepoStub(), ai.NewRateLimiter(100), nil, nil, nil)
 
-	_, _, _, err := svc.TranslateBlocks(context.Background(), 1, "", "title", false)
+	_, _, err := svc.TranslateBlocks(context.Background(), 1, "", "title", false)
 	require.Error(t, err, "expected error for empty content")
 }
 
 func TestAIService_TranslateBatch_EmptyInput(t *testing.T) {
-	svc := service.NewAIService(&summaryRepoStub{}, &translationRepoStub{}, &listTranslationRepoStub{}, newSettingsRepoStub(), ai.NewRateLimiter(100))
+	svc := service.NewAIService(&summaryRepoStub{}, &translationRepoStub{}, &listTranslationRepoStub{}, newSettingsRepoStub(), ai.NewRateLimiter(100), nil, nil, nil)
 
-	_, _, err := svc.TranslateBatch(context.Background(), nil)
+	_, err := svc.TranslateBatch(context.Background(), nil)
 	require.Error(t, err, "expected error for empty batch")
 }
 
 func TestAIService_GetCachedTranslation_Error(t *testing.T) {
 	repo := newSettingsRepoStub()
 	translationRepo := &translationRepoStub{getErr: errors.New("get failed")}
-	svc := service.NewAIService(&summaryRepoStub{}, translationRepo, &listTranslationRepoStub{}, repo, ai.NewRateLimiter(100))
+	svc := service.NewAIService(&summaryRepoStub{}, translationRepo, &listTranslationRepoStub{}, repo, ai.NewRateLimiter(100), nil, nil, nil)
 
 	_, err := svc.GetCachedTranslation(context.Background(), 1, false)
 	require.Error(t, err)
@@ -101,7 +101,7 @@ func TestAIService_GetCachedTranslation_Error(t *testing.T) {
 func TestAIService_SaveTranslation_Error(t *testing.T) {
 	repo := newSettingsRepoStub()
 	translationRepo := &translationRepoStub{saveErr: errors.New("save failed")}
-	svc := service.NewAIService(&summaryRepoStub{}, translationRepo, &listTranslationRepoStub{}, repo, ai.NewRateLimiter(100))
+	svc := service.NewAIService(&summaryRepoStub{}, translationRepo, &listTranslationRepoStub{}, repo, ai.NewRateLimiter(100), nil, nil, nil)
 
 	err := svc.SaveTranslation(context.Background(), 1, false, "content")
 	require.Error(t, err)
@@ -115,17 +115,20 @@ func TestAIService_TranslateBatch_CacheHit(t *testing.T) {
 			2: {EntryID: 2, Title: "T2", Summary: "S2"},
 		},
 	}
-	svc := service.NewAIService(&summaryRepoStub{}, &translationRepoStub{}, listRepo, repo, ai.NewRateLimiter(100))
+	svc := service.NewAIService(&summaryRepoStub{}, &translationRepoStub{}, listRepo, repo, ai.NewRateLimiter(100), nil, nil, nil)
 
-	resultCh, errCh, err := svc.TranslateBatch(context.Background(), []service.BatchArticleInput{
+	eventCh, err := svc.TranslateBatch(context.Background(), []service.BatchArticleInput{
 		{ID: "1"},
 		{ID: "2"},
 	})
 	require.NoError(t, err)
 
 	results := make(map[string]service.BatchTranslateResult)
-	for r := range resultCh {
-		results[r.ID] = r
+	for ev := range eventCh {
+		require.NoError(t, ev.Err)
+		if ev.Result != nil {
+			results[ev.Result.ID] = *ev.Result
+		}
 	}
 	require.Len(t, results, 2)
 	require.True(t, results["1"].Cached)
@@ -133,32 +136,23 @@ func TestAIService_TranslateBatch_CacheHit(t *testing.T) {
 	require.Equal(t, "T1", *results["1"].Title)
 	require.NotNil(t, results["1"].Summary)
 	require.Equal(t, "S1", *results["1"].Summary)
-
-	select {
-	case err := <-errCh:
-		require.NoError(t, err)
-	default:
-	}
 }
 
 func TestAIService_TranslateBatch_InvalidIDs(t *testing.T) {
 	repo := newSettingsRepoStub()
 	listRepo := &listTranslationRepoStub{batchResult: map[int64]*model.AIListTranslation{}}
-	svc := service.NewAIService(&summaryRepoStub{}, &translationRepoStub{}, listRepo, repo, ai.NewRateLimiter(100))
+	svc := service.NewAIService(&summaryRepoStub{}, &translationRepoStub{}, listRepo, repo, ai.NewRateLimiter(100), nil, nil, nil)
 
-	resultCh, errCh, err := svc.TranslateBatch(context.Background(), []service.BatchArticleInput{
+	eventCh, err := svc.TranslateBatch(context.Background(), []service.BatchArticleInput{
 		{ID: "not-a-number"},
 	})
 	require.NoError(t, err)
 
-	for range resultCh {
-		t.Fatalf("expected no results")
-	}
-
-	select {
-	case err := <-errCh:
-		require.NoError(t, err)
-	default:
+	for ev := range eventCh {
+		require.NoError(t, ev.Err)
+		if ev.Result != nil {
+			t.Fatalf("expected no results")
+		}
 	}
 }
 
@@ -179,10 +173,6 @@ func (s *summaryRepoStub) Get(ctx context.Context, entryID int64, isReadability 
 
 func (s *summaryRepoStub) Save(ctx context.Context, entryID int64, isReadability bool, language, summary string) error {
 	s.lastLanguage = language
-	return nil
-}
-
-func (s *summaryRepoStub) DeleteByEntryID(ctx context.Context, entryID int64) error {
 	return nil
 }
 
@@ -215,10 +205,6 @@ func (s *translationRepoStub) Save(ctx context.Context, entryID int64, isReadabi
 	return nil
 }
 
-func (s *translationRepoStub) DeleteByEntryID(ctx context.Context, entryID int64) error {
-	return nil
-}
-
 func (s *translationRepoStub) DeleteAll(ctx context.Context) (int64, error) {
 	if s.deleteAllErr != nil {
 		return 0, s.deleteAllErr
@@ -246,10 +232,6 @@ func (s *listTranslationRepoStub) Save(ctx context.Context, entryID int64, langu
 	return nil
 }
 
-func (s *listTranslationRepoStub) DeleteByEntryID(ctx context.Context, entryID int64) error {
-	return nil
-}
-
 func (s *listTranslationRepoStub) DeleteAll(ctx context.Context) (int64, error) {
 	if s.deleteAllErr != nil {
 		return 0, s.deleteAllErr
@@ -270,7 +252,7 @@ func TestAIService_GetCachedSummary_Success(t *testing.T) {
 			Summary:       "Test summary content",
 		},
 	}
-	svc := service.NewAIService(summaryRepo, &translationRepoStub{}, &listTranslationRepoStub{}, repo, ai.NewRateLimiter(100))
+	svc := service.NewAIService(summaryRepo, &translationRepoStub{}, &listTranslationRepoStub{}, repo, ai.NewRateLimiter(100), nil, nil, nil)
 
 	result, err := svc.GetCachedSummary(context.Background(), 123, false)
 	require.NoError(t, err)
@@ -282,7 +264,7 @@ func TestAIService_GetCachedSummary_Success(t *testing.T) {
 func TestAIService_GetCachedSummary_NotFound(t *testing.T) {
 	repo := newSettingsRepoStub()
 	summaryRepo := &summaryRepoStub{getResult: nil}
-	svc := service.NewAIService(summaryRepo, &translationRepoStub{}, &listTranslationRepoStub{}, repo, ai.NewRateLimiter(100))
+	svc := service.NewAIService(summaryRepo, &translationRepoStub{}, &listTranslationRepoStub{}, repo, ai.NewRateLimiter(100), nil, nil, nil)
 
 	result, err := svc.GetCachedSummary(context.Background(), 123, false)
 	require.NoError(t, err)
@@ -292,7 +274,7 @@ func TestAIService_GetCachedSummary_NotFound(t *testing.T) {
 func TestAIService_GetCachedSummary_Error(t *testing.T) {
 	repo := newSettingsRepoStub()
 	summaryRepo := &summaryRepoStub{getErr: errors.New("database error")}
-	svc := service.NewAIService(summaryRepo, &translationRepoStub{}, &listTranslationRepoStub{}, repo, ai.NewRateLimiter(100))
+	svc := service.NewAIService(summaryRepo, &translationRepoStub{}, &listTranslationRepoStub{}, repo, ai.NewRateLimiter(100), nil, nil, nil)
 
 	_, err := svc.GetCachedSummary(context.Background(), 123, false)
 	require.Error(t, err)
@@ -315,7 +297,7 @@ func TestAIService_BuildSummarizeSystemPrompt_UsesFeedReminder(t *testing.T) {
 		SummaryPromptReminder: &reminder,
 	}, nil)
 
-	svc := service.NewAIServiceWithFeedContext(
+	svc := service.NewAIService(
 		&summaryRepoStub{},
 		&translationRepoStub{},
 		&listTranslationRepoStub{},
@@ -323,6 +305,7 @@ func TestAIService_BuildSummarizeSystemPrompt_UsesFeedReminder(t *testing.T) {
 		ai.NewRateLimiter(100),
 		entryRepo,
 		feedRepo,
+		nil,
 	)
 
 	prompt := service.BuildAISummarizeSystemPromptForTest(svc, context.Background(), 123, "Title")
@@ -341,7 +324,7 @@ func TestAIService_BuildSummarizeSystemPrompt_FallbackOnFeedLookupError(t *testi
 	entryRepo.EXPECT().GetByID(gomock.Any(), int64(123)).Return(model.Entry{ID: 123, FeedID: 7}, nil)
 	feedRepo.EXPECT().GetByID(gomock.Any(), int64(7)).Return(model.Feed{}, errors.New("feed lookup failed"))
 
-	svc := service.NewAIServiceWithFeedContext(
+	svc := service.NewAIService(
 		&summaryRepoStub{},
 		&translationRepoStub{},
 		&listTranslationRepoStub{},
@@ -349,6 +332,7 @@ func TestAIService_BuildSummarizeSystemPrompt_FallbackOnFeedLookupError(t *testi
 		ai.NewRateLimiter(100),
 		entryRepo,
 		feedRepo,
+		nil,
 	)
 
 	prompt := service.BuildAISummarizeSystemPromptForTest(svc, context.Background(), 123, "Title")
@@ -356,128 +340,78 @@ func TestAIService_BuildSummarizeSystemPrompt_FallbackOnFeedLookupError(t *testi
 	require.Contains(t, prompt, "<target_language>English</target_language>")
 }
 
-// TestAIService_TranslateBlocks_ContextCancelled tests the BUG fix:
-// When context is cancelled, TranslateBlocks should exit gracefully without
-// continuing to process blocks or saving incomplete cache.
-// See commit 01d64c1: fix: AI streaming request cancellation
 func TestAIService_TranslateBlocks_ContextCancelled(t *testing.T) {
 	repo := newSettingsRepoStub()
 	translationRepo := &translationRepoStub{}
-	svc := service.NewAIService(&summaryRepoStub{}, translationRepo, &listTranslationRepoStub{}, repo, ai.NewRateLimiter(100))
+	svc := service.NewAIService(&summaryRepoStub{}, translationRepo, &listTranslationRepoStub{}, repo, ai.NewRateLimiter(100), nil, nil, nil)
 
-	// Create a pre-cancelled context
 	ctx, cancel := context.WithCancel(context.Background())
-	cancel() // Cancel immediately
+	cancel()
 
-	// TranslateBlocks with cancelled context
-	// It should either return an error or return channels that complete quickly
-	blockInfos, resultCh, errCh, err := svc.TranslateBlocks(ctx, 1, "<p>Test content</p>", "title", false)
-
-	// With cancelled context, it should either:
-	// 1. Return early with an error (missing config), or
-	// 2. Return channels that close quickly without processing
-
+	blockInfos, eventCh, err := svc.TranslateBlocks(ctx, 1, "<p>Test content</p>", "title", false)
 	if err != nil {
-		// Expected behavior: error due to missing config or context cancelled
 		return
 	}
 
-	// If no error, channels should close quickly without blocking
 	require.NotNil(t, blockInfos)
-	require.NotNil(t, resultCh)
-	require.NotNil(t, errCh)
+	require.NotNil(t, eventCh)
 
-	// Drain channels - they should close quickly
-	resultsReceived := 0
-	for range resultCh {
-		resultsReceived++
+	for range eventCh {
 	}
-
-	// With cancelled context, translation should not have been attempted
-	// (no AI config means it fails early anyway, but the context check is also there)
 }
 
-// TestAIService_TranslateBlocks_ContextCancelledDuringProcessing tests that
-// context cancellation during processing exits the block loop properly.
-// This verifies the labeled break and semaphore cancellation logic.
-// See commit 01d64c1: fix: AI streaming request cancellation
 func TestAIService_TranslateBlocks_ContextCancelledDuringProcessing(t *testing.T) {
 	repo := newSettingsRepoStub()
-	// Set up AI config to pass config validation
 	repo.data[service.KeyAIProvider] = "openai"
 	repo.data[service.KeyAIAPIKey] = "test-key"
 	repo.data[service.KeyAIModel] = "gpt-4"
 
 	translationRepo := &translationRepoStub{}
-	svc := service.NewAIService(&summaryRepoStub{}, translationRepo, &listTranslationRepoStub{}, repo, ai.NewRateLimiter(100))
+	svc := service.NewAIService(&summaryRepoStub{}, translationRepo, &listTranslationRepoStub{}, repo, ai.NewRateLimiter(100), nil, nil, nil)
 
-	// Create context that will be cancelled
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Start TranslateBlocks
-	blockInfos, resultCh, errCh, err := svc.TranslateBlocks(ctx, 1, "<p>Block 1</p><p>Block 2</p><p>Block 3</p>", "title", false)
-
-	// With proper AI config, it should not return an immediate error
+	blockInfos, eventCh, err := svc.TranslateBlocks(ctx, 1, "<p>Block 1</p><p>Block 2</p><p>Block 3</p>", "title", false)
 	if err != nil {
-		// If it failed (e.g., due to network), that's fine for this test
 		t.Skipf("TranslateBlocks returned error (expected in test env): %v", err)
 		return
 	}
 
 	require.NotNil(t, blockInfos)
-	require.NotNil(t, resultCh)
-	require.NotNil(t, errCh)
+	require.NotNil(t, eventCh)
 
-	// Cancel context immediately after starting
 	cancel()
 
-	// Drain channels - should complete without hanging
 	done := make(chan struct{})
 	go func() {
-		for range resultCh {
-		}
-		for range errCh {
+		for range eventCh {
 		}
 		close(done)
 	}()
 
-	// Wait with timeout - should complete quickly due to cancellation
 	select {
 	case <-done:
-		// Good - channels closed
 	case <-time.After(5 * time.Second):
 		t.Fatal("TranslateBlocks did not exit after context cancellation")
 	}
 }
 
-// TestAIService_TranslateBlocks_NoCacheOnCancel verifies that cancelled
-// translations do not save incomplete results to cache.
-// See commit 01d64c1: fix: AI streaming request cancellation
 func TestAIService_TranslateBlocks_NoCacheOnCancel(t *testing.T) {
 	repo := newSettingsRepoStub()
 	translationRepo := &translationRepoStub{}
-	svc := service.NewAIService(&summaryRepoStub{}, translationRepo, &listTranslationRepoStub{}, repo, ai.NewRateLimiter(100))
+	svc := service.NewAIService(&summaryRepoStub{}, translationRepo, &listTranslationRepoStub{}, repo, ai.NewRateLimiter(100), nil, nil, nil)
 
-	// Create and immediately cancel context
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	// Try to translate with cancelled context
-	_, resultCh, errCh, err := svc.TranslateBlocks(ctx, 1, "<p>Test</p>", "title", false)
-
+	_, eventCh, err := svc.TranslateBlocks(ctx, 1, "<p>Test</p>", "title", false)
 	if err != nil {
-		// Expected - missing config error
 		return
 	}
 
-	// Drain channels
-	for range resultCh {
-	}
-	for range errCh {
+	for range eventCh {
 	}
 
-	// Verify no cache was saved (translationRepo.lastLanguage should be empty
-	// because SaveTranslation was never called due to ctx.Err() != nil check)
 	require.Empty(t, translationRepo.lastLanguage, "Should not save cache on cancelled context")
 }

@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"gist/backend/pkg/sanitizer"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestSanitizeAuthor(t *testing.T) {
@@ -21,6 +23,16 @@ func TestSanitizeAuthor(t *testing.T) {
 			name:     "Google Blog RSS - Another author",
 			input:    "<name>Ben Gomes</name><title>Chief Technologist</title><department>Learning & Sustainability</department><company/>",
 			expected: "Ben Gomes",
+		},
+		{
+			name:     "Atom name with HTML entities",
+			input:    "<name>Tom &amp; Jerry</name><title>Cartoon</title>",
+			expected: "Tom & Jerry",
+		},
+		{
+			name:     "Atom name uppercase with attributes",
+			input:    `<NAME type="text">Ada &amp; Grace</NAME>`,
+			expected: "Ada & Grace",
 		},
 		{
 			name:     "Plain text author",
@@ -71,10 +83,7 @@ func TestSanitizeAuthor(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := sanitizer.SanitizeAuthor(tt.input)
-			if result != tt.expected {
-				t.Errorf("SanitizeAuthor(%q) = %q, expected %q", tt.input, result, tt.expected)
-			}
+			require.Equal(t, tt.expected, sanitizer.SanitizeAuthor(tt.input))
 		})
 	}
 }
@@ -96,9 +105,9 @@ func TestStripTags(t *testing.T) {
 			expected: "Hello World",
 		},
 		{
-			name:     "Multiple elements",
+			name:     "Adjacent block elements do not glue text",
 			input:    "<div><h1>Title</h1><p>Content</p></div>",
-			expected: "TitleContent",
+			expected: "Title Content",
 		},
 		{
 			name:     "Plain text",
@@ -116,9 +125,9 @@ func TestStripTags(t *testing.T) {
 			expected: "",
 		},
 		{
-			name:     "Self-closing tags",
+			name:     "Self-closing br separates text",
 			input:    "Before<br/>After",
-			expected: "BeforeAfter",
+			expected: "Before After",
 		},
 		{
 			name:     "Mixed content",
@@ -139,15 +148,11 @@ func TestStripTags(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := sanitizer.StripTags(tt.input)
-			if result != tt.expected {
-				t.Errorf("StripTags(%q) = %q, expected %q", tt.input, result, tt.expected)
-			}
+			require.Equal(t, tt.expected, sanitizer.StripTags(tt.input))
 		})
 	}
 }
 
-// BenchmarkSanitizeAuthor 性能测试
 func BenchmarkSanitizeAuthor(b *testing.B) {
 	inputs := []string{
 		"John Doe",

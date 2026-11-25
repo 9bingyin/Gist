@@ -71,6 +71,20 @@ func (mr *MockEntryRepositoryMockRecorder) CreateOrUpdate(ctx, entry any) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateOrUpdate", reflect.TypeOf((*MockEntryRepository)(nil).CreateOrUpdate), ctx, entry)
 }
 
+// CreateOrUpdateBatch mocks base method.
+func (m *MockEntryRepository) CreateOrUpdateBatch(ctx context.Context, entries []model.Entry) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateOrUpdateBatch", ctx, entries)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CreateOrUpdateBatch indicates an expected call of CreateOrUpdateBatch.
+func (mr *MockEntryRepositoryMockRecorder) CreateOrUpdateBatch(ctx, entries any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateOrUpdateBatch", reflect.TypeOf((*MockEntryRepository)(nil).CreateOrUpdateBatch), ctx, entries)
+}
+
 // DeleteUnstarred mocks base method.
 func (m *MockEntryRepository) DeleteUnstarred(ctx context.Context) (int64, error) {
 	m.ctrl.T.Helper()
@@ -101,21 +115,6 @@ func (mr *MockEntryRepositoryMockRecorder) ExistsByHash(ctx, feedID, hash any) *
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExistsByHash", reflect.TypeOf((*MockEntryRepository)(nil).ExistsByHash), ctx, feedID, hash)
 }
 
-// ExistsByLegacyURL mocks base method.
-func (m *MockEntryRepository) ExistsByLegacyURL(ctx context.Context, feedID int64, rawURL, hash string) (bool, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ExistsByLegacyURL", ctx, feedID, rawURL, hash)
-	ret0, _ := ret[0].(bool)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ExistsByLegacyURL indicates an expected call of ExistsByLegacyURL.
-func (mr *MockEntryRepositoryMockRecorder) ExistsByLegacyURL(ctx, feedID, rawURL, hash any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExistsByLegacyURL", reflect.TypeOf((*MockEntryRepository)(nil).ExistsByLegacyURL), ctx, feedID, rawURL, hash)
-}
-
 // GetAllUnreadCounts mocks base method.
 func (m *MockEntryRepository) GetAllUnreadCounts(ctx context.Context) ([]repository.UnreadCount, error) {
 	m.ctrl.T.Helper()
@@ -144,6 +143,21 @@ func (m *MockEntryRepository) GetByID(ctx context.Context, id int64) (model.Entr
 func (mr *MockEntryRepositoryMockRecorder) GetByID(ctx, id any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetByID", reflect.TypeOf((*MockEntryRepository)(nil).GetByID), ctx, id)
+}
+
+// GetExistingHashes mocks base method.
+func (m *MockEntryRepository) GetExistingHashes(ctx context.Context, feedID int64, hashes []string) (map[string]struct{}, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetExistingHashes", ctx, feedID, hashes)
+	ret0, _ := ret[0].(map[string]struct{})
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetExistingHashes indicates an expected call of GetExistingHashes.
+func (mr *MockEntryRepositoryMockRecorder) GetExistingHashes(ctx, feedID, hashes any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetExistingHashes", reflect.TypeOf((*MockEntryRepository)(nil).GetExistingHashes), ctx, feedID, hashes)
 }
 
 // GetStarredCount mocks base method.
@@ -244,46 +258,4 @@ func (m *MockEntryRepository) UpdateStarredStatus(ctx context.Context, id int64,
 func (mr *MockEntryRepositoryMockRecorder) UpdateStarredStatus(ctx, id, starred any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateStarredStatus", reflect.TypeOf((*MockEntryRepository)(nil).UpdateStarredStatus), ctx, id, starred)
-}
-
-// MockentryScanner is a mock of entryScanner interface.
-type MockentryScanner struct {
-	ctrl     *gomock.Controller
-	recorder *MockentryScannerMockRecorder
-	isgomock struct{}
-}
-
-// MockentryScannerMockRecorder is the mock recorder for MockentryScanner.
-type MockentryScannerMockRecorder struct {
-	mock *MockentryScanner
-}
-
-// NewMockentryScanner creates a new mock instance.
-func NewMockentryScanner(ctrl *gomock.Controller) *MockentryScanner {
-	mock := &MockentryScanner{ctrl: ctrl}
-	mock.recorder = &MockentryScannerMockRecorder{mock}
-	return mock
-}
-
-// EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockentryScanner) EXPECT() *MockentryScannerMockRecorder {
-	return m.recorder
-}
-
-// Scan mocks base method.
-func (m *MockentryScanner) Scan(dest ...any) error {
-	m.ctrl.T.Helper()
-	varargs := []any{}
-	for _, a := range dest {
-		varargs = append(varargs, a)
-	}
-	ret := m.ctrl.Call(m, "Scan", varargs...)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// Scan indicates an expected call of Scan.
-func (mr *MockentryScannerMockRecorder) Scan(dest ...any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Scan", reflect.TypeOf((*MockentryScanner)(nil).Scan), dest...)
 }

@@ -7,12 +7,13 @@ import (
 
 	"github.com/labstack/echo/v4"
 
+	"gist/backend/internal/handler"
 	"gist/backend/internal/service"
 	"gist/backend/pkg/logger"
 )
 
-// AuthCookieName is the name of the authentication cookie.
-const AuthCookieName = "gist_auth"
+// AuthCookieName re-exports the shared authentication cookie name for callers/tests.
+const AuthCookieName = handler.AuthCookieName
 
 // RequestLoggerMiddleware logs HTTP requests using logger.
 func RequestLoggerMiddleware() echo.MiddlewareFunc {
@@ -27,56 +28,32 @@ func RequestLoggerMiddleware() echo.MiddlewareFunc {
 
 			req := c.Request()
 			res := c.Response()
-			latency := time.Since(start)
-			remoteIP := c.RealIP()
-			userAgent := req.UserAgent()
-
 			status := res.Status
-			action := "request"
-			resource := "http"
 			result := "ok"
 			if status >= 400 {
 				result = "failed"
 			}
-			if status >= 500 {
-				logger.Error("http request",
-					"module", "http",
-					"action", action,
-					"resource", resource,
-					"result", result,
-					"method", req.Method,
-					"path", req.URL.Path,
-					"status_code", status,
-					"duration_ms", latency.Milliseconds(),
-					"remote_ip", remoteIP,
-					"user_agent", userAgent,
-				)
-			} else if status >= 400 {
-				logger.Warn("http request",
-					"module", "http",
-					"action", action,
-					"resource", resource,
-					"result", result,
-					"method", req.Method,
-					"path", req.URL.Path,
-					"status_code", status,
-					"duration_ms", latency.Milliseconds(),
-					"remote_ip", remoteIP,
-					"user_agent", userAgent,
-				)
-			} else {
-				logger.Debug("http request",
-					"module", "http",
-					"action", action,
-					"resource", resource,
-					"result", result,
-					"method", req.Method,
-					"path", req.URL.Path,
-					"status_code", status,
-					"duration_ms", latency.Milliseconds(),
-					"remote_ip", remoteIP,
-					"user_agent", userAgent,
-				)
+
+			fields := []any{
+				"module", "http",
+				"action", "request",
+				"resource", "http",
+				"result", result,
+				"method", req.Method,
+				"path", req.URL.Path,
+				"status_code", status,
+				"duration_ms", time.Since(start).Milliseconds(),
+				"remote_ip", c.RealIP(),
+				"user_agent", req.UserAgent(),
+			}
+
+			switch {
+			case status >= 500:
+				logger.Error("http request", fields...)
+			case status >= 400:
+				logger.Warn("http request", fields...)
+			default:
+				logger.Debug("http request", fields...)
 			}
 
 			return nil
@@ -95,14 +72,14 @@ func JWTAuthMiddleware(authService service.AuthService) echo.MiddlewareFunc {
 			authHeader := c.Request().Header.Get("Authorization")
 			if authHeader != "" {
 				parts := strings.SplitN(authHeader, " ", 2)
-				if len(parts) == 2 && strings.ToLower(parts[0]) == "bearer" {
+				if len(parts) == 2 && strings.EqualFold(parts[0], "bearer") {
 					token = parts[1]
 				}
 			}
 
 			// Fallback to cookie (for image/resource requests)
 			if token == "" {
-				if cookie, err := c.Cookie(AuthCookieName); err == nil && cookie.Value != "" {
+				if cookie, err := c.Cookie(handler.AuthCookieName); err == nil && cookie.Value != "" {
 					token = cookie.Value
 				}
 			}
@@ -123,9 +100,9 @@ func JWTAuthMiddleware(authService service.AuthService) echo.MiddlewareFunc {
 			}
 
 			// Validate token
-			valid, err := authService.ValidateToken(token)
+			valid, err := authService.ValidateToken(c.Request().Context(), token)
 			if err != nil || !valid {
-				clearAuthCookie(c)
+				handler.ClearAuthCookie(c)
 				logger.Warn("auth invalid",
 					"module", "http",
 					"action", "request",
@@ -143,17 +120,4 @@ func JWTAuthMiddleware(authService service.AuthService) echo.MiddlewareFunc {
 			return next(c)
 		}
 	}
-}
-
-func clearAuthCookie(c echo.Context) {
-	cookie := &http.Cookie{
-		Name:     AuthCookieName,
-		Value:    "",
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   c.Request().TLS != nil,
-		SameSite: http.SameSiteLaxMode,
-		MaxAge:   -1,
-	}
-	c.SetCookie(cookie)
 }

@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence } from "motion/react";
 import { useBlockBackgroundScroll } from "@/hooks/useBlockBackgroundScroll";
 import { cn } from "@/lib/utils";
 

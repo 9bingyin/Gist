@@ -20,7 +20,7 @@ func TestSettingsHandler_GetAISettings_Success(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockService := mock.NewMockSettingsService(ctrl)
-	h := handler.NewSettingsHandlerHelper(mockService, nil)
+	h := handler.NewSettingsHandlerHelper(mockService)
 
 	e := newTestEcho()
 	req := newJSONRequest(http.MethodGet, "/settings/ai", nil)
@@ -48,10 +48,10 @@ func TestSettingsHandler_UpdateAISettings_Success(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockService := mock.NewMockSettingsService(ctrl)
-	h := handler.NewSettingsHandlerHelper(mockService, nil)
+	h := handler.NewSettingsHandlerHelper(mockService)
 
 	e := newTestEcho()
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"provider": "openai",
 		"baseUrl":  "https://api.openai.com/v1",
 		"model":    "gpt-4",
@@ -85,10 +85,10 @@ func TestSettingsHandler_UpdateAISettings_MissingBaseURLForOpenAI(t *testing.T) 
 	defer ctrl.Finish()
 
 	mockService := mock.NewMockSettingsService(ctrl)
-	h := handler.NewSettingsHandlerHelper(mockService, nil)
+	h := handler.NewSettingsHandlerHelper(mockService)
 
 	e := newTestEcho()
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"provider": "openai",
 		"model":    "gpt-4",
 	}
@@ -105,10 +105,10 @@ func TestSettingsHandler_TestNetworkProxy_Disabled(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockService := mock.NewMockSettingsService(ctrl)
-	h := handler.NewSettingsHandlerHelper(mockService, nil)
+	h := handler.NewSettingsHandlerHelper(mockService)
 
 	e := newTestEcho()
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"enabled": false,
 	}
 	req := newJSONRequest(http.MethodPost, "/settings/network/test", reqBody)
@@ -127,10 +127,10 @@ func TestSettingsHandler_TestNetworkProxy_InvalidParams(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockService := mock.NewMockSettingsService(ctrl)
-	h := handler.NewSettingsHandlerHelper(mockService, nil)
+	h := handler.NewSettingsHandlerHelper(mockService)
 
 	e := newTestEcho()
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"enabled": true,
 		"host":    "",
 	}
@@ -148,7 +148,7 @@ func TestSettingsHandler_GetGeneralSettings_Success(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockService := mock.NewMockSettingsService(ctrl)
-	h := handler.NewSettingsHandlerHelper(mockService, nil)
+	h := handler.NewSettingsHandlerHelper(mockService)
 
 	e := newTestEcho()
 	req := newJSONRequest(http.MethodGet, "/settings/general", nil)
@@ -177,10 +177,10 @@ func TestSettingsHandler_UpdateGeneralSettings_Success(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockService := mock.NewMockSettingsService(ctrl)
-	h := handler.NewSettingsHandlerHelper(mockService, nil)
+	h := handler.NewSettingsHandlerHelper(mockService)
 
 	e := newTestEcho()
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"autoReadability":  true,
 		"markReadOnScroll": true,
 	}
@@ -210,7 +210,7 @@ func TestSettingsHandler_GetAppearanceSettings_Success(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockService := mock.NewMockSettingsService(ctrl)
-	h := handler.NewSettingsHandlerHelper(mockService, nil)
+	h := handler.NewSettingsHandlerHelper(mockService)
 
 	e := newTestEcho()
 	req := newJSONRequest(http.MethodGet, "/settings/appearance", nil)
@@ -237,10 +237,10 @@ func TestSettingsHandler_UpdateAppearanceSettings_Success(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockService := mock.NewMockSettingsService(ctrl)
-	h := handler.NewSettingsHandlerHelper(mockService, nil)
+	h := handler.NewSettingsHandlerHelper(mockService)
 
 	e := newTestEcho()
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"contentTypes": []string{"article", "picture"},
 	}
 	req := newJSONRequest(http.MethodPut, "/settings/appearance", reqBody)
@@ -265,10 +265,10 @@ func TestSettingsHandler_TestAI_Success(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockService := mock.NewMockSettingsService(ctrl)
-	h := handler.NewSettingsHandlerHelper(mockService, nil)
+	h := handler.NewSettingsHandlerHelper(mockService)
 
 	e := newTestEcho()
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"provider": "openai",
 		"apiKey":   "sk-test",
 		"baseUrl":  "https://api.openai.com/v1",
@@ -298,10 +298,10 @@ func TestSettingsHandler_TestAI_MissingBaseURLForOpenAI(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockService := mock.NewMockSettingsService(ctrl)
-	h := handler.NewSettingsHandlerHelper(mockService, nil)
+	h := handler.NewSettingsHandlerHelper(mockService)
 
 	e := newTestEcho()
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"provider": "openai",
 		"apiKey":   "sk-test",
 		"model":    "gpt-4",
@@ -319,10 +319,10 @@ func TestSettingsHandler_TestAI_AnthropicBaseURLOptional(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockService := mock.NewMockSettingsService(ctrl)
-	h := handler.NewSettingsHandlerHelper(mockService, nil)
+	h := handler.NewSettingsHandlerHelper(mockService)
 
 	e := newTestEcho()
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"provider": "anthropic",
 		"apiKey":   "sk-ant-test",
 		"model":    "claude-sonnet-4-20250514",
@@ -344,7 +344,7 @@ func TestSettingsHandler_ClearAnubisCookies_Success(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockService := mock.NewMockSettingsService(ctrl)
-	h := handler.NewSettingsHandlerHelper(mockService, nil)
+	h := handler.NewSettingsHandlerHelper(mockService)
 
 	e := newTestEcho()
 	req := newJSONRequest(http.MethodDelete, "/settings/anubis-cookies", nil)
@@ -365,7 +365,7 @@ func TestSettingsHandler_GetNetworkSettings_Success(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockService := mock.NewMockSettingsService(ctrl)
-	h := handler.NewSettingsHandlerHelper(mockService, nil)
+	h := handler.NewSettingsHandlerHelper(mockService)
 
 	e := newTestEcho()
 	req := newJSONRequest(http.MethodGet, "/settings/network", nil)
@@ -388,7 +388,7 @@ func TestSettingsHandler_GetNetworkSettings_Success(t *testing.T) {
 	err := h.GetNetworkSettings(c)
 	require.NoError(t, err)
 
-	var resp map[string]interface{}
+	var resp map[string]any
 	assertJSONResponse(t, rec, http.StatusOK, &resp)
 	require.Equal(t, true, resp["enabled"])
 	require.Equal(t, "socks5", resp["type"])
@@ -401,10 +401,10 @@ func TestSettingsHandler_UpdateNetworkSettings_Success(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockService := mock.NewMockSettingsService(ctrl)
-	h := handler.NewSettingsHandlerHelper(mockService, nil)
+	h := handler.NewSettingsHandlerHelper(mockService)
 
 	e := newTestEcho()
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"enabled":  true,
 		"type":     "http",
 		"host":     "proxy.local",
@@ -442,7 +442,7 @@ func TestSettingsHandler_UpdateNetworkSettings_InvalidRequest(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockService := mock.NewMockSettingsService(ctrl)
-	h := handler.NewSettingsHandlerHelper(mockService, nil)
+	h := handler.NewSettingsHandlerHelper(mockService)
 
 	e := newTestEcho()
 	req := httptest.NewRequest(http.MethodPut, "/settings/network", newBody(`{"enabled":`))

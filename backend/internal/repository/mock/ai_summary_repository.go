@@ -56,20 +56,6 @@ func (mr *MockAISummaryRepositoryMockRecorder) DeleteAll(ctx any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteAll", reflect.TypeOf((*MockAISummaryRepository)(nil).DeleteAll), ctx)
 }
 
-// DeleteByEntryID mocks base method.
-func (m *MockAISummaryRepository) DeleteByEntryID(ctx context.Context, entryID int64) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeleteByEntryID", ctx, entryID)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// DeleteByEntryID indicates an expected call of DeleteByEntryID.
-func (mr *MockAISummaryRepositoryMockRecorder) DeleteByEntryID(ctx, entryID any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteByEntryID", reflect.TypeOf((*MockAISummaryRepository)(nil).DeleteByEntryID), ctx, entryID)
-}
-
 // Get mocks base method.
 func (m *MockAISummaryRepository) Get(ctx context.Context, entryID int64, isReadability bool, language string) (*model.AISummary, error) {
 	m.ctrl.T.Helper()

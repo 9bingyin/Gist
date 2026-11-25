@@ -31,6 +31,18 @@ describe("image-proxy", () => {
       expect(url).toContain("/api/proxy/image/");
     });
 
+    it("should normalize parent directory segments (../) using URL resolution", () => {
+      const url = getProxiedImageUrl(
+        "../assets/pic.jpg",
+        "https://example.com/blog/2026/post.html",
+      );
+      const encodedPart =
+        url.replace("/api/proxy/image/", "").split("?")[0] ?? "";
+      const encoded = encodedPart.replace(/-/g, "+").replace(/_/g, "/");
+      const decoded = atob(encoded);
+      expect(decoded).toBe("https://example.com/blog/assets/pic.jpg");
+    });
+
     it("should resolve absolute path with base URL", () => {
       const url = getProxiedImageUrl(
         "/images/photo.jpg",

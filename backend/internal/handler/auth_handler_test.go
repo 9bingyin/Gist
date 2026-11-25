@@ -44,7 +44,7 @@ func TestAuthHandler_Register_Success(t *testing.T) {
 	h := handler.NewAuthHandlerHelper(mockService)
 
 	e := newTestEcho()
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"username": "alice",
 		"email":    "alice@example.com",
 		"password": "secret123",
@@ -85,7 +85,7 @@ func TestAuthHandler_Login_Success(t *testing.T) {
 	h := handler.NewAuthHandlerHelper(mockService)
 
 	e := newTestEcho()
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"identifier": "alice",
 		"password":   "secret123",
 	}
@@ -120,7 +120,7 @@ func TestAuthHandler_Login_InvalidCredentials(t *testing.T) {
 	h := handler.NewAuthHandlerHelper(mockService)
 
 	e := newTestEcho()
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"identifier": "alice",
 		"password":   "wrong",
 	}
@@ -174,7 +174,7 @@ func TestAuthHandler_UpdateProfile_Success(t *testing.T) {
 	h := handler.NewAuthHandlerHelper(mockService)
 
 	e := newTestEcho()
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"nickname": "New Nickname",
 		"email":    "new@example.com",
 	}
@@ -235,7 +235,7 @@ func TestAuthHandler_Register_UserExists(t *testing.T) {
 	h := handler.NewAuthHandlerHelper(mockService)
 
 	e := newTestEcho()
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"username": "alice",
 		"email":    "alice@example.com",
 		"password": "secret123",
@@ -260,7 +260,7 @@ func TestAuthHandler_Register_UsernameRequired(t *testing.T) {
 	h := handler.NewAuthHandlerHelper(mockService)
 
 	e := newTestEcho()
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"username": "",
 		"email":    "alice@example.com",
 		"password": "secret123",
@@ -285,7 +285,7 @@ func TestAuthHandler_Register_InvalidUsername(t *testing.T) {
 	h := handler.NewAuthHandlerHelper(mockService)
 
 	e := newTestEcho()
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"username": "1invalid",
 		"email":    "alice@example.com",
 		"password": "secret123",
@@ -310,7 +310,7 @@ func TestAuthHandler_Register_EmailRequired(t *testing.T) {
 	h := handler.NewAuthHandlerHelper(mockService)
 
 	e := newTestEcho()
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"username": "alice",
 		"email":    "",
 		"password": "secret123",
@@ -335,7 +335,7 @@ func TestAuthHandler_Register_PasswordRequired(t *testing.T) {
 	h := handler.NewAuthHandlerHelper(mockService)
 
 	e := newTestEcho()
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"username": "alice",
 		"email":    "alice@example.com",
 		"password": "",
@@ -360,7 +360,7 @@ func TestAuthHandler_Register_PasswordTooShort(t *testing.T) {
 	h := handler.NewAuthHandlerHelper(mockService)
 
 	e := newTestEcho()
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"username": "alice",
 		"email":    "alice@example.com",
 		"password": "123",
@@ -385,7 +385,7 @@ func TestAuthHandler_Login_UserNotFound(t *testing.T) {
 	h := handler.NewAuthHandlerHelper(mockService)
 
 	e := newTestEcho()
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"identifier": "unknown",
 		"password":   "secret123",
 	}
@@ -409,7 +409,7 @@ func TestAuthHandler_UpdateProfile_CurrentPasswordRequired(t *testing.T) {
 	h := handler.NewAuthHandlerHelper(mockService)
 
 	e := newTestEcho()
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"newPassword": "newpass123",
 	}
 	req := newJSONRequest(http.MethodPut, "/auth/profile", reqBody)
@@ -432,7 +432,7 @@ func TestAuthHandler_UpdateProfile_SamePassword(t *testing.T) {
 	h := handler.NewAuthHandlerHelper(mockService)
 
 	e := newTestEcho()
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"currentPassword": "oldpass",
 		"newPassword":     "oldpass",
 	}
@@ -496,7 +496,7 @@ func TestAuthHandler_Register_InternalError(t *testing.T) {
 	h := handler.NewAuthHandlerHelper(mockService)
 
 	e := newTestEcho()
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"username": "alice",
 		"email":    "alice@example.com",
 		"password": "secret123",
@@ -569,7 +569,7 @@ func TestAuthHandler_Login_InternalError(t *testing.T) {
 	h := handler.NewAuthHandlerHelper(mockService)
 
 	e := newTestEcho()
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"identifier": "alice",
 		"password":   "secret123",
 	}
@@ -613,7 +613,7 @@ func TestAuthHandler_UpdateProfile_InternalError(t *testing.T) {
 	h := handler.NewAuthHandlerHelper(mockService)
 
 	e := newTestEcho()
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"nickname": "New Nickname",
 	}
 	req := newJSONRequest(http.MethodPut, "/auth/profile", reqBody)
@@ -636,7 +636,7 @@ func TestAuthHandler_UpdateProfile_PasswordChange_WithNewToken(t *testing.T) {
 	h := handler.NewAuthHandlerHelper(mockService)
 
 	e := newTestEcho()
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"currentPassword": "oldpass",
 		"newPassword":     "newpass123",
 	}

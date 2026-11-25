@@ -26,19 +26,7 @@ export function toAbsoluteUrl(
   if (!baseUrl) return null;
 
   try {
-    const base = new URL(baseUrl);
-
-    // Absolute path (starts with /)
-    if (url.startsWith("/")) {
-      return `${base.origin}${url}`;
-    }
-
-    // Relative path
-    const basePath = base.pathname.substring(
-      0,
-      base.pathname.lastIndexOf("/") + 1,
-    );
-    return `${base.origin}${basePath}${url}`;
+    return new URL(url, baseUrl).href;
   } catch {
     return null;
   }
@@ -49,7 +37,6 @@ export function toAbsoluteUrl(
  * Handles Unicode characters by encoding to UTF-8 first
  */
 function toBase64Url(str: string): string {
-  // Convert Unicode string to UTF-8 bytes, then to base64
   const utf8 = encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, (_, p1) =>
     String.fromCharCode(parseInt(p1, 16)),
   );

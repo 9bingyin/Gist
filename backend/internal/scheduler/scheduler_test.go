@@ -1,14 +1,17 @@
 package scheduler_test
 
 import (
-	"gist/backend/internal/scheduler"
+	"context"
+	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"gist/backend/internal/scheduler"
+	"gist/backend/internal/service/mock"
+
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
-
-	"gist/backend/internal/service/mock"
 )
 
 func TestScheduler(t *testing.T) {
@@ -17,15 +20,66 @@ func TestScheduler(t *testing.T) {
 
 	mockRefresh := mock.NewMockRefreshService(ctrl)
 
-	// RefreshAll should be called once immediately on Start
-	mockRefresh.EXPECT().RefreshAll(gomock.Any()).Return(nil).AnyTimes()
+	var calls atomic.Int32
+	mockRefresh.EXPECT().RefreshAll(gomock.Any()).DoAndReturn(func(context.Context) error {
+		calls.Add(1)
+		return nil
+	}).AnyTimes()
 
-	s := scheduler.New(mockRefresh, 100*time.Millisecond)
+	s := scheduler.New(mockRefresh, 50*time.Millisecond)
 	s.Start()
 
-	// Let it run for a bit
-	time.Sleep(250 * time.Millisecond)
+	require.Eventually(t, func() bool {
+		return calls.Load() >= 2
+	}, time.Second, 10*time.Millisecond)
 
+	// Stop must be idempotent.
 	s.Stop()
-	require.True(t, true) // If we reach here without panic/deadlock, it's good
+	s.Stop()
+}
+
+func TestScheduler_CancelsInFlightRefreshAndHandlesInvalidInterval(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRefresh := mock.NewMockRefreshService(ctrl)
+	started := make(chan struct{})
+	cancelled := make(chan struct{})
+
+	mockRefresh.EXPECT().RefreshAll(gomock.Any()).DoAndReturn(func(ctx context.Context) error {
+		close(started)
+		<-ctx.Done()
+		close(cancelled)
+		return ctx.Err()
+	}).Times(1)
+
+	// Non-positive interval must not panic.
+	s := scheduler.New(mockRefresh, 0)
+	s.Start()
+
+	<-started
+	s.Stop()
+
+	select {
+	case <-cancelled:
+	case <-time.After(time.Second):
+		t.Fatal("expected in-flight refresh to be cancelled on Stop")
+	}
+}
+
+func TestScheduler_RefreshError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRefresh := mock.NewMockRefreshService(ctrl)
+	done := make(chan struct{})
+	mockRefresh.EXPECT().RefreshAll(gomock.Any()).DoAndReturn(func(context.Context) error {
+		close(done)
+		return errors.New("boom")
+	}).Times(1)
+
+	s := scheduler.New(mockRefresh, time.Hour)
+	s.Start()
+	<-done
+	s.Stop()
 }

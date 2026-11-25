@@ -9,19 +9,6 @@ async function getLanguageDetectModule() {
   return languageDetectModulePromise;
 }
 
-export async function detectLanguage(text: string): Promise<string | null> {
-  const module = await getLanguageDetectModule();
-  return module.detectLanguage(text);
-}
-
-export async function isTargetLanguage(
-  text: string,
-  targetLanguage: string,
-): Promise<boolean> {
-  const module = await getLanguageDetectModule();
-  return module.isTargetLanguage(text, targetLanguage);
-}
-
 export async function needsTranslation(
   title: string,
   summary: string | null,

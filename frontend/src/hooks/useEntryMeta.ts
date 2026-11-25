@@ -1,11 +1,12 @@
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { useFeeds } from "@/hooks/useFeeds";
+import { stripHtml } from "@/lib/html-utils";
 import type { Entry } from "@/types/api";
 
 export function useEntryMeta(entry: Entry | null | undefined) {
-  const { data: feeds } = useFeeds();
   const { t, i18n } = useTranslation();
+  const publishedAtRaw = entry?.publishedAt;
+  const entryContent = entry?.content;
 
   const longDateFormatter = useMemo(
     () =>
@@ -17,45 +18,25 @@ export function useEntryMeta(entry: Entry | null | undefined) {
     [i18n.language],
   );
 
-  const shortDateFormatter = useMemo(
-    () =>
-      new Intl.DateTimeFormat(i18n.language === "zh" ? "zh-CN" : "en-US", {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-      }),
-    [i18n.language],
-  );
-
-  const feedTitle = useMemo(() => {
-    if (!entry?.feedId || !feeds) return null;
-    return feeds.find((feed) => feed.id === entry.feedId)?.title ?? null;
-  }, [entry, feeds]);
-
   const publishedAt = useMemo(() => {
-    if (!entry?.publishedAt) return null;
-    const date = new Date(entry.publishedAt);
+    if (!publishedAtRaw) return null;
+    const date = new Date(publishedAtRaw);
     if (Number.isNaN(date.getTime())) return null;
     return date;
-  }, [entry]);
+  }, [publishedAtRaw]);
 
   const publishedLong = useMemo(() => {
     if (!publishedAt) return null;
     return longDateFormatter.format(publishedAt);
   }, [publishedAt, longDateFormatter]);
 
-  const publishedShort = useMemo(() => {
-    if (!publishedAt) return null;
-    return shortDateFormatter.format(publishedAt);
-  }, [publishedAt, shortDateFormatter]);
-
   const readingTime = useMemo(() => {
-    if (!entry?.content) return null;
-    const text = entry.content.replace(/<[^>]*>/g, "");
+    if (!entryContent) return null;
+    const text = stripHtml(entryContent);
     const words = text.match(/[\u4e00-\u9fa5]|\w+/g)?.length || 0;
-    const mins = Math.ceil(words / 230); // Adjusted for mixed content
+    const mins = Math.ceil(words / 230);
     return mins > 0 ? t("entry.min_read", { mins }) : null;
-  }, [entry, t]);
+  }, [entryContent, t]);
 
-  return { feedTitle, publishedLong, publishedShort, readingTime };
+  return { publishedLong, readingTime };
 }

@@ -11,8 +11,6 @@ import (
 
 	"gist/backend/internal/model"
 	"gist/backend/internal/service"
-	"gist/backend/pkg/logger"
-	"gist/backend/pkg/network"
 )
 
 type FeedHandler struct {
@@ -37,7 +35,7 @@ type feedConflictResponse struct {
 }
 
 type updateFeedRequest struct {
-	Title                 string  `json:"title" binding:"required"`
+	Title                 string  `json:"title"`
 	FolderID              *string `json:"folderId"`
 	SummaryPromptReminder *string `json:"summaryPromptReminder"`
 }
@@ -108,7 +106,6 @@ func (h *FeedHandler) RegisterRoutes(g *echo.Group) {
 func (h *FeedHandler) Create(c echo.Context) error {
 	var req createFeedRequest
 	if err := c.Bind(&req); err != nil {
-		logger.Debug("feed create invalid request", "module", "handler", "action", "create", "resource", "feed", "result", "failed", "error", err)
 		return c.JSON(http.StatusBadRequest, errorResponse{Error: "invalid request"})
 	}
 	var folderID *int64
@@ -129,16 +126,13 @@ func (h *FeedHandler) Create(c echo.Context) error {
 	if err != nil {
 		var conflictErr *service.FeedConflictError
 		if errors.As(err, &conflictErr) {
-			logger.Warn("feed create conflict", "module", "handler", "action", "create", "resource", "feed", "result", "failed", "host", network.ExtractHost(req.URL), "feed_id", conflictErr.ExistingFeed.ID, "feed_title", conflictErr.ExistingFeed.Title)
 			return c.JSON(http.StatusConflict, feedConflictResponse{
 				Error:        "feed_exists",
 				ExistingFeed: toFeedResponse(conflictErr.ExistingFeed),
 			})
 		}
-		logger.Error("feed create failed", "module", "handler", "action", "create", "resource", "feed", "result", "failed", "host", network.ExtractHost(req.URL), "error", err)
 		return writeServiceError(c, err)
 	}
-	logger.Info("feed created", "module", "handler", "action", "create", "resource", "feed", "result", "ok", "feed_id", feed.ID, "feed_title", feed.Title, "host", network.ExtractHost(feed.URL))
 	return c.JSON(http.StatusCreated, toFeedResponse(feed))
 }
 
@@ -162,7 +156,6 @@ func (h *FeedHandler) List(c echo.Context) error {
 
 	feeds, err := h.service.List(c.Request().Context(), folderID)
 	if err != nil {
-		logger.Error("feed list failed", "module", "handler", "action", "list", "resource", "feed", "result", "failed", "folder_id", folderID, "error", err)
 		return writeServiceError(c, err)
 	}
 	response := make([]feedResponse, 0, len(feeds))
@@ -188,10 +181,8 @@ func (h *FeedHandler) Preview(c echo.Context) error {
 	}
 	preview, err := h.service.Preview(c.Request().Context(), rawURL)
 	if err != nil {
-		logger.Warn("feed preview failed", "module", "handler", "action", "fetch", "resource", "feed", "result", "failed", "host", network.ExtractHost(rawURL), "error", err)
 		return writeServiceError(c, err)
 	}
-	logger.Debug("feed preview", "module", "handler", "action", "fetch", "resource", "feed", "result", "ok", "host", network.ExtractHost(rawURL))
 	return c.JSON(http.StatusOK, toFeedPreviewResponse(preview))
 }
 
@@ -229,10 +220,8 @@ func (h *FeedHandler) Update(c echo.Context) error {
 	}
 	feed, err := h.service.Update(c.Request().Context(), id, req.Title, folderID, req.SummaryPromptReminder)
 	if err != nil {
-		logger.Error("feed update failed", "module", "handler", "action", "update", "resource", "feed", "result", "failed", "feed_id", id, "error", err)
 		return writeServiceError(c, err)
 	}
-	logger.Info("feed updated", "module", "handler", "action", "update", "resource", "feed", "result", "ok", "feed_id", feed.ID, "feed_title", feed.Title)
 	return c.JSON(http.StatusOK, toFeedResponse(feed))
 }
 
@@ -260,10 +249,8 @@ func (h *FeedHandler) UpdateType(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, errorResponse{Error: "type must be article, picture, or notification"})
 	}
 	if err := h.service.UpdateType(c.Request().Context(), id, req.Type); err != nil {
-		logger.Error("feed update type failed", "module", "handler", "action", "update", "resource", "feed", "result", "failed", "feed_id", id, "type", req.Type, "error", err)
 		return writeServiceError(c, err)
 	}
-	logger.Info("feed type updated", "module", "handler", "action", "update", "resource", "feed", "result", "ok", "feed_id", id, "type", req.Type)
 	return c.NoContent(http.StatusNoContent)
 }
 
@@ -282,10 +269,8 @@ func (h *FeedHandler) Delete(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, errorResponse{Error: "invalid request"})
 	}
 	if err := h.service.Delete(c.Request().Context(), id); err != nil {
-		logger.Error("feed delete failed", "module", "handler", "action", "delete", "resource", "feed", "result", "failed", "feed_id", id, "error", err)
 		return writeServiceError(c, err)
 	}
-	logger.Info("feed deleted", "module", "handler", "action", "delete", "resource", "feed", "result", "ok", "feed_id", id)
 	return c.NoContent(http.StatusNoContent)
 }
 
@@ -307,7 +292,6 @@ func (h *FeedHandler) DeleteBatch(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, errorResponse{Error: "no feed IDs provided"})
 	}
 
-	// Parse all IDs first
 	ids := make([]int64, 0, len(req.IDs))
 	for _, idStr := range req.IDs {
 		id, err := strconv.ParseInt(idStr, 10, 64)
@@ -317,13 +301,9 @@ func (h *FeedHandler) DeleteBatch(c echo.Context) error {
 		ids = append(ids, id)
 	}
 
-	// Delete all at once
 	if err := h.service.DeleteBatch(c.Request().Context(), ids); err != nil {
-		logger.Error("feed batch delete failed", "module", "handler", "action", "delete", "resource", "feed", "result", "failed", "count", len(ids), "error", err)
 		return writeServiceError(c, err)
 	}
-
-	logger.Info("feed batch deleted", "module", "handler", "action", "delete", "resource", "feed", "result", "ok", "count", len(ids))
 	return c.NoContent(http.StatusNoContent)
 }
 
@@ -346,7 +326,7 @@ func (h *FeedHandler) RefreshStatus(c echo.Context) error {
 	return c.JSON(http.StatusOK, resp)
 }
 
-// RefreshAll triggers a refresh of all feeds.
+// RefreshAll triggers an asynchronous refresh of all feeds decoupled from request lifecycle.
 // @Summary Refresh all feeds
 // @Description Trigger an immediate refresh of all subscribed feeds
 // @Tags feeds
@@ -354,15 +334,12 @@ func (h *FeedHandler) RefreshStatus(c echo.Context) error {
 // @Failure 409 {object} errorResponse "Refresh already in progress"
 // @Router /feeds/refresh [post]
 func (h *FeedHandler) RefreshAll(c echo.Context) error {
-	if err := h.refreshService.RefreshAll(c.Request().Context()); err != nil {
+	if err := h.refreshService.StartRefreshAll(); err != nil {
 		if errors.Is(err, service.ErrAlreadyRefreshing) {
-			logger.Warn("feed refresh skipped", "module", "handler", "action", "refresh", "resource", "feed", "result", "skipped")
 			return c.JSON(http.StatusConflict, errorResponse{Error: "refresh already in progress"})
 		}
-		logger.Error("feed refresh failed", "module", "handler", "action", "refresh", "resource", "feed", "result", "failed", "error", err)
 		return writeServiceError(c, err)
 	}
-	logger.Info("feed refresh triggered", "module", "handler", "action", "refresh", "resource", "feed", "result", "ok")
 	return c.NoContent(http.StatusNoContent)
 }
 

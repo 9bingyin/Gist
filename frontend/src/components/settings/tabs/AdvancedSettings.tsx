@@ -1,83 +1,60 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Plus, Trash2, Edit2, Check, X } from "lucide-react";
 import {
-  getDomainRateLimits,
-  createDomainRateLimit,
-  updateDomainRateLimit,
-  deleteDomainRateLimit,
-} from "@/api";
+  useCreateDomainRateLimit,
+  useDeleteDomainRateLimit,
+  useDomainRateLimits,
+  useUpdateDomainRateLimit,
+} from "@/hooks/useSettings";
 import type { DomainRateLimit } from "@/types/settings";
 import { cn } from "@/lib/utils";
 
+function isValidHostFormat(host: string): boolean {
+  const trimmed = host.trim();
+  if (!trimmed) return false;
+  // Allow domains, IDN, IPv4/IPv6, and single-label internal hostnames (e.g. rsshub)
+  return !/[\s/?#\\]/.test(trimmed);
+}
+
 export function AdvancedSettings() {
   const { t } = useTranslation();
-  const [items, setItems] = useState<DomainRateLimit[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const { data, isLoading, error: loadError } = useDomainRateLimits();
+  const createMutation = useCreateDomainRateLimit();
+  const updateMutation = useUpdateDomainRateLimit();
+  const deleteMutation = useDeleteDomainRateLimit();
 
-  // Add state
+  const items = data?.items ?? [];
+
   const [newHost, setNewHost] = useState("");
   const [newInterval, setNewInterval] = useState("");
-
-  // Edit state
   const [editingHost, setEditingHost] = useState<string | null>(null);
   const [editInterval, setEditInterval] = useState<number>(0);
-
-  const loadData = useCallback(async () => {
-    try {
-      const data = await getDomainRateLimits();
-      setItems(data.items);
-    } catch {
-      // ignore
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
-
-  const isValidHostFormat = (h: string) => {
-    const trimmed = h.trim();
-    if (!trimmed) return false;
-    if (trimmed === "localhost") return true;
-
-    // IPv4 check
-    const ipv4Regex =
-      /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
-    if (ipv4Regex.test(trimmed)) return true;
-
-    // IPv6 check (simplified but robust enough for frontend)
-    if (trimmed.includes(":")) {
-      const ipv6Regex =
-        /^([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$|^(([0-9a-fA-F]{1,4}:)*[0-9a-fA-F]{1,4})?::(([0-9a-fA-F]{1,4}:)*[0-9a-fA-F]{1,4})?$/;
-      return ipv6Regex.test(trimmed);
-    }
-
-    // Domain check (RFC 1123, requires at least one dot)
-    const domainRegex =
-      /^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$/;
-    return domainRegex.test(trimmed);
-  };
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const handleCreate = async () => {
-    if (!newHost.trim() || !isValidHostFormat(newHost)) return;
+    if (!isValidHostFormat(newHost)) return;
 
-    const interval = Math.max(0, parseInt(newInterval) || 0);
+    const interval = Math.max(0, parseInt(newInterval, 10) || 0);
+    setActionError(null);
     try {
-      await createDomainRateLimit(newHost.trim(), interval);
+      await createMutation.mutateAsync({
+        host: newHost.trim(),
+        intervalSeconds: interval,
+      });
       setNewHost("");
       setNewInterval("");
-      await loadData();
-    } catch {
-      // ignore
+    } catch (err) {
+      setActionError(
+        err instanceof Error ? err.message : t("ai_settings.failed_to_save"),
+      );
     }
   };
 
   const startEdit = (item: DomainRateLimit) => {
     setEditingHost(item.host);
     setEditInterval(item.intervalSeconds);
+    setActionError(null);
   };
 
   const cancelEdit = () => {
@@ -87,22 +64,29 @@ export function AdvancedSettings() {
 
   const handleUpdate = async () => {
     if (!editingHost) return;
+    setActionError(null);
     try {
-      await updateDomainRateLimit(editingHost, editInterval);
+      await updateMutation.mutateAsync({
+        host: editingHost,
+        intervalSeconds: editInterval,
+      });
       setEditingHost(null);
-      await loadData();
-    } catch {
-      // ignore
+    } catch (err) {
+      setActionError(
+        err instanceof Error ? err.message : t("ai_settings.failed_to_save"),
+      );
     }
   };
 
   const handleDelete = async (host: string) => {
     if (!confirm(t("settings.confirm_delete") || "Are you sure?")) return;
+    setActionError(null);
     try {
-      await deleteDomainRateLimit(host);
-      await loadData();
-    } catch {
-      // ignore
+      await deleteMutation.mutateAsync(host);
+    } catch (err) {
+      setActionError(
+        err instanceof Error ? err.message : t("feeds.delete_failed"),
+      );
     }
   };
 
@@ -116,6 +100,15 @@ export function AdvancedSettings() {
 
   return (
     <div className="space-y-6">
+      {(loadError || actionError) && (
+        <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {actionError ||
+            (loadError instanceof Error
+              ? loadError.message
+              : t("ai_settings.failed_to_load"))}
+        </div>
+      )}
+
       {/* Domain Rate Limits Section */}
       <section>
         <div className="mb-4">
@@ -155,7 +148,10 @@ export function AdvancedSettings() {
               <button
                 type="button"
                 onClick={handleCreate}
-                disabled={!newHost.trim() || !isValidHostFormat(newHost)}
+                disabled={
+                  createMutation.isPending || !isValidHostFormat(newHost)
+                }
+                aria-label={t("settings.advanced_add_domain")}
                 className={cn(
                   "flex size-9 items-center justify-center rounded-md border border-border bg-secondary text-secondary-foreground transition-colors hover:bg-secondary/80",
                   "disabled:opacity-50 disabled:cursor-not-allowed",
@@ -196,7 +192,7 @@ export function AdvancedSettings() {
                           autoFocus
                           onChange={(e) =>
                             setEditInterval(
-                              Math.max(0, parseInt(e.target.value) || 0),
+                              Math.max(0, parseInt(e.target.value, 10) || 0),
                             )
                           }
                           className={cn(
@@ -207,6 +203,8 @@ export function AdvancedSettings() {
                         <button
                           type="button"
                           onClick={handleUpdate}
+                          disabled={updateMutation.isPending}
+                          aria-label={t("actions.save")}
                           className="flex size-9 items-center justify-center rounded-md text-primary hover:bg-primary/10"
                         >
                           <Check className="size-4" />
@@ -214,6 +212,7 @@ export function AdvancedSettings() {
                         <button
                           type="button"
                           onClick={cancelEdit}
+                          aria-label={t("actions.cancel")}
                           className="flex size-9 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
                         >
                           <X className="size-4" />
@@ -227,6 +226,7 @@ export function AdvancedSettings() {
                         <button
                           type="button"
                           onClick={() => startEdit(item)}
+                          aria-label={t("settings.advanced_edit")}
                           className="flex size-9 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
                         >
                           <Edit2 className="size-4" />
@@ -234,6 +234,8 @@ export function AdvancedSettings() {
                         <button
                           type="button"
                           onClick={() => handleDelete(item.host)}
+                          disabled={deleteMutation.isPending}
+                          aria-label={t("settings.advanced_delete")}
                           className="flex size-9 items-center justify-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                         >
                           <Trash2 className="size-4" />

@@ -1,8 +1,10 @@
 import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
+import { ChevronDown, X } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { MobileFullscreenDialog } from "./MobileFullscreenDialog";
 import { SettingsSidebar } from "./SettingsSidebar";
+import { SETTINGS_TABS, type SettingsTab } from "./settings-tabs";
 import { GeneralSettings } from "./tabs/GeneralSettings";
 import { AppearanceSettings } from "./tabs/AppearanceSettings";
 import { DataControl } from "./tabs/DataControl";
@@ -11,48 +13,21 @@ import { FoldersSettings } from "./tabs/FoldersSettings";
 import { AISettings } from "./tabs/AISettings";
 import { NetworkSettings } from "./tabs/NetworkSettings";
 import { AdvancedSettings } from "./tabs/AdvancedSettings";
+import { useIsMobile } from "@/hooks/useIsMobile";
 import { cn } from "@/lib/utils";
 
-export type SettingsTab =
-  | "general"
-  | "network"
-  | "appearance"
-  | "ai"
-  | "data"
-  | "feeds"
-  | "folders"
-  | "advanced";
+export type { SettingsTab } from "./settings-tabs";
 
 interface SettingsModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-const MOBILE_BREAKPOINT = 768;
-
-function useMobileDetect() {
-  const [isMobile, setIsMobile] = useState(
-    typeof window !== "undefined"
-      ? window.innerWidth < MOBILE_BREAKPOINT
-      : false,
-  );
-
-  useEffect(() => {
-    const handleResize = () =>
-      setIsMobile(window.innerWidth < MOBILE_BREAKPOINT);
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, []);
-
-  return isMobile;
-}
-
 export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<SettingsTab>("general");
-  const isMobile = useMobileDetect();
+  const isMobile = useIsMobile();
 
-  // Reset to general when modal opens
   useEffect(() => {
     if (open) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -83,41 +58,9 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
     }
   };
 
-  const getTitle = () => {
-    switch (activeTab) {
-      case "general":
-        return t("settings.general");
-      case "network":
-        return t("settings.network");
-      case "appearance":
-        return t("settings.appearance");
-      case "ai":
-        return t("settings.ai");
-      case "data":
-        return t("settings.data");
-      case "feeds":
-        return t("settings.subscriptions");
-      case "folders":
-        return t("settings.folders");
-      case "advanced":
-        return t("settings.advanced");
-      default:
-        return t("settings.title");
-    }
-  };
+  const activeMeta = SETTINGS_TABS.find((tab) => tab.id === activeTab);
+  const title = activeMeta ? t(activeMeta.labelKey) : t("settings.title");
 
-  const tabs: { id: SettingsTab; label: string }[] = [
-    { id: "general", label: t("settings.general") },
-    { id: "network", label: t("settings.network") },
-    { id: "appearance", label: t("settings.appearance") },
-    { id: "ai", label: t("settings.ai") },
-    { id: "data", label: t("settings.data") },
-    { id: "feeds", label: t("settings.subscriptions") },
-    { id: "folders", label: t("settings.folders") },
-    { id: "advanced", label: t("settings.advanced") },
-  ];
-
-  // Mobile layout
   if (isMobile) {
     return (
       <MobileFullscreenDialog
@@ -125,37 +68,27 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
         onOpenChange={onOpenChange}
         header={
           <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border">
-            <DialogTitle className="sr-only">{getTitle()}</DialogTitle>
+            <DialogTitle className="sr-only">{title}</DialogTitle>
             <div className="relative flex-1">
               <select
                 value={activeTab}
                 onChange={(e) => setActiveTab(e.target.value as SettingsTab)}
+                aria-label={t("settings.title")}
                 className={cn(
                   "w-full h-9 appearance-none rounded-md border border-border bg-background pl-3 pr-8 text-base font-medium",
                   "focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary",
                 )}
               >
-                {tabs.map((tab) => (
+                {SETTINGS_TABS.map((tab) => (
                   <option key={tab.id} value={tab.id}>
-                    {tab.label}
+                    {t(tab.labelKey)}
                   </option>
                 ))}
               </select>
-              <svg
-                className="pointer-events-none absolute right-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M19 9l-7 7-7-7"
-                />
-              </svg>
+              <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             </div>
             <button
+              type="button"
               onClick={() => onOpenChange(false)}
               className={cn(
                 "rounded-md p-1.5 shrink-0",
@@ -164,19 +97,7 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
               )}
               aria-label={t("entry.close")}
             >
-              <svg
-                className="size-5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
+              <X className="size-5" />
             </button>
           </div>
         }
@@ -186,7 +107,6 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
     );
   }
 
-  // Desktop layout
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[950px] h-[800px] max-w-[95vw] max-h-[90vh] p-0 overflow-hidden gap-0">
@@ -194,20 +114,16 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
           <SettingsSidebar activeTab={activeTab} onTabChange={setActiveTab} />
 
           <div className="relative flex h-full min-w-0 flex-1 flex-col bg-background">
-            {/* Header */}
             <div className="flex items-center gap-2 px-6 py-4 border-b border-border">
-              <DialogTitle className="text-xl font-bold">
-                {getTitle()}
-              </DialogTitle>
+              <DialogTitle className="text-xl font-bold">{title}</DialogTitle>
             </div>
 
-            {/* Content */}
             <div className="flex-1 overflow-auto px-6 py-4">
               {renderContent()}
             </div>
 
-            {/* Close button */}
             <button
+              type="button"
               onClick={() => onOpenChange(false)}
               className={cn(
                 "absolute right-4 top-4 rounded-md p-1.5",
@@ -216,19 +132,7 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
               )}
               aria-label={t("entry.close")}
             >
-              <svg
-                className="size-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
+              <X className="size-4" />
             </button>
           </div>
         </div>

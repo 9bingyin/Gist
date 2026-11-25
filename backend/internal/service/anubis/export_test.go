@@ -1,13 +1,13 @@
 package anubis
 
-// Export for testing
+// Export for testing.
 var ParseChallenge = parseChallenge
 var SolveChallenge = solveChallenge
 var SolvePreact = solvePreact
 var SolveMetaRefresh = solveMetaRefresh
 var SolveProofOfWork = solveProofOfWork
-var ExtractHost = extractHost
 var TruncateForLog = truncateForLog
+var ParseAuthCookieExpiry = parseAuthCookieExpiry
 
 type AzureSession = azureSession
 type NewSessionFunc = newSessionFunc

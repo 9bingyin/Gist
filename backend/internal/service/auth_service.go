@@ -8,9 +8,10 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"regexp"
 	"strings"
+	"sync"
 	"time"
+	"unicode"
 
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
@@ -19,10 +20,7 @@ import (
 	"gist/backend/pkg/logger"
 )
 
-// usernameRegex validates username format: lowercase letters and numbers only, starts with letter
-var usernameRegex = regexp.MustCompile(`^[a-z][a-z0-9]*$`)
-
-// Auth setting keys
+// Auth setting keys.
 const (
 	keyUserUsername     = "user.username"
 	keyUserNickname     = "user.nickname"
@@ -31,17 +29,18 @@ const (
 	keyUserJWTSecret    = "user.jwt_secret"
 )
 
-// Auth errors
+// Auth errors.
 var (
 	ErrUserExists              = errors.New("user already exists")
 	ErrUserNotFound            = errors.New("user not found")
 	ErrInvalidPassword         = errors.New("invalid password")
 	ErrInvalidToken            = errors.New("invalid token")
 	ErrUsernameRequired        = errors.New("username is required")
-	ErrInvalidUsername         = errors.New("username must be lowercase letters and numbers only, starting with a letter")
+	ErrInvalidUsername         = errors.New("username must not contain whitespace or control characters")
 	ErrEmailRequired           = errors.New("email is required")
 	ErrPasswordRequired        = errors.New("password is required")
 	ErrPasswordTooShort        = errors.New("password must be at least 6 characters")
+	ErrPasswordTooLong         = errors.New("password must be at most 72 bytes")
 	ErrCurrentPasswordRequired = errors.New("current password is required")
 	ErrSamePassword            = errors.New("new password must be different from current password")
 )
@@ -56,19 +55,11 @@ type User struct {
 
 // AuthService provides authentication functionality.
 type AuthService interface {
-	// CheckUserExists checks if a user has been registered.
 	CheckUserExists(ctx context.Context) (bool, error)
-	// Register creates a new user (only if none exists).
 	Register(ctx context.Context, username, nickname, email, password string) (*AuthResponse, error)
-	// Login authenticates a user and returns a JWT token.
-	// The identifier can be either username or email.
 	Login(ctx context.Context, identifier, password string) (*AuthResponse, error)
-	// GetCurrentUser returns the current user info.
 	GetCurrentUser(ctx context.Context) (*User, error)
-	// ValidateToken validates a JWT token and returns whether it's valid.
-	ValidateToken(token string) (bool, error)
-	// UpdateProfile updates user nickname, email and/or password.
-	// Returns new token when password is changed (old tokens become invalid).
+	ValidateToken(ctx context.Context, token string) (bool, error)
 	UpdateProfile(ctx context.Context, nickname, email, currentPassword, newPassword string) (*UpdateProfileResponse, error)
 }
 
@@ -79,14 +70,18 @@ type AuthResponse struct {
 }
 
 // UpdateProfileResponse is returned after updating profile.
-// Token is only set when password was changed (old tokens become invalid).
 type UpdateProfileResponse struct {
 	User  *User   `json:"user"`
 	Token *string `json:"token,omitempty"`
 }
 
 type authService struct {
-	repo repository.SettingsRepository
+	repo       repository.SettingsRepository
+	registerMu sync.Mutex
+
+	secretMu    sync.RWMutex
+	jwtSecret   []byte
+	secretReady bool
 }
 
 // NewAuthService creates a new auth service.
@@ -94,7 +89,29 @@ func NewAuthService(repo repository.SettingsRepository) AuthService {
 	return &authService{repo: repo}
 }
 
-// CheckUserExists checks if a user has been registered.
+func isValidUsername(username string) bool {
+	if username == "" {
+		return false
+	}
+	for _, r := range username {
+		if unicode.IsSpace(r) || unicode.IsControl(r) {
+			return false
+		}
+	}
+	return true
+}
+
+func hashPassword(password string) ([]byte, error) {
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		if errors.Is(err, bcrypt.ErrPasswordTooLong) {
+			return nil, ErrPasswordTooLong
+		}
+		return nil, fmt.Errorf("hash password: %w", err)
+	}
+	return hash, nil
+}
+
 func (s *authService) CheckUserExists(ctx context.Context) (bool, error) {
 	setting, err := s.repo.Get(ctx, keyUserUsername)
 	if err != nil {
@@ -103,9 +120,7 @@ func (s *authService) CheckUserExists(ctx context.Context) (bool, error) {
 	return setting != nil && setting.Value != "", nil
 }
 
-// Register creates a new user (only if none exists).
 func (s *authService) Register(ctx context.Context, username, nickname, email, password string) (*AuthResponse, error) {
-	// Validate input
 	username = strings.TrimSpace(strings.ToLower(username))
 	nickname = strings.TrimSpace(nickname)
 	email = strings.TrimSpace(email)
@@ -113,10 +128,9 @@ func (s *authService) Register(ctx context.Context, username, nickname, email, p
 	if username == "" {
 		return nil, ErrUsernameRequired
 	}
-	if !usernameRegex.MatchString(username) {
+	if !isValidUsername(username) {
 		return nil, ErrInvalidUsername
 	}
-	// Use username as nickname if not provided
 	if nickname == "" {
 		nickname = username
 	}
@@ -130,7 +144,9 @@ func (s *authService) Register(ctx context.Context, username, nickname, email, p
 		return nil, ErrPasswordTooShort
 	}
 
-	// Check if user already exists
+	s.registerMu.Lock()
+	defer s.registerMu.Unlock()
+
 	exists, err := s.CheckUserExists(ctx)
 	if err != nil {
 		return nil, err
@@ -140,38 +156,30 @@ func (s *authService) Register(ctx context.Context, username, nickname, email, p
 		return nil, ErrUserExists
 	}
 
-	// Hash password
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	hash, err := hashPassword(password)
 	if err != nil {
-		return nil, fmt.Errorf("hash password: %w", err)
+		return nil, err
 	}
 
-	// Generate JWT secret
 	jwtSecret := make([]byte, 32)
 	if _, err := rand.Read(jwtSecret); err != nil {
 		return nil, fmt.Errorf("generate jwt secret: %w", err)
 	}
 	jwtSecretHex := hex.EncodeToString(jwtSecret)
 
-	// Save user info
-	if err := s.repo.Set(ctx, keyUserUsername, username); err != nil {
-		return nil, fmt.Errorf("save username: %w", err)
-	}
-	if err := s.repo.Set(ctx, keyUserNickname, nickname); err != nil {
-		return nil, fmt.Errorf("save nickname: %w", err)
-	}
-	if err := s.repo.Set(ctx, keyUserEmail, email); err != nil {
-		return nil, fmt.Errorf("save email: %w", err)
-	}
-	if err := s.repo.Set(ctx, keyUserPasswordHash, string(hash)); err != nil {
-		return nil, fmt.Errorf("save password hash: %w", err)
-	}
-	if err := s.repo.Set(ctx, keyUserJWTSecret, jwtSecretHex); err != nil {
-		return nil, fmt.Errorf("save jwt secret: %w", err)
+	if err := s.repo.SetMany(ctx, map[string]string{
+		keyUserUsername:     username,
+		keyUserNickname:     nickname,
+		keyUserEmail:        email,
+		keyUserPasswordHash: string(hash),
+		keyUserJWTSecret:    jwtSecretHex,
+	}); err != nil {
+		return nil, fmt.Errorf("save user: %w", err)
 	}
 
-	// Generate token and return
-	token, err := s.generateToken(username, jwtSecretHex)
+	s.cacheJWTSecret(jwtSecret)
+
+	token, err := signToken(username, jwtSecret)
 	if err != nil {
 		return nil, err
 	}
@@ -188,8 +196,6 @@ func (s *authService) Register(ctx context.Context, username, nickname, email, p
 	}, nil
 }
 
-// Login authenticates a user and returns a JWT token.
-// The identifier can be either username or email.
 func (s *authService) Login(ctx context.Context, identifier, password string) (*AuthResponse, error) {
 	identifier = strings.TrimSpace(identifier)
 
@@ -200,7 +206,6 @@ func (s *authService) Login(ctx context.Context, identifier, password string) (*
 		return nil, ErrPasswordRequired
 	}
 
-	// Get stored username and email
 	storedUsername, err := s.getString(ctx, keyUserUsername)
 	if err != nil {
 		return nil, err
@@ -209,39 +214,41 @@ func (s *authService) Login(ctx context.Context, identifier, password string) (*
 		return nil, ErrUserNotFound
 	}
 
-	storedEmail, _ := s.getString(ctx, keyUserEmail)
+	storedEmail, err := s.getString(ctx, keyUserEmail)
+	if err != nil {
+		return nil, err
+	}
 
-	// Check if identifier matches username or email
 	identifierLower := strings.ToLower(identifier)
 	if storedUsername != identifierLower && strings.ToLower(storedEmail) != identifierLower {
 		logger.Warn("auth login invalid identifier", "module", "service", "action", "login", "resource", "auth", "result", "failed", "actor", identifier)
 		return nil, ErrInvalidPassword
 	}
 
-	// Get stored password hash
 	storedHash, err := s.getString(ctx, keyUserPasswordHash)
 	if err != nil {
 		return nil, err
 	}
 
-	// Verify password
 	if err := bcrypt.CompareHashAndPassword([]byte(storedHash), []byte(password)); err != nil {
 		logger.Warn("auth login invalid password", "module", "service", "action", "login", "resource", "auth", "result", "failed", "actor", identifier)
 		return nil, ErrInvalidPassword
 	}
 
-	// Get nickname and JWT secret
-	storedNickname, _ := s.getString(ctx, keyUserNickname)
+	storedNickname, err := s.getString(ctx, keyUserNickname)
+	if err != nil {
+		return nil, err
+	}
 	if storedNickname == "" {
 		storedNickname = storedUsername
 	}
-	jwtSecret, err := s.getString(ctx, keyUserJWTSecret)
+
+	secretBytes, err := s.getJWTSecret(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	// Generate token
-	token, err := s.generateToken(storedUsername, jwtSecret)
+	token, err := signToken(storedUsername, secretBytes)
 	if err != nil {
 		return nil, err
 	}
@@ -258,7 +265,6 @@ func (s *authService) Login(ctx context.Context, identifier, password string) (*
 	}, nil
 }
 
-// GetCurrentUser returns the current user info.
 func (s *authService) GetCurrentUser(ctx context.Context) (*User, error) {
 	username, err := s.getString(ctx, keyUserUsername)
 	if err != nil {
@@ -268,11 +274,17 @@ func (s *authService) GetCurrentUser(ctx context.Context) (*User, error) {
 		return nil, ErrUserNotFound
 	}
 
-	nickname, _ := s.getString(ctx, keyUserNickname)
+	nickname, err := s.getString(ctx, keyUserNickname)
+	if err != nil {
+		return nil, err
+	}
 	if nickname == "" {
 		nickname = username
 	}
-	email, _ := s.getString(ctx, keyUserEmail)
+	email, err := s.getString(ctx, keyUserEmail)
+	if err != nil {
+		return nil, err
+	}
 
 	return &User{
 		Username:  username,
@@ -282,43 +294,62 @@ func (s *authService) GetCurrentUser(ctx context.Context) (*User, error) {
 	}, nil
 }
 
-// ValidateToken validates a JWT token.
-func (s *authService) ValidateToken(tokenString string) (bool, error) {
-	jwtSecret, err := s.getString(context.Background(), keyUserJWTSecret)
-	if err != nil || jwtSecret == "" {
+// ValidateToken validates a JWT token using an in-memory cached signing key.
+func (s *authService) ValidateToken(ctx context.Context, tokenString string) (bool, error) {
+	secretBytes, err := s.getJWTSecret(ctx)
+	if err != nil || len(secretBytes) == 0 {
 		return false, ErrInvalidToken
 	}
 
-	secretBytes, err := hex.DecodeString(jwtSecret)
-	if err != nil {
-		return false, ErrInvalidToken
-	}
-
-	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (any, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
 		return secretBytes, nil
 	})
-
 	if err != nil || !token.Valid {
 		return false, ErrInvalidToken
 	}
-
 	return true, nil
 }
 
-// generateToken creates a new JWT token.
-func (s *authService) generateToken(username, jwtSecretHex string) (string, error) {
+func (s *authService) cacheJWTSecret(secret []byte) {
+	copied := append([]byte(nil), secret...)
+	s.secretMu.Lock()
+	s.jwtSecret = copied
+	s.secretReady = true
+	s.secretMu.Unlock()
+}
+
+func (s *authService) getJWTSecret(ctx context.Context) ([]byte, error) {
+	s.secretMu.RLock()
+	if s.secretReady && len(s.jwtSecret) > 0 {
+		secret := s.jwtSecret
+		s.secretMu.RUnlock()
+		return secret, nil
+	}
+	s.secretMu.RUnlock()
+
+	jwtSecretHex, err := s.getString(ctx, keyUserJWTSecret)
+	if err != nil {
+		return nil, err
+	}
+	if jwtSecretHex == "" {
+		return nil, ErrInvalidToken
+	}
 	secretBytes, err := hex.DecodeString(jwtSecretHex)
 	if err != nil {
-		return "", fmt.Errorf("decode jwt secret: %w", err)
+		return nil, fmt.Errorf("decode jwt secret: %w", err)
 	}
+	s.cacheJWTSecret(secretBytes)
+	return secretBytes, nil
+}
 
+func signToken(username string, secretBytes []byte) (string, error) {
 	claims := jwt.MapClaims{
 		"sub": username,
 		"iat": time.Now().Unix(),
-		"exp": time.Now().Add(30 * 24 * time.Hour).Unix(), // 30 days
+		"exp": time.Now().Add(30 * 24 * time.Hour).Unix(),
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -326,13 +357,12 @@ func (s *authService) generateToken(username, jwtSecretHex string) (string, erro
 	if err != nil {
 		return "", fmt.Errorf("sign token: %w", err)
 	}
-
 	return tokenString, nil
 }
 
-// UpdateProfile updates user nickname, email and/or password.
+// UpdateProfile validates all inputs (including password checks) up-front and writes
+// all changes atomically in a single transaction.
 func (s *authService) UpdateProfile(ctx context.Context, nickname, email, currentPassword, newPassword string) (*UpdateProfileResponse, error) {
-	// Check if user exists
 	username, err := s.getString(ctx, keyUserUsername)
 	if err != nil {
 		return nil, err
@@ -342,36 +372,22 @@ func (s *authService) UpdateProfile(ctx context.Context, nickname, email, curren
 		return nil, ErrUserNotFound
 	}
 
-	// Get current values
-	currentNickname, _ := s.getString(ctx, keyUserNickname)
+	currentNickname, err := s.getString(ctx, keyUserNickname)
+	if err != nil {
+		return nil, err
+	}
 	if currentNickname == "" {
 		currentNickname = username
 	}
-	currentEmail, _ := s.getString(ctx, keyUserEmail)
-
-	// Update nickname if provided
-	nickname = strings.TrimSpace(nickname)
-	if nickname != "" && nickname != currentNickname {
-		if err := s.repo.Set(ctx, keyUserNickname, nickname); err != nil {
-			logger.Warn("auth profile update nickname failed", "module", "service", "action", "update", "resource", "auth", "result", "failed", "actor", username, "error", err)
-			return nil, fmt.Errorf("update nickname: %w", err)
-		}
-		currentNickname = nickname
+	currentEmail, err := s.getString(ctx, keyUserEmail)
+	if err != nil {
+		return nil, err
 	}
 
-	// Update email if provided
-	email = strings.TrimSpace(email)
-	if email != "" && email != currentEmail {
-		if err := s.repo.Set(ctx, keyUserEmail, email); err != nil {
-			logger.Warn("auth profile update email failed", "module", "service", "action", "update", "resource", "auth", "result", "failed", "actor", username, "error", err)
-			return nil, fmt.Errorf("update email: %w", err)
-		}
-		currentEmail = email
-	}
+	updates := make(map[string]string)
 
-	var newToken *string
-
-	// Update password if provided
+	// Validate password change BEFORE persisting any profile field.
+	var newSecretBytes []byte
 	if newPassword != "" {
 		if currentPassword == "" {
 			logger.Warn("auth profile update missing current password", "module", "service", "action", "update", "resource", "auth", "result", "failed", "actor", username)
@@ -382,7 +398,6 @@ func (s *authService) UpdateProfile(ctx context.Context, nickname, email, curren
 			return nil, ErrPasswordTooShort
 		}
 
-		// Verify current password
 		storedHash, err := s.getString(ctx, keyUserPasswordHash)
 		if err != nil {
 			return nil, err
@@ -391,36 +406,46 @@ func (s *authService) UpdateProfile(ctx context.Context, nickname, email, curren
 			logger.Warn("auth profile update invalid current password", "module", "service", "action", "update", "resource", "auth", "result", "failed", "actor", username)
 			return nil, ErrInvalidPassword
 		}
-
-		// Check if new password is different
 		if err := bcrypt.CompareHashAndPassword([]byte(storedHash), []byte(newPassword)); err == nil {
 			logger.Warn("auth profile update same password", "module", "service", "action", "update", "resource", "auth", "result", "failed", "actor", username)
 			return nil, ErrSamePassword
 		}
 
-		// Hash and save new password
-		hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+		hash, err := hashPassword(newPassword)
 		if err != nil {
-			return nil, fmt.Errorf("hash password: %w", err)
+			return nil, err
 		}
-		if err := s.repo.Set(ctx, keyUserPasswordHash, string(hash)); err != nil {
-			logger.Warn("auth profile update password failed", "module", "service", "action", "update", "resource", "auth", "result", "failed", "actor", username, "error", err)
-			return nil, fmt.Errorf("update password: %w", err)
-		}
-
-		// Regenerate JWT secret to invalidate all existing tokens
-		newJwtSecret := make([]byte, 32)
-		if _, err := rand.Read(newJwtSecret); err != nil {
+		newSecretBytes = make([]byte, 32)
+		if _, err := rand.Read(newSecretBytes); err != nil {
 			return nil, fmt.Errorf("generate new jwt secret: %w", err)
 		}
-		jwtSecretHex := hex.EncodeToString(newJwtSecret)
-		if err := s.repo.Set(ctx, keyUserJWTSecret, jwtSecretHex); err != nil {
-			logger.Warn("auth profile update jwt secret failed", "module", "service", "action", "update", "resource", "auth", "result", "failed", "actor", username, "error", err)
-			return nil, fmt.Errorf("update jwt secret: %w", err)
-		}
+		updates[keyUserPasswordHash] = string(hash)
+		updates[keyUserJWTSecret] = hex.EncodeToString(newSecretBytes)
+	}
 
-		// Generate new token for the user
-		token, err := s.generateToken(username, jwtSecretHex)
+	nickname = strings.TrimSpace(nickname)
+	if nickname != "" && nickname != currentNickname {
+		updates[keyUserNickname] = nickname
+		currentNickname = nickname
+	}
+
+	email = strings.TrimSpace(email)
+	if email != "" && email != currentEmail {
+		updates[keyUserEmail] = email
+		currentEmail = email
+	}
+
+	if len(updates) > 0 {
+		if err := s.repo.SetMany(ctx, updates); err != nil {
+			logger.Warn("auth profile update failed", "module", "service", "action", "update", "resource", "auth", "result", "failed", "actor", username, "error", err)
+			return nil, fmt.Errorf("update profile: %w", err)
+		}
+	}
+
+	var newToken *string
+	if len(newSecretBytes) > 0 {
+		s.cacheJWTSecret(newSecretBytes)
+		token, err := signToken(username, newSecretBytes)
 		if err != nil {
 			return nil, fmt.Errorf("generate new token: %w", err)
 		}
@@ -439,7 +464,6 @@ func (s *authService) UpdateProfile(ctx context.Context, nickname, email, curren
 	}, nil
 }
 
-// getString gets a string value from settings.
 func (s *authService) getString(ctx context.Context, key string) (string, error) {
 	setting, err := s.repo.Get(ctx, key)
 	if err != nil {
@@ -451,7 +475,6 @@ func (s *authService) getString(ctx context.Context, key string) (string, error)
 	return setting.Value, nil
 }
 
-// gravatarURL generates a Gravatar URL for the given email.
 func gravatarURL(email string) string {
 	email = strings.ToLower(strings.TrimSpace(email))
 	hash := md5.Sum([]byte(email))

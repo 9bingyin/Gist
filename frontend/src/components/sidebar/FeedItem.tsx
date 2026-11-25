@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import {
@@ -16,7 +16,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { RssIcon, ErrorIcon } from "@/components/ui/icons";
-import { useContextMenu } from "@/hooks/useContextMenu";
+import { useContextMenuTrigger } from "@/hooks/useContextMenu";
 import { feedItemStyles, sidebarItemIconStyles } from "./styles";
 import type { ContentType, Folder } from "@/types/api";
 
@@ -54,41 +54,36 @@ export function FeedItem({
   onChangeType,
 }: FeedItemProps) {
   const { t } = useTranslation();
-  const [iconError, setIconError] = useState(false);
+  const [failedIconPath, setFailedIconPath] = useState<string | null>(null);
+  const showIcon = Boolean(iconPath && failedIconPath !== iconPath);
   const hasError = !!errorMessage;
-  const triggerRef = useRef<HTMLSpanElement>(null);
+  const { triggerRef, contextMenuProps } =
+    useContextMenuTrigger<HTMLDivElement>();
 
-  const handleContextMenu = useCallback(
-    (e: React.MouseEvent | { pageX: number; pageY: number }) => {
-      // Programmatically trigger the context menu for long press
-      if (!("button" in e) && triggerRef.current) {
-        triggerRef.current.dispatchEvent(
-          new MouseEvent("contextmenu", {
-            bubbles: true,
-            clientX: e.pageX,
-            clientY: e.pageY,
-          }),
-        );
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        onClick?.();
       }
     },
-    [],
+    [onClick],
   );
-
-  const contextMenuProps = useContextMenu({
-    onContextMenu: handleContextMenu,
-  });
 
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild ref={triggerRef}>
         <div
+          role="button"
+          tabIndex={0}
           data-active={isActive}
           className={cn(
             feedItemStyles,
-            "group relative justify-between py-0.5 pr-2",
+            "group relative justify-between py-0.5 pr-2 outline-none focus-visible:ring-2 focus-visible:ring-ring",
             className,
           )}
           onClick={onClick}
+          onKeyDown={handleKeyDown}
           {...contextMenuProps}
         >
           <div
@@ -98,12 +93,12 @@ export function FeedItem({
             )}
           >
             <span className={sidebarItemIconStyles}>
-              {iconPath && !iconError ? (
+              {showIcon && iconPath ? (
                 <img
                   src={`/icons/${iconPath}`}
                   alt=""
                   className="size-4 rounded-sm object-cover"
-                  onError={() => setIconError(true)}
+                  onError={() => setFailedIconPath(iconPath)}
                 />
               ) : (
                 <RssIcon className="size-4 text-muted-foreground" />

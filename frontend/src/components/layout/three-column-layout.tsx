@@ -34,17 +34,35 @@ function useResizable({
   max,
   onResizeEnd,
 }: UseResizableOptions) {
-  const [position, setPosition] = useState(initial);
+  const [override, setOverride] = useState<{
+    base: number;
+    value: number;
+  } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const startPosRef = useRef(0);
   const startValueRef = useRef(0);
 
-  // Sync with external changes
-  useEffect(() => {
-    setPosition(initial);
-  }, [initial]);
+  const position =
+    override && override.base === initial ? override.value : initial;
+  const positionRef = useRef(position);
+  const onResizeEndRef = useRef(onResizeEnd);
 
-  // Extract position from mouse/pointer/touch events
+  useEffect(() => {
+    positionRef.current = position;
+  }, [position]);
+
+  useEffect(() => {
+    onResizeEndRef.current = onResizeEnd;
+  }, [onResizeEnd]);
+
+  const setPosition = useCallback(
+    (next: number) => {
+      positionRef.current = next;
+      setOverride({ base: initial, value: next });
+    },
+    [initial],
+  );
+
   const getEventPosition = useCallback(
     (e: MouseEvent | PointerEvent | TouchEvent) => {
       if ("touches" in e && e.touches.length > 0) {
@@ -63,14 +81,10 @@ function useResizable({
       setIsDragging(true);
       const pos = getEventPosition(e.nativeEvent as PointerEvent | TouchEvent);
       startPosRef.current = pos;
-      startValueRef.current = position;
+      startValueRef.current = positionRef.current;
     },
-    [position, getEventPosition],
+    [getEventPosition],
   );
-
-  const handleDoubleClick = useCallback(() => {
-    // Will be handled by parent
-  }, []);
 
   useEffect(() => {
     if (!isDragging) return;
@@ -82,12 +96,13 @@ function useResizable({
         max,
         Math.max(min, startValueRef.current + delta),
       );
+      positionRef.current = newValue;
       setPosition(newValue);
     };
 
     const handleEnd = () => {
       setIsDragging(false);
-      onResizeEnd?.(position);
+      onResizeEndRef.current?.(positionRef.current);
     };
 
     const handleTouchMove = (e: TouchEvent) => {
@@ -95,17 +110,13 @@ function useResizable({
       handleMove(e);
     };
 
-    // Pointer events (primary, works on most modern devices)
     document.addEventListener("pointermove", handleMove);
     document.addEventListener("pointerup", handleEnd);
     document.addEventListener("pointercancel", handleEnd);
-
-    // Touch events (fallback for older devices)
     document.addEventListener("touchmove", handleTouchMove, { passive: false });
     document.addEventListener("touchend", handleEnd);
     document.addEventListener("touchcancel", handleEnd);
 
-    // Change cursor during drag
     document.body.style.cursor = "ew-resize";
     document.body.style.userSelect = "none";
 
@@ -119,7 +130,7 @@ function useResizable({
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
     };
-  }, [isDragging, min, max, onResizeEnd, position, getEventPosition]);
+  }, [isDragging, min, max, getEventPosition, setPosition]);
 
   return {
     position,
@@ -127,7 +138,6 @@ function useResizable({
     separatorProps: {
       onPointerDown: handleDragStart,
       onTouchStart: handleDragStart,
-      onDoubleClick: handleDoubleClick,
     },
     setPosition,
   };
@@ -150,19 +160,13 @@ export function ThreeColumnLayout({
   hideList = false,
   showSidebar = true,
 }: ThreeColumnLayoutProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
   const [windowWidth, setWindowWidth] = useState(
     typeof window !== "undefined" ? window.innerWidth : 1200,
   );
 
-  // Get stored feed column width for dynamic max calculation
   const storedFeedColWidth = useUISettingKey("feedColWidth");
 
-  // Calculate dynamic max for entry column
   const entryColMax = useMemo(() => {
-    // (windowWidth - feedColWidth - splitters) / 2
-    // This ensures content area always has at least half the remaining space
-    // When sidebar is hidden, don't subtract its width
     const sidebarWidth = showSidebar ? storedFeedColWidth : 0;
     return Math.max(
       ENTRY_COL_MIN,
@@ -170,7 +174,6 @@ export function ThreeColumnLayout({
     );
   }, [windowWidth, storedFeedColWidth, showSidebar]);
 
-  // Track window resize
   useEffect(() => {
     const handleResize = () => {
       setWindowWidth(window.innerWidth);
@@ -179,11 +182,9 @@ export function ThreeColumnLayout({
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  // Initial values from storage
   const feedColInitial = useMemo(() => getUISettings().feedColWidth, []);
   const entryColInitial = useMemo(() => {
     const stored = getUISettings().entryColWidth;
-    // Clamp to valid range
     return Math.min(Math.max(stored, ENTRY_COL_MIN), entryColMax);
   }, [entryColMax]);
 
@@ -207,7 +208,6 @@ export function ThreeColumnLayout({
     },
   });
 
-  // Double-click handlers to reset to defaults
   const handleFeedColDoubleClick = useCallback(() => {
     setUISetting("feedColWidth", defaultUISettings.feedColWidth);
     feedColResizable.setPosition(defaultUISettings.feedColWidth);
@@ -220,26 +220,22 @@ export function ThreeColumnLayout({
 
   return (
     <div
-      ref={containerRef}
       className={cn("flex h-full w-screen overflow-hidden", className)}
       style={
         {
-          // CSS custom property for potential use by child components
           "--feed-col-width": `${feedColResizable.position}px`,
           "--entry-col-width": `${entryColResizable.position}px`,
         } as React.CSSProperties
       }
     >
-      {/* Sidebar - left column (Feed list) - always rendered but animated in/out */}
+      {/* Sidebar - left column (Feed list) */}
       <aside
         className={cn(
           "flex h-full shrink-0 flex-col overflow-hidden bg-sidebar safe-area-top safe-area-left",
           "ease-[var(--ease-ios)]",
-          // Transition only when not dragging
           !feedColResizable.isDragging && "motion-reduce:transition-none",
           !feedColResizable.isDragging &&
             "transition-[width,opacity,transform]",
-          // Show/hide animation states
           showSidebar
             ? "opacity-100 translate-x-0 w-[calc(var(--feed-col-width)+env(safe-area-inset-left,0px))] duration-[var(--duration-sidebar-expand)]"
             : "w-0 opacity-0 -translate-x-2 pointer-events-none duration-[var(--duration-sidebar-collapse)]",
@@ -248,7 +244,7 @@ export function ThreeColumnLayout({
         {sidebar}
       </aside>
 
-      {/* First splitter - also animated */}
+      {/* First splitter */}
       <div
         className={cn(
           "relative h-full shrink-0 z-30 ease-[var(--ease-ios)]",
@@ -269,7 +265,7 @@ export function ThreeColumnLayout({
         )}
       </div>
 
-      {/* List - middle column (Entry list) - hidden when hideList is true */}
+      {/* List - middle column (Entry list) */}
       {!hideList && (
         <>
           <div
@@ -282,7 +278,6 @@ export function ThreeColumnLayout({
             {list}
           </div>
 
-          {/* Second splitter */}
           <PanelSplitter
             isDragging={entryColResizable.isDragging}
             onPointerDown={entryColResizable.separatorProps.onPointerDown}

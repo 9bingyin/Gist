@@ -2,10 +2,13 @@ package network
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Noooste/azuretls-client"
@@ -26,17 +29,37 @@ type IPStackProvider interface {
 	GetIPStack(ctx context.Context) string
 }
 
-// ClientFactory creates HTTP clients with proxy configuration.
+type transportKey struct {
+	proxyURL string
+	ipStack  string
+}
+
+type errorRoundTripper struct {
+	err error
+}
+
+func (e errorRoundTripper) RoundTrip(*http.Request) (*http.Response, error) {
+	return nil, e.err
+}
+
+// ClientFactory creates HTTP clients with proxy and IP stack configuration,
+// reusing pooled transports per (proxyURL, ipStack).
 type ClientFactory struct {
 	proxyProvider   ProxyProvider
 	ipStackProvider IPStackProvider
-	testTransport   http.RoundTripper // For testing only
-	testHTTPClient  *http.Client      // For testing only
+	testHTTPClient  *http.Client // For testing only
+
+	mu         sync.RWMutex
+	transports map[transportKey]*http.Transport
 }
 
 // NewClientFactory creates a new client factory.
 func NewClientFactory(proxyProvider ProxyProvider, ipStackProvider IPStackProvider) *ClientFactory {
-	return &ClientFactory{proxyProvider: proxyProvider, ipStackProvider: ipStackProvider}
+	return &ClientFactory{
+		proxyProvider:   proxyProvider,
+		ipStackProvider: ipStackProvider,
+		transports:      make(map[transportKey]*http.Transport),
+	}
 }
 
 // NewClientFactoryForTest creates a client factory that uses the given http.Client for testing.
@@ -47,55 +70,91 @@ func NewClientFactoryForTest(client *http.Client) *ClientFactory {
 		proxyProvider:   noop,
 		ipStackProvider: noop,
 		testHTTPClient:  client,
+		transports:      make(map[transportKey]*http.Transport),
 	}
 }
 
 // noopProvider returns empty/default values.
 type noopProvider struct{}
 
-func (p *noopProvider) GetProxyURL(ctx context.Context) string {
+func (p *noopProvider) GetProxyURL(context.Context) string {
 	return ""
 }
 
-func (p *noopProvider) GetIPStack(ctx context.Context) string {
+func (p *noopProvider) GetIPStack(context.Context) string {
 	return "default"
 }
 
-// NewHTTPClient creates a standard http.Client with proxy configuration.
+// InvalidateTransports closes idle connections on all cached transports and clears the cache.
+// Call this when network/proxy settings change.
+func (f *ClientFactory) InvalidateTransports() {
+	f.mu.Lock()
+	old := f.transports
+	f.transports = make(map[transportKey]*http.Transport)
+	f.mu.Unlock()
+
+	for _, tr := range old {
+		tr.CloseIdleConnections()
+	}
+}
+
+// NewHTTPClient creates an http.Client using a pooled transport for the current
+// proxy and IP stack configuration. If the configured proxy is invalid, requests
+// made with the returned client fail explicitly instead of silently bypassing the proxy.
 func (f *ClientFactory) NewHTTPClient(ctx context.Context, timeout time.Duration) *http.Client {
-	// For testing: return the injected client
 	if f.testHTTPClient != nil {
 		return f.testHTTPClient
 	}
 
-	client := &http.Client{Timeout: timeout}
+	proxyURL := f.getProxyURL(ctx)
+	ipStack := f.getIPStack(ctx)
 
-	// For testing: use injected transport
-	if f.testTransport != nil {
-		client.Transport = f.testTransport
-		return client
+	rt, err := f.getOrCreateTransport(proxyURL, ipStack)
+	if err != nil {
+		return &http.Client{
+			Timeout:       timeout,
+			Transport:     errorRoundTripper{err: err},
+			CheckRedirect: CheckRedirect,
+		}
 	}
 
-	proxyURL := f.proxyProvider.GetProxyURL(ctx)
-	ipStack := f.getIPStack(ctx)
-	client.Transport = f.newTransport(proxyURL, ipStack)
-
-	return client
+	return &http.Client{
+		Timeout:       timeout,
+		Transport:     rt,
+		CheckRedirect: CheckRedirect,
+	}
 }
 
-// NewAzureSession creates an azuretls.Session with proxy configuration.
-func (f *ClientFactory) NewAzureSession(ctx context.Context, timeout time.Duration) *azuretls.Session {
-	session := azuretls.NewSession()
+// NewAzureSession creates an azuretls.Session bound to ctx with proxy configuration
+// and pre-send per-hop redirect validation.
+func (f *ClientFactory) NewAzureSession(ctx context.Context, timeout time.Duration) (*azuretls.Session, error) {
+	session := azuretls.NewSessionWithContext(ctx)
 	session.Browser = azuretls.Chrome
 	session.SetTimeout(timeout)
 	session.ModifyConfig = useStandardCertificateVerification
+	session.CheckRedirect = CheckAzureRedirect
 
-	proxyURL := f.proxyProvider.GetProxyURL(ctx)
+	proxyURL := f.getProxyURL(ctx)
 	if proxyURL != "" {
-		_ = session.SetProxy(proxyURL)
+		if err := session.SetProxy(proxyURL); err != nil {
+			session.Close()
+			return nil, fmt.Errorf("configure azuretls proxy: %w", err)
+		}
+	} else {
+		session.Dial = func(dialCtx context.Context, networkName, addr string) (net.Conn, error) {
+			conn, err := (&net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}).DialContext(dialCtx, networkName, addr)
+			if err != nil {
+				return nil, err
+			}
+			if err := checkRemoteConn(conn); err != nil {
+				_ = conn.Close()
+				return nil, err
+			}
+			return conn, nil
+		}
 	}
 
-	return session
+	return session, nil
 }
 
 func useStandardCertificateVerification(config *tls.Config) error {
@@ -107,42 +166,24 @@ func useStandardCertificateVerification(config *tls.Config) error {
 	return nil
 }
 
-// GetProxyURL returns the current proxy URL.
-func (f *ClientFactory) GetProxyURL(ctx context.Context) string {
-	return f.proxyProvider.GetProxyURL(ctx)
-}
-
-// TestProxy tests if the proxy is working by making a request to the given URL.
-func (f *ClientFactory) TestProxy(ctx context.Context, testURL string) error {
-	client := f.NewHTTPClient(ctx, 10*time.Second)
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, testURL, nil)
-	if err != nil {
-		return err
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	return nil
-}
-
-// NewHTTPTransport creates an http.Transport with proxy configuration.
-// This is useful when you need to customize the http.Client (e.g., CheckRedirect).
-func (f *ClientFactory) NewHTTPTransport(ctx context.Context) *http.Transport {
-	proxyURL := f.proxyProvider.GetProxyURL(ctx)
-	ipStack := f.getIPStack(ctx)
-	return f.newTransport(proxyURL, ipStack)
-}
-
 // TestProxyWithConfig tests a proxy configuration without saving it.
 func (f *ClientFactory) TestProxyWithConfig(ctx context.Context, proxyURL, testURL string) error {
+	if _, err := ValidateFetchURL(testURL); err != nil {
+		return err
+	}
+
 	ipStack := f.getIPStack(ctx)
-	client := &http.Client{Timeout: 10 * time.Second}
-	client.Transport = f.newTransport(proxyURL, ipStack)
+	tr, err := f.newTransport(proxyURL, ipStack)
+	if err != nil {
+		return err
+	}
+	defer tr.CloseIdleConnections()
+
+	client := &http.Client{
+		Timeout:       10 * time.Second,
+		Transport:     tr,
+		CheckRedirect: CheckRedirect,
+	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, testURL, nil)
 	if err != nil {
@@ -158,30 +199,74 @@ func (f *ClientFactory) TestProxyWithConfig(ctx context.Context, proxyURL, testU
 	return nil
 }
 
-// getIPStack returns the IP stack preference, defaulting to "default".
+func (f *ClientFactory) getProxyURL(ctx context.Context) string {
+	if f.proxyProvider == nil {
+		return ""
+	}
+	return strings.TrimSpace(f.proxyProvider.GetProxyURL(ctx))
+}
+
 func (f *ClientFactory) getIPStack(ctx context.Context) string {
 	if f.ipStackProvider == nil {
 		return "default"
 	}
-	return f.ipStackProvider.GetIPStack(ctx)
+	ipStack := strings.TrimSpace(f.ipStackProvider.GetIPStack(ctx))
+	if ipStack == "" {
+		return "default"
+	}
+	return ipStack
 }
 
-// newTransport creates an http.Transport with proxy and IP stack configuration.
-func (f *ClientFactory) newTransport(proxyURL, ipStack string) *http.Transport {
+func (f *ClientFactory) getOrCreateTransport(proxyURL, ipStack string) (*http.Transport, error) {
+	key := transportKey{proxyURL: proxyURL, ipStack: ipStack}
+
+	f.mu.RLock()
+	if tr, ok := f.transports[key]; ok {
+		f.mu.RUnlock()
+		return tr, nil
+	}
+	f.mu.RUnlock()
+
+	tr, err := f.newTransport(proxyURL, ipStack)
+	if err != nil {
+		return nil, err
+	}
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.transports == nil {
+		f.transports = make(map[transportKey]*http.Transport)
+	}
+	if existing, ok := f.transports[key]; ok {
+		tr.CloseIdleConnections()
+		return existing, nil
+	}
+	f.transports[key] = tr
+	return tr, nil
+}
+
+// newTransport creates a pooled http.Transport cloned from http.DefaultTransport
+// with proxy and IP stack configuration.
+func (f *ClientFactory) newTransport(proxyURL, ipStack string) (*http.Transport, error) {
 	dialFunc := f.makeDialFunc(ipStack)
 
 	if proxyURL == "" {
-		return newOneShotTransport(dialFunc, nil)
+		return newPooledTransport(dialFunc, nil), nil
 	}
 
 	parsed, err := url.Parse(proxyURL)
 	if err != nil {
-		return newOneShotTransport(dialFunc, nil)
+		return nil, fmt.Errorf("invalid proxy URL: %w", err)
+	}
+	if parsed.Host == "" {
+		return nil, errors.New("invalid proxy URL: missing host")
 	}
 
-	// Check if it's a SOCKS proxy
-	if strings.HasPrefix(parsed.Scheme, "socks") {
-		// Extract auth if present
+	scheme := strings.ToLower(parsed.Scheme)
+	switch scheme {
+	case "http", "https":
+		return newPooledTransport(dialFunc, http.ProxyURL(parsed)), nil
+	case "socks5", "socks5h":
 		var auth *proxy.Auth
 		if parsed.User != nil {
 			auth = &proxy.Auth{
@@ -192,37 +277,45 @@ func (f *ClientFactory) newTransport(proxyURL, ipStack string) *http.Transport {
 			}
 		}
 
-		// Create SOCKS5 dialer with custom dial function
 		dialer, err := proxy.SOCKS5("tcp", parsed.Host, auth, &ipStackDialer{ipStack: ipStack})
 		if err != nil {
-			return newOneShotTransport(dialFunc, nil)
+			return nil, fmt.Errorf("create SOCKS5 proxy dialer: %w", err)
 		}
 
-		// Create transport with SOCKS5 dialer
-		return newOneShotTransport(func(ctx context.Context, network, addr string) (net.Conn, error) {
+		if ctxDialer, ok := dialer.(proxy.ContextDialer); ok {
+			return newPooledTransport(ctxDialer.DialContext, nil), nil
+		}
+		return newPooledTransport(func(_ context.Context, network, addr string) (net.Conn, error) {
 			return dialer.Dial(network, addr)
-		}, nil)
-	}
-
-	// For HTTP/HTTPS proxies, use standard http.ProxyURL with custom dial
-	return newOneShotTransport(dialFunc, http.ProxyURL(parsed))
-}
-
-func newOneShotTransport(dialContext func(ctx context.Context, network, addr string) (net.Conn, error), proxy func(*http.Request) (*url.URL, error)) *http.Transport {
-	return &http.Transport{
-		Proxy:             proxy,
-		DialContext:       dialContext,
-		DisableKeepAlives: true,
+		}, nil), nil
+	default:
+		return nil, fmt.Errorf("unsupported proxy scheme %q", parsed.Scheme)
 	}
 }
 
-// ipStackDialer implements proxy.Dialer for SOCKS5 with IP stack preference.
+func newPooledTransport(
+	dialContext func(ctx context.Context, network, addr string) (net.Conn, error),
+	proxyFunc func(*http.Request) (*url.URL, error),
+) *http.Transport {
+	base := http.DefaultTransport.(*http.Transport).Clone()
+	base.Proxy = proxyFunc
+	base.DialContext = dialContext
+	base.DisableKeepAlives = false
+	base.ForceAttemptHTTP2 = true
+	return base
+}
+
+// ipStackDialer implements proxy.Dialer and proxy.ContextDialer for SOCKS5 with IP stack preference.
 type ipStackDialer struct {
 	ipStack string
 }
 
 func (d *ipStackDialer) Dial(network, addr string) (net.Conn, error) {
 	return dialWithIPStack(context.Background(), network, addr, d.ipStack)
+}
+
+func (d *ipStackDialer) DialContext(ctx context.Context, network, addr string) (net.Conn, error) {
+	return dialWithIPStack(ctx, network, addr, d.ipStack)
 }
 
 // makeDialFunc creates a DialContext function with IP stack preference.
@@ -237,32 +330,41 @@ func (f *ClientFactory) makeDialFunc(ipStack string) func(ctx context.Context, n
 // - "ipv4": tries IPv4 first, falls back to IPv6 on timeout/failure
 // - "ipv6": tries IPv6 first, falls back to IPv4 on timeout/failure
 func dialWithIPStack(ctx context.Context, network, addr string, ipStack string) (net.Conn, error) {
+	var (
+		conn net.Conn
+		err  error
+	)
 	switch ipStack {
 	case "ipv4":
 		logger.Debug("dialing with IPv4 preference", "module", "network", "action", "dial", "resource", "network", "result", "ok", "addr", addr)
-		return dialWithPreference(ctx, addr, "tcp4", "tcp6")
+		conn, err = dialWithPreference(ctx, addr, "tcp4", "tcp6")
 	case "ipv6":
 		logger.Debug("dialing with IPv6 preference", "module", "network", "action", "dial", "resource", "network", "result", "ok", "addr", addr)
-		return dialWithPreference(ctx, addr, "tcp6", "tcp4")
+		conn, err = dialWithPreference(ctx, addr, "tcp6", "tcp4")
 	default:
-		// Happy Eyeballs - use standard Dialer
 		logger.Debug("dialing with Happy Eyeballs", "module", "network", "action", "dial", "resource", "network", "result", "ok", "addr", addr)
-		d := &net.Dialer{Timeout: 30 * time.Second}
-		return d.DialContext(ctx, network, addr)
+		d := &net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}
+		conn, err = d.DialContext(ctx, network, addr)
 	}
+	if err != nil {
+		return nil, err
+	}
+	if err := checkRemoteConn(conn); err != nil {
+		_ = conn.Close()
+		return nil, err
+	}
+	return conn, nil
 }
 
 // dialWithPreference tries the primary network first, then falls back to secondary.
 func dialWithPreference(ctx context.Context, addr, primary, fallback string) (net.Conn, error) {
-	// Try primary with 3 second timeout
-	d := &net.Dialer{Timeout: 3 * time.Second}
+	d := &net.Dialer{Timeout: 3 * time.Second, KeepAlive: 30 * time.Second}
 	conn, err := d.DialContext(ctx, primary, addr)
 	if err == nil {
 		logger.Debug("dial succeeded", "module", "network", "action", "dial", "resource", "network", "result", "ok", "network", primary, "addr", addr)
 		return conn, nil
 	}
 
-	// Primary failed, try fallback with longer timeout
 	logger.Debug("primary dial failed, trying fallback", "module", "network", "action", "dial", "resource", "network", "result", "skipped", "primary", primary, "fallback", fallback, "addr", addr, "error", err)
 	d.Timeout = 30 * time.Second
 	conn, err = d.DialContext(ctx, fallback, addr)

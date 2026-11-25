@@ -22,7 +22,7 @@ func TestFeedHandler_Create_Success(t *testing.T) {
 	h := handler.NewFeedHandlerHelper(mockService, mockRefreshService)
 
 	e := newTestEcho()
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"url":      "https://example.com/feed.xml",
 		"folderId": "123",
 		"type":     "article",
@@ -58,7 +58,7 @@ func TestFeedHandler_Create_Conflict(t *testing.T) {
 	h := handler.NewFeedHandlerHelper(mockService, mockRefreshService)
 
 	e := newTestEcho()
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"url": "https://example.com/feed.xml",
 	}
 	req := newJSONRequest(http.MethodPost, "/feeds", reqBody)
@@ -87,7 +87,7 @@ func TestFeedHandler_Create_InvalidRequest(t *testing.T) {
 	h := handler.NewFeedHandlerHelper(mockService, mockRefreshService)
 
 	e := newTestEcho()
-	req := newJSONRequest(http.MethodPost, "/feeds", map[string]interface{}{})
+	req := newJSONRequest(http.MethodPost, "/feeds", map[string]any{})
 	c, rec := newTestContext(e, req)
 
 	// Empty URL will be passed to service, which should return an error
@@ -141,7 +141,7 @@ func TestFeedHandler_Update_Success(t *testing.T) {
 	h := handler.NewFeedHandlerHelper(mockService, mockRefreshService)
 
 	e := newTestEcho()
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"title":                 "Updated Title",
 		"summaryPromptReminder": "突出结论",
 	}
@@ -180,7 +180,7 @@ func TestFeedHandler_Update_TitleRequired(t *testing.T) {
 	h := handler.NewFeedHandlerHelper(mockService, mockRefreshService)
 
 	e := newTestEcho()
-	req := newJSONRequest(http.MethodPut, "/feeds/123", map[string]interface{}{
+	req := newJSONRequest(http.MethodPut, "/feeds/123", map[string]any{
 		"summaryPromptReminder": "突出结论",
 	})
 	c, rec := newTestContext(e, req)
@@ -224,7 +224,7 @@ func TestFeedHandler_UpdateType_Success(t *testing.T) {
 	h := handler.NewFeedHandlerHelper(mockService, mockRefreshService)
 
 	e := newTestEcho()
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"type": "picture",
 	}
 	req := newJSONRequest(http.MethodPatch, "/feeds/123/type", reqBody)
@@ -250,7 +250,7 @@ func TestFeedHandler_DeleteBatch_Success(t *testing.T) {
 	h := handler.NewFeedHandlerHelper(mockService, mockRefreshService)
 
 	e := newTestEcho()
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"ids": []string{"1", "2", "3"},
 	}
 	req := newJSONRequest(http.MethodDelete, "/feeds", reqBody)
@@ -279,7 +279,7 @@ func TestFeedHandler_RefreshAll_Success(t *testing.T) {
 	c, rec := newTestContext(e, req)
 
 	mockRefreshService.EXPECT().
-		RefreshAll(gomock.Any()).
+		StartRefreshAll().
 		Return(nil)
 
 	err := h.RefreshAll(c)

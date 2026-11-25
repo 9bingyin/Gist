@@ -18,4 +18,4 @@ cover:
 
 clean:
 	rm -f gist-server coverage.out
-	find . -name "mock_*.go" -type f -delete
+	find . -path "*/mock/*.go" -type f -delete

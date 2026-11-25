@@ -10,8 +10,8 @@ import (
 	"gist/backend/pkg/logger"
 )
 
-// authCookieName must match the one in middleware.go
-const authCookieName = "gist_auth"
+// AuthCookieName is the name of the authentication cookie shared with HTTP middleware.
+const AuthCookieName = "gist_auth"
 
 type AuthHandler struct {
 	service service.AuthService
@@ -116,12 +116,11 @@ func (h *AuthHandler) Register(c echo.Context) error {
 
 	resp, err := h.service.Register(c.Request().Context(), req.Username, req.Nickname, req.Email, req.Password)
 	if err != nil {
-		logger.Warn("auth register failed", "module", "handler", "action", "create", "resource", "auth", "result", "failed", "actor", req.Username, "error", err)
-		return h.handleAuthError(c, err)
+		return h.handleAuthError(c, "create", req.Username, err)
 	}
 
 	// Set auth cookie for browser resource requests (images, etc.)
-	setAuthCookie(c, resp.Token)
+	SetAuthCookie(c, resp.Token)
 
 	logger.Info("auth register", "module", "handler", "action", "create", "resource", "auth", "result", "ok", "actor", resp.User.Username)
 	return c.JSON(http.StatusOK, authResponse{
@@ -151,12 +150,11 @@ func (h *AuthHandler) Login(c echo.Context) error {
 
 	resp, err := h.service.Login(c.Request().Context(), req.Identifier, req.Password)
 	if err != nil {
-		logger.Warn("auth login failed", "module", "handler", "action", "login", "resource", "auth", "result", "failed", "actor", req.Identifier, "error", err)
-		return h.handleAuthError(c, err)
+		return h.handleAuthError(c, "login", req.Identifier, err)
 	}
 
 	// Set auth cookie for browser resource requests (images, etc.)
-	setAuthCookie(c, resp.Token)
+	SetAuthCookie(c, resp.Token)
 
 	logger.Info("auth login", "module", "handler", "action", "login", "resource", "auth", "result", "ok", "actor", resp.User.Username)
 	return c.JSON(http.StatusOK, authResponse{
@@ -212,13 +210,12 @@ func (h *AuthHandler) UpdateProfile(c echo.Context) error {
 
 	result, err := h.service.UpdateProfile(c.Request().Context(), req.Nickname, req.Email, req.CurrentPassword, req.NewPassword)
 	if err != nil {
-		logger.Warn("auth profile update failed", "module", "handler", "action", "update", "resource", "auth", "result", "failed", "error", err)
-		return h.handleAuthError(c, err)
+		return h.handleAuthError(c, "update", "", err)
 	}
 
 	// Update auth cookie if new token was generated
 	if result.Token != nil {
-		setAuthCookie(c, *result.Token)
+		SetAuthCookie(c, *result.Token)
 	}
 
 	logger.Info("auth profile updated", "module", "handler", "action", "update", "resource", "auth", "result", "ok", "actor", result.User.Username)
@@ -236,37 +233,53 @@ func (h *AuthHandler) UpdateProfile(c echo.Context) error {
 // @Success 200 {object} map[string]string
 // @Router /auth/logout [post]
 func (h *AuthHandler) Logout(c echo.Context) error {
-	clearAuthCookie(c)
+	ClearAuthCookie(c)
 	logger.Info("auth logout", "module", "handler", "action", "logout", "resource", "auth", "result", "ok")
 	return c.JSON(http.StatusOK, map[string]string{"message": "logged out"})
 }
 
-func (h *AuthHandler) handleAuthError(c echo.Context, err error) error {
+func (h *AuthHandler) handleAuthError(c echo.Context, action, actor string, err error) error {
+	var status int
+	var message string
+
 	switch {
 	case errors.Is(err, service.ErrUserExists):
-		return c.JSON(http.StatusConflict, errorResponse{Error: "user already exists"})
+		status, message = http.StatusConflict, "user already exists"
 	case errors.Is(err, service.ErrUserNotFound):
-		return c.JSON(http.StatusUnauthorized, errorResponse{Error: "user not found"})
+		status, message = http.StatusUnauthorized, "user not found"
 	case errors.Is(err, service.ErrInvalidPassword):
-		return c.JSON(http.StatusUnauthorized, errorResponse{Error: "invalid credentials"})
+		status, message = http.StatusUnauthorized, "invalid credentials"
 	case errors.Is(err, service.ErrUsernameRequired):
-		return c.JSON(http.StatusBadRequest, errorResponse{Error: "username is required"})
+		status, message = http.StatusBadRequest, "username is required"
 	case errors.Is(err, service.ErrInvalidUsername):
-		return c.JSON(http.StatusBadRequest, errorResponse{Error: "username must be lowercase letters and numbers only"})
+		status, message = http.StatusBadRequest, "username must not contain whitespace or control characters"
 	case errors.Is(err, service.ErrEmailRequired):
-		return c.JSON(http.StatusBadRequest, errorResponse{Error: "email is required"})
+		status, message = http.StatusBadRequest, "email is required"
 	case errors.Is(err, service.ErrPasswordRequired):
-		return c.JSON(http.StatusBadRequest, errorResponse{Error: "password is required"})
+		status, message = http.StatusBadRequest, "password is required"
 	case errors.Is(err, service.ErrPasswordTooShort):
-		return c.JSON(http.StatusBadRequest, errorResponse{Error: "password must be at least 6 characters"})
+		status, message = http.StatusBadRequest, "password must be at least 6 characters"
+	case errors.Is(err, service.ErrPasswordTooLong):
+		status, message = http.StatusBadRequest, "password must be at most 72 bytes"
 	case errors.Is(err, service.ErrCurrentPasswordRequired):
-		return c.JSON(http.StatusBadRequest, errorResponse{Error: "current password is required"})
+		status, message = http.StatusBadRequest, "current password is required"
 	case errors.Is(err, service.ErrSamePassword):
-		return c.JSON(http.StatusBadRequest, errorResponse{Error: "new password must be different from current password"})
+		status, message = http.StatusBadRequest, "new password must be different from current password"
 	default:
-		logger.Error("auth request failed", "module", "handler", "action", "request", "resource", "auth", "result", "failed", "error", err)
+		fields := []any{"module", "handler", "action", action, "resource", "auth", "result", "failed", "error", err}
+		if actor != "" {
+			fields = append(fields, "actor", actor)
+		}
+		logger.Error("auth request failed", fields...)
 		return c.JSON(http.StatusInternalServerError, errorResponse{Error: "internal error"})
 	}
+
+	fields := []any{"module", "handler", "action", action, "resource", "auth", "result", "failed", "error", err}
+	if actor != "" {
+		fields = append(fields, "actor", actor)
+	}
+	logger.Warn("auth request rejected", fields...)
+	return c.JSON(status, errorResponse{Error: message})
 }
 
 func toUserResponse(user *service.User) *userResponse {
@@ -281,28 +294,30 @@ func toUserResponse(user *service.User) *userResponse {
 	}
 }
 
-// setAuthCookie sets the authentication cookie for browser resource requests.
-func setAuthCookie(c echo.Context, token string) {
+// SetAuthCookie sets the authentication cookie for browser resource requests.
+func SetAuthCookie(c echo.Context, token string) {
 	cookie := &http.Cookie{
-		Name:     authCookieName,
+		Name:     AuthCookieName,
 		Value:    token,
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   c.Request().TLS != nil, // Secure if HTTPS
+		Secure:   c.Scheme() == "https",
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   30 * 24 * 60 * 60, // 30 days (same as JWT expiry)
 	}
 	c.SetCookie(cookie)
 }
 
-// clearAuthCookie clears the authentication cookie.
-func clearAuthCookie(c echo.Context) {
+// ClearAuthCookie clears the authentication cookie with matching attributes.
+func ClearAuthCookie(c echo.Context) {
 	cookie := &http.Cookie{
-		Name:     authCookieName,
+		Name:     AuthCookieName,
 		Value:    "",
 		Path:     "/",
 		HttpOnly: true,
-		MaxAge:   -1, // Delete cookie
+		Secure:   c.Scheme() == "https",
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   -1,
 	}
 	c.SetCookie(cookie)
 }

@@ -1,55 +1,66 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { useQueryClient } from "@tanstack/react-query";
-import { updateGeneralSettings } from "@/api";
 import { cn } from "@/lib/utils";
 import { Switch } from "@/components/ui/switch";
 import { SegmentedControl } from "@/components/ui/segmented-control";
-import { useGeneralSettings } from "@/hooks/useGeneralSettings";
+import {
+  useGeneralSettings,
+  useUpdateGeneralSettings,
+} from "@/hooks/useSettings";
 
 type Language = "zh" | "en";
 
 export function GeneralSettings() {
   const { t, i18n } = useTranslation();
-  const queryClient = useQueryClient();
   const { data: generalSettings, isLoading: isGeneralSettingsLoading } =
     useGeneralSettings();
-  const [fallbackUA, setFallbackUA] = useState("");
-  const [autoReadability, setAutoReadability] = useState(false);
-  const [markReadOnScroll, setMarkReadOnScroll] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
+  const updateGeneralMutation = useUpdateGeneralSettings();
+
+  // Keep unsaved draft separate so toggling switches never overwrites fallbackUA edits
+  const [fallbackUADraft, setFallbackUADraft] = useState<string | null>(null);
+  const [autoReadabilityOverride, setAutoReadabilityOverride] = useState<
+    boolean | null
+  >(null);
+  const [markReadOnScrollOverride, setMarkReadOnScrollOverride] = useState<
+    boolean | null
+  >(null);
   const [saveStatus, setSaveStatus] = useState<"idle" | "success" | "error">(
     "idle",
   );
+  const statusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (!generalSettings) return;
+    return () => {
+      if (statusTimerRef.current) {
+        clearTimeout(statusTimerRef.current);
+      }
+    };
+  }, []);
 
-    setFallbackUA(generalSettings.fallbackUserAgent || "");
-    setAutoReadability(generalSettings.autoReadability || false);
-    setMarkReadOnScroll(generalSettings.markReadOnScroll || false);
-  }, [generalSettings]);
-
+  const fallbackUA =
+    fallbackUADraft ?? generalSettings?.fallbackUserAgent ?? "";
+  const autoReadability =
+    autoReadabilityOverride ?? generalSettings?.autoReadability ?? false;
+  const markReadOnScroll =
+    markReadOnScrollOverride ?? generalSettings?.markReadOnScroll ?? false;
   const settingsDisabled = isGeneralSettingsLoading || !generalSettings;
 
   const handleSaveFallbackUA = async () => {
     if (!generalSettings) return;
 
-    setIsSaving(true);
     setSaveStatus("idle");
     try {
-      await updateGeneralSettings({
+      await updateGeneralMutation.mutateAsync({
         fallbackUserAgent: fallbackUA,
         autoReadability,
         markReadOnScroll,
       });
-      queryClient.invalidateQueries({ queryKey: ["generalSettings"] });
+      setFallbackUADraft(null);
       setSaveStatus("success");
-      setTimeout(() => setSaveStatus("idle"), 2000);
+      if (statusTimerRef.current) clearTimeout(statusTimerRef.current);
+      statusTimerRef.current = setTimeout(() => setSaveStatus("idle"), 2000);
     } catch {
       setSaveStatus("error");
-    } finally {
-      setIsSaving(false);
     }
   };
 
@@ -57,39 +68,40 @@ export function GeneralSettings() {
     async (checked: boolean) => {
       if (!generalSettings) return;
 
-      setAutoReadability(checked);
+      setAutoReadabilityOverride(checked);
       try {
-        await updateGeneralSettings({
+        await updateGeneralMutation.mutateAsync({
           fallbackUserAgent: generalSettings.fallbackUserAgent,
           autoReadability: checked,
           markReadOnScroll,
         });
-        queryClient.invalidateQueries({ queryKey: ["generalSettings"] });
       } catch {
-        // Revert on error
-        setAutoReadability(!checked);
+        // Revert via server value on error
+      } finally {
+        setAutoReadabilityOverride(null);
       }
     },
-    [generalSettings, markReadOnScroll, queryClient],
+    [generalSettings, markReadOnScroll, updateGeneralMutation],
   );
 
   const handleMarkReadOnScrollChange = useCallback(
     async (checked: boolean) => {
       if (!generalSettings) return;
 
-      setMarkReadOnScroll(checked);
+      setMarkReadOnScrollOverride(checked);
       try {
-        await updateGeneralSettings({
+        await updateGeneralMutation.mutateAsync({
           fallbackUserAgent: generalSettings.fallbackUserAgent,
           autoReadability,
           markReadOnScroll: checked,
         });
-        queryClient.invalidateQueries({ queryKey: ["generalSettings"] });
       } catch {
-        setMarkReadOnScroll(!checked);
+        // Revert via server value on error
+      } finally {
+        setMarkReadOnScrollOverride(null);
       }
     },
-    [autoReadability, generalSettings, queryClient],
+    [autoReadability, generalSettings, updateGeneralMutation],
   );
 
   const languageOptions = useMemo(
@@ -105,9 +117,10 @@ export function GeneralSettings() {
     localStorage.setItem("gist-lang", lng);
   };
 
+  const isSaving = updateGeneralMutation.isPending;
+
   return (
     <div className="space-y-6">
-      {/* Language Section */}
       <section>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="min-w-0">
@@ -125,7 +138,6 @@ export function GeneralSettings() {
         </div>
       </section>
 
-      {/* Auto Readability Section */}
       <section>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="min-w-0">
@@ -144,7 +156,6 @@ export function GeneralSettings() {
         </div>
       </section>
 
-      {/* Mark Read On Scroll Section */}
       <section>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="min-w-0">
@@ -163,7 +174,6 @@ export function GeneralSettings() {
         </div>
       </section>
 
-      {/* Advanced Section */}
       <section>
         <div className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
           {t("settings.advanced")}
@@ -181,7 +191,7 @@ export function GeneralSettings() {
             <input
               type="text"
               value={fallbackUA}
-              onChange={(e) => setFallbackUA(e.target.value)}
+              onChange={(e) => setFallbackUADraft(e.target.value)}
               disabled={settingsDisabled}
               placeholder={t("settings.fallback_ua_placeholder")}
               className={cn(

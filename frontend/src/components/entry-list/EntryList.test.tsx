@@ -12,7 +12,6 @@ const {
   mockRenderedEntryListItem,
   mockNeedsTranslation,
   mockTranslateArticlesBatch,
-  mockCancelAllBatchTranslations,
   mockTranslationActionsGet,
   mockMarkManyAsRead,
   mockRemoveFromUnreadList,
@@ -20,7 +19,6 @@ const {
   mockRenderedEntryListItem: vi.fn(),
   mockNeedsTranslation: vi.fn(() => Promise.resolve(true)),
   mockTranslateArticlesBatch: vi.fn(() => Promise.resolve()),
-  mockCancelAllBatchTranslations: vi.fn(),
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   mockTranslationActionsGet: vi.fn((): any => undefined),
   mockMarkManyAsRead: vi.fn(),
@@ -68,7 +66,6 @@ vi.mock("@/lib/language-detect-async", () => ({
 
 vi.mock("@/services/translation-service", () => ({
   translateArticlesBatch: mockTranslateArticlesBatch,
-  cancelAllBatchTranslations: mockCancelAllBatchTranslations,
 }));
 
 vi.mock("@/stores/translation-store", () => ({
@@ -423,6 +420,23 @@ describe("EntryList translation scheduling", () => {
 
     expect(mockTranslateArticlesBatch).toHaveBeenCalledTimes(1);
     mockTranslateArticlesBatch.mockClear();
+
+    // Refresh entries list so visible items are re-evaluated after failure
+    vi.mocked(useEntriesInfinite).mockReturnValue({
+      data: {
+        pages: [
+          {
+            entries: allEntries.map((entry) => ({ ...entry })),
+            hasMore: false,
+          },
+        ],
+      },
+      fetchNextPage: vi.fn(),
+      hasNextPage: false,
+      isFetchingNextPage: false,
+      isLoading: false,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
 
     rerender(<EntryList {...defaultProps} selectedEntryId="3" />);
 
@@ -902,8 +916,7 @@ describe("EntryList translation scheduling", () => {
     await flushMarkReadBatch();
 
     const firstCallOptions = mockMarkManyAsRead.mock.calls[0]?.[1] as
-      | { onSuccess?: () => void }
-      | undefined;
+      { onSuccess?: () => void } | undefined;
     firstCallOptions?.onSuccess?.();
 
     expect(mockRemoveFromUnreadList).toHaveBeenCalledWith(
@@ -924,8 +937,7 @@ describe("EntryList translation scheduling", () => {
     await flushMarkReadBatch();
 
     const firstCallOptions = mockMarkManyAsRead.mock.calls[0]?.[1] as
-      | { onError?: () => void }
-      | undefined;
+      { onError?: () => void } | undefined;
     firstCallOptions?.onError?.();
 
     vi.mocked(useEntriesInfinite).mockReturnValue({

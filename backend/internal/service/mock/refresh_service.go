@@ -110,3 +110,29 @@ func (mr *MockRefreshServiceMockRecorder) RefreshFeeds(ctx, feedIDs any) *gomock
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshFeeds", reflect.TypeOf((*MockRefreshService)(nil).RefreshFeeds), ctx, feedIDs)
 }
+
+// Shutdown mocks base method.
+func (m *MockRefreshService) Shutdown() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Shutdown")
+}
+
+// Shutdown indicates an expected call of Shutdown.
+func (mr *MockRefreshServiceMockRecorder) Shutdown() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Shutdown", reflect.TypeOf((*MockRefreshService)(nil).Shutdown))
+}
+
+// StartRefreshAll mocks base method.
+func (m *MockRefreshService) StartRefreshAll() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "StartRefreshAll")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// StartRefreshAll indicates an expected call of StartRefreshAll.
+func (mr *MockRefreshServiceMockRecorder) StartRefreshAll() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartRefreshAll", reflect.TypeOf((*MockRefreshService)(nil).StartRefreshAll))
+}

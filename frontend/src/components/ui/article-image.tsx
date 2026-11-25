@@ -1,18 +1,8 @@
-import {
-  memo,
-  useState,
-  useCallback,
-  useContext,
-  createContext,
-  useMemo,
-} from "react";
+import { memo, useState, useCallback, useContext, useMemo } from "react";
+import { Image as LucideImage } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getProxiedImageUrl } from "@/lib/image-proxy";
-import { ImagePreviewContext } from "./article-content";
-
-// Context for passing article URL to resolve relative URLs and set Referer
-// eslint-disable-next-line react-refresh/only-export-components
-export const ArticleLinkContext = createContext<string | undefined>(undefined);
+import { ArticleLinkContext, ImagePreviewContext } from "./article-context";
 
 // Global cache to track loaded images - prevents flash when component remounts
 const loadedImagesCache = new Set<string>();
@@ -22,7 +12,7 @@ interface ArticleImageProps {
   alt?: string;
   width?: string | number;
   height?: string | number;
-  srcset?: string;
+  srcSet?: string;
   sizes?: string;
   className?: string;
 }
@@ -30,8 +20,8 @@ interface ArticleImageProps {
 /**
  * Proxy srcset URLs
  */
-function proxySrcset(srcset: string, articleUrl?: string): string {
-  return srcset
+function proxySrcset(srcSet: string, articleUrl?: string): string {
+  return srcSet
     .split(",")
     .map((entry) => {
       const parts = entry.trim().split(/\s+/);
@@ -44,15 +34,15 @@ function proxySrcset(srcset: string, articleUrl?: string): string {
 }
 
 /**
- * Article image component with lazy loading and error handling
- * Uses memo to prevent re-rendering when parent content changes
+ * Article image component with lazy loading and error handling.
+ * Uses memo to prevent re-rendering when parent content changes.
  */
 export const ArticleImage = memo(function ArticleImage({
   src,
   alt = "",
   width,
   height,
-  srcset,
+  srcSet,
   sizes,
   className,
   ...props
@@ -60,30 +50,32 @@ export const ArticleImage = memo(function ArticleImage({
   const articleUrl = useContext(ArticleLinkContext);
   const imagePreviewContext = useContext(ImagePreviewContext);
 
-  // Compute proxied URLs first so we can check the cache
   const proxiedSrc = useMemo(
     () => (src ? getProxiedImageUrl(src, articleUrl) : ""),
     [src, articleUrl],
   );
-  const proxiedSrcset = useMemo(
-    () => (srcset ? proxySrcset(srcset, articleUrl) : undefined),
-    [srcset, articleUrl],
+  const proxiedSrcSet = useMemo(
+    () => (srcSet ? proxySrcset(srcSet, articleUrl) : undefined),
+    [srcSet, articleUrl],
   );
 
-  // Initialize isLoaded based on cache - prevents flash on remount
-  const [isLoaded, setIsLoaded] = useState(() =>
-    loadedImagesCache.has(proxiedSrc),
+  const [loadedSrc, setLoadedSrc] = useState<string | null>(() =>
+    loadedImagesCache.has(proxiedSrc) ? proxiedSrc : null,
   );
-  const [isError, setIsError] = useState(false);
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+
+  const isLoaded =
+    loadedSrc === proxiedSrc || loadedImagesCache.has(proxiedSrc);
+  const isError = failedSrc === proxiedSrc;
 
   const handleLoad = useCallback(() => {
     loadedImagesCache.add(proxiedSrc);
-    setIsLoaded(true);
+    setLoadedSrc(proxiedSrc);
   }, [proxiedSrc]);
 
   const handleError = useCallback(() => {
-    setIsError(true);
-  }, []);
+    setFailedSrc(proxiedSrc);
+  }, [proxiedSrc]);
 
   const handleClick = useCallback(
     (e: React.MouseEvent) => {
@@ -110,30 +102,17 @@ export const ArticleImage = memo(function ArticleImage({
           height: height ? Number(height) : 80,
         }}
       >
-        <svg
-          className="size-5 opacity-40"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={1.5}
-            d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-          />
-        </svg>
+        <LucideImage className="size-5 opacity-40" strokeWidth={1.5} />
       </span>
     );
   }
 
-  // Only show skeleton placeholder if we have dimensions
   const showSkeleton = !isLoaded && width && height;
 
   return (
     <img
       src={proxiedSrc}
-      srcSet={proxiedSrcset}
+      srcSet={proxiedSrcSet}
       sizes={sizes}
       alt={alt}
       width={width}

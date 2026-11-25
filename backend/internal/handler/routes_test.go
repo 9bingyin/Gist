@@ -7,7 +7,6 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"gist/backend/internal/handler"
-	"gist/backend/pkg/network"
 )
 
 func assertRoute(t *testing.T, routes []*echo.Route, method, path string) {
@@ -36,7 +35,7 @@ func TestHandler_RegisterRoutes(t *testing.T) {
 	handler.NewFolderHandler(nil).RegisterRoutes(g)
 	handler.NewProxyHandler(nil).RegisterRoutes(g)
 	handler.NewOPMLHandler(nil, nil).RegisterRoutes(g)
-	handler.NewSettingsHandler(nil, network.NewClientFactoryForTest(&http.Client{})).RegisterRoutes(g)
+	handler.NewSettingsHandler(nil).RegisterRoutes(g)
 
 	iconHandler := handler.NewIconHandler(nil)
 	iconHandler.RegisterRoutes(e)

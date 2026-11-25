@@ -2,10 +2,10 @@ package repository_test
 
 import (
 	"context"
-	"gist/backend/internal/repository"
 	"testing"
 
 	"gist/backend/internal/model"
+	"gist/backend/internal/repository"
 	"gist/backend/internal/repository/testutil"
 
 	"github.com/stretchr/testify/require"
@@ -19,30 +19,23 @@ func TestAISummaryRepository(t *testing.T) {
 	feedID := testutil.SeedFeed(t, db, model.Feed{Title: "F", URL: "u"})
 	entryID := testutil.SeedEntry(t, db, model.Entry{FeedID: feedID})
 
-	// Save
 	err := repo.Save(ctx, entryID, false, "zh-CN", "summary content")
 	require.NoError(t, err)
 
-	// Get
 	summary, err := repo.Get(ctx, entryID, false, "zh-CN")
 	require.NoError(t, err)
 	require.NotNil(t, summary)
 	require.Equal(t, "summary content", summary.Summary)
 
-	// Update (Conflict)
 	err = repo.Save(ctx, entryID, false, "zh-CN", "updated summary")
 	require.NoError(t, err)
-	summary, _ = repo.Get(ctx, entryID, false, "zh-CN")
+	summary, err = repo.Get(ctx, entryID, false, "zh-CN")
+	require.NoError(t, err)
 	require.Equal(t, "updated summary", summary.Summary)
 
-	// Delete All
 	count, err := repo.DeleteAll(ctx)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), count)
-
-	// Delete By Entry
-	err = repo.DeleteByEntryID(ctx, entryID)
-	require.NoError(t, err)
 }
 
 func TestAITranslationRepository(t *testing.T) {
@@ -53,53 +46,24 @@ func TestAITranslationRepository(t *testing.T) {
 	feedID := testutil.SeedFeed(t, db, model.Feed{Title: "F", URL: "u"})
 	entryID := testutil.SeedEntry(t, db, model.Entry{FeedID: feedID})
 
-	// Save
 	err := repo.Save(ctx, entryID, false, "en-US", "translated html")
 	require.NoError(t, err)
 
-	// Get
 	trans, err := repo.Get(ctx, entryID, false, "en-US")
 	require.NoError(t, err)
 	require.NotNil(t, trans)
 	require.Equal(t, "translated html", trans.Content)
 
-	// Delete By Entry
-	err = repo.DeleteByEntryID(ctx, entryID)
-	require.NoError(t, err)
-	trans, _ = repo.Get(ctx, entryID, false, "en-US")
-	require.Nil(t, trans)
-
-	// Delete All
-	count, err := repo.DeleteAll(ctx)
-	require.NoError(t, err)
-	require.Equal(t, int64(0), count)
-}
-
-func TestAIListTranslationRepository(t *testing.T) {
-	db := testutil.NewTestDB(t)
-	repo := repository.NewAIListTranslationRepository(db)
-	ctx := context.Background()
-
-	feedID := testutil.SeedFeed(t, db, model.Feed{Title: "F", URL: "u"})
-	entryID := testutil.SeedEntry(t, db, model.Entry{FeedID: feedID})
-
-	// Save
-	err := repo.Save(ctx, entryID, "en-US", "Trans Title", "Trans Summary")
-	require.NoError(t, err)
-
-	// Get
-	trans, err := repo.Get(ctx, entryID, "en-US")
-	require.NoError(t, err)
-	require.NotNil(t, trans)
-	require.Equal(t, "Trans Title", trans.Title)
-
-	// Delete All
 	count, err := repo.DeleteAll(ctx)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), count)
+
+	trans, err = repo.Get(ctx, entryID, false, "en-US")
+	require.NoError(t, err)
+	require.Nil(t, trans)
 }
 
-func TestAIListTranslationRepository_GetBatchAndDelete(t *testing.T) {
+func TestAIListTranslationRepository(t *testing.T) {
 	db := testutil.NewTestDB(t)
 	repo := repository.NewAIListTranslationRepository(db)
 	ctx := context.Background()
@@ -113,13 +77,16 @@ func TestAIListTranslationRepository_GetBatchAndDelete(t *testing.T) {
 	err = repo.Save(ctx, entryID2, "en-US", "Title 2", "Summary 2")
 	require.NoError(t, err)
 
+	trans, err := repo.Get(ctx, entryID1, "en-US")
+	require.NoError(t, err)
+	require.NotNil(t, trans)
+	require.Equal(t, "Title 1", trans.Title)
+
 	batch, err := repo.GetBatch(ctx, []int64{entryID1, entryID2}, "en-US")
 	require.NoError(t, err)
 	require.Len(t, batch, 2)
 
-	err = repo.DeleteByEntryID(ctx, entryID1)
+	count, err := repo.DeleteAll(ctx)
 	require.NoError(t, err)
-	remaining, err := repo.GetBatch(ctx, []int64{entryID1, entryID2}, "en-US")
-	require.NoError(t, err)
-	require.Len(t, remaining, 1)
+	require.Equal(t, int64(2), count)
 }

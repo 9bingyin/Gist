@@ -36,6 +36,13 @@ export function EntryListHeader({
 }: EntryListHeaderProps) {
   const { t } = useTranslation();
 
+  const sidebarToggleLabel = sidebarVisible
+    ? t("actions.hide_sidebar")
+    : t("actions.show_sidebar");
+  const unreadFilterLabel = unreadOnly
+    ? t("entry.show_all")
+    : t("entry.show_unread_only");
+
   return (
     <div className="flex h-14 items-center justify-between gap-4 px-4 shrink-0">
       <div className="flex min-w-0 flex-1 items-center gap-2">
@@ -43,6 +50,7 @@ export function EntryListHeader({
           <button
             type="button"
             onClick={onMenuClick}
+            aria-label={t("actions.show_sidebar")}
             className="flex size-11 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-item-hover -ml-1.5"
           >
             <MenuIcon className="size-5" />
@@ -52,11 +60,8 @@ export function EntryListHeader({
           <button
             type="button"
             onClick={onToggleSidebar}
-            title={
-              sidebarVisible
-                ? t("actions.hide_sidebar")
-                : t("actions.show_sidebar")
-            }
+            title={sidebarToggleLabel}
+            aria-label={sidebarToggleLabel}
             className="flex size-11 shrink-0 items-center justify-center rounded-md transition-all duration-200 ease-[var(--ease-ios)] hover:bg-item-hover active:scale-95 -ml-1.5"
           >
             <MenuIcon className="size-5" />
@@ -79,7 +84,8 @@ export function EntryListHeader({
         <button
           type="button"
           onClick={onToggleUnreadOnly}
-          title={unreadOnly ? t("entry.show_all") : t("entry.show_unread_only")}
+          title={unreadFilterLabel}
+          aria-label={unreadFilterLabel}
           className="flex size-8 items-center justify-center rounded-md transition-colors hover:bg-item-hover"
         >
           {unreadOnly ? (
@@ -92,6 +98,7 @@ export function EntryListHeader({
           type="button"
           onClick={onMarkAllRead}
           title={t("entry.mark_all_read")}
+          aria-label={t("entry.mark_all_read")}
           className="flex size-8 items-center justify-center rounded-md transition-colors hover:bg-item-hover"
         >
           <CheckCircleIcon className="size-4" />

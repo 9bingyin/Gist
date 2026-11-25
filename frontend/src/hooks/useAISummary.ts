@@ -27,31 +27,39 @@ export function useAISummary({
   const [summaryError, setSummaryError] = useState<string | null>(null);
 
   const summaryAbortRef = useRef<AbortController | null>(null);
+  const requestSeqRef = useRef(0);
   const summaryRequestedRef = useRef(false);
   const prevReadableActiveRef = useRef(false);
   const summaryManuallyDisabledRef = useRef(false);
 
-  // Reset state when entry changes
+  // Reset state and cancel in-flight SSE when entry changes or unmounts
   useEffect(() => {
+    requestSeqRef.current += 1;
+    summaryAbortRef.current?.abort();
+    summaryAbortRef.current = null;
     setAiSummary(null);
     setSummaryError(null);
     setIsLoadingSummary(false);
-    if (summaryAbortRef.current) {
-      summaryAbortRef.current.abort();
-      summaryAbortRef.current = null;
-    }
     summaryRequestedRef.current = false;
     prevReadableActiveRef.current = false;
     summaryManuallyDisabledRef.current = false;
+
+    return () => {
+      requestSeqRef.current += 1;
+      summaryAbortRef.current?.abort();
+      summaryAbortRef.current = null;
+    };
   }, [entry?.id]);
 
   const generateSummary = useCallback(
     async (forReadability: boolean) => {
       if (!entry) return;
 
-      if (summaryAbortRef.current) {
-        summaryAbortRef.current.abort();
-      }
+      requestSeqRef.current += 1;
+      const requestSeq = requestSeqRef.current;
+
+      summaryAbortRef.current?.abort();
+      summaryAbortRef.current = null;
 
       const content = forReadability ? readableContent : entry.content;
       if (!content) {
@@ -79,6 +87,9 @@ export function useAISummary({
         );
 
         for await (const chunk of stream) {
+          if (requestSeqRef.current !== requestSeq) {
+            return;
+          }
           if (typeof chunk === "object" && "cached" in chunk) {
             setAiSummary(chunk.summary);
           } else {
@@ -86,19 +97,24 @@ export function useAISummary({
           }
         }
       } catch (err) {
+        if (requestSeqRef.current !== requestSeq) {
+          return;
+        }
         if (err instanceof Error && err.name === "AbortError") {
           return;
         }
+        setAiSummary(null);
         const message =
           err instanceof Error ? err.message : "Failed to generate summary";
         setSummaryError(message);
-        setIsLoadingSummary(false);
-        summaryAbortRef.current = null;
-        return;
+      } finally {
+        if (requestSeqRef.current === requestSeq) {
+          setIsLoadingSummary(false);
+          if (summaryAbortRef.current === abortController) {
+            summaryAbortRef.current = null;
+          }
+        }
       }
-
-      setIsLoadingSummary(false);
-      summaryAbortRef.current = null;
     },
     [entry, readableContent],
   );
@@ -114,6 +130,7 @@ export function useAISummary({
     }
 
     if (isLoadingSummary && summaryAbortRef.current) {
+      requestSeqRef.current += 1;
       summaryAbortRef.current.abort();
       summaryAbortRef.current = null;
       setIsLoadingSummary(false);
@@ -131,7 +148,7 @@ export function useAISummary({
     if (prevReadableActiveRef.current !== isReadableActive) {
       prevReadableActiveRef.current = isReadableActive;
       if (summaryRequestedRef.current && (aiSummary || isLoadingSummary)) {
-        generateSummary(isReadableActive);
+        void generateSummary(isReadableActive);
       }
     }
   }, [isReadableActive, aiSummary, isLoadingSummary, generateSummary]);
@@ -142,7 +159,7 @@ export function useAISummary({
     if (summaryManuallyDisabledRef.current) return;
     if (aiSummary || summaryRequestedRef.current) return;
 
-    generateSummary(isReadableActive);
+    void generateSummary(isReadableActive);
   }, [
     autoSummary,
     entry,

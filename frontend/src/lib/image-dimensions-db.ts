@@ -1,4 +1,4 @@
-import { get, set, getMany, createStore } from "idb-keyval";
+import { set, getMany, createStore } from "idb-keyval";
 
 export interface ImageDimension {
   src: string;
@@ -8,12 +8,6 @@ export interface ImageDimension {
 }
 
 const store = createStore("gist-image-dimensions", "dimensions");
-
-export async function getDimension(
-  src: string,
-): Promise<ImageDimension | undefined> {
-  return get<ImageDimension>(src, store);
-}
 
 export async function saveDimension(dim: ImageDimension): Promise<void> {
   await set(dim.src, dim, store);

@@ -78,7 +78,7 @@ func TestIPStackDialer_Dial(t *testing.T) {
 	tcpLn := ln.(*net.TCPListener)
 	acceptOnce(t, tcpLn)
 
-	conn, err := DialWithIPStackDialerForTest("tcp", tcpLn.Addr().String(), "ipv4")
+	conn, err := DialWithIPStackDialerForTest(context.Background(), "tcp", tcpLn.Addr().String(), "ipv4")
 	require.NoError(t, err)
 	require.NoError(t, conn.Close())
 }

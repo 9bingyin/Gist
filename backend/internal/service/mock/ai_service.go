@@ -132,13 +132,12 @@ func (mr *MockAIServiceMockRecorder) SaveTranslation(ctx, entryID, isReadability
 }
 
 // Summarize mocks base method.
-func (m *MockAIService) Summarize(ctx context.Context, entryID int64, content, title string, isReadability bool) (<-chan string, <-chan error, error) {
+func (m *MockAIService) Summarize(ctx context.Context, entryID int64, content, title string, isReadability bool) (<-chan service.SummarizeEvent, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Summarize", ctx, entryID, content, title, isReadability)
-	ret0, _ := ret[0].(<-chan string)
-	ret1, _ := ret[1].(<-chan error)
-	ret2, _ := ret[2].(error)
-	return ret0, ret1, ret2
+	ret0, _ := ret[0].(<-chan service.SummarizeEvent)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // Summarize indicates an expected call of Summarize.
@@ -148,13 +147,12 @@ func (mr *MockAIServiceMockRecorder) Summarize(ctx, entryID, content, title, isR
 }
 
 // TranslateBatch mocks base method.
-func (m *MockAIService) TranslateBatch(ctx context.Context, articles []service.BatchArticleInput) (<-chan service.BatchTranslateResult, <-chan error, error) {
+func (m *MockAIService) TranslateBatch(ctx context.Context, articles []service.BatchArticleInput) (<-chan service.BatchTranslateEvent, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "TranslateBatch", ctx, articles)
-	ret0, _ := ret[0].(<-chan service.BatchTranslateResult)
-	ret1, _ := ret[1].(<-chan error)
-	ret2, _ := ret[2].(error)
-	return ret0, ret1, ret2
+	ret0, _ := ret[0].(<-chan service.BatchTranslateEvent)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // TranslateBatch indicates an expected call of TranslateBatch.
@@ -164,14 +162,13 @@ func (mr *MockAIServiceMockRecorder) TranslateBatch(ctx, articles any) *gomock.C
 }
 
 // TranslateBlocks mocks base method.
-func (m *MockAIService) TranslateBlocks(ctx context.Context, entryID int64, content, title string, isReadability bool) ([]service.TranslateBlockInfo, <-chan service.TranslateBlockResult, <-chan error, error) {
+func (m *MockAIService) TranslateBlocks(ctx context.Context, entryID int64, content, title string, isReadability bool) ([]service.TranslateBlockInfo, <-chan service.TranslateBlockEvent, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "TranslateBlocks", ctx, entryID, content, title, isReadability)
 	ret0, _ := ret[0].([]service.TranslateBlockInfo)
-	ret1, _ := ret[1].(<-chan service.TranslateBlockResult)
-	ret2, _ := ret[2].(<-chan error)
-	ret3, _ := ret[3].(error)
-	return ret0, ret1, ret2, ret3
+	ret1, _ := ret[1].(<-chan service.TranslateBlockEvent)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
 // TranslateBlocks indicates an expected call of TranslateBlocks.

@@ -43,7 +43,7 @@ const docTemplate = `{
         },
         "/ai/summarize": {
             "post": {
-                "description": "Generate an AI summary of the article content. Returns cached result if available, otherwise streams the response.",
+                "description": "Generate an AI summary of the article content. Returns cached result if available, otherwise streams summary events via SSE.",
                 "consumes": [
                     "application/json"
                 ],
@@ -177,116 +177,6 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/internal_handler.errorResponse"
                         }
-                    }
-                }
-            }
-        },
-        "/api/domain-rate-limits": {
-            "get": {
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "domain-rate-limits"
-                ],
-                "summary": "List all domain rate limits",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/internal_handler.domainRateLimitListResponse"
-                        }
-                    }
-                }
-            },
-            "post": {
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "domain-rate-limits"
-                ],
-                "summary": "Create a domain rate limit",
-                "parameters": [
-                    {
-                        "description": "Domain rate limit",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/internal_handler.domainRateLimitRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "description": "Created",
-                        "schema": {
-                            "$ref": "#/definitions/internal_handler.domainRateLimitResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/domain-rate-limits/{host}": {
-            "put": {
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "domain-rate-limits"
-                ],
-                "summary": "Update a domain rate limit",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Host",
-                        "name": "host",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Domain rate limit",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/internal_handler.domainRateLimitRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/internal_handler.domainRateLimitResponse"
-                        }
-                    }
-                }
-            },
-            "delete": {
-                "tags": [
-                    "domain-rate-limits"
-                ],
-                "summary": "Delete a domain rate limit",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Host",
-                        "name": "host",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "204": {
-                        "description": "No Content"
                     }
                 }
             }
@@ -593,6 +483,116 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/internal_handler.errorResponse"
                         }
+                    }
+                }
+            }
+        },
+        "/domain-rate-limits": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "domain-rate-limits"
+                ],
+                "summary": "List all domain rate limits",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.domainRateLimitListResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "domain-rate-limits"
+                ],
+                "summary": "Create a domain rate limit",
+                "parameters": [
+                    {
+                        "description": "Domain rate limit",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.domainRateLimitRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.domainRateLimitResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/domain-rate-limits/{host}": {
+            "put": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "domain-rate-limits"
+                ],
+                "summary": "Update a domain rate limit",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Host",
+                        "name": "host",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Domain rate limit",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.domainRateLimitRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.domainRateLimitResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "tags": [
+                    "domain-rate-limits"
+                ],
+                "summary": "Delete a domain rate limit",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Host",
+                        "name": "host",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
                     }
                 }
             }
@@ -1594,12 +1594,6 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/internal_handler.errorResponse"
                         }
-                    },
-                    "413": {
-                        "description": "Request Entity Too Large",
-                        "schema": {
-                            "$ref": "#/definitions/internal_handler.errorResponse"
-                        }
                     }
                 }
             },
@@ -1656,7 +1650,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_handler.aiSettingsResponse"
+                            "$ref": "#/definitions/gist_backend_internal_service.AISettings"
                         }
                     },
                     "500": {
@@ -1668,7 +1662,7 @@ const docTemplate = `{
                 }
             },
             "put": {
-                "description": "Update the AI provider configuration. Empty apiKey keeps existing key.",
+                "description": "Update the AI provider configuration.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1686,7 +1680,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/internal_handler.aiSettingsRequest"
+                            "$ref": "#/definitions/gist_backend_internal_service.AISettings"
                         }
                     }
                 ],
@@ -1694,7 +1688,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_handler.aiSettingsResponse"
+                            "$ref": "#/definitions/gist_backend_internal_service.AISettings"
                         }
                     },
                     "400": {
@@ -1792,7 +1786,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_handler.appearanceSettingsResponse"
+                            "$ref": "#/definitions/gist_backend_internal_service.AppearanceSettings"
                         }
                     },
                     "500": {
@@ -1822,7 +1816,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/internal_handler.appearanceSettingsRequest"
+                            "$ref": "#/definitions/gist_backend_internal_service.AppearanceSettings"
                         }
                     }
                 ],
@@ -1830,7 +1824,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_handler.appearanceSettingsResponse"
+                            "$ref": "#/definitions/gist_backend_internal_service.AppearanceSettings"
                         }
                     },
                     "400": {
@@ -1862,7 +1856,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_handler.generalSettingsResponse"
+                            "$ref": "#/definitions/gist_backend_internal_service.GeneralSettings"
                         }
                     },
                     "500": {
@@ -1892,7 +1886,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/internal_handler.generalSettingsRequest"
+                            "$ref": "#/definitions/gist_backend_internal_service.GeneralSettings"
                         }
                     }
                 ],
@@ -1900,7 +1894,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_handler.generalSettingsResponse"
+                            "$ref": "#/definitions/gist_backend_internal_service.GeneralSettings"
                         }
                     },
                     "400": {
@@ -1932,7 +1926,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_handler.networkSettingsResponse"
+                            "$ref": "#/definitions/gist_backend_internal_service.NetworkSettings"
                         }
                     },
                     "500": {
@@ -1944,7 +1938,7 @@ const docTemplate = `{
                 }
             },
             "put": {
-                "description": "Update the network proxy configuration. Empty password keeps existing password.",
+                "description": "Update the network proxy configuration.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1962,7 +1956,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/internal_handler.networkSettingsRequest"
+                            "$ref": "#/definitions/gist_backend_internal_service.NetworkSettings"
                         }
                     }
                 ],
@@ -1970,7 +1964,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_handler.networkSettingsResponse"
+                            "$ref": "#/definitions/gist_backend_internal_service.NetworkSettings"
                         }
                     },
                     "400": {
@@ -2070,6 +2064,50 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "gist_backend_internal_service.AISettings": {
+            "type": "object",
+            "properties": {
+                "apiKey": {
+                    "type": "string"
+                },
+                "autoSummary": {
+                    "type": "boolean"
+                },
+                "autoTranslate": {
+                    "type": "boolean"
+                },
+                "baseUrl": {
+                    "type": "string"
+                },
+                "model": {
+                    "type": "string"
+                },
+                "provider": {
+                    "type": "string"
+                },
+                "rateLimit": {
+                    "type": "integer"
+                },
+                "requestOptions": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "summaryLanguage": {
+                    "type": "string"
+                }
+            }
+        },
+        "gist_backend_internal_service.AppearanceSettings": {
+            "type": "object",
+            "properties": {
+                "contentTypes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
         "gist_backend_internal_service.BatchTranslateResult": {
             "type": "object",
             "properties": {
@@ -2084,6 +2122,20 @@ const docTemplate = `{
                 },
                 "title": {
                     "type": "string"
+                }
+            }
+        },
+        "gist_backend_internal_service.GeneralSettings": {
+            "type": "object",
+            "properties": {
+                "autoReadability": {
+                    "type": "boolean"
+                },
+                "fallbackUserAgent": {
+                    "type": "string"
+                },
+                "markReadOnScroll": {
+                    "type": "boolean"
                 }
             }
         },
@@ -2134,68 +2186,30 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_handler.aiSettingsRequest": {
+        "gist_backend_internal_service.NetworkSettings": {
             "type": "object",
             "properties": {
-                "apiKey": {
-                    "type": "string"
-                },
-                "autoSummary": {
+                "enabled": {
                     "type": "boolean"
                 },
-                "autoTranslate": {
-                    "type": "boolean"
-                },
-                "baseUrl": {
+                "host": {
                     "type": "string"
                 },
-                "model": {
+                "ipStack": {
+                    "description": "default, ipv4, ipv6",
                     "type": "string"
                 },
-                "provider": {
+                "password": {
                     "type": "string"
                 },
-                "rateLimit": {
+                "port": {
                     "type": "integer"
                 },
-                "requestOptions": {
-                    "type": "object",
-                    "additionalProperties": {}
-                },
-                "summaryLanguage": {
-                    "type": "string"
-                }
-            }
-        },
-        "internal_handler.aiSettingsResponse": {
-            "type": "object",
-            "properties": {
-                "apiKey": {
+                "type": {
+                    "description": "http, https, socks5, socks5h",
                     "type": "string"
                 },
-                "autoSummary": {
-                    "type": "boolean"
-                },
-                "autoTranslate": {
-                    "type": "boolean"
-                },
-                "baseUrl": {
-                    "type": "string"
-                },
-                "model": {
-                    "type": "string"
-                },
-                "provider": {
-                    "type": "string"
-                },
-                "rateLimit": {
-                    "type": "integer"
-                },
-                "requestOptions": {
-                    "type": "object",
-                    "additionalProperties": {}
-                },
-                "summaryLanguage": {
+                "username": {
                     "type": "string"
                 }
             }
@@ -2232,28 +2246,6 @@ const docTemplate = `{
                 },
                 "success": {
                     "type": "boolean"
-                }
-            }
-        },
-        "internal_handler.appearanceSettingsRequest": {
-            "type": "object",
-            "properties": {
-                "contentTypes": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                }
-            }
-        },
-        "internal_handler.appearanceSettingsResponse": {
-            "type": "object",
-            "properties": {
-                "contentTypes": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
                 }
             }
         },
@@ -2591,34 +2583,6 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_handler.generalSettingsRequest": {
-            "type": "object",
-            "properties": {
-                "autoReadability": {
-                    "type": "boolean"
-                },
-                "fallbackUserAgent": {
-                    "type": "string"
-                },
-                "markReadOnScroll": {
-                    "type": "boolean"
-                }
-            }
-        },
-        "internal_handler.generalSettingsResponse": {
-            "type": "object",
-            "properties": {
-                "autoReadability": {
-                    "type": "boolean"
-                },
-                "fallbackUserAgent": {
-                    "type": "string"
-                },
-                "markReadOnScroll": {
-                    "type": "boolean"
-                }
-            }
-        },
         "internal_handler.iconClearResponse": {
             "type": "object",
             "properties": {
@@ -2664,58 +2628,6 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "folderId": {
-                    "type": "string"
-                }
-            }
-        },
-        "internal_handler.networkSettingsRequest": {
-            "type": "object",
-            "properties": {
-                "enabled": {
-                    "type": "boolean"
-                },
-                "host": {
-                    "type": "string"
-                },
-                "ipStack": {
-                    "type": "string"
-                },
-                "password": {
-                    "type": "string"
-                },
-                "port": {
-                    "type": "integer"
-                },
-                "type": {
-                    "type": "string"
-                },
-                "username": {
-                    "type": "string"
-                }
-            }
-        },
-        "internal_handler.networkSettingsResponse": {
-            "type": "object",
-            "properties": {
-                "enabled": {
-                    "type": "boolean"
-                },
-                "host": {
-                    "type": "string"
-                },
-                "ipStack": {
-                    "type": "string"
-                },
-                "password": {
-                    "type": "string"
-                },
-                "port": {
-                    "type": "integer"
-                },
-                "type": {
-                    "type": "string"
-                },
-                "username": {
                     "type": "string"
                 }
             }
@@ -2870,9 +2782,6 @@ const docTemplate = `{
         },
         "internal_handler.updateFeedRequest": {
             "type": "object",
-            "required": [
-                "title"
-            ],
             "properties": {
                 "folderId": {
                     "type": "string"

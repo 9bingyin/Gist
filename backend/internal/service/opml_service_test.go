@@ -122,7 +122,7 @@ func TestOPMLService_Export_SortsAndBuildsOutlines(t *testing.T) {
 	feeds := []model.Feed{
 		{ID: 10, Title: "Z Feed", URL: "https://z.com/rss"},
 		{ID: 11, Title: "A Feed", URL: "https://a.com/rss"},
-		{ID: 12, Title: "Child", URL: "https://c.com/rss", FolderID: int64Ptr(1), SiteURL: strPtr("https://c.com")},
+		{ID: 12, Title: "Child", URL: "https://c.com/rss", FolderID: new(int64(1)), SiteURL: new("https://c.com")},
 	}
 
 	folderRepo.EXPECT().List(gomock.Any()).Return(folders, nil)
@@ -172,6 +172,10 @@ func (s *folderServiceStub) UpdateType(ctx context.Context, id int64, folderType
 }
 
 func (s *folderServiceStub) Delete(ctx context.Context, id int64) error {
+	return nil
+}
+
+func (s *folderServiceStub) DeleteBatch(ctx context.Context, ids []int64) error {
 	return nil
 }
 
@@ -228,6 +232,12 @@ func (s *refreshServiceStub) RefreshAll(ctx context.Context) error {
 	return nil
 }
 
+func (s *refreshServiceStub) StartRefreshAll() error {
+	return nil
+}
+
+func (s *refreshServiceStub) Shutdown() {}
+
 func (s *refreshServiceStub) RefreshFeed(ctx context.Context, feedID int64) error {
 	return nil
 }
@@ -260,10 +270,6 @@ func (s *iconServiceStub) EnsureIcon(ctx context.Context, iconPath, siteURL stri
 	return nil
 }
 
-func (s *iconServiceStub) EnsureIconByFeedID(ctx context.Context, feedID int64, iconPath string) error {
-	return nil
-}
-
 func (s *iconServiceStub) BackfillIcons(ctx context.Context) error {
 	select {
 	case s.done <- struct{}{}:
@@ -279,13 +285,3 @@ func (s *iconServiceStub) GetIconPath(filename string) string {
 func (s *iconServiceStub) ClearAllIcons(ctx context.Context) (int64, error) {
 	return 0, nil
 }
-
-func int64Ptr(value int64) *int64 {
-	return &value
-}
-
-func strPtr(value string) *string {
-	return &value
-}
-
-// Ensure we satisfy the io.Reader interface import when not used in build tags.

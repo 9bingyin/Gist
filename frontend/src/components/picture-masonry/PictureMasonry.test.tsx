@@ -591,8 +591,7 @@ describe("PictureMasonry scroll mark read", () => {
 
     await flushMarkReadBatch();
     const firstCallOptions = mockMarkManyAsRead.mock.calls[0]?.[1] as
-      | { onSuccess?: () => void }
-      | undefined;
+      { onSuccess?: () => void } | undefined;
     firstCallOptions?.onSuccess?.();
 
     expect(mockRemoveFromUnreadList).toHaveBeenCalledWith(
@@ -685,8 +684,7 @@ describe("PictureMasonry scroll mark read", () => {
 
     await flushMarkReadBatch();
     const firstCallOptions = mockMarkManyAsRead.mock.calls[0]?.[1] as
-      | { onSuccess?: () => void }
-      | undefined;
+      { onSuccess?: () => void } | undefined;
     secondTop = 50;
     firstCallOptions?.onSuccess?.();
 

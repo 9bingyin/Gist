@@ -1,13 +1,54 @@
 import { describe, it, expect } from "vitest";
-import { parseHtml } from "./parse-html";
-import rehypeStringify from "rehype-stringify";
-import { unified } from "unified";
-import type { Root } from "hast";
+import { extractImagesFromHast, parseHtml } from "./parse-html";
+import type { Element, Root, RootContent } from "hast";
 
-// Helper to convert hastTree back to HTML string for easier assertion
+const VOID_TAGS = new Set([
+  "area",
+  "base",
+  "br",
+  "col",
+  "embed",
+  "hr",
+  "img",
+  "input",
+  "link",
+  "meta",
+  "param",
+  "source",
+  "track",
+  "wbr",
+]);
+
+function serializeNode(node: RootContent): string {
+  if (node.type === "text") return node.value;
+  if (node.type !== "element") return "";
+  return serializeElement(node);
+}
+
+function serializeElement(el: Element): string {
+  const attrs: string[] = [];
+  for (const [key, val] of Object.entries(el.properties ?? {})) {
+    if (val === undefined || val === null || val === false) continue;
+    const attrName =
+      key === "className" ? "class" : key === "srcSet" ? "srcset" : key;
+    if (val === true) {
+      attrs.push(attrName);
+    } else if (Array.isArray(val)) {
+      attrs.push(`${attrName}="${val.join(" ")}"`);
+    } else {
+      attrs.push(`${attrName}="${String(val)}"`);
+    }
+  }
+  const attrStr = attrs.length > 0 ? ` ${attrs.join(" ")}` : "";
+  if (VOID_TAGS.has(el.tagName)) {
+    return `<${el.tagName}${attrStr}>`;
+  }
+  const children = el.children.map(serializeNode).join("");
+  return `<${el.tagName}${attrStr}>${children}</${el.tagName}>`;
+}
+
 function hastToHtml(tree: Root): string {
-  const processor = unified().use(rehypeStringify);
-  return processor.stringify(tree);
+  return tree.children.map(serializeNode).join("");
 }
 
 describe("parse-html", () => {
@@ -26,6 +67,34 @@ describe("parse-html", () => {
       const result = parseHtml('<video src="test.mp4" controls></video>');
       expect(hastToHtml(result.hastTree)).toContain("<video");
       expect(hastToHtml(result.hastTree)).toContain("controls");
+    });
+
+    it("should preserve img srcset attribute", () => {
+      const result = parseHtml(
+        '<img src="https://example.com/a.jpg" srcset="https://example.com/a-2x.jpg 2x" sizes="100vw">',
+      );
+      const output = hastToHtml(result.hastTree);
+      expect(output).toContain('srcset="https://example.com/a-2x.jpg 2x"');
+      expect(output).toContain('sizes="100vw"');
+    });
+
+    it("should strip arbitrary inline style and className on generic elements", () => {
+      const result = parseHtml(
+        '<div style="position:fixed;inset:0" class="evil-class"><p>Safe</p></div>',
+      );
+      const output = hastToHtml(result.hastTree);
+      expect(output).not.toContain("style=");
+      expect(output).not.toContain("evil-class");
+      expect(output).toContain("<p>Safe</p>");
+    });
+
+    it("should decode HTML entities when extracting images from HAST", () => {
+      const result = parseHtml(
+        '<p><img src="https://example.com/img.jpg?w=800&amp;q=80"></p>',
+      );
+      expect(extractImagesFromHast(result.hastTree)).toEqual([
+        "https://example.com/img.jpg?w=800&q=80",
+      ]);
     });
 
     it("should remove style elements together with their CSS text", () => {
@@ -165,10 +234,8 @@ describe("parse-html", () => {
       const result = parseHtml(html);
       const output = hastToHtml(result.hastTree);
 
-      // Emoji images should be converted
       expect(output).toContain("\u2705");
       expect(output).toContain("\u2b50");
-      // Regular image should be preserved
       expect(output).toContain("<img");
       expect(output).toContain("photo.jpg");
     });

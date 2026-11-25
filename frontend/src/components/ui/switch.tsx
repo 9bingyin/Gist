@@ -8,64 +8,68 @@ const MotionThumb = motion.create(SwitchPrimitives.Thumb);
 const Switch = React.forwardRef<
   React.ComponentRef<typeof SwitchPrimitives.Root>,
   React.ComponentPropsWithoutRef<typeof SwitchPrimitives.Root>
->(({ className, checked, onCheckedChange, ...props }, ref) => {
-  const [isChecked, setIsChecked] = React.useState(checked ?? false);
-  const [isTapped, setIsTapped] = React.useState(false);
+>(
+  (
+    { className, checked, defaultChecked, onCheckedChange, disabled, ...props },
+    ref,
+  ) => {
+    const [uncontrolledChecked, setUncontrolledChecked] = React.useState(
+      defaultChecked ?? false,
+    );
+    const [isTapped, setIsTapped] = React.useState(false);
 
-  React.useEffect(() => {
-    setIsChecked(checked ?? false);
-  }, [checked]);
+    const isControlled = checked !== undefined;
+    const currentChecked = isControlled ? checked : uncontrolledChecked;
 
-  const handleChange = React.useCallback(
-    (value: boolean) => {
-      setIsChecked(value);
-      onCheckedChange?.(value);
-    },
-    [onCheckedChange],
-  );
+    const handleChange = React.useCallback(
+      (value: boolean) => {
+        if (!isControlled) {
+          setUncontrolledChecked(value);
+        }
+        onCheckedChange?.(value);
+      },
+      [isControlled, onCheckedChange],
+    );
 
-  const thumbVariants = {
-    checked: {
-      translateX: 16,
-      width: isTapped ? 20 : 16,
-    },
-    unchecked: {
-      translateX: 0,
-      width: isTapped ? 20 : 16,
-    },
-  };
+    const thumbWidth = !disabled && isTapped ? 20 : 16;
 
-  return (
-    <SwitchPrimitives.Root
-      className={cn(
-        "peer inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent shadow-sm transition-colors",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-        "disabled:cursor-not-allowed disabled:opacity-50",
-        "data-[state=checked]:bg-primary data-[state=unchecked]:bg-input",
-        className,
-      )}
-      checked={isChecked}
-      onCheckedChange={handleChange}
-      onMouseDown={() => setIsTapped(true)}
-      onMouseUp={() => setIsTapped(false)}
-      onMouseLeave={() => setIsTapped(false)}
-      {...props}
-      ref={ref}
-    >
-      <MotionThumb
-        className="pointer-events-none block size-4 rounded-full bg-background shadow-lg ring-0"
-        initial={false}
-        animate={isChecked ? "checked" : "unchecked"}
-        variants={thumbVariants}
-        transition={{
-          type: "spring",
-          stiffness: 500,
-          damping: 30,
+    return (
+      <SwitchPrimitives.Root
+        className={cn(
+          "peer inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent shadow-sm transition-colors",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+          "disabled:cursor-not-allowed disabled:opacity-50",
+          "data-[state=checked]:bg-primary data-[state=unchecked]:bg-input",
+          className,
+        )}
+        checked={currentChecked}
+        disabled={disabled}
+        onCheckedChange={handleChange}
+        onMouseDown={() => {
+          if (!disabled) setIsTapped(true);
         }}
-      />
-    </SwitchPrimitives.Root>
-  );
-});
+        onMouseUp={() => setIsTapped(false)}
+        onMouseLeave={() => setIsTapped(false)}
+        {...props}
+        ref={ref}
+      >
+        <MotionThumb
+          className="pointer-events-none block size-4 rounded-full bg-background shadow-lg ring-0"
+          initial={false}
+          animate={{
+            translateX: currentChecked ? 16 : 0,
+            width: thumbWidth,
+          }}
+          transition={{
+            type: "spring",
+            stiffness: 500,
+            damping: 30,
+          }}
+        />
+      </SwitchPrimitives.Root>
+    );
+  },
+);
 Switch.displayName = SwitchPrimitives.Root.displayName;
 
 export { Switch };

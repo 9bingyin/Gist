@@ -15,7 +15,7 @@ var BuildReferer = buildReferer
 var IsValidHost = isValidHost
 var DefaultAppearanceContentTypes = defaultAppearanceContentTypes
 var MaskAPIKey = maskAPIKey
-var IsMaskedKey = isMaskedKey
+var ResolveSecretUpdate = resolveSecretUpdate
 
 const (
 	KeyAISummaryLanguage = keyAISummaryLanguage

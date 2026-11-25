@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	anubischallenge "gist/backend/internal/service/anubis"
+	"gist/backend/pkg/network"
+
 	"github.com/Noooste/azuretls-client"
 )
 
@@ -23,6 +25,7 @@ var (
 type AnubisSolver interface {
 	GetCachedCookieWithHeaders(ctx context.Context, host string, requestHeaders http.Header) string
 	SolveFromBodyWithHeaders(ctx context.Context, body []byte, originalURL string, initialCookies []*http.Cookie, requestHeaders http.Header) (string, error)
+	InvalidateCookie(ctx context.Context, host string, requestHeaders http.Header)
 }
 
 func getCachedAnubisCookie(ctx context.Context, solver AnubisSolver, host string, headers http.Header) string {
@@ -32,7 +35,7 @@ func getCachedAnubisCookie(ctx context.Context, solver AnubisSolver, host string
 	return solver.GetCachedCookieWithHeaders(ctx, host, headers)
 }
 
-// trySolveAnubisChallenge centralizes challenge detection and retry guards.
+// trySolveAnubisChallenge centralizes challenge detection, stale-cookie invalidation, and retry guards.
 //
 // Return contract:
 //   - errAnubisNotPage: body is not an Anubis page, caller should continue normal parsing.
@@ -52,6 +55,9 @@ func trySolveAnubisChallenge(
 	if solver == nil || !anubischallenge.IsAnubisPage(body) {
 		return "", errAnubisNotPage
 	}
+	// Invalidate stale cached cookie before rejecting or re-solving.
+	solver.InvalidateCookie(ctx, network.ExtractHost(originalURL), requestHeaders)
+
 	if !anubischallenge.IsAnubisChallenge(body) {
 		return "", errAnubisRejected
 	}

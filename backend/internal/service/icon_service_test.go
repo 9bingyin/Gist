@@ -18,7 +18,6 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/mmcdole/gofeed"
 	"github.com/stretchr/testify/require"
 
 	"gist/backend/internal/model"
@@ -115,6 +114,10 @@ func (f *feedRepoStub) ClearAllConditionalGet(ctx context.Context) (int64, error
 }
 
 func (f *feedRepoStub) UpdateSiteURL(context.Context, int64, string) error {
+	panic("not implemented")
+}
+
+func (f *feedRepoStub) UpdateConditionalGet(context.Context, int64, *string, *string) error {
 	panic("not implemented")
 }
 
@@ -238,40 +241,6 @@ func TestIconService_EnsureIcon_InvalidPathAndHash(t *testing.T) {
 	require.NoError(t, svc.EnsureIcon(context.Background(), "0123456789abcdef.png", "https://example.com"))
 }
 
-func TestIconService_EnsureIconByFeedID(t *testing.T) {
-	iconData := pngBytes(t, 2, 2)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/favicon.ico" {
-			_, _ = w.Write(iconData)
-			return
-		}
-		http.NotFound(w, r)
-	}))
-	defer server.Close()
-
-	dataDir := t.TempDir()
-	parsed, err := url.Parse(server.URL)
-	require.NoError(t, err)
-	iconPath := parsed.Hostname() + ".png"
-
-	repo := &feedRepoStub{
-		getByIDFn: func(ctx context.Context, id int64) (model.Feed, error) {
-			site := server.URL
-			return model.Feed{ID: id, URL: server.URL, SiteURL: &site}, nil
-		},
-	}
-
-	svc := service.NewIconService(dataDir, repo, network.NewClientFactoryForTest(&http.Client{}), nil)
-
-	err = svc.EnsureIconByFeedID(context.Background(), 1, iconPath)
-	require.NoError(t, err)
-	_, err = os.Stat(filepath.Join(dataDir, "icons", iconPath))
-	require.NoError(t, err)
-
-	err = svc.EnsureIconByFeedID(context.Background(), 1, "")
-	require.Error(t, err)
-}
-
 func TestIconService_GetIconPath(t *testing.T) {
 	dataDir := t.TempDir()
 	svc := service.NewIconService(dataDir, &feedRepoStub{}, network.NewClientFactoryForTest(&http.Client{}), nil)
@@ -374,7 +343,7 @@ func TestIconService_FetchIconsForFeeds(t *testing.T) {
 	svc := service.NewIconService(dataDir, repo, network.NewClientFactoryForTest(&http.Client{}), nil)
 	feeds := []model.Feed{{ID: 10, URL: server.URL + "/rss", Title: "Test"}}
 
-	err := service.FetchIconsForFeedsForTest(svc, context.Background(), gofeed.NewParser(), feeds)
+	err := service.FetchIconsForFeedsForTest(svc, context.Background(), feeds)
 	require.NoError(t, err)
 
 	repo.mu.Lock()
@@ -385,18 +354,11 @@ func TestIconService_FetchIconsForFeeds(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestIconService_DownloadIconWithFreshClient(t *testing.T) {
-	iconData := pngBytes(t, 2, 2)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write(iconData)
-	}))
-	defer server.Close()
-
-	dataDir := t.TempDir()
-	svc := service.NewIconService(dataDir, &feedRepoStub{}, network.NewClientFactoryForTest(&http.Client{}), nil)
-
-	err := service.DownloadIconWithFreshClientForTest(svc, context.Background(), server.URL, "", 0)
+func TestIconService_DetectImageFormat_SVGWithLongHeader(t *testing.T) {
+	svgData := []byte(`<?xml version="1.0" encoding="UTF-8"?><!-- ` + strings.Repeat("x", 512) + ` --><svg xmlns="http://www.w3.org/2000/svg"></svg>`)
+	ext, err := service.DetectImageFormatExtForTest(svgData)
 	require.NoError(t, err)
+	require.Equal(t, "svg", ext)
 }
 
 // TestIconService_BuildDDGFaviconURL tests the DuckDuckGo favicon URL builder.

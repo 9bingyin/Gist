@@ -71,3 +71,15 @@ func (mr *MockOPMLServiceMockRecorder) Import(ctx, reader, onProgress any) *gomo
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Import", reflect.TypeOf((*MockOPMLService)(nil).Import), ctx, reader, onProgress)
 }
+
+// Shutdown mocks base method.
+func (m *MockOPMLService) Shutdown() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Shutdown")
+}
+
+// Shutdown indicates an expected call of Shutdown.
+func (mr *MockOPMLServiceMockRecorder) Shutdown() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Shutdown", reflect.TypeOf((*MockOPMLService)(nil).Shutdown))
+}

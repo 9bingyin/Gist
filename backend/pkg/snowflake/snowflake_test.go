@@ -36,7 +36,7 @@ func TestNextID_Uniqueness(t *testing.T) {
 	const count = 10000
 	ids := make(map[int64]bool, count)
 
-	for i := 0; i < count; i++ {
+	for range count {
 		id := NextID()
 		require.False(t, ids[id], "duplicate ID generated: %d", id)
 		ids[id] = true
@@ -52,7 +52,7 @@ func TestNextID_Monotonic(t *testing.T) {
 	const count = 1000
 	prevID := NextID()
 
-	for i := 0; i < count; i++ {
+	for range count {
 		currentID := NextID()
 		require.Greater(t, currentID, prevID, "ID not monotonically increasing")
 		prevID = currentID
@@ -71,13 +71,11 @@ func TestNextID_Concurrent(t *testing.T) {
 	var mu sync.Mutex
 	ids := make(map[int64]bool, totalIDs)
 
-	for g := 0; g < goroutines; g++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range goroutines {
+		wg.Go(func() {
 
 			localIDs := make([]int64, idsPerGoroutine)
-			for i := 0; i < idsPerGoroutine; i++ {
+			for i := range idsPerGoroutine {
 				localIDs[i] = NextID()
 			}
 
@@ -87,7 +85,7 @@ func TestNextID_Concurrent(t *testing.T) {
 				ids[id] = true
 			}
 			mu.Unlock()
-		}()
+		})
 	}
 
 	wg.Wait()
@@ -98,7 +96,7 @@ func TestNextID_NonZero(t *testing.T) {
 	err := Init(0)
 	require.NoError(t, err)
 
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		id := NextID()
 		require.NotZero(t, id)
 		require.Positive(t, id)

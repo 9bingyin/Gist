@@ -11,7 +11,7 @@ package mock
 
 import (
 	context "context"
-	service "gist/backend/internal/service"
+	model "gist/backend/internal/model"
 	reflect "reflect"
 	time "time"
 
@@ -85,10 +85,10 @@ func (mr *MockDomainRateLimitServiceMockRecorder) GetIntervalDuration(ctx, host 
 }
 
 // List mocks base method.
-func (m *MockDomainRateLimitService) List(ctx context.Context) ([]service.DomainRateLimitDTO, error) {
+func (m *MockDomainRateLimitService) List(ctx context.Context) ([]model.DomainRateLimit, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "List", ctx)
-	ret0, _ := ret[0].([]service.DomainRateLimitDTO)
+	ret0, _ := ret[0].([]model.DomainRateLimit)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -100,11 +100,12 @@ func (mr *MockDomainRateLimitServiceMockRecorder) List(ctx any) *gomock.Call {
 }
 
 // SetInterval mocks base method.
-func (m *MockDomainRateLimitService) SetInterval(ctx context.Context, host string, seconds int) error {
+func (m *MockDomainRateLimitService) SetInterval(ctx context.Context, host string, seconds int) (model.DomainRateLimit, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SetInterval", ctx, host, seconds)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(model.DomainRateLimit)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // SetInterval indicates an expected call of SetInterval.

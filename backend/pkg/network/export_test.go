@@ -20,7 +20,7 @@ func DialWithIPStackForTest(ctx context.Context, network, addr, ipStack string) 
 	return dialWithIPStack(ctx, network, addr, ipStack)
 }
 
-// DialWithIPStackDialerForTest exposes ipStackDialer.Dial for tests.
-func DialWithIPStackDialerForTest(network, addr, ipStack string) (net.Conn, error) {
-	return (&ipStackDialer{ipStack: ipStack}).Dial(network, addr)
+// DialWithIPStackDialerForTest exposes ipStackDialer.DialContext for tests.
+func DialWithIPStackDialerForTest(ctx context.Context, network, addr, ipStack string) (net.Conn, error) {
+	return (&ipStackDialer{ipStack: ipStack}).DialContext(ctx, network, addr)
 }

@@ -1,4 +1,4 @@
-import { useCallback, useRef, type ReactNode } from "react";
+import { useCallback, type ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
@@ -12,7 +12,7 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { ChevronIcon } from "@/components/ui/icons";
-import { useContextMenu } from "@/hooks/useContextMenu";
+import { useContextMenuTrigger } from "@/hooks/useContextMenu";
 import { useCategoryState } from "@/hooks/useCategoryState";
 import { feedItemStyles, sidebarItemIconStyles } from "./styles";
 import type { ContentType } from "@/types/api";
@@ -41,45 +41,42 @@ export function FeedCategory({
   onChangeType,
 }: FeedCategoryProps) {
   const { t } = useTranslation();
-  const [open, , toggle] = useCategoryState(name, defaultOpen);
-  const triggerRef = useRef<HTMLDivElement>(null);
+  const [open, , toggle] = useCategoryState(folderId, defaultOpen);
+  const { triggerRef, contextMenuProps } =
+    useContextMenuTrigger<HTMLDivElement>();
 
-  const handleContextMenu = useCallback(
-    (e: React.MouseEvent | { pageX: number; pageY: number }) => {
-      // Programmatically trigger the context menu for long press
-      if (!("button" in e) && triggerRef.current) {
-        triggerRef.current.dispatchEvent(
-          new MouseEvent("contextmenu", {
-            bubbles: true,
-            clientX: e.pageX,
-            clientY: e.pageY,
-          }),
-        );
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
+      if (e.target !== e.currentTarget) return;
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        onSelect?.();
       }
     },
-    [],
+    [onSelect],
   );
-
-  const contextMenuProps = useContextMenu({
-    onContextMenu: handleContextMenu,
-  });
 
   return (
     <div>
-      {/* Category header */}
       <ContextMenu>
         <ContextMenuTrigger asChild ref={triggerRef}>
           <div
+            role="button"
+            tabIndex={0}
             data-active={isSelected}
-            className={cn(feedItemStyles, "group relative py-0.5 pl-2.5 pr-2")}
+            className={cn(
+              feedItemStyles,
+              "group relative py-0.5 pl-2.5 pr-2 outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            )}
             onClick={onSelect}
+            onKeyDown={handleKeyDown}
             {...contextMenuProps}
           >
-            {/* Arrow button - only this toggles expand/collapse */}
             <button
               type="button"
+              aria-expanded={open}
+              aria-label={name}
               className="flex h-full items-center"
-              tabIndex={-1}
               onClick={(e) => {
                 e.stopPropagation();
                 toggle();
@@ -94,7 +91,6 @@ export function FeedCategory({
                 />
               </span>
             </button>
-            {/* Folder name - clicking selects the folder */}
             <span className="grow truncate font-semibold">{name}</span>
             {unreadCount !== undefined && unreadCount > 0 && (
               <span className="ml-2 shrink-0 text-[0.65rem] tabular-nums text-muted-foreground">
@@ -139,7 +135,6 @@ export function FeedCategory({
         </ContextMenuContent>
       </ContextMenu>
 
-      {/* Children list with animation */}
       <AnimatePresence initial={false}>
         {open && (
           <motion.div

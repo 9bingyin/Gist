@@ -1,12 +1,5 @@
-import {
-  Suspense,
-  lazy,
-  useCallback,
-  useState,
-  useMemo,
-  useEffect,
-} from "react";
-import { Router, useLocation, Redirect } from "wouter";
+import { Suspense, lazy, useCallback, useMemo, useEffect } from "react";
+import { Router, useLocation, useSearch, Redirect } from "wouter";
 import { useTranslation } from "react-i18next";
 import { ThreeColumnLayout } from "@/components/layout/three-column-layout";
 import { Sheet } from "@/components/ui/sheet";
@@ -19,6 +12,10 @@ import { ScrollToTopZone } from "@/components/layout/ScrollToTopZone";
 import { ImagePreview } from "@/components/ui/image-preview";
 import { LoginPage, RegisterPage, NetworkErrorPage } from "@/components/auth";
 import { UpdateNotice } from "@/components/update-notice";
+import {
+  EntryContentEmpty,
+  EntryContentSkeleton,
+} from "@/components/entry-content/EntryContentPlaceholders";
 import { useSelection, selectionToParams } from "@/hooks/useSelection";
 import { useMarkAllAsRead, useEntry } from "@/hooks/useEntries";
 import { useMobileLayout } from "@/hooks/useMobileLayout";
@@ -35,15 +32,25 @@ import {
   setUISetting,
 } from "@/hooks/useUISettings";
 import { useRefreshStatus } from "@/hooks/useRefreshStatus";
+import {
+  useAuthStore,
+  registerSessionResetListener,
+} from "@/stores/auth-store";
+import { entryListScrollPositions } from "@/components/entry-list/scroll-key";
 import { isAddFeedPath } from "@/lib/router";
+import {
+  createFeedsMap,
+  createFoldersMap,
+  getVisibleContentTypes,
+  isContentType,
+} from "@/lib/content-types";
 import { cn } from "@/lib/utils";
-import type { ContentType, Feed, Folder } from "@/types/api";
+import type { ContentType } from "@/types/api";
 
-const defaultContentTypes: ContentType[] = [
-  "article",
-  "picture",
-  "notification",
-];
+registerSessionResetListener(() => {
+  entryListScrollPositions.clear();
+});
+
 const LazyEntryContent = lazy(async () => {
   const module = await import("@/components/entry-content");
   return { default: module.EntryContent };
@@ -61,73 +68,9 @@ function LoadingScreen() {
   );
 }
 
-function EntryContentPlaceholder({ message }: { message: string }) {
-  return (
-    <div className="flex h-full flex-col">
-      <div className="flex h-12 items-center px-6" />
-      <div className="flex flex-1 items-center justify-center">
-        <div className="text-center text-muted-foreground">
-          <svg
-            className="mx-auto size-12 opacity-50"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={1.5}
-              d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-            />
-          </svg>
-          <p className="mt-2 text-sm">{message}</p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function EntryContentFallback() {
-  return (
-    <div className="relative flex h-full flex-col animate-pulse">
-      <div className="absolute inset-x-0 top-0 z-20">
-        <div className="h-12" />
-      </div>
-      <div className="flex-1 overflow-auto">
-        <div className="mx-auto w-full max-w-[720px] px-6 pb-20 pt-16">
-          <div className="mb-10 space-y-5">
-            <div className="h-10 w-3/4 rounded bg-muted" />
-            <div className="flex gap-6">
-              <div className="h-4 w-24 rounded bg-muted" />
-              <div className="h-4 w-32 rounded bg-muted" />
-            </div>
-            <hr className="border-border/60" />
-          </div>
-          <div className="space-y-4">
-            <div className="h-4 w-full rounded bg-muted" />
-            <div className="h-4 w-full rounded bg-muted" />
-            <div className="h-4 w-3/4 rounded bg-muted" />
-            <div className="h-4 w-full rounded bg-muted" />
-            <div className="h-4 w-5/6 rounded bg-muted" />
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function AuthenticatedApp() {
   const [location, navigate] = useLocation();
-  const {
-    isMobile,
-    isTablet,
-    mobileView,
-    sidebarOpen,
-    setSidebarOpen,
-    showList,
-    openSidebar,
-    closeSidebar,
-  } = useMobileLayout();
+  const search = useSearch();
 
   const {
     selection,
@@ -142,36 +85,50 @@ function AuthenticatedApp() {
     contentType,
   } = useSelection();
 
-  const { mutate: markAllAsRead } = useMarkAllAsRead();
-  const [addFeedContentType, setAddFeedContentType] =
-    useState<ContentType>("article");
+  const handleClearEntry = useCallback(() => {
+    selectEntry(null);
+  }, [selectEntry]);
 
-  // Poll refresh status and auto-invalidate entries when scheduled refresh completes
+  const {
+    isMobile,
+    isTablet,
+    mobileView,
+    sidebarOpen,
+    setSidebarOpen,
+    showList,
+    openSidebar,
+    closeSidebar,
+  } = useMobileLayout({
+    selectedEntryId,
+    onClearEntry: handleClearEntry,
+  });
+
+  const { mutate: markAllAsRead } = useMarkAllAsRead();
+
+  // Derive add-feed content type directly from URL query so refresh preserves it
+  const addFeedContentType = useMemo<ContentType>(() => {
+    const param = new URLSearchParams(search).get("type");
+    return isContentType(param) ? param : contentType;
+  }, [search, contentType]);
+
+  // Poll refresh status and auto-invalidate entries when refresh completes
   useRefreshStatus();
 
-  // Sidebar visibility for tablet/desktop
   const sidebarVisible = useUISettingKey("sidebarVisible");
   const { toggleSidebarVisible } = useUISettingActions();
 
-  // Initialize sidebar visibility for tablet on first visit
   useEffect(() => {
-    // Only run on tablet, and only if sidebarVisible has never been set
     if (isTablet && !hasSidebarVisibilitySetting()) {
       setUISetting("sidebarVisible", false);
     }
   }, [isTablet]);
 
-  // Calculate whether to show sidebar based on breakpoint
-  // Desktop (>= 1366): always show
-  // Tablet (768-1366): user preference (default false on first visit)
-  // Mobile (< 768): use Sheet overlay
   const showSidebar = useMemo(() => {
-    if (isMobile) return false; // Mobile uses Sheet
-    if (isTablet) return sidebarVisible; // Tablet respects user preference
-    return true; // Desktop always shows sidebar
+    if (isMobile) return false;
+    if (isTablet) return sidebarVisible;
+    return true;
   }, [isMobile, isTablet, sidebarVisible]);
 
-  // Dynamic title management
   const { t } = useTranslation();
   const { data: feeds = [] } = useFeeds();
   const { data: folders = [] } = useFolders();
@@ -179,21 +136,8 @@ function AuthenticatedApp() {
     useAppearanceSettings();
   const { data: entry } = useEntry(selectedEntryId);
 
-  const feedsMap = useMemo(() => {
-    const map = new Map<string, Feed>();
-    for (const feed of feeds) {
-      map.set(feed.id, feed);
-    }
-    return map;
-  }, [feeds]);
-
-  const foldersMap = useMemo(() => {
-    const map = new Map<string, Folder>();
-    for (const folder of folders) {
-      map.set(folder.id, folder);
-    }
-    return map;
-  }, [folders]);
+  const feedsMap = useMemo(() => createFeedsMap(feeds), [feeds]);
+  const foldersMap = useMemo(() => createFoldersMap(folders), [folders]);
 
   const title = buildTitle({
     selection,
@@ -206,8 +150,6 @@ function AuthenticatedApp() {
 
   useTitle(title);
 
-  // Mobile-aware selection handlers (all hooks must be before any conditional returns)
-  // Use replace to avoid creating history entries for sidebar navigation
   const handleSelectFeed = useCallback(
     (feedId: string) => {
       closeSidebar();
@@ -231,7 +173,6 @@ function AuthenticatedApp() {
 
   const handleAddClick = useCallback(
     (ct: ContentType) => {
-      setAddFeedContentType(ct);
       closeSidebar();
       navigate(`/add-feed?type=${ct}`, { replace: true });
     },
@@ -254,14 +195,10 @@ function AuthenticatedApp() {
     [selectAll, closeSidebar],
   );
 
-  const visibleContentTypes = useMemo(() => {
-    const current = appearanceSettings?.contentTypes;
-    if (!current || current.length === 0) return defaultContentTypes;
-    return current.filter(
-      (item) =>
-        item === "article" || item === "picture" || item === "notification",
-    );
-  }, [appearanceSettings]);
+  const visibleContentTypes = useMemo(
+    () => getVisibleContentTypes(appearanceSettings),
+    [appearanceSettings],
+  );
 
   useEffect(() => {
     if (!visibleContentTypes.includes(contentType)) {
@@ -273,21 +210,19 @@ function AuthenticatedApp() {
   const usesMobileDocumentScroll = isMobile && !isAddFeedPath(location);
   useMobileDocumentScrollMode({
     enabled: usesMobileDocumentScroll,
-    // Changing root overflow destabilizes viewport-pinned UI in iOS WebKit.
-    // Only the full-screen detail view needs a document lock.
     locked: usesMobileDocumentScroll && mobileView === "detail",
   });
 
   const entryContent = selectedEntryId ? (
-    <Suspense fallback={<EntryContentFallback />}>
+    <Suspense fallback={<EntryContentSkeleton />}>
       <LazyEntryContent key={selectedEntryId} entryId={selectedEntryId} />
     </Suspense>
   ) : (
-    <EntryContentPlaceholder message={t("entry.select_article")} />
+    <EntryContentEmpty message={t("entry.select_article")} />
   );
 
   const mobileEntryContent = selectedEntryId ? (
-    <Suspense fallback={<EntryContentFallback />}>
+    <Suspense fallback={<EntryContentSkeleton />}>
       <LazyEntryContent
         key={selectedEntryId}
         entryId={selectedEntryId}
@@ -296,12 +231,10 @@ function AuthenticatedApp() {
       />
     </Suspense>
   ) : (
-    <EntryContentPlaceholder message={t("entry.select_article")} />
+    <EntryContentEmpty message={t("entry.select_article")} />
   );
 
-  // Redirect root to /all with first visible type (must be after ALL hooks including useCallback)
   if (location === "/") {
-    // 等待 appearanceSettings 加载完成再跳转，避免先跳 article 再跳正确类型
     if (isAppearanceLoading) {
       return <div className="h-full bg-background" />;
     }
@@ -309,12 +242,10 @@ function AuthenticatedApp() {
     return <Redirect to={`/all?type=${defaultType}`} replace />;
   }
 
-  // 等待 appearanceSettings 加载完成，避免显示默认三视图的闪烁
   if (isAppearanceLoading) {
     return <div className="h-full bg-background" />;
   }
 
-  // Sidebar component (shared between mobile and desktop)
   const sidebarContent = (
     <Sidebar
       onAddClick={handleAddClick}
@@ -328,9 +259,7 @@ function AuthenticatedApp() {
     />
   );
 
-  // Mobile layout - Sheet is rendered once at the top level to prevent animation flickering
   if (isMobile) {
-    // Determine mobile content based on current route/mode
     let mobileContent: React.ReactNode;
 
     if (isAddFeedPath(location)) {
@@ -357,10 +286,8 @@ function AuthenticatedApp() {
         </div>
       );
     } else {
-      // List and detail views rendered together, controlled by CSS
       mobileContent = (
         <div className="mobile-reading-stack relative min-h-[var(--app-dvh)] w-screen max-w-full bg-background">
-          {/* The list stays mounted in normal document flow to preserve state. */}
           <section
             className={cn(
               "mobile-list-page min-h-[var(--app-dvh)] bg-background",
@@ -382,7 +309,6 @@ function AuthenticatedApp() {
               onMenuClick={openSidebar}
             />
           </section>
-          {/* Detail remains an internal scroller and slides over the document list. */}
           <section
             className={cn(
               "mobile-detail-page fixed inset-0 z-30 h-[var(--app-dvh)] overflow-hidden bg-background transition-transform duration-300 ease-out",
@@ -403,11 +329,8 @@ function AuthenticatedApp() {
       <>
         {mobileContent}
         <ScrollToTopZone />
-        {/* Lightbox for picture mode */}
         {contentType === "picture" && <Lightbox />}
-        {/* ImagePreview for article/notification mode */}
         {contentType !== "picture" && <ImagePreview />}
-        {/* Sheet rendered once to prevent animation flickering on route/mode changes */}
         <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
           {sidebarContent}
         </Sheet>
@@ -415,7 +338,6 @@ function AuthenticatedApp() {
     );
   }
 
-  // Desktop layout
   if (isAddFeedPath(location)) {
     return (
       <ThreeColumnLayout
@@ -433,7 +355,6 @@ function AuthenticatedApp() {
     );
   }
 
-  // Desktop picture mode - two column layout
   if (contentType === "picture") {
     return (
       <>
@@ -502,6 +423,11 @@ function AppContent() {
     clearError,
     consumeRootRedirect,
   } = useAuth();
+
+  // Trigger auth initialization once at the application root
+  useEffect(() => {
+    void useAuthStore.getState().initialize();
+  }, []);
 
   useEffect(() => {
     if (!shouldRedirectToRoot) {

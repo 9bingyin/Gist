@@ -6,12 +6,13 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"gist/backend/internal/model"
 	"gist/backend/pkg/snowflake"
 )
+
+const feedColumns = `id, folder_id, title, url, site_url, description, summary_prompt_reminder, icon_path, type, etag, last_modified, error_message, created_at, updated_at`
 
 type FeedRepository interface {
 	Create(ctx context.Context, feed model.Feed) (model.Feed, error)
@@ -21,6 +22,7 @@ type FeedRepository interface {
 	List(ctx context.Context, folderID *int64) ([]model.Feed, error)
 	ListWithoutIcon(ctx context.Context) ([]model.Feed, error)
 	Update(ctx context.Context, feed model.Feed) (model.Feed, error)
+	UpdateConditionalGet(ctx context.Context, id int64, etag, lastModified *string) error
 	UpdateIconPath(ctx context.Context, id int64, iconPath string) error
 	UpdateErrorMessage(ctx context.Context, id int64, errorMessage *string) error
 	UpdateType(ctx context.Context, id int64, feedType string) error
@@ -42,7 +44,7 @@ func NewFeedRepository(db dbtx) FeedRepository {
 
 func (r *feedRepository) Create(ctx context.Context, feed model.Feed) (model.Feed, error) {
 	feed.ID = snowflake.NextID()
-	now := time.Now().UTC()
+	now := time.Now().UTC().Truncate(time.Second)
 	if feed.Type == "" {
 		feed.Type = "article"
 	}
@@ -51,16 +53,16 @@ func (r *feedRepository) Create(ctx context.Context, feed model.Feed) (model.Fee
 		`INSERT INTO feeds (id, folder_id, title, url, site_url, description, summary_prompt_reminder, type, etag, last_modified, error_message, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		feed.ID,
-		nullableInt64(feed.FolderID),
+		feed.FolderID,
 		feed.Title,
 		feed.URL,
-		nullableString(feed.SiteURL),
-		nullableString(feed.Description),
-		nullableString(feed.SummaryPromptReminder),
+		feed.SiteURL,
+		feed.Description,
+		feed.SummaryPromptReminder,
 		feed.Type,
-		nullableString(feed.ETag),
-		nullableString(feed.LastModified),
-		nullableString(feed.ErrorMessage),
+		feed.ETag,
+		feed.LastModified,
+		feed.ErrorMessage,
 		formatTime(now),
 		formatTime(now),
 	)
@@ -73,7 +75,7 @@ func (r *feedRepository) Create(ctx context.Context, feed model.Feed) (model.Fee
 }
 
 func (r *feedRepository) GetByID(ctx context.Context, id int64) (model.Feed, error) {
-	row := r.db.QueryRowContext(ctx, `SELECT id, folder_id, title, url, site_url, description, summary_prompt_reminder, icon_path, type, etag, last_modified, error_message, created_at, updated_at FROM feeds WHERE id = ?`, id)
+	row := r.db.QueryRowContext(ctx, `SELECT `+feedColumns+` FROM feeds WHERE id = ?`, id)
 	return scanFeed(row)
 }
 
@@ -81,33 +83,39 @@ func (r *feedRepository) GetByIDs(ctx context.Context, ids []int64) ([]model.Fee
 	if len(ids) == 0 {
 		return nil, nil
 	}
-	placeholders := strings.Repeat("?,", len(ids)-1) + "?"
-	args := make([]interface{}, len(ids))
-	for i, id := range ids {
-		args[i] = id
-	}
-	rows, err := r.db.QueryContext(ctx, `SELECT id, folder_id, title, url, site_url, description, summary_prompt_reminder, icon_path, type, etag, last_modified, error_message, created_at, updated_at FROM feeds WHERE id IN (`+placeholders+`)`, args...)
-	if err != nil {
-		return nil, fmt.Errorf("get feeds by ids: %w", err)
-	}
-	defer rows.Close()
 
 	var feeds []model.Feed
-	for rows.Next() {
-		feed, err := scanFeed(rows)
-		if err != nil {
-			return nil, err
+	err := chunkSlice(ids, sqliteMaxBatchSize, func(chunk []int64) error {
+		args := make([]any, len(chunk))
+		for i, id := range chunk {
+			args[i] = id
 		}
-		feeds = append(feeds, feed)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate feeds: %w", err)
+		rows, err := r.db.QueryContext(ctx, `SELECT `+feedColumns+` FROM feeds WHERE id IN (`+placeholders(len(chunk))+`)`, args...)
+		if err != nil {
+			return fmt.Errorf("get feeds by ids: %w", err)
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			feed, err := scanFeed(rows)
+			if err != nil {
+				return err
+			}
+			feeds = append(feeds, feed)
+		}
+		if err := rows.Err(); err != nil {
+			return fmt.Errorf("iterate feeds: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 	return feeds, nil
 }
 
 func (r *feedRepository) FindByURL(ctx context.Context, url string) (*model.Feed, error) {
-	row := r.db.QueryRowContext(ctx, `SELECT id, folder_id, title, url, site_url, description, summary_prompt_reminder, icon_path, type, etag, last_modified, error_message, created_at, updated_at FROM feeds WHERE url = ?`, url)
+	row := r.db.QueryRowContext(ctx, `SELECT `+feedColumns+` FROM feeds WHERE url = ?`, url)
 	feed, err := scanFeed(row)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -119,10 +127,10 @@ func (r *feedRepository) FindByURL(ctx context.Context, url string) (*model.Feed
 }
 
 func (r *feedRepository) List(ctx context.Context, folderID *int64) ([]model.Feed, error) {
-	query := `SELECT id, folder_id, title, url, site_url, description, summary_prompt_reminder, icon_path, type, etag, last_modified, error_message, created_at, updated_at FROM feeds ORDER BY title`
-	args := []interface{}{}
+	query := `SELECT ` + feedColumns + ` FROM feeds ORDER BY title`
+	var args []any
 	if folderID != nil {
-		query = `SELECT id, folder_id, title, url, site_url, description, summary_prompt_reminder, icon_path, type, etag, last_modified, error_message, created_at, updated_at FROM feeds WHERE folder_id = ? ORDER BY title`
+		query = `SELECT ` + feedColumns + ` FROM feeds WHERE folder_id = ? ORDER BY title`
 		args = append(args, *folderID)
 	}
 	rows, err := r.db.QueryContext(ctx, query, args...)
@@ -147,7 +155,7 @@ func (r *feedRepository) List(ctx context.Context, folderID *int64) ([]model.Fee
 }
 
 func (r *feedRepository) ListWithoutIcon(ctx context.Context) ([]model.Feed, error) {
-	rows, err := r.db.QueryContext(ctx, `SELECT id, folder_id, title, url, site_url, description, summary_prompt_reminder, icon_path, type, etag, last_modified, error_message, created_at, updated_at FROM feeds WHERE icon_path IS NULL OR icon_path = ''`)
+	rows, err := r.db.QueryContext(ctx, `SELECT `+feedColumns+` FROM feeds WHERE icon_path IS NULL OR icon_path = ''`)
 	if err != nil {
 		return nil, fmt.Errorf("list feeds without icon: %w", err)
 	}
@@ -169,19 +177,19 @@ func (r *feedRepository) ListWithoutIcon(ctx context.Context) ([]model.Feed, err
 }
 
 func (r *feedRepository) Update(ctx context.Context, feed model.Feed) (model.Feed, error) {
-	now := time.Now().UTC()
+	now := time.Now().UTC().Truncate(time.Second)
 	_, err := r.db.ExecContext(
 		ctx,
 		`UPDATE feeds SET folder_id = ?, title = ?, url = ?, site_url = ?, description = ?, summary_prompt_reminder = ?, etag = ?, last_modified = ?, error_message = ?, updated_at = ? WHERE id = ?`,
-		nullableInt64(feed.FolderID),
+		feed.FolderID,
 		feed.Title,
 		feed.URL,
-		nullableString(feed.SiteURL),
-		nullableString(feed.Description),
-		nullableString(feed.SummaryPromptReminder),
-		nullableString(feed.ETag),
-		nullableString(feed.LastModified),
-		nullableString(feed.ErrorMessage),
+		feed.SiteURL,
+		feed.Description,
+		feed.SummaryPromptReminder,
+		feed.ETag,
+		feed.LastModified,
+		feed.ErrorMessage,
 		formatTime(now),
 		feed.ID,
 	)
@@ -190,6 +198,26 @@ func (r *feedRepository) Update(ctx context.Context, feed model.Feed) (model.Fee
 	}
 	feed.UpdatedAt = now
 	return feed, nil
+}
+
+// UpdateConditionalGet updates only ETag and LastModified without overwriting user-edited columns.
+func (r *feedRepository) UpdateConditionalGet(ctx context.Context, id int64, etag, lastModified *string) error {
+	_, err := r.db.ExecContext(
+		ctx,
+		`UPDATE feeds
+		 SET etag = COALESCE(?, etag),
+		     last_modified = COALESCE(?, last_modified),
+		     updated_at = ?
+		 WHERE id = ?`,
+		etag,
+		lastModified,
+		formatTime(time.Now()),
+		id,
+	)
+	if err != nil {
+		return fmt.Errorf("update feed conditional get: %w", err)
+	}
+	return nil
 }
 
 func (r *feedRepository) UpdateIconPath(ctx context.Context, id int64, iconPath string) error {
@@ -218,7 +246,7 @@ func (r *feedRepository) UpdateErrorMessage(ctx context.Context, id int64, error
 	_, err := r.db.ExecContext(
 		ctx,
 		`UPDATE feeds SET error_message = ?, updated_at = ? WHERE id = ?`,
-		nullableString(errorMessage),
+		errorMessage,
 		formatTime(time.Now()),
 		id,
 	)
@@ -258,17 +286,29 @@ func (r *feedRepository) DeleteBatch(ctx context.Context, ids []int64) (int64, e
 	if len(ids) == 0 {
 		return 0, nil
 	}
-	// Build placeholder string: ?,?,?...
-	placeholders := strings.Repeat("?,", len(ids)-1) + "?"
-	args := make([]interface{}, len(ids))
-	for i, id := range ids {
-		args[i] = id
-	}
-	result, err := r.db.ExecContext(ctx, `DELETE FROM feeds WHERE id IN (`+placeholders+`)`, args...)
+	var total int64
+	err := withTx(ctx, r.db, func(exec dbtx) error {
+		return chunkSlice(ids, sqliteMaxBatchSize, func(chunk []int64) error {
+			args := make([]any, len(chunk))
+			for i, id := range chunk {
+				args[i] = id
+			}
+			result, err := exec.ExecContext(ctx, `DELETE FROM feeds WHERE id IN (`+placeholders(len(chunk))+`)`, args...)
+			if err != nil {
+				return fmt.Errorf("delete feeds batch: %w", err)
+			}
+			affected, err := result.RowsAffected()
+			if err != nil {
+				return err
+			}
+			total += affected
+			return nil
+		})
+	})
 	if err != nil {
-		return 0, fmt.Errorf("delete feeds batch: %w", err)
+		return 0, err
 	}
-	return result.RowsAffected()
+	return total, nil
 }
 
 func (r *feedRepository) ClearAllIconPaths(ctx context.Context) (int64, error) {
@@ -287,9 +327,7 @@ func (r *feedRepository) ClearAllConditionalGet(ctx context.Context) (int64, err
 	return result.RowsAffected()
 }
 
-func scanFeed(scanner interface {
-	Scan(dest ...interface{}) error
-}) (model.Feed, error) {
+func scanFeed(scanner rowScanner) (model.Feed, error) {
 	var feed model.Feed
 	var folderID sql.NullInt64
 	var siteURL sql.NullString

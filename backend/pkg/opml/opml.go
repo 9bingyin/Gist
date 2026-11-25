@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/xml"
 	"io"
+
+	"golang.org/x/net/html/charset"
 )
 
 type Document struct {
@@ -34,6 +36,7 @@ type Outline struct {
 
 func Parse(r io.Reader) (Document, error) {
 	decoder := xml.NewDecoder(r)
+	decoder.CharsetReader = charset.NewReaderLabel
 	var doc Document
 	if err := decoder.Decode(&doc); err != nil {
 		return Document{}, err

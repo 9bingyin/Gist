@@ -19,6 +19,7 @@ type FolderService interface {
 	Update(ctx context.Context, id int64, name string, parentID *int64) (model.Folder, error)
 	UpdateType(ctx context.Context, id int64, folderType string) error
 	Delete(ctx context.Context, id int64) error
+	DeleteBatch(ctx context.Context, ids []int64) error
 }
 
 type folderService struct {
@@ -30,23 +31,20 @@ func NewFolderService(folders repository.FolderRepository, feeds repository.Feed
 	return &folderService{folders: folders, feeds: feeds}
 }
 
-// detectCycle checks if setting newParentID as parent of id would create a cycle.
 func (s *folderService) detectCycle(ctx context.Context, id int64, newParentID *int64) (bool, error) {
 	if newParentID == nil {
 		return false, nil
 	}
-	// Direct self-reference
 	if *newParentID == id {
 		return true, nil
 	}
-	// Walk up the parent chain to detect indirect cycles
 	visited := make(map[int64]bool)
 	visited[id] = true
 
 	currentID := newParentID
 	for currentID != nil {
 		if visited[*currentID] {
-			return true, nil // Cycle detected
+			return true, nil
 		}
 		visited[*currentID] = true
 		folder, err := s.folders.GetByID(ctx, *currentID)
@@ -103,7 +101,6 @@ func (s *folderService) Update(ctx context.Context, id int64, name string, paren
 	if trimmed == "" {
 		return model.Folder{}, ErrInvalid
 	}
-	// Check for cycles (both direct and indirect)
 	if hasCycle, err := s.detectCycle(ctx, id, parentID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return model.Folder{}, ErrNotFound
@@ -149,16 +146,9 @@ func (s *folderService) UpdateType(ctx context.Context, id int64, folderType str
 		return fmt.Errorf("get folder: %w", err)
 	}
 
-	// Update folder type
-	if err := s.folders.UpdateType(ctx, id, folderType); err != nil {
+	if err := s.folders.UpdateTypeWithFeeds(ctx, id, folderType); err != nil {
 		logger.Error("folder update type failed", "module", "service", "action", "update", "resource", "folder", "result", "failed", "folder_id", id, "type", folderType, "error", err)
 		return err
-	}
-
-	// Update all feeds in this folder to the same type using batch operation
-	if err := s.feeds.UpdateTypeByFolderID(ctx, id, folderType); err != nil {
-		logger.Error("folder update feeds type failed", "module", "service", "action", "update", "resource", "feed", "result", "failed", "folder_id", id, "type", folderType, "error", err)
-		return fmt.Errorf("update feeds type in folder: %w", err)
 	}
 
 	logger.Info("folder type updated", "module", "service", "action", "update", "resource", "folder", "result", "ok", "folder_id", id, "type", folderType)
@@ -166,33 +156,66 @@ func (s *folderService) UpdateType(ctx context.Context, id int64, folderType str
 }
 
 func (s *folderService) Delete(ctx context.Context, id int64) error {
-	if _, err := s.folders.GetByID(ctx, id); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+	return s.DeleteBatch(ctx, []int64{id})
+}
+
+// DeleteBatch validates all target IDs, recursively collects all descendant folder IDs,
+// and atomically deletes all feeds under those folders along with the folders themselves.
+func (s *folderService) DeleteBatch(ctx context.Context, ids []int64) error {
+	if len(ids) == 0 {
+		return nil
+	}
+
+	allFolders, err := s.folders.List(ctx)
+	if err != nil {
+		return fmt.Errorf("list folders: %w", err)
+	}
+
+	exists := make(map[int64]struct{}, len(allFolders))
+	childrenByParent := make(map[int64][]int64)
+	for _, f := range allFolders {
+		exists[f.ID] = struct{}{}
+		if f.ParentID != nil {
+			childrenByParent[*f.ParentID] = append(childrenByParent[*f.ParentID], f.ID)
+		}
+	}
+
+	for _, id := range ids {
+		if _, ok := exists[id]; !ok {
 			return ErrNotFound
 		}
-		return fmt.Errorf("get folder: %w", err)
 	}
 
-	// Delete all feeds in this folder using batch operation (entries will be cascade deleted by DB)
-	feeds, err := s.feeds.List(ctx, &id)
-	if err != nil {
-		return fmt.Errorf("list feeds in folder: %w", err)
-	}
-	if len(feeds) > 0 {
-		feedIDs := make([]int64, len(feeds))
-		for i, feed := range feeds {
-			feedIDs[i] = feed.ID
+	// BFS to collect all target folders and their descendants.
+	collectedSet := make(map[int64]struct{}, len(ids))
+	queue := make([]int64, 0, len(ids))
+	for _, id := range ids {
+		if _, seen := collectedSet[id]; !seen {
+			collectedSet[id] = struct{}{}
+			queue = append(queue, id)
 		}
-		if _, err := s.feeds.DeleteBatch(ctx, feedIDs); err != nil {
-			logger.Error("folder delete feeds failed", "module", "service", "action", "delete", "resource", "feed", "result", "failed", "folder_id", id, "count", len(feedIDs), "error", err)
-			return fmt.Errorf("delete feeds in folder: %w", err)
+	}
+	for len(queue) > 0 {
+		curr := queue[0]
+		queue = queue[1:]
+		for _, childID := range childrenByParent[curr] {
+			if _, seen := collectedSet[childID]; !seen {
+				collectedSet[childID] = struct{}{}
+				queue = append(queue, childID)
+			}
 		}
 	}
 
-	if err := s.folders.Delete(ctx, id); err != nil {
-		logger.Error("folder delete failed", "module", "service", "action", "delete", "resource", "folder", "result", "failed", "folder_id", id, "error", err)
+	allFolderIDs := make([]int64, 0, len(collectedSet))
+	for id := range collectedSet {
+		allFolderIDs = append(allFolderIDs, id)
+	}
+
+	if err := s.folders.DeleteBatchWithFeeds(ctx, allFolderIDs); err != nil {
+		logger.Error("folder batch delete failed", "module", "service", "action", "delete", "resource", "folder", "result", "failed", "count", len(allFolderIDs), "error", err)
 		return err
 	}
-	logger.Info("folder deleted", "module", "service", "action", "delete", "resource", "folder", "result", "ok", "folder_id", id)
+
+	logger.Info("folder deleted", "module", "service", "action", "delete", "resource", "folder", "result", "ok", "count", len(allFolderIDs))
 	return nil
 }

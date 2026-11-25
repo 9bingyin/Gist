@@ -15,6 +15,7 @@ export function useDeleteFeed() {
     mutationFn: (id: string) => deleteFeed(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["feeds"] });
+      queryClient.invalidateQueries({ queryKey: ["entries"] });
       queryClient.invalidateQueries({ queryKey: ["unreadCounts"] });
     },
   });

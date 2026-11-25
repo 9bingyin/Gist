@@ -1,13 +1,18 @@
-import { useState, useCallback, useEffect, useRef, useMemo } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
 import {
   streamTranslateBlocks,
   isTranslateInit,
   isTranslateBlockResult,
-  isTranslateDone,
-  isTranslateError,
   type TranslateBlockData,
 } from "@/api";
-import { needsTranslation } from "@/lib/language-detect";
+import { needsTranslation } from "@/lib/language-detect-async";
 import { stripHtml } from "@/lib/html-utils";
 import {
   useTranslationStore,
@@ -35,6 +40,80 @@ interface UseAITranslationReturn {
   handleToggleTranslation: () => Promise<void>;
 }
 
+interface TranslationLocalState {
+  translatedContent: string | null;
+  originalBlocks: TranslateBlockData[];
+  translatedBlocks: Map<number, string>;
+  isTranslating: boolean;
+  translationMode: boolean | null;
+}
+
+type TranslationAction =
+  | { type: "reset" }
+  | { type: "start"; mode: boolean }
+  | { type: "cached"; content: string; mode: boolean }
+  | { type: "init"; blocks: TranslateBlockData[] }
+  | { type: "block"; index: number; html: string }
+  | { type: "finish" }
+  | { type: "cancel" };
+
+const initialTranslationState: TranslationLocalState = {
+  translatedContent: null,
+  originalBlocks: [],
+  translatedBlocks: new Map(),
+  isTranslating: false,
+  translationMode: null,
+};
+
+function translationReducer(
+  state: TranslationLocalState,
+  action: TranslationAction,
+): TranslationLocalState {
+  switch (action.type) {
+    case "reset":
+      return initialTranslationState;
+    case "start":
+      return {
+        translatedContent: null,
+        originalBlocks: [],
+        translatedBlocks: new Map(),
+        isTranslating: true,
+        translationMode: action.mode,
+      };
+    case "cached":
+      return {
+        translatedContent: action.content,
+        originalBlocks: [],
+        translatedBlocks: new Map(),
+        isTranslating: false,
+        translationMode: action.mode,
+      };
+    case "init":
+      return {
+        ...state,
+        originalBlocks: action.blocks,
+      };
+    case "block": {
+      const nextMap = new Map(state.translatedBlocks);
+      nextMap.set(action.index, action.html);
+      return {
+        ...state,
+        translatedBlocks: nextMap,
+      };
+    }
+    case "finish":
+      return {
+        ...state,
+        isTranslating: false,
+      };
+    case "cancel":
+      return {
+        ...state,
+        isTranslating: false,
+      };
+  }
+}
+
 export function useAITranslation({
   entry,
   isReadableActive,
@@ -42,77 +121,102 @@ export function useAITranslation({
   autoTranslate,
   targetLanguage,
 }: UseAITranslationOptions): UseAITranslationReturn {
-  const [translatedContent, setTranslatedContent] = useState<string | null>(
-    null,
+  const [state, dispatch] = useReducer(
+    translationReducer,
+    initialTranslationState,
   );
-  const [originalBlocks, setOriginalBlocks] = useState<TranslateBlockData[]>(
-    [],
-  );
-  const [translatedBlocks, setTranslatedBlocks] = useState<Map<number, string>>(
-    new Map(),
-  );
-  const [isTranslating, setIsTranslating] = useState(false);
-  const [translationMode, setTranslationMode] = useState<boolean | null>(null);
 
   const translateAbortRef = useRef<AbortController | null>(null);
-  const translateRequestedRef = useRef(false);
-  const prevTranslateReadableRef = useRef(false);
-  const manuallyDisabledRef = useRef(false);
+  const titleAbortRef = useRef<AbortController | null>(null);
   const requestSeqRef = useRef(0);
-  const hasExistingTranslationRef = useRef(false);
-  const isTranslatingRef = useRef(false);
+  const manuallyDisabledRef = useRef(false);
+  const translateRequestedRef = useRef(false);
+  const prevReadableRef = useRef(isReadableActive);
 
-  const clearTranslationState = useCallback(() => {
-    setTranslatedContent(null);
-    setOriginalBlocks([]);
-    setTranslatedBlocks(new Map());
-    setTranslationMode(null);
-    hasExistingTranslationRef.current = false;
-  }, []);
+  const currentContent = isReadableActive ? readableContent : entry?.content;
+  const currentSummary = useMemo(
+    () => (currentContent ? stripHtml(currentContent).slice(0, 200) : null),
+    [currentContent],
+  );
+
+  // Single deduplicated async language detection for the active content mode
+  const detectionKey = entry
+    ? `${entry.id}|${isReadableActive}|${targetLanguage}|${entry.title ?? ""}|${currentSummary ?? ""}`
+    : "";
+  const [detection, setDetection] = useState<{
+    key: string;
+    needs: boolean;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!entry || !detectionKey) return;
+    let cancelled = false;
+    void needsTranslation(entry.title || "", currentSummary, targetLanguage)
+      .then((needs) => {
+        if (!cancelled) {
+          setDetection({ key: detectionKey, needs });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setDetection({ key: detectionKey, needs: false });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [entry, detectionKey, currentSummary, targetLanguage]);
+
+  const isDetectionReady = !!entry && detection?.key === detectionKey;
+  const needsCurrentTranslation = isDetectionReady ? detection.needs : false;
+  const isAlreadyTargetLanguage = isDetectionReady ? !detection.needs : false;
 
   const cancelInFlightTranslation = useCallback(() => {
     requestSeqRef.current += 1;
-    if (translateAbortRef.current) {
-      translateAbortRef.current.abort();
-      translateAbortRef.current = null;
-    }
-    setIsTranslating(false);
-    isTranslatingRef.current = false;
+    translateAbortRef.current?.abort();
+    translateAbortRef.current = null;
+    dispatch({ type: "cancel" });
   }, []);
 
-  // Reset state when entry changes
+  // Reset state and abort all streams on entry change or unmount
   useEffect(() => {
-    cancelInFlightTranslation();
-    clearTranslationState();
+    requestSeqRef.current += 1;
+    translateAbortRef.current?.abort();
+    translateAbortRef.current = null;
+    titleAbortRef.current?.abort();
+    titleAbortRef.current = null;
     translateRequestedRef.current = false;
-    prevTranslateReadableRef.current = false;
+    prevReadableRef.current = false;
     manuallyDisabledRef.current = false;
-  }, [entry?.id, cancelInFlightTranslation, clearTranslationState]);
+    dispatch({ type: "reset" });
+
+    return () => {
+      requestSeqRef.current += 1;
+      translateAbortRef.current?.abort();
+      translateAbortRef.current = null;
+      titleAbortRef.current?.abort();
+      titleAbortRef.current = null;
+    };
+  }, [entry?.id]);
 
   // Get cached translations from store
-  const cachedTranslation = useTranslationStore((state) =>
+  const cachedTranslation = useTranslationStore((store) =>
     entry && autoTranslate
-      ? state.getTranslation(entry.id, targetLanguage, isReadableActive)
+      ? store.getTranslation(entry.id, targetLanguage, isReadableActive)
       : undefined,
   );
 
-  const cachedTitleTranslation = useTranslationStore((state) =>
+  const cachedTitleTranslation = useTranslationStore((store) =>
     entry && autoTranslate
-      ? state.getTranslation(entry.id, targetLanguage)
+      ? store.getTranslation(entry.id, targetLanguage)
       : undefined,
   );
 
-  const isTranslationForCurrentMode = translationMode === isReadableActive;
+  const isTranslationForCurrentMode =
+    state.translationMode === isReadableActive;
   const translatedContentForCurrentMode = isTranslationForCurrentMode
-    ? translatedContent
+    ? state.translatedContent
     : null;
-
-  const isAlreadyTargetLanguage = useMemo(() => {
-    if (!entry) return false;
-    const content = isReadableActive ? readableContent : entry.content;
-    const summary = content ? stripHtml(content).slice(0, 200) : null;
-    return !needsTranslation(entry.title || "", summary, targetLanguage);
-  }, [entry, isReadableActive, readableContent, targetLanguage]);
 
   const displayTitle = useMemo(() => {
     if (!autoTranslate || !entry) return entry?.title || null;
@@ -122,15 +226,15 @@ export function useAITranslation({
   const combinedTranslatedContent = useMemo(() => {
     if (!isTranslationForCurrentMode) return null;
     if (translatedContentForCurrentMode) return translatedContentForCurrentMode;
-    if (originalBlocks.length === 0) return null;
-    return originalBlocks
-      .map((block) => translatedBlocks.get(block.index) ?? block.html)
+    if (state.originalBlocks.length === 0) return null;
+    return state.originalBlocks
+      .map((block) => state.translatedBlocks.get(block.index) ?? block.html)
       .join("");
   }, [
     isTranslationForCurrentMode,
     translatedContentForCurrentMode,
-    originalBlocks,
-    translatedBlocks,
+    state.originalBlocks,
+    state.translatedBlocks,
   ]);
 
   const translatedContentBlocks = useMemo(() => {
@@ -138,26 +242,26 @@ export function useAITranslation({
       !entry ||
       !isTranslationForCurrentMode ||
       translatedContentForCurrentMode ||
-      originalBlocks.length === 0
+      state.originalBlocks.length === 0
     ) {
       return null;
     }
-    return originalBlocks.map((block) => ({
+    return state.originalBlocks.map((block) => ({
       key: `${entry.id}-${block.index}`,
-      html: translatedBlocks.get(block.index) ?? block.html,
+      html: state.translatedBlocks.get(block.index) ?? block.html,
     }));
   }, [
     entry,
     isTranslationForCurrentMode,
     translatedContentForCurrentMode,
-    originalBlocks,
-    translatedBlocks,
+    state.originalBlocks,
+    state.translatedBlocks,
   ]);
 
   const hasTranslation =
-    !isTranslating &&
+    !state.isTranslating &&
     isTranslationForCurrentMode &&
-    !!(translatedContentForCurrentMode || originalBlocks.length > 0);
+    !!(translatedContentForCurrentMode || state.originalBlocks.length > 0);
 
   const generateTranslation = useCallback(
     async (forReadability: boolean) => {
@@ -167,23 +271,18 @@ export function useAITranslation({
       if (!content) return;
 
       requestSeqRef.current += 1;
-      if (translateAbortRef.current) {
-        translateAbortRef.current.abort();
-        translateAbortRef.current = null;
-      }
       const requestSeq = requestSeqRef.current;
 
-      setIsTranslating(true);
-      isTranslatingRef.current = true;
-      setTranslatedContent(null);
-      setOriginalBlocks([]);
-      setTranslatedBlocks(new Map());
-      hasExistingTranslationRef.current = false;
-      setTranslationMode(forReadability);
-      translateRequestedRef.current = true;
-
+      translateAbortRef.current?.abort();
       const abortController = new AbortController();
       translateAbortRef.current = abortController;
+
+      translateRequestedRef.current = true;
+      dispatch({ type: "start", mode: forReadability });
+
+      let finalCachedContent: string | null = null;
+      let blocksSnapshot: TranslateBlockData[] = [];
+      const translatedMap = new Map<number, string>();
 
       try {
         const stream = streamTranslateBlocks(
@@ -202,31 +301,42 @@ export function useAITranslation({
           }
 
           if ("cached" in event) {
-            setTranslatedContent(event.content);
-            setOriginalBlocks([]);
-            setTranslatedBlocks(new Map());
+            finalCachedContent = event.content;
+            dispatch({
+              type: "cached",
+              content: event.content,
+              mode: forReadability,
+            });
             break;
           }
 
           if (isTranslateInit(event)) {
-            setOriginalBlocks(event.blocks);
+            blocksSnapshot = event.blocks;
+            dispatch({ type: "init", blocks: event.blocks });
             continue;
           }
 
           if (isTranslateBlockResult(event)) {
-            setTranslatedBlocks((prev) => {
-              const newMap = new Map(prev);
-              newMap.set(event.index, event.html);
-              return newMap;
-            });
+            translatedMap.set(event.index, event.html);
+            dispatch({ type: "block", index: event.index, html: event.html });
           }
+        }
 
-          if (isTranslateDone(event)) {
-            // Translation complete
-          }
-
-          if (isTranslateError(event)) {
-            // Handle error
+        if (requestSeqRef.current === requestSeq && autoTranslate) {
+          const finalContent =
+            finalCachedContent ??
+            (blocksSnapshot.length > 0
+              ? blocksSnapshot
+                  .map((b) => translatedMap.get(b.index) ?? b.html)
+                  .join("")
+              : null);
+          if (finalContent) {
+            translationActions.set(
+              entry.id,
+              targetLanguage,
+              { content: finalContent },
+              forReadability,
+            );
           }
         }
       } catch (err) {
@@ -236,44 +346,32 @@ export function useAITranslation({
         if (err instanceof Error && err.name === "AbortError") {
           return;
         }
-        return;
       } finally {
         if (requestSeqRef.current === requestSeq) {
-          setIsTranslating(false);
-          isTranslatingRef.current = false;
+          dispatch({ type: "finish" });
           if (translateAbortRef.current === abortController) {
             translateAbortRef.current = null;
           }
         }
       }
     },
-    [entry, readableContent],
+    [entry, readableContent, autoTranslate, targetLanguage],
   );
-
-  useEffect(() => {
-    hasExistingTranslationRef.current = !!(
-      translatedContent || originalBlocks.length > 0
-    );
-  }, [translatedContent, originalBlocks.length]);
-
-  useEffect(() => {
-    isTranslatingRef.current = isTranslating;
-  }, [isTranslating]);
 
   const handleToggleTranslation = useCallback(async () => {
     if (!entry) return;
 
-    if (hasTranslation && !isTranslating) {
-      clearTranslationState();
+    if (hasTranslation && !state.isTranslating) {
+      dispatch({ type: "reset" });
       translateRequestedRef.current = false;
       manuallyDisabledRef.current = true;
       translationActions.disable(entry.id);
       return;
     }
 
-    if (isTranslating && translateAbortRef.current) {
+    if (state.isTranslating && translateAbortRef.current) {
       cancelInFlightTranslation();
-      clearTranslationState();
+      dispatch({ type: "reset" });
       translateRequestedRef.current = false;
       manuallyDisabledRef.current = true;
       translationActions.disable(entry.id);
@@ -283,13 +381,14 @@ export function useAITranslation({
     manuallyDisabledRef.current = false;
     translationActions.enable(entry.id);
 
-    const summary = entry.content
-      ? stripHtml(entry.content).slice(0, 200)
-      : null;
-    if (needsTranslation(entry.title || "", summary, targetLanguage)) {
+    if (needsCurrentTranslation) {
+      titleAbortRef.current?.abort();
+      const titleController = new AbortController();
+      titleAbortRef.current = titleController;
       translateArticlesBatch(
-        [{ id: entry.id, title: entry.title || "", summary }],
+        [{ id: entry.id, title: entry.title || "", summary: currentSummary }],
         targetLanguage,
+        titleController.signal,
       ).catch(() => {});
     }
 
@@ -297,111 +396,92 @@ export function useAITranslation({
   }, [
     entry,
     hasTranslation,
-    isTranslating,
+    state.isTranslating,
     isReadableActive,
-    clearTranslationState,
+    needsCurrentTranslation,
+    currentSummary,
     cancelInFlightTranslation,
     generateTranslation,
     targetLanguage,
   ]);
 
-  // Auto-regenerate when readability mode changes
+  // Unified effect for readability mode switches & auto-translation
   useEffect(() => {
-    if (prevTranslateReadableRef.current !== isReadableActive) {
-      prevTranslateReadableRef.current = isReadableActive;
-      if (
-        translateRequestedRef.current &&
-        (hasExistingTranslationRef.current || isTranslatingRef.current)
-      ) {
+    if (!entry) return;
+
+    const readabilityChanged = prevReadableRef.current !== isReadableActive;
+
+    // Immediately cancel stale mode translation if readability switched
+    if (readabilityChanged && state.translationMode !== isReadableActive) {
+      if (state.isTranslating) {
+        cancelInFlightTranslation();
+      }
+    }
+
+    if (!isDetectionReady) return;
+
+    if (readabilityChanged) {
+      prevReadableRef.current = isReadableActive;
+
+      if (translateRequestedRef.current) {
         if (cachedTranslation?.content) {
           cancelInFlightTranslation();
-          clearTranslationState();
-          setTranslatedContent(cachedTranslation.content);
-          setTranslationMode(isReadableActive);
-          translateRequestedRef.current = true;
+          dispatch({
+            type: "cached",
+            content: cachedTranslation.content,
+            mode: isReadableActive,
+          });
           return;
         }
 
-        const content = isReadableActive ? readableContent : entry?.content;
-        const summary = content ? stripHtml(content).slice(0, 200) : null;
-
-        if (needsTranslation(entry?.title || "", summary, targetLanguage)) {
-          generateTranslation(isReadableActive);
-        } else {
-          cancelInFlightTranslation();
-          clearTranslationState();
-          translateRequestedRef.current = false;
+        if (needsCurrentTranslation) {
+          void generateTranslation(isReadableActive);
+          return;
         }
+
+        cancelInFlightTranslation();
+        dispatch({ type: "reset" });
+        translateRequestedRef.current = false;
+        return;
       }
     }
-  }, [
-    isReadableActive,
-    cancelInFlightTranslation,
-    clearTranslationState,
-    generateTranslation,
-    readableContent,
-    entry,
-    targetLanguage,
-    cachedTranslation,
-  ]);
 
-  // Auto-translate when entry is selected
-  useEffect(() => {
-    if (!autoTranslate || !entry || isTranslating || isTranslatingRef.current)
-      return;
-    if (manuallyDisabledRef.current) return;
+    // Auto-translate when enabled and not already translated/translating/disabled
+    if (!autoTranslate || manuallyDisabledRef.current) return;
+    if (translateRequestedRef.current) return;
+    if (state.isTranslating && isTranslationForCurrentMode) return;
     if (hasTranslation) return;
 
     if (cachedTranslation?.content) {
-      setTranslatedContent(cachedTranslation.content);
-      setTranslationMode(isReadableActive);
       translateRequestedRef.current = true;
+      dispatch({
+        type: "cached",
+        content: cachedTranslation.content,
+        mode: isReadableActive,
+      });
       return;
     }
 
-    const content = isReadableActive ? readableContent : entry.content;
-    const summary = content ? stripHtml(content).slice(0, 200) : null;
-    if (!needsTranslation(entry.title || "", summary, targetLanguage)) {
-      return;
+    if (needsCurrentTranslation) {
+      void generateTranslation(isReadableActive);
     }
-
-    generateTranslation(isReadableActive);
   }, [
-    autoTranslate,
     entry,
     isReadableActive,
-    readableContent,
-    targetLanguage,
+    isDetectionReady,
+    needsCurrentTranslation,
+    autoTranslate,
     cachedTranslation,
-    isTranslating,
+    state.isTranslating,
+    state.translationMode,
+    isTranslationForCurrentMode,
     hasTranslation,
+    cancelInFlightTranslation,
     generateTranslation,
   ]);
 
-  // Save translation to store when completed
-  useEffect(() => {
-    if (!entry || !autoTranslate) return;
-
-    const content = combinedTranslatedContent;
-    if (content && !isTranslating && translationMode !== null) {
-      translationActions.set(
-        entry.id,
-        targetLanguage,
-        { content },
-        translationMode,
-      );
-    }
-  }, [
-    entry,
-    autoTranslate,
-    targetLanguage,
-    translationMode,
-    combinedTranslatedContent,
-    isTranslating,
-  ]);
-
   return {
-    isTranslating,
+    isTranslating: state.isTranslating,
     hasTranslation,
     translationDisabled: isAlreadyTargetLanguage,
     displayTitle,

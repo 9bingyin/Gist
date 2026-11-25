@@ -147,14 +147,9 @@ export default defineConfig({
           if (id.includes("node_modules")) {
             if (id.includes("/react/") || id.includes("/react-dom/"))
               return "react-vendor";
-            if (
-              id.includes("@tanstack/react-query") ||
-              id.includes("@tanstack/react-virtual")
-            )
-              return "query-vendor";
+            if (id.includes("@tanstack/react-query")) return "query-vendor";
             if (id.includes("@radix-ui/")) return "radix-vendor";
-            if (id.includes("/motion/") || id.includes("/framer-motion/"))
-              return "motion-vendor";
+            if (id.includes("/motion/")) return "motion-vendor";
             if (id.includes("/i18next/") || id.includes("/react-i18next/"))
               return "i18n-vendor";
             if (
@@ -168,7 +163,6 @@ export default defineConfig({
               id.includes("/unified/") ||
               id.includes("/rehype-parse/") ||
               id.includes("/rehype-sanitize/") ||
-              id.includes("/rehype-stringify/") ||
               id.includes("/hast-util-to-jsx-runtime/")
             )
               return "html-parser-vendor";

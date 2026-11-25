@@ -83,20 +83,6 @@ func (mr *MockIconServiceMockRecorder) EnsureIcon(ctx, iconPath, siteURL any) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EnsureIcon", reflect.TypeOf((*MockIconService)(nil).EnsureIcon), ctx, iconPath, siteURL)
 }
 
-// EnsureIconByFeedID mocks base method.
-func (m *MockIconService) EnsureIconByFeedID(ctx context.Context, feedID int64, iconPath string) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "EnsureIconByFeedID", ctx, feedID, iconPath)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// EnsureIconByFeedID indicates an expected call of EnsureIconByFeedID.
-func (mr *MockIconServiceMockRecorder) EnsureIconByFeedID(ctx, feedID, iconPath any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EnsureIconByFeedID", reflect.TypeOf((*MockIconService)(nil).EnsureIconByFeedID), ctx, feedID, iconPath)
-}
-
 // FetchAndSaveIcon mocks base method.
 func (m *MockIconService) FetchAndSaveIcon(ctx context.Context, feedImageURL, siteURL string) (string, error) {
 	m.ctrl.T.Helper()

@@ -82,106 +82,32 @@ func TestEntryRepository_CreateOrUpdate_SameHashUpdatesURL(t *testing.T) {
 	require.Equal(t, url2, *entries[0].URL)
 }
 
-func TestEntryRepository_CreateOrUpdate_UpgradesLegacyURLHashToGUIDHash(t *testing.T) {
+func TestEntryRepository_CreateOrUpdateBatch_AndGetExistingHashes(t *testing.T) {
 	db := testutil.NewTestDB(t)
 	repo := repository.NewEntryRepository(db)
 	ctx := context.Background()
 
 	feedID := testutil.SeedFeed(t, db, model.Feed{Title: "Test Feed", URL: "url"})
-	title := "Test Entry"
-	legacyURL := "https://example.com/post"
-	legacyHash := hashString(legacyURL)
-	guidHash := hashString("guid-abc-123")
+	title1 := "Entry 1"
+	title2 := "Entry 2"
+	url1 := "https://example.com/1"
+	url2 := "https://example.com/2"
+	h1 := hashString(url1)
+	h2 := hashString(url2)
 
-	testutil.SeedEntry(t, db, model.Entry{
-		FeedID: feedID,
-		Title:  &title,
-		URL:    &legacyURL,
-		Hash:   legacyHash,
-	})
-
-	err := repo.CreateOrUpdate(ctx, model.Entry{
-		FeedID: feedID,
-		Title:  &title,
-		URL:    &legacyURL,
-		Hash:   guidHash,
+	err := repo.CreateOrUpdateBatch(ctx, []model.Entry{
+		{FeedID: feedID, Title: &title1, URL: &url1, Hash: h1},
+		{FeedID: feedID, Title: &title2, URL: &url2, Hash: h2},
 	})
 	require.NoError(t, err)
 
-	entries, err := repo.List(ctx, repository.EntryListFilter{FeedID: &feedID})
+	existing, err := repo.GetExistingHashes(ctx, feedID, []string{h1, h2, hashString("missing")})
 	require.NoError(t, err)
-	require.Len(t, entries, 1)
-	require.Equal(t, guidHash, entries[0].Hash)
-}
-
-func TestEntryRepository_CreateOrUpdate_UpgradesLegacyURLHashToGUIDHash_WhenFragmentChanges(t *testing.T) {
-	db := testutil.NewTestDB(t)
-	repo := repository.NewEntryRepository(db)
-	ctx := context.Background()
-
-	feedID := testutil.SeedFeed(t, db, model.Feed{Title: "Test Feed", URL: "url"})
-	title := "Test Entry"
-	legacyURL := "https://www.v2ex.com/t/1193191#reply10"
-	newURL := "https://www.v2ex.com/t/1193191#reply20"
-	legacyHash := hashString(legacyURL)
-	guidHash := hashString("v2ex-guid-1193191")
-
-	testutil.SeedEntry(t, db, model.Entry{
-		FeedID: feedID,
-		Title:  &title,
-		URL:    &legacyURL,
-		Hash:   legacyHash,
-	})
-
-	err := repo.CreateOrUpdate(ctx, model.Entry{
-		FeedID: feedID,
-		Title:  &title,
-		URL:    &newURL,
-		Hash:   guidHash,
-	})
-	require.NoError(t, err)
-
-	entries, err := repo.List(ctx, repository.EntryListFilter{FeedID: &feedID})
-	require.NoError(t, err)
-	require.Len(t, entries, 1)
-	require.Equal(t, guidHash, entries[0].Hash)
-	require.NotNil(t, entries[0].URL)
-	require.Equal(t, newURL, *entries[0].URL)
-}
-
-func TestEntryRepository_CreateOrUpdate_CompatibilitySkipsWhenTargetHashExists(t *testing.T) {
-	db := testutil.NewTestDB(t)
-	repo := repository.NewEntryRepository(db)
-	ctx := context.Background()
-
-	feedID := testutil.SeedFeed(t, db, model.Feed{Title: "Test Feed", URL: "url"})
-	title := "Test Entry"
-	newURL := "https://www.v2ex.com/t/1193191#reply20"
-	legacyURL := "https://www.v2ex.com/t/1193191#reply10"
-	guidHash := hashString("v2ex-guid-1193191")
-
-	// Existing target hash row.
-	testutil.SeedEntry(t, db, model.Entry{
-		FeedID: feedID,
-		Title:  &title,
-		URL:    &newURL,
-		Hash:   guidHash,
-	})
-	// Legacy URL-hash row that used to trigger compatibility update conflicts.
-	testutil.SeedEntry(t, db, model.Entry{
-		FeedID: feedID,
-		Title:  &title,
-		URL:    &legacyURL,
-		Hash:   hashString(legacyURL),
-	})
-
-	err := repo.CreateOrUpdate(ctx, model.Entry{
-		FeedID: feedID,
-		Title:  &title,
-		URL:    &newURL,
-		Hash:   guidHash,
-	})
-	require.NoError(t, err)
+	require.Len(t, existing, 2)
+	_, ok1 := existing[h1]
+	_, ok2 := existing[h2]
+	require.True(t, ok1)
+	require.True(t, ok2)
 }
 
 func TestEntryRepository_List_Filters(t *testing.T) {
@@ -193,9 +119,9 @@ func TestEntryRepository_List_Filters(t *testing.T) {
 	feedID1 := testutil.SeedFeed(t, db, model.Feed{Title: "Feed 1", URL: "u1", FolderID: &folderID})
 	feedID2 := testutil.SeedFeed(t, db, model.Feed{Title: "Feed 2", URL: "u2"})
 
-	testutil.SeedEntry(t, db, model.Entry{FeedID: feedID1, Title: stringPtr("E1"), Read: false})
-	testutil.SeedEntry(t, db, model.Entry{FeedID: feedID1, Title: stringPtr("E2"), Read: true})
-	testutil.SeedEntry(t, db, model.Entry{FeedID: feedID2, Title: stringPtr("E3"), Starred: true})
+	testutil.SeedEntry(t, db, model.Entry{FeedID: feedID1, Title: new("E1"), Read: false})
+	testutil.SeedEntry(t, db, model.Entry{FeedID: feedID1, Title: new("E2"), Read: true})
+	testutil.SeedEntry(t, db, model.Entry{FeedID: feedID2, Title: new("E3"), Starred: true})
 
 	// Unread only
 	entries, err := repo.List(ctx, repository.EntryListFilter{UnreadOnly: true})
@@ -293,7 +219,7 @@ func TestEntryRepository_ClearCaches(t *testing.T) {
 	ctx := context.Background()
 
 	feedID := testutil.SeedFeed(t, db, model.Feed{Title: "F", URL: "u"})
-	testutil.SeedEntry(t, db, model.Entry{FeedID: feedID, ReadableContent: stringPtr("content"), Starred: false})
+	testutil.SeedEntry(t, db, model.Entry{FeedID: feedID, ReadableContent: new("content"), Starred: false})
 	testutil.SeedEntry(t, db, model.Entry{FeedID: feedID, Starred: true})
 
 	// Clear readable
@@ -330,28 +256,6 @@ func TestEntryRepository_ExistsByHash(t *testing.T) {
 	require.False(t, exists)
 }
 
-func TestEntryRepository_ExistsByLegacyURL(t *testing.T) {
-	db := testutil.NewTestDB(t)
-	repo := repository.NewEntryRepository(db)
-	ctx := context.Background()
-
-	feedID := testutil.SeedFeed(t, db, model.Feed{Title: "F", URL: "u"})
-	legacyURL := "https://www.v2ex.com/t/1193191#reply10"
-	testutil.SeedEntry(t, db, model.Entry{
-		FeedID: feedID,
-		URL:    &legacyURL,
-		Hash:   hashString(legacyURL),
-	})
-
-	exists, err := repo.ExistsByLegacyURL(ctx, feedID, "https://www.v2ex.com/t/1193191#reply20", hashString("v2ex-guid-1193191"))
-	require.NoError(t, err)
-	require.True(t, exists)
-
-	exists, err = repo.ExistsByLegacyURL(ctx, feedID, "https://www.v2ex.com/t/other#reply1", hashString("other-guid"))
-	require.NoError(t, err)
-	require.False(t, exists)
-}
-
 func TestEntryRepository_UpdateReadableContent(t *testing.T) {
 	db := testutil.NewTestDB(t)
 	repo := repository.NewEntryRepository(db)
@@ -381,15 +285,6 @@ func TestEntryRepository_GetStarredCount(t *testing.T) {
 	count, err := repo.GetStarredCount(ctx)
 	require.NoError(t, err)
 	require.Equal(t, 1, count)
-}
-
-func TestParseTimePtr(t *testing.T) {
-	require.Nil(t, repository.ParseTimePtr(""))
-
-	ts := "2025-01-04T12:34:56Z"
-	got := repository.ParseTimePtr(ts)
-	require.NotNil(t, got)
-	require.Equal(t, ts, got.UTC().Format(time.RFC3339))
 }
 
 // TestEntryRepository_CreateOrUpdate_PreservesExistingPublishedAt tests the BUG fix:
@@ -489,8 +384,262 @@ func TestEntryRepository_CreateOrUpdate_SetsPublishedAtWhenNull(t *testing.T) {
 	require.Equal(t, newTime.Format(time.RFC3339), entries[0].PublishedAt.UTC().Format(time.RFC3339))
 }
 
-func stringPtr(s string) *string {
-	return &s
+func TestEntryRepository_CreateOrUpdate_UpgradesLegacyURLHashToGUIDHash(t *testing.T) {
+	db := testutil.NewTestDB(t)
+	repo := repository.NewEntryRepository(db)
+	summaryRepo := repository.NewAISummaryRepository(db)
+	ctx := context.Background()
+
+	feedID := testutil.SeedFeed(t, db, model.Feed{Title: "Test Feed", URL: "url"})
+	title := "Test Entry"
+	legacyURL := "https://example.com/post"
+	legacyHash := hashString(legacyURL)
+	guidHash := hashString("guid-abc-123")
+
+	legacyID := testutil.SeedEntry(t, db, model.Entry{
+		FeedID:  feedID,
+		Title:   &title,
+		URL:     &legacyURL,
+		Hash:    legacyHash,
+		Read:    true,
+		Starred: true,
+	})
+	require.NoError(t, summaryRepo.Save(ctx, legacyID, false, "zh-CN", "cached summary"))
+
+	err := repo.CreateOrUpdate(ctx, model.Entry{
+		FeedID: feedID,
+		Title:  &title,
+		URL:    &legacyURL,
+		Hash:   guidHash,
+	})
+	require.NoError(t, err)
+
+	entries, err := repo.List(ctx, repository.EntryListFilter{FeedID: &feedID})
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	require.Equal(t, legacyID, entries[0].ID)
+	require.Equal(t, guidHash, entries[0].Hash)
+	require.True(t, entries[0].Read)
+	require.True(t, entries[0].Starred)
+
+	cached, err := summaryRepo.Get(ctx, legacyID, false, "zh-CN")
+	require.NoError(t, err)
+	require.NotNil(t, cached)
+	require.Equal(t, "cached summary", cached.Summary)
+}
+
+func TestEntryRepository_CreateOrUpdate_UpgradesLegacyURLHashToGUIDHash_WhenFragmentChanges(t *testing.T) {
+	db := testutil.NewTestDB(t)
+	repo := repository.NewEntryRepository(db)
+	ctx := context.Background()
+
+	feedID := testutil.SeedFeed(t, db, model.Feed{Title: "Test Feed", URL: "url"})
+	title := "Test Entry"
+	legacyURL := "https://www.v2ex.com/t/1193191#reply10"
+	newURL := "https://www.v2ex.com/t/1193191#reply20"
+	legacyHash := hashString(legacyURL)
+	guidHash := hashString("v2ex-guid-1193191")
+
+	legacyID := testutil.SeedEntry(t, db, model.Entry{
+		FeedID:  feedID,
+		Title:   &title,
+		URL:     &legacyURL,
+		Hash:    legacyHash,
+		Read:    true,
+		Starred: true,
+	})
+
+	err := repo.CreateOrUpdate(ctx, model.Entry{
+		FeedID: feedID,
+		Title:  &title,
+		URL:    &newURL,
+		Hash:   guidHash,
+	})
+	require.NoError(t, err)
+
+	entries, err := repo.List(ctx, repository.EntryListFilter{FeedID: &feedID})
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	require.Equal(t, legacyID, entries[0].ID)
+	require.Equal(t, guidHash, entries[0].Hash)
+	require.NotNil(t, entries[0].URL)
+	require.Equal(t, newURL, *entries[0].URL)
+	require.True(t, entries[0].Read)
+	require.True(t, entries[0].Starred)
+}
+
+func TestEntryRepository_CreateOrUpdate_CompatibilitySkipsWhenTargetHashExists(t *testing.T) {
+	db := testutil.NewTestDB(t)
+	repo := repository.NewEntryRepository(db)
+	ctx := context.Background()
+
+	feedID := testutil.SeedFeed(t, db, model.Feed{Title: "Test Feed", URL: "url"})
+	title := "Test Entry"
+	newURL := "https://www.v2ex.com/t/1193191#reply20"
+	legacyURL := "https://www.v2ex.com/t/1193191#reply10"
+	guidHash := hashString("v2ex-guid-1193191")
+
+	testutil.SeedEntry(t, db, model.Entry{
+		FeedID: feedID,
+		Title:  &title,
+		URL:    &newURL,
+		Hash:   guidHash,
+	})
+	testutil.SeedEntry(t, db, model.Entry{
+		FeedID: feedID,
+		Title:  &title,
+		URL:    &legacyURL,
+		Hash:   hashString(legacyURL),
+	})
+
+	updatedTitle := "Updated Title"
+	err := repo.CreateOrUpdate(ctx, model.Entry{
+		FeedID: feedID,
+		Title:  &updatedTitle,
+		URL:    &newURL,
+		Hash:   guidHash,
+	})
+	require.NoError(t, err)
+
+	entries, err := repo.List(ctx, repository.EntryListFilter{FeedID: &feedID})
+	require.NoError(t, err)
+	require.Len(t, entries, 2)
+}
+
+func TestEntryRepository_CreateOrUpdateBatch_UpgradesLegacyURLHashAndPreservesDistinctGUIDs(t *testing.T) {
+	db := testutil.NewTestDB(t)
+	repo := repository.NewEntryRepository(db)
+	summaryRepo := repository.NewAISummaryRepository(db)
+	ctx := context.Background()
+
+	feedID := testutil.SeedFeed(t, db, model.Feed{Title: "Test Feed", URL: "url"})
+
+	legacyURL := "https://example.com/v2ex#reply1"
+	updatedURL := "https://example.com/v2ex#reply2"
+	legacyTitle := "Legacy Post"
+	legacyID := testutil.SeedEntry(t, db, model.Entry{
+		FeedID:  feedID,
+		Title:   &legacyTitle,
+		URL:     &legacyURL,
+		Hash:    hashString(legacyURL),
+		Read:    true,
+		Starred: true,
+	})
+	require.NoError(t, summaryRepo.Save(ctx, legacyID, false, "en", "preserved summary"))
+
+	// Distinct GUID row sharing a URL must NOT be overwritten by a different GUID.
+	sharedURL := "https://example.com/weekly"
+	guid1Title := "Weekly #1"
+	guid2Title := "Weekly #2"
+	guid1ID := testutil.SeedEntry(t, db, model.Entry{
+		FeedID: feedID,
+		Title:  &guid1Title,
+		URL:    &sharedURL,
+		Hash:   hashString("weekly-guid-1"),
+	})
+
+	newGUIDHash := hashString("guid-v2ex-1")
+	err := repo.CreateOrUpdateBatch(ctx, []model.Entry{
+		{
+			FeedID: feedID,
+			Title:  &legacyTitle,
+			URL:    &updatedURL,
+			Hash:   newGUIDHash,
+		},
+		{
+			FeedID: feedID,
+			Title:  &guid2Title,
+			URL:    &sharedURL,
+			Hash:   hashString("weekly-guid-2"),
+		},
+	})
+	require.NoError(t, err)
+
+	entries, err := repo.List(ctx, repository.EntryListFilter{FeedID: &feedID})
+	require.NoError(t, err)
+	require.Len(t, entries, 3)
+
+	upgraded, err := repo.GetByID(ctx, legacyID)
+	require.NoError(t, err)
+	require.Equal(t, newGUIDHash, upgraded.Hash)
+	require.Equal(t, updatedURL, *upgraded.URL)
+	require.True(t, upgraded.Read)
+	require.True(t, upgraded.Starred)
+
+	cached, err := summaryRepo.Get(ctx, legacyID, false, "en")
+	require.NoError(t, err)
+	require.NotNil(t, cached)
+	require.Equal(t, "preserved summary", cached.Summary)
+
+	existingGUID1, err := repo.GetByID(ctx, guid1ID)
+	require.NoError(t, err)
+	require.Equal(t, hashString("weekly-guid-1"), existingGUID1.Hash)
+}
+
+func TestEntryRepository_List_PreservesSubSecondOrder(t *testing.T) {
+	db := testutil.NewTestDB(t)
+	repo := repository.NewEntryRepository(db)
+	ctx := context.Background()
+
+	feedID := testutil.SeedFeed(t, db, model.Feed{Title: "Test Feed", URL: "url"})
+	t0 := time.Date(2026, 5, 1, 10, 0, 0, 0, time.UTC)
+	t1 := time.Date(2026, 5, 1, 10, 0, 0, 150_000_000, time.UTC)
+	t2 := time.Date(2026, 5, 1, 10, 0, 0, 200_000_000, time.UTC)
+
+	title0, title1, title2 := "t0", "t1", "t2"
+	require.NoError(t, repo.CreateOrUpdateBatch(ctx, []model.Entry{
+		{FeedID: feedID, Title: &title0, Hash: hashString("t0"), PublishedAt: &t0},
+		{FeedID: feedID, Title: &title2, Hash: hashString("t2"), PublishedAt: &t2},
+		{FeedID: feedID, Title: &title1, Hash: hashString("t1"), PublishedAt: &t1},
+	}))
+
+	entries, err := repo.List(ctx, repository.EntryListFilter{FeedID: &feedID})
+	require.NoError(t, err)
+	require.Len(t, entries, 3)
+	require.Equal(t, "t2", *entries[0].Title)
+	require.Equal(t, "t1", *entries[1].Title)
+	require.Equal(t, "t0", *entries[2].Title)
+	require.Equal(t, t2, entries[0].PublishedAt.UTC())
+	require.Equal(t, t1, entries[1].PublishedAt.UTC())
+	require.Equal(t, t0, entries[2].PublishedAt.UTC())
+}
+
+func TestEntryRepository_LegacyLookupQueries_UseFeedURLIndexWithoutTempBTree(t *testing.T) {
+	db := testutil.NewTestDB(t)
+
+	explain := func(query string, args ...any) string {
+		t.Helper()
+		rows, err := db.Query("EXPLAIN QUERY PLAN "+query, args...)
+		require.NoError(t, err)
+		defer rows.Close()
+
+		var details []string
+		for rows.Next() {
+			var id, parent, notused int
+			var detail string
+			require.NoError(t, rows.Scan(&id, &parent, &notused, &detail))
+			details = append(details, detail)
+		}
+		require.NoError(t, rows.Err())
+		return strings.Join(details, "\n")
+	}
+
+	exactPlan := explain(
+		`SELECT id, hash, url FROM entries WHERE feed_id = ? AND url = ? ORDER BY id ASC`,
+		int64(1), "https://example.com/post",
+	)
+	require.Contains(t, exactPlan, "idx_entries_feed_url_lookup")
+	require.Contains(t, exactPlan, "url=?")
+	require.NotContains(t, exactPlan, "TEMP B-TREE")
+
+	rangePlan := explain(
+		`SELECT id, hash, url FROM entries WHERE feed_id = ? AND url >= ? AND url < ?`,
+		int64(1), "https://example.com/post#", "https://example.com/post$",
+	)
+	require.Contains(t, rangePlan, "idx_entries_feed_url_lookup")
+	require.Contains(t, rangePlan, "url>?")
+	require.Contains(t, rangePlan, "url<?")
+	require.NotContains(t, rangePlan, "TEMP B-TREE")
 }
 
 func hashString(input string) string {

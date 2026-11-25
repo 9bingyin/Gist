@@ -35,11 +35,9 @@ vi.mock("./tabs/AdvancedSettings", () => ({
 }));
 
 vi.mock("./SettingsSidebar", () => ({
-  SettingsSidebar: ({
-    children,
-  }: {
-    children?: ReactNode;
-  }) => <div>{children}</div>,
+  SettingsSidebar: ({ children }: { children?: ReactNode }) => (
+    <div>{children}</div>
+  ),
 }));
 
 describe("SettingsModal", () => {

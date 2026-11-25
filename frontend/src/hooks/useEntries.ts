@@ -4,6 +4,7 @@ import {
   useMutation,
   useQueryClient,
   useInfiniteQuery,
+  type QueryClient,
 } from "@tanstack/react-query";
 import {
   listEntries,
@@ -16,7 +17,16 @@ import {
   getStarredCount,
 } from "@/api";
 import { countLoadedEntries } from "@/lib/entry-pagination";
-import type { Entry, EntryListParams, MarkAllReadParams } from "@/types/api";
+import type {
+  Entry,
+  EntryListParams,
+  MarkAllReadParams,
+  StarredCountResponse,
+} from "@/types/api";
+
+interface InfiniteEntriesData {
+  pages: { entries: Entry[]; hasMore: boolean }[];
+}
 
 function entriesQueryKey(params: EntryListParams) {
   return ["entries", params] as const;
@@ -24,6 +34,52 @@ function entriesQueryKey(params: EntryListParams) {
 
 function uniqueStrings(values: string[]): string[] {
   return Array.from(new Set(values));
+}
+
+function findEntryInCaches(
+  queryClient: QueryClient,
+  id: string,
+): Entry | undefined {
+  const cached = queryClient.getQueryData<Entry>(["entry", id]);
+  if (cached) return cached;
+
+  const queries = queryClient.getQueriesData<InfiniteEntriesData>({
+    queryKey: ["entries"],
+  });
+  for (const [, data] of queries) {
+    if (!data) continue;
+    for (const page of data.pages) {
+      const found = page.entries.find((e) => e.id === id);
+      if (found) return found;
+    }
+  }
+  return undefined;
+}
+
+function applyEntryUpdatesToListCache(
+  queryClient: QueryClient,
+  updates: Map<string, Partial<Entry>>,
+): void {
+  queryClient.setQueriesData<InfiniteEntriesData>(
+    { queryKey: ["entries"] },
+    (old) => {
+      if (!old) return old;
+      let changed = false;
+      const pages = old.pages.map((page) => {
+        let pageChanged = false;
+        const entries = page.entries.map((entry) => {
+          const patch = updates.get(entry.id);
+          if (!patch) return entry;
+          pageChanged = true;
+          return { ...entry, ...patch };
+        });
+        if (!pageChanged) return page;
+        changed = true;
+        return { ...page, entries };
+      });
+      return changed ? { ...old, pages } : old;
+    },
+  );
 }
 
 export function useEntriesInfinite(params: Omit<EntryListParams, "offset">) {
@@ -78,64 +134,39 @@ export function useMarkAsRead() {
     mutationFn: ({ id, read }: MarkAsReadOptions) =>
       updateEntryReadStatus(id, read),
 
-    // Optimistic update: immediately update UI before API call completes
     onMutate: async ({ id, read }) => {
-      // Cancel outgoing refetches to avoid overwriting optimistic update
       await queryClient.cancelQueries({ queryKey: ["entry", id] });
       await queryClient.cancelQueries({ queryKey: ["entries"] });
 
-      // Snapshot previous values for rollback
-      const previousEntry = queryClient.getQueryData<Entry>(["entry", id]);
-      const previousEntries = queryClient.getQueriesData<{
-        pages: { entries: Entry[] }[];
-      }>({
-        queryKey: ["entries"],
-      });
+      const existing = findEntryInCaches(queryClient, id);
+      const previousRead = existing?.read;
 
-      // Optimistically update single entry cache
-      queryClient.setQueryData(["entry", id], (old: Entry | undefined) => {
-        if (!old) return old;
-        return { ...old, read };
-      });
-
-      // Optimistically update entries list cache
-      queryClient.setQueriesData<{ pages: { entries: Entry[] }[] }>(
-        { queryKey: ["entries"] },
-        (old) => {
-          if (!old) return old;
-          return {
-            ...old,
-            pages: old.pages.map((page) => ({
-              ...page,
-              entries: page.entries.map((entry) =>
-                entry.id === id ? { ...entry, read } : entry,
-              ),
-            })),
-          };
-        },
+      queryClient.setQueryData<Entry>(["entry", id], (old) =>
+        old ? { ...old, read } : old,
       );
+      applyEntryUpdatesToListCache(queryClient, new Map([[id, { read }]]));
 
-      return { previousEntry, previousEntries };
+      return { previousRead };
     },
 
     onSuccess: (_, { skipInvalidate }) => {
-      // Always update unread counts immediately
       queryClient.invalidateQueries({ queryKey: ["unreadCounts"] });
-      // Only invalidate entries if not skipped (e.g., not in lightbox/detail view)
       if (!skipInvalidate) {
         queryClient.invalidateQueries({ queryKey: ["entries"] });
       }
     },
 
     onError: (_, { id }, context) => {
-      // Rollback to previous values on error
-      if (context?.previousEntry) {
-        queryClient.setQueryData(["entry", id], context.previousEntry);
-      }
-      if (context?.previousEntries) {
-        for (const [queryKey, data] of context.previousEntries) {
-          queryClient.setQueryData(queryKey, data);
-        }
+      // Roll back only this specific entry so concurrent successful mutations are preserved
+      if (context?.previousRead !== undefined) {
+        const read = context.previousRead;
+        queryClient.setQueryData<Entry>(["entry", id], (old) =>
+          old ? { ...old, read } : old,
+        );
+        applyEntryUpdatesToListCache(queryClient, new Map([[id, { read }]]));
+      } else {
+        queryClient.invalidateQueries({ queryKey: ["entry", id] });
+        queryClient.invalidateQueries({ queryKey: ["entries"] });
       }
     },
   });
@@ -160,42 +191,23 @@ export function useMarkManyAsRead() {
       );
       await queryClient.cancelQueries({ queryKey: ["entries"] });
 
-      const previousEntriesById = new Map(
-        uniqueIds.map(
-          (id) => [id, queryClient.getQueryData<Entry>(["entry", id])] as const,
-        ),
-      );
-      const previousEntries = queryClient.getQueriesData<{
-        pages: { entries: Entry[] }[];
-      }>({
-        queryKey: ["entries"],
-      });
-      const idSet = new Set(uniqueIds);
+      const previousReadById = new Map<string, boolean>();
+      const updates = new Map<string, Partial<Entry>>();
 
       for (const id of uniqueIds) {
-        queryClient.setQueryData(["entry", id], (old: Entry | undefined) => {
-          if (!old) return old;
-          return { ...old, read };
-        });
+        const existing = findEntryInCaches(queryClient, id);
+        if (existing !== undefined) {
+          previousReadById.set(id, existing.read);
+        }
+        updates.set(id, { read });
+        queryClient.setQueryData<Entry>(["entry", id], (old) =>
+          old ? { ...old, read } : old,
+        );
       }
 
-      queryClient.setQueriesData<{ pages: { entries: Entry[] }[] }>(
-        { queryKey: ["entries"] },
-        (old) => {
-          if (!old) return old;
-          return {
-            ...old,
-            pages: old.pages.map((page) => ({
-              ...page,
-              entries: page.entries.map((entry) =>
-                idSet.has(entry.id) ? { ...entry, read } : entry,
-              ),
-            })),
-          };
-        },
-      );
+      applyEntryUpdatesToListCache(queryClient, updates);
 
-      return { previousEntriesById, previousEntries };
+      return { previousReadById };
     },
 
     onSuccess: (_, { skipInvalidate }) => {
@@ -206,17 +218,24 @@ export function useMarkManyAsRead() {
     },
 
     onError: (_, { ids }, context) => {
+      // Roll back only this batch's IDs without clobbering concurrent mutations
       const uniqueIds = uniqueStrings(ids);
+      const rollbackUpdates = new Map<string, Partial<Entry>>();
+
       for (const id of uniqueIds) {
-        const previousEntry = context?.previousEntriesById.get(id);
-        if (previousEntry) {
-          queryClient.setQueryData(["entry", id], previousEntry);
+        const previousRead = context?.previousReadById.get(id);
+        if (previousRead !== undefined) {
+          rollbackUpdates.set(id, { read: previousRead });
+          queryClient.setQueryData<Entry>(["entry", id], (old) =>
+            old ? { ...old, read: previousRead } : old,
+          );
         }
       }
-      if (context?.previousEntries) {
-        for (const [queryKey, data] of context.previousEntries) {
-          queryClient.setQueryData(queryKey, data);
-        }
+
+      if (rollbackUpdates.size > 0) {
+        applyEntryUpdatesToListCache(queryClient, rollbackUpdates);
+      } else {
+        queryClient.invalidateQueries({ queryKey: ["entries"] });
       }
     },
   });
@@ -228,14 +247,11 @@ export function useRemoveFromUnreadList() {
 
   return useCallback(
     (idsToRemove: Set<string>) => {
-      const queries = queryClient.getQueriesData<{
-        pages: { entries: Entry[]; hasMore: boolean }[];
-      }>({
+      const queries = queryClient.getQueriesData<InfiniteEntriesData>({
         queryKey: ["entries"],
       });
 
       for (const [queryKey, data] of queries) {
-        // Only process unreadOnly queries
         const params = queryKey[1] as EntryListParams | undefined;
         if (!params?.unreadOnly || !data) continue;
 
@@ -261,6 +277,7 @@ export function useMarkAllAsRead() {
     mutationFn: (params: MarkAllReadParams) => markAllAsRead(params),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["entries"] });
+      queryClient.invalidateQueries({ queryKey: ["entry"] });
       queryClient.invalidateQueries({ queryKey: ["unreadCounts"] });
     },
   });
@@ -281,11 +298,51 @@ export function useMarkAsStarred() {
   return useMutation({
     mutationFn: ({ id, starred }: { id: string; starred: boolean }) =>
       updateEntryStarred(id, starred),
-    onSuccess: (_, { id, starred }) => {
-      queryClient.setQueryData(["entry", id], (old: Entry | undefined) => {
-        if (!old) return old;
-        return { ...old, starred };
+
+    onMutate: async ({ id, starred }) => {
+      await queryClient.cancelQueries({ queryKey: ["entry", id] });
+      await queryClient.cancelQueries({ queryKey: ["entries"] });
+      await queryClient.cancelQueries({ queryKey: ["starredCount"] });
+
+      const existing = findEntryInCaches(queryClient, id);
+      const previousStarred = existing?.starred;
+      const previousStarredCount =
+        queryClient.getQueryData<StarredCountResponse>(["starredCount"]);
+
+      queryClient.setQueryData<Entry>(["entry", id], (old) => {
+        if (old) return { ...old, starred };
+        return existing ? { ...existing, starred } : old;
       });
+      applyEntryUpdatesToListCache(queryClient, new Map([[id, { starred }]]));
+
+      if (previousStarred !== undefined && previousStarred !== starred) {
+        queryClient.setQueryData<StarredCountResponse>(
+          ["starredCount"],
+          (old) =>
+            old ? { count: Math.max(0, old.count + (starred ? 1 : -1)) } : old,
+        );
+      }
+
+      return { previousStarred, previousStarredCount };
+    },
+
+    onError: (_, { id }, context) => {
+      if (context?.previousStarred !== undefined) {
+        const starred = context.previousStarred;
+        queryClient.setQueryData<Entry>(["entry", id], (old) =>
+          old ? { ...old, starred } : old,
+        );
+        applyEntryUpdatesToListCache(queryClient, new Map([[id, { starred }]]));
+      }
+      if (context?.previousStarredCount !== undefined) {
+        queryClient.setQueryData(
+          ["starredCount"],
+          context.previousStarredCount,
+        );
+      }
+    },
+
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["starredCount"] });
       queryClient.invalidateQueries({ queryKey: ["entries"] });
     },

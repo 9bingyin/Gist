@@ -8,6 +8,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { VirtuosoMasonry } from "@virtuoso.dev/masonry";
+import { Loader2 } from "lucide-react";
 import { useEntriesInfinite, useUnreadCounts } from "@/hooks/useEntries";
 import { useFeeds } from "@/hooks/useFeeds";
 import { useFolders } from "@/hooks/useFolders";
@@ -24,6 +25,7 @@ import { useMasonryScrollMarkRead } from "./useMasonryScrollMarkRead";
 import { EntryListHeader } from "@/components/entry-list/EntryListHeader";
 import { MobileDocumentHeader } from "@/components/layout/MobileDocumentHeader";
 import { useEntryListScrollSurface } from "@/components/entry-list/scroll-surface";
+import { createFeedsMap, createFoldersMap } from "@/lib/content-types";
 import type { ContentType, Entry, Feed } from "@/types/api";
 
 interface PictureMasonryProps {
@@ -97,10 +99,18 @@ export function PictureMasonry({
   const wrapperRef = useRef<HTMLDivElement>(null);
   const headerRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [scrollContainerNode, setScrollContainerNode] =
+    useState<HTMLDivElement | null>(null);
   const scrollElementRef = useRef<HTMLElement>(null);
   const [internalScroller, setInternalScroller] = useState<HTMLElement | null>(
     null,
   );
+
+  const setScrollContainerRef = useCallback((node: HTMLDivElement | null) => {
+    scrollContainerRef.current = node;
+    setScrollContainerNode(node);
+  }, []);
+
   const usesDocumentScroll = Boolean(isMobile);
   const scrollElement = usesDocumentScroll
     ? document.documentElement
@@ -116,7 +126,6 @@ export function PictureMasonry({
 
   useScrollToTop(scrollToTop, "picture");
 
-  // Swipe gesture: Right swipe opens sidebar (only on mobile)
   useSwipeGesture(wrapperRef, {
     onSwipeRight: () => onMenuClick?.(),
     enabledDirections: ["right"],
@@ -145,21 +154,8 @@ export function PictureMasonry({
   const { data: generalSettings } = useGeneralSettings();
   const markReadOnScroll = generalSettings?.markReadOnScroll ?? false;
 
-  const feedsMap = useMemo(() => {
-    const map = new Map<string, Feed>();
-    for (const feed of feeds) {
-      map.set(feed.id, feed);
-    }
-    return map;
-  }, [feeds]);
-
-  const foldersMap = useMemo(() => {
-    const map = new Map<string, { name: string }>();
-    for (const folder of folders) {
-      map.set(folder.id, folder);
-    }
-    return map;
-  }, [folders]);
+  const feedsMap = useMemo(() => createFeedsMap(feeds), [feeds]);
+  const foldersMap = useMemo(() => createFoldersMap(folders), [folders]);
 
   const entries = useMemo(() => flattenUniqueEntries(data?.pages), [data]);
 
@@ -168,13 +164,10 @@ export function PictureMasonry({
     [selection, unreadOnly],
   );
 
-  // Clear failed images on mount and when filter context changes,
-  // giving images a fresh chance to load (failures are often transient)
   useEffect(() => {
     clearFailed();
   }, [filterKey, clearFailed]);
 
-  // Load cached dimensions from IndexedDB
   useEffect(() => {
     const srcs = entries
       .map((entry) => entry.thumbnailUrl)
@@ -199,10 +192,57 @@ export function PictureMasonry({
     scrollSurface.scrollTo(0);
   }, [filterKey, scrollElement, scrollSurface]);
 
-  // Virtuoso creates its own scroller on desktop and uses the document on mobile.
+  const hasEntries = entries.length > 0;
+  const activeInternalScroller =
+    !usesDocumentScroll && isReady && !isLoading && hasEntries
+      ? internalScroller
+      : null;
+
+  // Effect 1: Locate Virtuoso's internal scroll container on desktop (never re-runs on pagination)
   useEffect(() => {
+    if (usesDocumentScroll || !isReady || isLoading || !hasEntries) {
+      scrollElementRef.current = null;
+      return;
+    }
+
     const wrapper = scrollContainerRef.current;
-    if (!wrapper || !isReady) return;
+    if (!wrapper) return;
+
+    let found: HTMLElement | null = null;
+    let observer: MutationObserver | null = null;
+
+    const locate = () => {
+      const next = findScrollableElement(wrapper);
+      if (!next) return false;
+      found = next;
+      scrollElementRef.current = next;
+      setInternalScroller(next);
+      return true;
+    };
+
+    if (!locate()) {
+      observer = new MutationObserver(() => {
+        if (locate() && observer) {
+          observer.disconnect();
+          observer = null;
+        }
+      });
+      observer.observe(wrapper, { childList: true, subtree: true });
+    }
+
+    return () => {
+      observer?.disconnect();
+      if (scrollElementRef.current === found) {
+        scrollElementRef.current = null;
+      }
+      setInternalScroller((current) => (current === found ? null : current));
+    };
+  }, [filterKey, isReady, isLoading, hasEntries, usesDocumentScroll]);
+
+  // Effect 2: Attach pagination scroll listener (cheap, never re-queries DOM)
+  useEffect(() => {
+    if (!isReady) return;
+    if (!usesDocumentScroll && !activeInternalScroller) return;
 
     const handleScroll = () => {
       if (
@@ -214,50 +254,14 @@ export function PictureMasonry({
       }
     };
 
+    const unsubscribe = scrollSurface.subscribe(handleScroll);
     if (usesDocumentScroll) {
-      const unsubscribe = scrollSurface.subscribe(handleScroll);
       handleScroll();
-      return unsubscribe;
     }
-
-    let internalScroller: HTMLElement | null = null;
-    let observer: MutationObserver | null = null;
-
-    const setupScrollListener = () => {
-      const nextScroller = findScrollableElement(wrapper);
-      if (!nextScroller || nextScroller === internalScroller) {
-        return Boolean(internalScroller);
-      }
-
-      internalScroller?.removeEventListener("scroll", handleScroll);
-      internalScroller = nextScroller;
-      scrollElementRef.current = nextScroller;
-      setInternalScroller(nextScroller);
-      nextScroller.addEventListener("scroll", handleScroll, { passive: true });
-      return true;
-    };
-
-    if (!setupScrollListener()) {
-      observer = new MutationObserver(() => {
-        if (setupScrollListener() && observer) {
-          observer.disconnect();
-          observer = null;
-        }
-      });
-      observer.observe(wrapper, { childList: true, subtree: true });
-    }
-
-    return () => {
-      observer?.disconnect();
-      internalScroller?.removeEventListener("scroll", handleScroll);
-      scrollElementRef.current = null;
-      setInternalScroller((current) =>
-        current === internalScroller ? null : current,
-      );
-    };
+    return unsubscribe;
   }, [
+    activeInternalScroller,
     fetchNextPage,
-    filterKey,
     hasNextPage,
     isFetchingNextPage,
     isReady,
@@ -265,9 +269,13 @@ export function PictureMasonry({
     usesDocumentScroll,
   ]);
 
+  const observeRoot = usesDocumentScroll
+    ? scrollContainerNode
+    : activeInternalScroller;
+
   const { endPaddingHeight: scrollReadEndPaddingHeight } =
     useMasonryScrollMarkRead({
-      scrollElement,
+      observeRoot,
       scrollSurface,
       entries,
       enabled: markReadOnScroll,
@@ -275,6 +283,7 @@ export function PictureMasonry({
       hasNextPage: Boolean(hasNextPage),
       resetKey: `${filterKey}\u0000${markReadOnScroll}`,
     });
+
   const title = useMemo(() => {
     switch (selection.type) {
       case "all":
@@ -339,7 +348,7 @@ export function PictureMasonry({
       </MobileDocumentHeader>
 
       <div
-        ref={scrollContainerRef}
+        ref={setScrollContainerRef}
         className={cn(
           "[overflow-anchor:none]",
           usesDocumentScroll
@@ -404,25 +413,7 @@ function EmptyState() {
 function LoadingMore() {
   return (
     <div className="flex items-center justify-center py-8">
-      <svg
-        className="size-5 animate-spin text-muted-foreground"
-        fill="none"
-        viewBox="0 0 24 24"
-      >
-        <circle
-          className="opacity-25"
-          cx="12"
-          cy="12"
-          r="10"
-          stroke="currentColor"
-          strokeWidth="4"
-        />
-        <path
-          className="opacity-75"
-          fill="currentColor"
-          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-        />
-      </svg>
+      <Loader2 className="size-5 animate-spin text-muted-foreground" />
     </div>
   );
 }

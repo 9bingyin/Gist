@@ -12,10 +12,50 @@ package mock
 import (
 	context "context"
 	service "gist/backend/internal/service"
+	network "gist/backend/pkg/network"
 	reflect "reflect"
 
 	gomock "go.uber.org/mock/gomock"
 )
+
+// MockAnubisCookieClearer is a mock of AnubisCookieClearer interface.
+type MockAnubisCookieClearer struct {
+	ctrl     *gomock.Controller
+	recorder *MockAnubisCookieClearerMockRecorder
+	isgomock struct{}
+}
+
+// MockAnubisCookieClearerMockRecorder is the mock recorder for MockAnubisCookieClearer.
+type MockAnubisCookieClearerMockRecorder struct {
+	mock *MockAnubisCookieClearer
+}
+
+// NewMockAnubisCookieClearer creates a new mock instance.
+func NewMockAnubisCookieClearer(ctrl *gomock.Controller) *MockAnubisCookieClearer {
+	mock := &MockAnubisCookieClearer{ctrl: ctrl}
+	mock.recorder = &MockAnubisCookieClearerMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockAnubisCookieClearer) EXPECT() *MockAnubisCookieClearerMockRecorder {
+	return m.recorder
+}
+
+// ClearAll mocks base method.
+func (m *MockAnubisCookieClearer) ClearAll(ctx context.Context) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ClearAll", ctx)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ClearAll indicates an expected call of ClearAll.
+func (mr *MockAnubisCookieClearerMockRecorder) ClearAll(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClearAll", reflect.TypeOf((*MockAnubisCookieClearer)(nil).ClearAll), ctx)
+}
 
 // MockSettingsService is a mock of SettingsService interface.
 type MockSettingsService struct {
@@ -172,6 +212,18 @@ func (mr *MockSettingsServiceMockRecorder) SetAISettings(ctx, settings any) *gom
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetAISettings", reflect.TypeOf((*MockSettingsService)(nil).SetAISettings), ctx, settings)
 }
 
+// SetAnubisStore mocks base method.
+func (m *MockSettingsService) SetAnubisStore(clearer service.AnubisCookieClearer) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetAnubisStore", clearer)
+}
+
+// SetAnubisStore indicates an expected call of SetAnubisStore.
+func (mr *MockSettingsServiceMockRecorder) SetAnubisStore(clearer any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetAnubisStore", reflect.TypeOf((*MockSettingsService)(nil).SetAnubisStore), clearer)
+}
+
 // SetAppearanceSettings mocks base method.
 func (m *MockSettingsService) SetAppearanceSettings(ctx context.Context, settings *service.AppearanceSettings) error {
 	m.ctrl.T.Helper()
@@ -184,6 +236,18 @@ func (m *MockSettingsService) SetAppearanceSettings(ctx context.Context, setting
 func (mr *MockSettingsServiceMockRecorder) SetAppearanceSettings(ctx, settings any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetAppearanceSettings", reflect.TypeOf((*MockSettingsService)(nil).SetAppearanceSettings), ctx, settings)
+}
+
+// SetClientFactory mocks base method.
+func (m *MockSettingsService) SetClientFactory(factory *network.ClientFactory) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetClientFactory", factory)
+}
+
+// SetClientFactory indicates an expected call of SetClientFactory.
+func (mr *MockSettingsServiceMockRecorder) SetClientFactory(factory any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetClientFactory", reflect.TypeOf((*MockSettingsService)(nil).SetClientFactory), factory)
 }
 
 // SetGeneralSettings mocks base method.
@@ -227,4 +291,18 @@ func (m *MockSettingsService) TestAI(ctx context.Context, provider, apiKey, base
 func (mr *MockSettingsServiceMockRecorder) TestAI(ctx, provider, apiKey, baseURL, model, requestOptions any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TestAI", reflect.TypeOf((*MockSettingsService)(nil).TestAI), ctx, provider, apiKey, baseURL, model, requestOptions)
+}
+
+// TestNetworkProxy mocks base method.
+func (m *MockSettingsService) TestNetworkProxy(ctx context.Context, settings *service.NetworkSettings) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "TestNetworkProxy", ctx, settings)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// TestNetworkProxy indicates an expected call of TestNetworkProxy.
+func (mr *MockSettingsServiceMockRecorder) TestNetworkProxy(ctx, settings any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TestNetworkProxy", reflect.TypeOf((*MockSettingsService)(nil).TestNetworkProxy), ctx, settings)
 }

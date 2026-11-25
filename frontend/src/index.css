@@ -1,5 +1,4 @@
 @import "tailwindcss";
-@plugin "tailwindcss-motion";
 @plugin "@tailwindcss/typography";
 
 @theme {

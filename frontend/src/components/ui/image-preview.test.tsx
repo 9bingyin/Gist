@@ -34,8 +34,8 @@ vi.mock("embla-carousel-react", () => ({
   },
 }));
 
-// Mock framer-motion to avoid animation issues in tests
-vi.mock("framer-motion", () => ({
+// Mock motion/react to avoid animation issues in tests
+vi.mock("motion/react", () => ({
   AnimatePresence: ({
     children,
     onExitComplete,
@@ -464,6 +464,17 @@ describe("ImagePreview", () => {
       expect(overlay?.className).toContain("z-[100]");
       expect(overlay?.className).not.toContain("bg-black/90");
       expect(overlay?.className).not.toContain("h-dvh");
+    });
+
+    it("does not close overlay when clicking on image inside carousel", () => {
+      useImagePreviewStore.getState().open(mockImages);
+
+      const { container } = render(<ImagePreview />);
+      const img = container.querySelector("img");
+      expect(img).not.toBeNull();
+
+      fireEvent.click(img!);
+      expect(useImagePreviewStore.getState().isOpen).toBe(true);
     });
   });
 

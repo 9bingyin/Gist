@@ -205,6 +205,20 @@ func (mr *MockFeedRepositoryMockRecorder) Update(ctx, feed any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Update", reflect.TypeOf((*MockFeedRepository)(nil).Update), ctx, feed)
 }
 
+// UpdateConditionalGet mocks base method.
+func (m *MockFeedRepository) UpdateConditionalGet(ctx context.Context, id int64, etag, lastModified *string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateConditionalGet", ctx, id, etag, lastModified)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateConditionalGet indicates an expected call of UpdateConditionalGet.
+func (mr *MockFeedRepositoryMockRecorder) UpdateConditionalGet(ctx, id, etag, lastModified any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateConditionalGet", reflect.TypeOf((*MockFeedRepository)(nil).UpdateConditionalGet), ctx, id, etag, lastModified)
+}
+
 // UpdateErrorMessage mocks base method.
 func (m *MockFeedRepository) UpdateErrorMessage(ctx context.Context, id int64, errorMessage *string) error {
 	m.ctrl.T.Helper()

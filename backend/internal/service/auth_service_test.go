@@ -24,7 +24,7 @@ func TestAuthService_RegisterAndLogin_Success(t *testing.T) {
 	require.Equal(t, "alice@example.com", resp.User.Email)
 	require.NotEmpty(t, resp.Token, "expected token")
 
-	ok, err := svc.ValidateToken(resp.Token)
+	ok, err := svc.ValidateToken(context.Background(), resp.Token)
 	require.NoError(t, err, "token validation should not fail")
 	require.True(t, ok, "expected token to be valid")
 
@@ -49,10 +49,11 @@ func TestAuthService_Register_ValidationErrors(t *testing.T) {
 		wantErr  error
 	}{
 		{name: "missing username", username: "", email: "a@b.com", password: "secret", wantErr: service.ErrUsernameRequiredHelper},
-		{name: "invalid username", username: "1alice", email: "a@b.com", password: "secret", wantErr: service.ErrInvalidUsernameHelper},
+		{name: "invalid username", username: "alice bob", email: "a@b.com", password: "secret", wantErr: service.ErrInvalidUsernameHelper},
 		{name: "missing email", username: "alice", email: "", password: "secret", wantErr: service.ErrEmailRequiredHelper},
 		{name: "missing password", username: "alice", email: "a@b.com", password: "", wantErr: service.ErrPasswordRequiredHelper},
 		{name: "short password", username: "alice", email: "a@b.com", password: "123", wantErr: service.ErrPasswordTooShortHelper},
+		{name: "long password", username: "alice", email: "a@b.com", password: "1234567890123456789012345678901234567890123456789012345678901234567890123", wantErr: service.ErrPasswordTooLong},
 	}
 
 	for _, tc := range cases {
@@ -144,7 +145,7 @@ func TestAuthService_ValidateToken_MissingSecret(t *testing.T) {
 	repo := newSettingsRepoStub()
 	svc := service.NewAuthService(repo)
 
-	ok, err := svc.ValidateToken("invalid")
+	ok, err := svc.ValidateToken(context.Background(), "invalid")
 	require.ErrorIs(t, err, service.ErrInvalidTokenHelper)
 	require.False(t, ok, "expected token to be invalid")
 }

@@ -26,8 +26,8 @@ func TestEntryService_List_Success(t *testing.T) {
 	ctx := context.Background()
 
 	expectedEntries := []model.Entry{
-		{ID: 1, FeedID: 100, Title: stringPtr("Entry 1")},
-		{ID: 2, FeedID: 100, Title: stringPtr("Entry 2")},
+		{ID: 1, FeedID: 100, Title: new("Entry 1")},
+		{ID: 2, FeedID: 100, Title: new("Entry 2")},
 	}
 
 	mockEntries.EXPECT().
@@ -38,13 +38,14 @@ func TestEntryService_List_Success(t *testing.T) {
 			UnreadOnly:   false,
 			StarredOnly:  false,
 			HasThumbnail: false,
-			Limit:        50,
+			Limit:        51,
 			Offset:       0,
 		}).
 		Return(expectedEntries, nil)
 
-	entries, err := svc.List(ctx, service.EntryListParams{})
+	entries, hasMore, err := svc.List(ctx, service.EntryListParams{})
 	require.NoError(t, err)
+	require.False(t, hasMore)
 	require.Len(t, entries, 2)
 }
 
@@ -72,12 +73,12 @@ func TestEntryService_List_WithFeedID(t *testing.T) {
 			UnreadOnly:   false,
 			StarredOnly:  false,
 			HasThumbnail: false,
-			Limit:        50,
+			Limit:        51,
 			Offset:       0,
 		}).
 		Return([]model.Entry{}, nil)
 
-	_, err := svc.List(ctx, service.EntryListParams{FeedID: &feedID})
+	_, _, err := svc.List(ctx, service.EntryListParams{FeedID: &feedID})
 	require.NoError(t, err)
 }
 
@@ -97,7 +98,7 @@ func TestEntryService_List_FeedNotFound(t *testing.T) {
 		GetByID(ctx, feedID).
 		Return(model.Feed{}, sql.ErrNoRows)
 
-	_, err := svc.List(ctx, service.EntryListParams{FeedID: &feedID})
+	_, _, err := svc.List(ctx, service.EntryListParams{FeedID: &feedID})
 	require.ErrorIs(t, err, service.ErrNotFound)
 }
 
@@ -117,11 +118,11 @@ func TestEntryService_List_FolderNotFound(t *testing.T) {
 		GetByID(ctx, folderID).
 		Return(model.Folder{}, sql.ErrNoRows)
 
-	_, err := svc.List(ctx, service.EntryListParams{FolderID: &folderID})
+	_, _, err := svc.List(ctx, service.EntryListParams{FolderID: &folderID})
 	require.ErrorIs(t, err, service.ErrNotFound)
 }
 
-func TestEntryService_List_LimitClamp(t *testing.T) {
+func TestEntryService_List_HasMore(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -131,16 +132,39 @@ func TestEntryService_List_LimitClamp(t *testing.T) {
 	svc := service.NewEntryService(mockEntries, mockFeeds, mockFolders)
 	ctx := context.Background()
 
-	// Limit > 101 should be clamped to 101
 	mockEntries.EXPECT().
 		List(ctx, repository.EntryListFilter{
-			Limit:  101,
+			Limit:  3,
+			Offset: 0,
+		}).
+		Return([]model.Entry{{ID: 1}, {ID: 2}, {ID: 3}}, nil)
+
+	entries, hasMore, err := svc.List(ctx, service.EntryListParams{Limit: 2})
+	require.NoError(t, err)
+	require.True(t, hasMore)
+	require.Len(t, entries, 2)
+}
+
+func TestEntryService_List_LargeLimitAllowed(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockEntries := mock.NewMockEntryRepository(ctrl)
+	mockFeeds := mock.NewMockFeedRepository(ctrl)
+	mockFolders := mock.NewMockFolderRepository(ctrl)
+	svc := service.NewEntryService(mockEntries, mockFeeds, mockFolders)
+	ctx := context.Background()
+
+	mockEntries.EXPECT().
+		List(ctx, repository.EntryListFilter{
+			Limit:  201,
 			Offset: 0,
 		}).
 		Return([]model.Entry{}, nil)
 
-	_, err := svc.List(ctx, service.EntryListParams{Limit: 200})
+	_, hasMore, err := svc.List(ctx, service.EntryListParams{Limit: 200})
 	require.NoError(t, err)
+	require.False(t, hasMore)
 }
 
 func TestEntryService_List_DefaultLimit(t *testing.T) {
@@ -153,15 +177,15 @@ func TestEntryService_List_DefaultLimit(t *testing.T) {
 	svc := service.NewEntryService(mockEntries, mockFeeds, mockFolders)
 	ctx := context.Background()
 
-	// Limit <= 0 should default to 50
+	// Limit <= 0 should default to 50 (querying 50+1)
 	mockEntries.EXPECT().
 		List(ctx, repository.EntryListFilter{
-			Limit:  50,
+			Limit:  51,
 			Offset: 0,
 		}).
 		Return([]model.Entry{}, nil)
 
-	_, err := svc.List(ctx, service.EntryListParams{Limit: 0})
+	_, _, err := svc.List(ctx, service.EntryListParams{Limit: 0})
 	require.NoError(t, err)
 }
 
@@ -182,7 +206,7 @@ func TestEntryService_List_FeedCheckError(t *testing.T) {
 		GetByID(ctx, feedID).
 		Return(model.Feed{}, dbErr)
 
-	_, err := svc.List(ctx, service.EntryListParams{FeedID: &feedID})
+	_, _, err := svc.List(ctx, service.EntryListParams{FeedID: &feedID})
 	require.ErrorIs(t, err, dbErr)
 }
 
@@ -200,12 +224,12 @@ func TestEntryService_List_RepositoryError(t *testing.T) {
 
 	mockEntries.EXPECT().
 		List(ctx, repository.EntryListFilter{
-			Limit:  50,
+			Limit:  51,
 			Offset: 0,
 		}).
 		Return(nil, dbErr)
 
-	_, err := svc.List(ctx, service.EntryListParams{})
+	_, _, err := svc.List(ctx, service.EntryListParams{})
 	require.ErrorIs(t, err, dbErr)
 }
 
@@ -222,7 +246,7 @@ func TestEntryService_GetByID_Success(t *testing.T) {
 	expectedEntry := model.Entry{
 		ID:     123,
 		FeedID: 100,
-		Title:  stringPtr("Test Entry"),
+		Title:  new("Test Entry"),
 	}
 
 	mockEntries.EXPECT().
@@ -645,12 +669,12 @@ func TestEntryService_List_WithFilters(t *testing.T) {
 			UnreadOnly:   true,
 			StarredOnly:  false,
 			HasThumbnail: true,
-			Limit:        20,
+			Limit:        21,
 			Offset:       10,
 		}).
 		Return([]model.Entry{}, nil)
 
-	_, err := svc.List(ctx, service.EntryListParams{
+	_, _, err := svc.List(ctx, service.EntryListParams{
 		ContentType:  &contentType,
 		UnreadOnly:   true,
 		HasThumbnail: true,
@@ -712,9 +736,4 @@ func TestEntryService_ClearEntryCache_DeleteError(t *testing.T) {
 
 	_, err := svc.ClearEntryCache(context.Background())
 	require.ErrorIs(t, err, dbErr)
-}
-
-// Helper function
-func stringPtr(s string) *string {
-	return &s
 }

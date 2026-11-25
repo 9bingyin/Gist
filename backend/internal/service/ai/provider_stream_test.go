@@ -19,8 +19,7 @@ func TestOpenAIProvider_ResponsesEndpoints(t *testing.T) {
 	server := newOpenAITestServer(t)
 	defer server.Close()
 
-	provider, err := ai.NewOpenAIProvider("key", server.URL+"/v1/", "gpt-4o-mini", nil)
-	require.NoError(t, err)
+	provider := ai.NewOpenAIProvider("key", server.URL+"/v1/", "gpt-4o-mini", nil, nil)
 
 	testAndCompleteProvider(t, provider, "response-text")
 	streamText := readStream(t, provider, "sys", "content")
@@ -31,8 +30,7 @@ func TestCompatibleProvider_ChatEndpoints(t *testing.T) {
 	server := newOpenAITestServer(t)
 	defer server.Close()
 
-	provider, err := ai.NewCompatibleProvider("key", server.URL+"/v1/", "gpt-4o-mini", nil)
-	require.NoError(t, err)
+	provider := ai.NewCompatibleProvider("key", server.URL+"/v1/", "gpt-4o-mini", nil, nil)
 
 	testAndCompleteProvider(t, provider, "chat-response")
 	streamText := readStream(t, provider, "sys", "content")
@@ -43,8 +41,7 @@ func TestAnthropicProvider_MessageEndpoints(t *testing.T) {
 	server := newAnthropicTestServer(t)
 	defer server.Close()
 
-	provider, err := ai.NewAnthropicProvider("key", server.URL+"/", "claude-3-sonnet", nil)
-	require.NoError(t, err)
+	provider := ai.NewAnthropicProvider("key", server.URL+"/", "claude-3-sonnet", nil, nil)
 
 	testProvider(t, provider, "claude-response")
 
@@ -66,11 +63,10 @@ func TestOpenAIProvider_RequestOptionsAreMerged(t *testing.T) {
 	})
 	defer server.Close()
 
-	provider, err := ai.NewOpenAIProvider("key", server.URL+"/v1/", "gpt-4o-mini", map[string]any{
+	provider := ai.NewOpenAIProvider("key", server.URL+"/v1/", "gpt-4o-mini", map[string]any{
 		"custom_flag": "enabled",
 		"metadata":    map[string]any{"source": "test"},
-	})
-	require.NoError(t, err)
+	}, nil)
 
 	testAndCompleteProvider(t, provider, "response-text")
 	require.Equal(t, "response-stream", readStream(t, provider, "sys", "content"))
@@ -89,11 +85,10 @@ func TestCompatibleProvider_RequestOptionsAreMerged(t *testing.T) {
 	})
 	defer server.Close()
 
-	provider, err := ai.NewCompatibleProvider("key", server.URL+"/v1/", "gpt-4o-mini", map[string]any{
+	provider := ai.NewCompatibleProvider("key", server.URL+"/v1/", "gpt-4o-mini", map[string]any{
 		"custom_flag": "enabled",
 		"extra_body":  map[string]any{"trace": true},
-	})
-	require.NoError(t, err)
+	}, nil)
 
 	testAndCompleteProvider(t, provider, "chat-response")
 	require.Equal(t, "chat-stream", readStream(t, provider, "sys", "content"))
@@ -112,11 +107,10 @@ func TestAnthropicProvider_RequestOptionsAreMerged(t *testing.T) {
 	})
 	defer server.Close()
 
-	provider, err := ai.NewAnthropicProvider("key", server.URL+"/", "claude-3-sonnet", map[string]any{
+	provider := ai.NewAnthropicProvider("key", server.URL+"/", "claude-3-sonnet", map[string]any{
 		"custom_flag": "enabled",
 		"metadata":    map[string]any{"user_id": "test"},
-	})
-	require.NoError(t, err)
+	}, nil)
 
 	testProvider(t, provider, "claude-response")
 
@@ -164,14 +158,12 @@ func readStream(t *testing.T, provider ai.Provider, systemPrompt, content string
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	textCh, errCh := provider.SummarizeStream(ctx, systemPrompt, content)
+	eventCh := provider.SummarizeStream(ctx, systemPrompt, content)
 
 	var sb strings.Builder
-	for text := range textCh {
-		sb.WriteString(text)
-	}
-	if err, ok := <-errCh; ok && err != nil {
-		require.NoError(t, err)
+	for ev := range eventCh {
+		require.NoError(t, ev.Err)
+		sb.WriteString(ev.Text)
 	}
 	return sb.String()
 }
@@ -252,7 +244,7 @@ func decodeBody(t *testing.T, body []byte) map[string]any {
 }
 
 func isStreamRequest(body []byte) bool {
-	var payload map[string]interface{}
+	var payload map[string]any
 	if err := json.Unmarshal(body, &payload); err != nil {
 		return false
 	}
@@ -262,23 +254,23 @@ func isStreamRequest(body []byte) bool {
 
 func writeOpenAIChatResponse(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "application/json")
-	resp := map[string]interface{}{
+	resp := map[string]any{
 		"id":      "chatcmpl-1",
 		"object":  "chat.completion",
 		"created": 1,
 		"model":   "gpt-4o-mini",
-		"choices": []interface{}{
-			map[string]interface{}{
+		"choices": []any{
+			map[string]any{
 				"index":         0,
 				"finish_reason": "stop",
-				"message": map[string]interface{}{
+				"message": map[string]any{
 					"role":    "assistant",
 					"content": "chat-response",
 					"refusal": "",
 				},
-				"logprobs": map[string]interface{}{
-					"content": []interface{}{},
-					"refusal": []interface{}{},
+				"logprobs": map[string]any{
+					"content": []any{},
+					"refusal": []any{},
 				},
 			},
 		},
@@ -298,27 +290,27 @@ func writeOpenAIChatStream(w http.ResponseWriter) {
 
 func writeOpenAIResponse(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "application/json")
-	resp := map[string]interface{}{
+	resp := map[string]any{
 		"id":                 "resp-1",
 		"created_at":         1,
-		"error":              map[string]interface{}{"code": "server_error", "message": ""},
-		"incomplete_details": map[string]interface{}{"reason": ""},
+		"error":              map[string]any{"code": "server_error", "message": ""},
+		"incomplete_details": map[string]any{"reason": ""},
 		"instructions":       "",
-		"metadata":           map[string]interface{}{},
+		"metadata":           map[string]any{},
 		"model":              "gpt-4o-mini",
 		"object":             "response",
-		"output": []interface{}{
-			map[string]interface{}{
+		"output": []any{
+			map[string]any{
 				"id":     "item-1",
 				"type":   "message",
 				"role":   "assistant",
 				"status": "completed",
-				"content": []interface{}{
-					map[string]interface{}{
+				"content": []any{
+					map[string]any{
 						"type":        "output_text",
 						"text":        "response-text",
-						"annotations": []interface{}{},
-						"logprobs":    []interface{}{},
+						"annotations": []any{},
+						"logprobs":    []any{},
 					},
 				},
 			},
@@ -326,7 +318,7 @@ func writeOpenAIResponse(w http.ResponseWriter) {
 		"parallel_tool_calls": false,
 		"temperature":         0,
 		"tool_choice":         "auto",
-		"tools":               []interface{}{},
+		"tools":               []any{},
 		"top_p":               1,
 	}
 	_ = json.NewEncoder(w).Encode(resp)
@@ -344,16 +336,16 @@ func writeOpenAIResponseStream(w http.ResponseWriter) {
 
 func writeAnthropicMessage(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "application/json")
-	resp := map[string]interface{}{
+	resp := map[string]any{
 		"id":            "msg-1",
 		"type":          "message",
 		"role":          "assistant",
 		"model":         "claude-3-sonnet",
-		"content":       []interface{}{map[string]interface{}{"type": "text", "text": "claude-response"}},
+		"content":       []any{map[string]any{"type": "text", "text": "claude-response"}},
 		"stop_reason":   "end_turn",
 		"stop_sequence": "",
-		"usage": map[string]interface{}{
-			"cache_creation": map[string]interface{}{
+		"usage": map[string]any{
+			"cache_creation": map[string]any{
 				"ephemeral_1h_input_tokens": 0,
 				"ephemeral_5m_input_tokens": 0,
 			},
@@ -361,7 +353,7 @@ func writeAnthropicMessage(w http.ResponseWriter) {
 			"cache_read_input_tokens":     0,
 			"input_tokens":                1,
 			"output_tokens":               1,
-			"server_tool_use":             map[string]interface{}{"web_search_requests": 0},
+			"server_tool_use":             map[string]any{"web_search_requests": 0},
 			"service_tier":                "standard",
 		},
 	}

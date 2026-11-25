@@ -1,3 +1,4 @@
+import { useCallback, useRef } from "react";
 import { useLongPress } from "./useLongPress";
 
 interface UseContextMenuOptions {
@@ -30,4 +31,33 @@ export function useContextMenu({
     ...longPressProps,
     onContextMenu,
   };
+}
+
+/**
+ * Shared helper for Radix ContextMenuTrigger elements that bridges mobile long-press
+ * into a synthetic `contextmenu` MouseEvent on the trigger node.
+ */
+export function useContextMenuTrigger<T extends HTMLElement>() {
+  const triggerRef = useRef<T>(null);
+
+  const handleContextMenu = useCallback(
+    (e: React.MouseEvent | { pageX: number; pageY: number }) => {
+      if (!("button" in e) && triggerRef.current) {
+        triggerRef.current.dispatchEvent(
+          new MouseEvent("contextmenu", {
+            bubbles: true,
+            clientX: e.pageX,
+            clientY: e.pageY,
+          }),
+        );
+      }
+    },
+    [],
+  );
+
+  const contextMenuProps = useContextMenu({
+    onContextMenu: handleContextMenu,
+  });
+
+  return { triggerRef, contextMenuProps };
 }

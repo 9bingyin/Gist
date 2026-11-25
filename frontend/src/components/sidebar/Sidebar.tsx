@@ -6,7 +6,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence } from "motion/react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import {
@@ -35,31 +35,21 @@ import {
 } from "@/hooks/useFeeds";
 import { useUnreadCounts } from "@/hooks/useEntries";
 import { useAuth } from "@/hooks/useAuth";
+import { registerSessionResetListener } from "@/stores/auth-store";
+import { getVisibleContentTypes } from "@/lib/content-types";
+import { compareStrings } from "@/lib/table-utils";
 import type { SelectionType } from "@/hooks/useSelection";
 import type { Folder, Feed, ContentType } from "@/types/api";
 import type { AppearanceSettings } from "@/types/settings";
 
-const defaultContentTypes: ContentType[] = [
-  "article",
-  "picture",
-  "notification",
-];
-
 // Per-contentType scroll position cache (module-level to survive unmount/remount)
 const sidebarScrollPositions = new Map<string, number>();
 
-type SortBy = "name" | "date";
+registerSessionResetListener(() => {
+  sidebarScrollPositions.clear();
+});
 
-// ASCII first (English/numbers before Chinese)
-function compareNames(a: string, b: string): number {
-  /* eslint-disable no-control-regex */
-  const isAsciiA = /^[\u0000-\u007f]/.test(a);
-  const isAsciiB = /^[\u0000-\u007f]/.test(b);
-  /* eslint-enable no-control-regex */
-  if (isAsciiA && !isAsciiB) return -1;
-  if (!isAsciiA && isAsciiB) return 1;
-  return a.localeCompare(b, "zh-CN");
-}
+type SortBy = "name" | "date";
 
 interface SidebarProps {
   onAddClick?: (contentType: ContentType) => void;
@@ -94,19 +84,12 @@ export function Sidebar({
   const [editingFeed, setEditingFeed] = useState<Feed | null>(null);
   const [sortBy, setSortBy] = useState<SortBy>("name");
 
-  const visibleContentTypes = useMemo(() => {
-    const current = appearanceSettings?.contentTypes;
-    if (!current || current.length === 0) return defaultContentTypes;
-    return current.filter(
-      (type) =>
-        type === "article" || type === "picture" || type === "notification",
-    );
-  }, [appearanceSettings]);
+  const visibleContentTypes = useMemo(
+    () => getVisibleContentTypes(appearanceSettings),
+    [appearanceSettings],
+  );
 
-  // Animation direction tracking:
-  // 1. direction is a state (set synchronously in effect, BEFORE setTimeout)
-  // 2. prevOrderIndexRef tracks contentType's orderIndex (not animatedContentType)
-  // 3. animatedContentType update is delayed via setTimeout
+  // Animation direction tracking
   const orderIndex = visibleContentTypes.indexOf(contentType);
   const prevOrderIndexRef = useRef(-1);
   const [isAnimationReady, setIsAnimationReady] = useState(false);
@@ -119,13 +102,16 @@ export function Sidebar({
       // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: must set direction BEFORE setTimeout schedules key update
       setDirection(orderIndex > prevOrderIndex ? 1 : -1);
     }
-    setTimeout(() => {
+    const timer = setTimeout(() => {
       setAnimatedContentType(contentType);
     }, 0);
     if (prevOrderIndexRef.current !== -1) {
       setIsAnimationReady(true);
     }
     prevOrderIndexRef.current = orderIndex;
+    return () => {
+      clearTimeout(timer);
+    };
   }, [orderIndex, contentType]);
 
   const { data: allFolders = [] } = useFolders();
@@ -136,7 +122,6 @@ export function Sidebar({
   const { mutate: updateFeedType } = useUpdateFeedType();
   const { mutate: updateFolderType } = useUpdateFolderType();
 
-  // Filter by content type - use animatedContentType to keep content in sync with animation
   const folders = useMemo(
     () => allFolders.filter((f) => f.type === animatedContentType),
     [allFolders, animatedContentType],
@@ -148,7 +133,6 @@ export function Sidebar({
 
   const { data: unreadCountsData } = useUnreadCounts();
 
-  // Handlers for menu actions
   const handleEditFeed = useCallback(
     (feedId: string) => {
       const feed = allFeeds.find((f) => f.id === feedId);
@@ -215,7 +199,6 @@ export function Sidebar({
     return map;
   }, [unreadCountsData]);
 
-  // Calculate unread count for each content type
   const contentTypeCounts = useMemo(() => {
     const counts = { article: 0, picture: 0, notification: 0 };
     for (const feed of allFeeds) {
@@ -241,13 +224,11 @@ export function Sidebar({
     return map;
   }, [feeds, unreadCounts]);
 
-  // Group feeds by folder (uses animatedContentType for content sync with animation)
-  const { foldersWithFeeds, uncategorizedFeeds } = groupFeedsByFolder(
-    folders,
-    feeds,
+  const { foldersWithFeeds, uncategorizedFeeds } = useMemo(
+    () => groupFeedsByFolder(folders, feeds),
+    [folders, feeds],
   );
 
-  // Sort feeds helper
   const sortFeeds = useCallback(
     (feedList: Feed[]) => {
       const sorted = [...feedList];
@@ -257,14 +238,13 @@ export function Sidebar({
             new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
         );
       } else {
-        sorted.sort((a, b) => compareNames(a.title, b.title));
+        sorted.sort((a, b) => compareStrings(a.title, b.title));
       }
       return sorted;
     },
     [sortBy],
   );
 
-  // Sorted folders with feeds
   const sortedFoldersWithFeeds = useMemo(() => {
     const sorted = [...foldersWithFeeds];
     if (sortBy === "date") {
@@ -274,7 +254,7 @@ export function Sidebar({
           new Date(b.folder.createdAt).getTime(),
       );
     } else {
-      sorted.sort((a, b) => compareNames(a.folder.name, b.folder.name));
+      sorted.sort((a, b) => compareStrings(a.folder.name, b.folder.name));
     }
     return sorted.map((item) => ({
       ...item,
@@ -282,7 +262,6 @@ export function Sidebar({
     }));
   }, [foldersWithFeeds, sortBy, sortFeeds]);
 
-  // Sorted uncategorized feeds
   const sortedUncategorizedFeeds = useMemo(
     () => sortFeeds(uncategorizedFeeds),
     [uncategorizedFeeds, sortFeeds],
@@ -314,7 +293,6 @@ export function Sidebar({
         visibleContentTypes={visibleContentTypes}
       />
 
-      {/* Content */}
       <div className="relative flex-1 overflow-hidden">
         <AnimatePresence initial={false} mode="popLayout">
           <motion.div
@@ -333,14 +311,21 @@ export function Sidebar({
             className="absolute inset-0 will-change-[transform,opacity]"
           >
             <SidebarScrollArea scrollKey={animatedContentType}>
-              {/* Feed categories header with sort */}
               <div className="flex items-center justify-between px-2.5">
                 <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
                   {t("sidebar.feeds")}
                 </span>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <button className="flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent/50 hover:text-foreground">
+                    <button
+                      type="button"
+                      aria-label={
+                        sortBy === "name"
+                          ? t("sidebar.sort_name")
+                          : t("sidebar.sort_date")
+                      }
+                      className="flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                    >
                       {sortBy === "name" ? (
                         <ArrowDownAZIcon className="size-3.5" />
                       ) : (
@@ -367,7 +352,6 @@ export function Sidebar({
                 </DropdownMenu>
               </div>
 
-              {/* Feed categories */}
               <div className="space-y-px">
                 {sortedFoldersWithFeeds.map(
                   ({ folder, feeds: folderFeeds }) => (
@@ -440,8 +424,6 @@ export function Sidebar({
   );
 }
 
-// Isolated scroll container - each AnimatePresence keyed child creates its own instance,
-// so refs and effects never conflict between entering/exiting elements.
 function SidebarScrollArea({
   scrollKey,
   children,
@@ -455,13 +437,11 @@ function SidebarScrollArea({
     const node = ref.current;
     if (!node) return;
 
-    // Restore saved position
     const saved = sidebarScrollPositions.get(scrollKey);
     if (saved) {
       node.scrollTop = saved;
     }
 
-    // Save on scroll
     const handleScroll = () => {
       sidebarScrollPositions.set(scrollKey, node.scrollTop);
     };

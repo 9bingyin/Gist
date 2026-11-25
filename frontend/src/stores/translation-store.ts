@@ -31,6 +31,7 @@ interface TranslationState {
     isReadability?: boolean,
   ) => void;
   clearTranslation: (articleId: string) => void;
+  clearAll: () => void;
   disableTranslation: (articleId: string) => void;
   enableTranslation: (articleId: string) => void;
   isDisabled: (articleId: string) => boolean;
@@ -89,6 +90,10 @@ export const useTranslationStore = create<TranslationState>((set, get) => ({
     });
   },
 
+  clearAll: () => {
+    set({ data: {}, disabled: new Set<string>() });
+  },
+
   disableTranslation: (articleId: string) => {
     set((state) => {
       const newDisabled = new Set(state.disabled);
@@ -134,6 +139,7 @@ export const translationActions = {
       .setTranslation(articleId, language, translation, isReadability),
   clear: (articleId: string) =>
     useTranslationStore.getState().clearTranslation(articleId),
+  clearAll: () => useTranslationStore.getState().clearAll(),
   disable: (articleId: string) =>
     useTranslationStore.getState().disableTranslation(articleId),
   enable: (articleId: string) =>

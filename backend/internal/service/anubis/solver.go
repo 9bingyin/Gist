@@ -6,17 +6,20 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
-	"regexp"
 	"sort"
+	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/Noooste/azuretls-client"
+	"golang.org/x/net/html"
+	"golang.org/x/sync/singleflight"
 
 	"gist/backend/internal/config"
 	"gist/backend/pkg/logger"
@@ -24,9 +27,12 @@ import (
 )
 
 const (
-	solverTimeout = 30 * time.Second
-	logModule     = "service"
-	logResource   = "anubis"
+	solverTimeout      = 30 * time.Second
+	defaultCookieTTL   = 7 * 24 * time.Hour
+	maxPoWDifficulty   = 64 // SHA-256 hex length
+	maxErrorBodyLogLen = 256
+	logModule          = "service"
+	logResource        = "anubis"
 )
 
 var submitHeaderOrder = []string{
@@ -52,7 +58,6 @@ var submitHeaderOrder = []string{
 }
 
 // cookieProfileHeaders are used to namespace cookies by request fingerprint.
-// This avoids cookie thrashing when multiple request profiles hit the same host.
 var cookieProfileHeaders = []string{
 	"user-agent",
 	"accept",
@@ -72,16 +77,16 @@ var cookieProfileHeaders = []string{
 	"priority",
 }
 
-// azureSession is an interface for azuretls session to allow testing
+// azureSession is an interface for azuretls session to allow testing.
 type azureSession interface {
 	Do(req *azuretls.Request, args ...any) (*azuretls.Response, error)
 	Close()
 }
 
-// newSessionFunc is a function type for creating new azure sessions
-type newSessionFunc func(ctx context.Context, timeout time.Duration) azureSession
+// newSessionFunc is a function type for creating new azure sessions.
+type newSessionFunc func(ctx context.Context, timeout time.Duration) (azureSession, error)
 
-// Challenge represents the Anubis challenge structure
+// Challenge represents the Anubis challenge structure.
 type Challenge struct {
 	Rules struct {
 		Algorithm  string `json:"algorithm"`
@@ -93,40 +98,91 @@ type Challenge struct {
 	} `json:"challenge"`
 }
 
-// Solver handles Anubis challenge detection and solving
+// Solver handles Anubis challenge detection and solving.
 type Solver struct {
 	clientFactory *network.ClientFactory
 	store         *Store
-	mu            sync.Mutex
-	solving       map[string]chan struct{} // cache_key -> done channel (prevents concurrent solving)
-	newSession    newSessionFunc           // for testing injection
+	sf            singleflight.Group
+	newSession    newSessionFunc // for testing injection
 }
 
-// NewSolver creates a new Anubis solver
+// NewSolver creates a new Anubis solver.
 func NewSolver(clientFactory *network.ClientFactory, store *Store) *Solver {
 	return &Solver{
 		clientFactory: clientFactory,
 		store:         store,
-		solving:       make(map[string]chan struct{}),
+	}
+}
+
+// extractChallengeScriptText uses an HTML tokenizer to find the text inside
+// <script id="anubis_challenge">...</script>.
+func extractChallengeScriptText(body []byte) (string, bool) {
+	if !bytes.Contains(body, []byte("anubis_challenge")) {
+		return "", false
+	}
+
+	tokenizer := html.NewTokenizer(bytes.NewReader(body))
+	for {
+		tt := tokenizer.Next()
+		if tt == html.ErrorToken {
+			if tokenizer.Err() == io.EOF {
+				return "", false
+			}
+			return "", false
+		}
+		if tt != html.StartTagToken {
+			continue
+		}
+
+		tagName, hasAttr := tokenizer.TagName()
+		if !bytes.EqualFold(tagName, []byte("script")) || !hasAttr {
+			continue
+		}
+
+		isChallengeTag := false
+		for {
+			key, val, more := tokenizer.TagAttr()
+			if bytes.EqualFold(key, []byte("id")) && string(val) == "anubis_challenge" {
+				isChallengeTag = true
+			}
+			if !more {
+				break
+			}
+		}
+		if !isChallengeTag {
+			continue
+		}
+
+		var content strings.Builder
+		for {
+			next := tokenizer.Next()
+			switch next {
+			case html.TextToken:
+				content.Write(tokenizer.Text())
+			case html.EndTagToken, html.ErrorToken:
+				return strings.TrimSpace(content.String()), true
+			}
+		}
 	}
 }
 
 // IsAnubisPage checks if the response body is any Anubis page (challenge or rejection).
 func IsAnubisPage(body []byte) bool {
-	return bytes.Contains(body, []byte(`id="anubis_challenge"`))
+	_, found := extractChallengeScriptText(body)
+	return found
 }
 
 // IsAnubisChallenge checks if the response body is a solvable Anubis challenge.
 // Returns false for rejection pages where challenge is null.
 func IsAnubisChallenge(body []byte) bool {
-	if !IsAnubisPage(body) {
+	text, found := extractChallengeScriptText(body)
+	if !found || text == "" {
 		return false
 	}
-	// Rejection pages have null challenge, not solvable
-	return !nullChallengeRegex.Match(body)
+	return text != "null"
 }
 
-// GetCachedCookie returns the cached cookie for the given host if valid
+// GetCachedCookie returns the cached cookie for the given host if valid.
 func (s *Solver) GetCachedCookie(ctx context.Context, host string) string {
 	return s.GetCachedCookieWithHeaders(ctx, host, nil)
 }
@@ -178,95 +234,96 @@ func (s *Solver) GetCachedCookieWithHeaders(ctx context.Context, host string, re
 	return ""
 }
 
-// SolveFromBody detects and solves Anubis challenge from response body
-// Returns the cookie string if successful, empty string if not an Anubis challenge
-// initialCookies are the cookies received from the initial request (needed for session)
+// InvalidateCookie removes stale cached cookies for the host and request profile.
+func (s *Solver) InvalidateCookie(ctx context.Context, host string, requestHeaders http.Header) {
+	if s.store == nil {
+		return
+	}
+	normalizedHost := normalizeHost(host)
+	if normalizedHost == "" {
+		return
+	}
+	cacheKey := buildCookieCacheKey(normalizedHost, requestHeaders)
+	if cacheKey != "" && cacheKey != normalizedHost {
+		_ = s.store.DeleteCookie(ctx, cacheKey)
+	}
+	_ = s.store.DeleteCookie(ctx, normalizedHost)
+}
+
+// SolveFromBody detects and solves Anubis challenge from response body.
 func (s *Solver) SolveFromBody(ctx context.Context, body []byte, originalURL string, initialCookies []*http.Cookie) (string, error) {
 	return s.SolveFromBodyWithHeaders(ctx, body, originalURL, initialCookies, nil)
 }
 
 // SolveFromBodyWithHeaders detects and solves Anubis challenge from response body.
-// requestHeaders should be the original request headers that triggered the challenge.
+// Concurrent requests for the same host+profile deduplicate via singleflight while
+// allowing each caller to cancel independently without aborting peers.
 func (s *Solver) SolveFromBodyWithHeaders(ctx context.Context, body []byte, originalURL string, initialCookies []*http.Cookie, requestHeaders http.Header) (string, error) {
 	if !IsAnubisChallenge(body) {
 		return "", nil
 	}
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
 
-	host := normalizeHost(extractHost(originalURL))
+	host := normalizeHost(network.ExtractHost(originalURL))
 	cacheKey := buildCookieCacheKey(host, requestHeaders)
 	if cacheKey == "" {
 		cacheKey = host
 	}
 
-	// Check if another goroutine is already solving for this request profile.
-	s.mu.Lock()
-	if ch, ok := s.solving[cacheKey]; ok {
-		s.mu.Unlock()
-		logger.Debug("anubis waiting for ongoing solve",
-			"module", logModule,
-			"action", "solve",
-			"resource", logResource,
-			"result", "ok",
-			"host", host,
-		)
-		select {
-		case <-ch:
-			// Small delay to let the cookie propagate and avoid thundering herd
-			time.Sleep(100 * time.Millisecond)
-			// Solving completed, get cookie from cache
-			if cookie := s.GetCachedCookieWithHeaders(ctx, host, requestHeaders); cookie != "" {
-				return cookie, nil
-			}
-			// Cache miss after solve - this shouldn't happen normally
-			return "", fmt.Errorf("anubis solve completed but no cookie cached for %s", host)
-		case <-ctx.Done():
-			return "", ctx.Err()
-		}
-	}
-
-	// Mark this profile as being solved
-	done := make(chan struct{})
-	s.solving[cacheKey] = done
-	s.mu.Unlock()
-
-	defer func() {
-		s.mu.Lock()
-		delete(s.solving, cacheKey)
-		close(done) // Notify waiting goroutines
-		s.mu.Unlock()
-	}()
-
-	// Parse the challenge JSON from HTML
+	// Parse challenge eagerly so invalid payloads fail fast without entering singleflight.
 	challenge, err := parseChallenge(body)
 	if err != nil {
 		return "", fmt.Errorf("parse anubis challenge: %w", err)
 	}
 
-	logger.Debug("anubis detected challenge",
-		"module", logModule,
-		"action", "solve",
-		"resource", logResource,
-		"result", "ok",
-		"host", extractHost(originalURL),
-		"algorithm", challenge.Rules.Algorithm,
-		"difficulty", challenge.Rules.Difficulty,
-	)
-
-	// Solve the challenge based on algorithm type
-	result, err := solveChallenge(ctx, challenge)
-	if err != nil {
-		return "", fmt.Errorf("solve anubis challenge: %w", err)
+	// Copy headers so the leader goroutine does not race with caller mutations.
+	var headersCopy http.Header
+	if requestHeaders != nil {
+		headersCopy = requestHeaders.Clone()
 	}
 
-	// Submit the solution (pass initial cookies for session)
-	cookie, expiresAt, err := s.submit(ctx, originalURL, challenge, result, initialCookies, requestHeaders)
-	if err != nil {
-		return "", fmt.Errorf("submit anubis solution: %w", err)
+	ch := s.sf.DoChan(cacheKey, func() (any, error) {
+		// Protect the shared solve from a single caller cancelling its request,
+		// while still bounding total execution time.
+		leaderCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), solverTimeout)
+		defer cancel()
+
+		logger.Debug("anubis detected challenge",
+			"module", logModule,
+			"action", "solve",
+			"resource", logResource,
+			"result", "ok",
+			"host", host,
+			"algorithm", challenge.Rules.Algorithm,
+			"difficulty", challenge.Rules.Difficulty,
+		)
+
+		result, err := solveChallenge(leaderCtx, challenge)
+		if err != nil {
+			return "", fmt.Errorf("solve anubis challenge: %w", err)
+		}
+
+		cookie, expiresAt, err := s.submit(leaderCtx, originalURL, challenge, result, initialCookies, headersCopy)
+		if err != nil {
+			return "", fmt.Errorf("submit anubis solution: %w", err)
+		}
+
+		s.cacheSolvedCookie(leaderCtx, host, cacheKey, cookie, expiresAt)
+		return cookie, nil
+	})
+
+	select {
+	case <-ctx.Done():
+		return "", ctx.Err()
+	case res := <-ch:
+		if res.Err != nil {
+			return "", res.Err
+		}
+		cookie, _ := res.Val.(string)
+		return cookie, nil
 	}
-
-	s.cacheSolvedCookie(ctx, host, cacheKey, cookie, expiresAt)
-
-	return cookie, nil
 }
 
 func (s *Solver) cacheSolvedCookie(ctx context.Context, host, cacheKey, cookie string, expiresAt time.Time) {
@@ -292,7 +349,7 @@ func (s *Solver) cacheSolvedCookie(ctx context.Context, host, cacheKey, cookie s
 		"resource", logResource,
 		"result", "ok",
 		"host", host,
-		"expires", expiresAt.Format(time.RFC3339),
+		"expires", expiresAt.UTC().Format(time.RFC3339),
 	)
 
 	// Keep a host-level fallback entry for callers without a stable header profile.
@@ -312,20 +369,15 @@ func (s *Solver) cacheSolvedCookie(ctx context.Context, host, cacheKey, cookie s
 	}
 }
 
-// challengeRegex extracts the JSON from the anubis_challenge script tag
-var challengeRegex = regexp.MustCompile(`<script id="anubis_challenge" type="application/json">([^<]+)</script>`)
-
-var nullChallengeRegex = regexp.MustCompile(`(?s)<script id="anubis_challenge" type="application/json">\s*null\s*</script>`)
-
-// parseChallenge extracts the Anubis challenge from HTML body
+// parseChallenge extracts the Anubis challenge from HTML body.
 func parseChallenge(body []byte) (*Challenge, error) {
-	matches := challengeRegex.FindSubmatch(body)
-	if len(matches) < 2 {
+	raw, found := extractChallengeScriptText(body)
+	if !found || raw == "" || raw == "null" {
 		return nil, fmt.Errorf("challenge JSON not found in response")
 	}
 
 	var challenge Challenge
-	if err := json.Unmarshal(matches[1], &challenge); err != nil {
+	if err := json.Unmarshal([]byte(raw), &challenge); err != nil {
 		return nil, fmt.Errorf("unmarshal challenge: %w", err)
 	}
 
@@ -336,7 +388,7 @@ func parseChallenge(body []byte) (*Challenge, error) {
 	return &challenge, nil
 }
 
-// solveResult holds the result of solving an Anubis challenge
+// solveResult holds the result of solving an Anubis challenge.
 type solveResult struct {
 	Hash    string // The computed hash
 	Nonce   int    // Nonce (only for proofofwork algorithms)
@@ -352,6 +404,10 @@ func solveChallenge(ctx context.Context, challenge *Challenge) (solveResult, err
 	difficulty := challenge.Rules.Difficulty
 	algorithm := challenge.Rules.Algorithm
 
+	if difficulty < 0 {
+		return solveResult{}, fmt.Errorf("invalid negative difficulty: %d", difficulty)
+	}
+
 	switch algorithm {
 	case "preact":
 		return solvePreact(ctx, randomData, difficulty)
@@ -360,11 +416,10 @@ func solveChallenge(ctx context.Context, challenge *Challenge) (solveResult, err
 	case "fast", "slow":
 		return solveProofOfWork(ctx, randomData, difficulty)
 	default:
-		// Default to preact for unknown algorithms
 		logger.Warn("anubis unknown algorithm, using preact",
-			"module", "service",
+			"module", logModule,
 			"action", "solve",
-			"resource", "anubis",
+			"resource", logResource,
 			"result", "failed",
 			"algorithm", algorithm,
 		)
@@ -372,90 +427,120 @@ func solveChallenge(ctx context.Context, challenge *Challenge) (solveResult, err
 	}
 }
 
-// solvePreact implements the preact algorithm: SHA256(randomData) + wait difficulty*80ms
+func waitWithContext(ctx context.Context, d time.Duration) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if d <= 0 {
+		return nil
+	}
+	if deadline, ok := ctx.Deadline(); ok && time.Until(deadline) < d {
+		return context.DeadlineExceeded
+	}
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// solvePreact implements the preact algorithm: SHA256(randomData) + wait difficulty*80ms.
 func solvePreact(ctx context.Context, randomData string, difficulty int) (solveResult, error) {
-	// Compute simple SHA256(randomData)
+	if difficulty < 0 {
+		return solveResult{}, fmt.Errorf("invalid negative difficulty: %d", difficulty)
+	}
+
 	h := sha256.Sum256([]byte(randomData))
 	hash := hex.EncodeToString(h[:])
 
-	// Wait required time: difficulty * 80ms (server validates this)
 	waitTime := time.Duration(difficulty)*80*time.Millisecond + 50*time.Millisecond
 	logger.Debug("anubis preact: waiting",
-		"module", "service",
+		"module", logModule,
 		"action", "solve",
-		"resource", "anubis",
+		"resource", logResource,
 		"result", "ok",
 		"duration_ms", waitTime.Milliseconds(),
 	)
 
-	select {
-	case <-time.After(waitTime):
-		logger.Debug("anubis preact solved",
-			"module", "service",
-			"action", "solve",
-			"resource", "anubis",
-			"result", "ok",
-			"hash", truncateForLog(hash),
-		)
-		return solveResult{Hash: hash}, nil
-	case <-ctx.Done():
-		return solveResult{}, ctx.Err()
+	if err := waitWithContext(ctx, waitTime); err != nil {
+		return solveResult{}, err
 	}
+
+	logger.Debug("anubis preact solved",
+		"module", logModule,
+		"action", "solve",
+		"resource", logResource,
+		"result", "ok",
+		"hash", truncateForLog(hash),
+	)
+	return solveResult{Hash: hash}, nil
 }
 
-// solveMetaRefresh implements the metarefresh algorithm: return randomData + wait difficulty*800ms
+// solveMetaRefresh implements the metarefresh algorithm: return randomData + wait difficulty*800ms.
 func solveMetaRefresh(ctx context.Context, randomData string, difficulty int) (solveResult, error) {
-	// Wait required time: difficulty * 800ms (server validates this)
+	if difficulty < 0 {
+		return solveResult{}, fmt.Errorf("invalid negative difficulty: %d", difficulty)
+	}
+
 	waitTime := time.Duration(difficulty)*800*time.Millisecond + 100*time.Millisecond
 	logger.Debug("anubis metarefresh: waiting",
-		"module", "service",
+		"module", logModule,
 		"action", "solve",
-		"resource", "anubis",
+		"resource", logResource,
 		"result", "ok",
 		"duration_ms", waitTime.Milliseconds(),
 	)
 
-	select {
-	case <-time.After(waitTime):
-		// metarefresh returns randomData directly, not a hash
-		logger.Debug("anubis metarefresh solved",
-			"module", "service",
-			"action", "solve",
-			"resource", "anubis",
-			"result", "ok",
-			"data", truncateForLog(randomData),
-		)
-		return solveResult{Hash: randomData}, nil
-	case <-ctx.Done():
-		return solveResult{}, ctx.Err()
+	if err := waitWithContext(ctx, waitTime); err != nil {
+		return solveResult{}, err
 	}
+
+	logger.Debug("anubis metarefresh solved",
+		"module", logModule,
+		"action", "solve",
+		"resource", logResource,
+		"result", "ok",
+		"data", truncateForLog(randomData),
+	)
+	return solveResult{Hash: randomData}, nil
 }
 
-// solveProofOfWork implements the proofofwork algorithm: iterate until enough leading zeros
+// solveProofOfWork implements the proofofwork algorithm with minimal allocations.
+// Protocol hard bounds: 0 <= difficulty <= 64 (SHA-256 hex length). Total runtime
+// is bounded by ctx cancellation/timeout rather than an arbitrary difficulty cap.
 func solveProofOfWork(ctx context.Context, randomData string, difficulty int) (solveResult, error) {
+	if difficulty < 0 || difficulty > maxPoWDifficulty {
+		return solveResult{}, fmt.Errorf("invalid proof-of-work difficulty %d (must be 0..%d)", difficulty, maxPoWDifficulty)
+	}
+
 	startTime := time.Now()
-	prefix := strings.Repeat("0", difficulty)
+	prefixLen := len(randomData)
+	buf := make([]byte, prefixLen, prefixLen+24)
+	copy(buf, randomData)
+
+	fullBytes := difficulty / 2
+	hasOddNibble := difficulty%2 == 1
 
 	for nonce := 0; ; nonce++ {
-		// Check context cancellation periodically to avoid blocking
-		if nonce%10000 == 0 {
-			select {
-			case <-ctx.Done():
-				return solveResult{}, ctx.Err()
-			default:
+		if nonce&0x3fff == 0 {
+			if err := ctx.Err(); err != nil {
+				return solveResult{}, err
 			}
 		}
 
-		input := fmt.Sprintf("%s%d", randomData, nonce)
-		h := sha256.Sum256([]byte(input))
-		hashHex := hex.EncodeToString(h[:])
+		input := strconv.AppendInt(buf[:prefixLen], int64(nonce), 10)
+		sum := sha256.Sum256(input)
 
-		if strings.HasPrefix(hashHex, prefix) {
+		if hasLeadingZeroNibbles(sum, fullBytes, hasOddNibble) {
+			hashHex := hex.EncodeToString(sum[:])
 			elapsed := time.Since(startTime).Milliseconds()
 			logger.Debug("anubis PoW solved",
-				"module", "service",
+				"module", logModule,
 				"action", "solve",
-				"resource", "anubis",
+				"resource", logResource,
 				"result", "ok",
 				"difficulty", difficulty,
 				"nonce", nonce,
@@ -471,38 +556,36 @@ func solveProofOfWork(ctx context.Context, randomData string, difficulty int) (s
 	}
 }
 
-// submit sends the solution to Anubis and retrieves the cookie
+func hasLeadingZeroNibbles(sum [32]byte, fullBytes int, hasOddNibble bool) bool {
+	for i := range fullBytes {
+		if sum[i] != 0 {
+			return false
+		}
+	}
+	if hasOddNibble && sum[fullBytes]&0xf0 != 0 {
+		return false
+	}
+	return true
+}
+
+// submit sends the solution to Anubis and retrieves the cookie.
 func (s *Solver) submit(ctx context.Context, originalURL string, challenge *Challenge, result solveResult, initialCookies []*http.Cookie, requestHeaders http.Header) (string, time.Time, error) {
-	// Parse the original URL to get the base
-	parsed, err := url.Parse(originalURL)
+	parsed, err := network.ValidateFetchURL(originalURL)
 	if err != nil {
-		return "", time.Time{}, fmt.Errorf("parse url: %w", err)
+		return "", time.Time{}, fmt.Errorf("validate url: %w", err)
 	}
 	baseURL := fmt.Sprintf("%s://%s", parsed.Scheme, parsed.Host)
 
-	// Build submission URL based on algorithm type
 	var submitURL string
-	algorithm := challenge.Rules.Algorithm
-
-	switch algorithm {
-	case "preact":
-		// preact: uses 'result' parameter (SHA256 hash), no nonce/elapsedTime
-		submitURL = fmt.Sprintf("%s/.within.website/x/cmd/anubis/api/pass-challenge?id=%s&redir=%s&result=%s",
+	switch challenge.Rules.Algorithm {
+	case "metarefresh":
+		submitURL = fmt.Sprintf("%s/.within.website/x/cmd/anubis/api/pass-challenge?id=%s&redir=%s&challenge=%s",
 			baseURL,
 			url.QueryEscape(challenge.Challenge.ID),
 			url.QueryEscape(parsed.RequestURI()),
 			url.QueryEscape(result.Hash),
 		)
-	case "metarefresh":
-		// metarefresh: uses 'challenge' parameter (raw randomData), no nonce/elapsedTime
-		submitURL = fmt.Sprintf("%s/.within.website/x/cmd/anubis/api/pass-challenge?id=%s&redir=%s&challenge=%s",
-			baseURL,
-			url.QueryEscape(challenge.Challenge.ID),
-			url.QueryEscape(parsed.RequestURI()),
-			url.QueryEscape(result.Hash), // Hash field contains randomData for metarefresh
-		)
 	case "fast", "slow":
-		// proofofwork: uses 'response', 'nonce', 'elapsedTime' parameters
 		submitURL = fmt.Sprintf("%s/.within.website/x/cmd/anubis/api/pass-challenge?id=%s&response=%s&nonce=%d&redir=%s&elapsedTime=%d",
 			baseURL,
 			url.QueryEscape(challenge.Challenge.ID),
@@ -512,7 +595,7 @@ func (s *Solver) submit(ctx context.Context, originalURL string, challenge *Chal
 			result.Elapsed,
 		)
 	default:
-		// Default to preact format
+		// preact and unknown algorithms default to preact format.
 		submitURL = fmt.Sprintf("%s/.within.website/x/cmd/anubis/api/pass-challenge?id=%s&redir=%s&result=%s",
 			baseURL,
 			url.QueryEscape(challenge.Challenge.ID),
@@ -521,32 +604,32 @@ func (s *Solver) submit(ctx context.Context, originalURL string, challenge *Chal
 		)
 	}
 
-	// Create azuretls session with Chrome fingerprint
 	var session azureSession
 	if s.newSession != nil {
-		session = s.newSession(ctx, solverTimeout)
+		session, err = s.newSession(ctx, solverTimeout)
+	} else if s.clientFactory != nil {
+		session, err = s.clientFactory.NewAzureSession(ctx, solverTimeout)
 	} else {
-		session = s.clientFactory.NewAzureSession(ctx, solverTimeout)
+		return "", time.Time{}, errors.New("clientFactory is nil")
+	}
+	if err != nil {
+		return "", time.Time{}, fmt.Errorf("create azure session: %w", err)
 	}
 	defer session.Close()
 
-	// Reuse the original request fingerprint to avoid policyRule drift.
 	headers := buildSubmitHeaders(requestHeaders)
-
-	// Add initial cookies from the challenge request (required for session)
 	if cookieHeader := formatCookieHeader(initialCookies); cookieHeader != "" {
 		headers = upsertOrderedHeader(headers, "cookie", cookieHeader)
 	}
 
 	logger.Debug("anubis submitting solution",
-		"module", "service",
+		"module", logModule,
 		"action", "submit",
-		"resource", "anubis",
+		"resource", logResource,
 		"result", "ok",
-		"host", extractHost(submitURL),
+		"host", network.ExtractHost(submitURL),
 	)
 
-	// Send request with redirect disabled to capture Set-Cookie header
 	resp, err := session.Do(&azuretls.Request{
 		Method:           http.MethodGet,
 		Url:              submitURL,
@@ -555,9 +638,9 @@ func (s *Solver) submit(ctx context.Context, originalURL string, challenge *Chal
 	})
 	if err != nil {
 		logger.Debug("anubis submit request failed",
-			"module", "service",
+			"module", logModule,
 			"action", "submit",
-			"resource", "anubis",
+			"resource", logResource,
 			"result", "failed",
 			"error", err,
 		)
@@ -565,45 +648,93 @@ func (s *Solver) submit(ctx context.Context, originalURL string, challenge *Chal
 	}
 
 	logger.Debug("anubis submit response",
-		"module", "service",
+		"module", logModule,
 		"action", "submit",
-		"resource", "anubis",
+		"resource", logResource,
 		"result", "ok",
 		"status_code", resp.StatusCode,
 		"cookies", len(resp.Cookies),
 	)
 
-	// Expected: 302 redirect with Set-Cookie
 	if resp.StatusCode != http.StatusFound && resp.StatusCode != http.StatusOK {
 		logger.Debug("anubis unexpected status",
-			"module", "service",
+			"module", logModule,
 			"action", "submit",
-			"resource", "anubis",
+			"resource", logResource,
 			"result", "failed",
 			"status_code", resp.StatusCode,
 		)
-		return "", time.Time{}, fmt.Errorf("unexpected status %d: %s", resp.StatusCode, string(resp.Body))
+		return "", time.Time{}, fmt.Errorf("unexpected status %d: %s", resp.StatusCode, truncateBodyForError(resp.Body))
 	}
 
-	// Extract auth cookies from response (azuretls uses map[string]string)
 	authCookieParts := extractAuthCookieParts(resp.Cookies)
-
 	if len(authCookieParts) == 0 {
+		cookieNames := make([]string, 0, len(resp.Cookies))
+		for name := range resp.Cookies {
+			cookieNames = append(cookieNames, name)
+		}
+		sort.Strings(cookieNames)
 		logger.Debug("anubis no cookies found",
-			"module", "service",
+			"module", logModule,
 			"action", "submit",
-			"resource", "anubis",
+			"resource", logResource,
 			"result", "failed",
-			"all_cookies", resp.Cookies,
+			"cookie_names", cookieNames,
 		)
 		return "", time.Time{}, fmt.Errorf("no auth cookies in response")
 	}
 
-	// Default expiry (7 days) - azuretls cookies map doesn't include expiry info
-	expiresAt := time.Now().Add(7 * 24 * time.Hour)
-
+	expiresAt := parseAuthCookieExpiry(resp.Header)
 	cookie := strings.Join(authCookieParts, "; ")
 	return cookie, expiresAt, nil
+}
+
+func parseAuthCookieExpiry(headers map[string][]string) time.Time {
+	now := time.Now().UTC()
+	var earliest time.Time
+
+	for key, values := range headers {
+		if !strings.EqualFold(key, "Set-Cookie") {
+			continue
+		}
+		for _, raw := range values {
+			c, err := http.ParseSetCookie(raw)
+			if err != nil || !isAuthCookieName(c.Name) {
+				continue
+			}
+			var exp time.Time
+			switch {
+			case c.MaxAge > 0:
+				exp = now.Add(time.Duration(c.MaxAge) * time.Second)
+			case !c.Expires.IsZero() && c.Expires.After(now):
+				exp = c.Expires.UTC()
+			}
+			if !exp.IsZero() && (earliest.IsZero() || exp.Before(earliest)) {
+				earliest = exp
+			}
+		}
+	}
+
+	if !earliest.IsZero() {
+		return earliest
+	}
+	return now.Add(defaultCookieTTL)
+}
+
+func isAuthCookieName(name string) bool {
+	lowerName := strings.ToLower(name)
+	if strings.Contains(lowerName, "cookie-verification") {
+		return false
+	}
+	return strings.HasSuffix(lowerName, "-auth") || strings.Contains(lowerName, "anubis")
+}
+
+func truncateBodyForError(body []byte) string {
+	s := strings.TrimSpace(string(body))
+	if len(s) <= maxErrorBodyLogLen {
+		return s
+	}
+	return s[:maxErrorBodyLogLen] + "..."
 }
 
 func buildSubmitHeaders(requestHeaders http.Header) azuretls.OrderedHeaders {
@@ -686,13 +817,10 @@ func formatCookieHeader(cookies []*http.Cookie) string {
 func extractAuthCookieParts(cookies map[string]string) []string {
 	parts := make([]string, 0, len(cookies))
 	for name, value := range cookies {
-		lowerName := strings.ToLower(name)
-		if value == "" || strings.Contains(lowerName, "cookie-verification") {
+		if value == "" || !isAuthCookieName(name) {
 			continue
 		}
-		if strings.HasSuffix(lowerName, "-auth") || strings.Contains(lowerName, "anubis") {
-			parts = append(parts, fmt.Sprintf("%s=%s", name, value))
-		}
+		parts = append(parts, fmt.Sprintf("%s=%s", name, value))
 	}
 	sort.Strings(parts)
 	return parts
@@ -724,17 +852,7 @@ func buildCookieCacheKey(host string, requestHeaders http.Header) string {
 	}
 
 	sum := sha256.Sum256([]byte(keyBuilder.String()))
-	// First 8 bytes are enough as a stable bucket key while keeping settings keys short.
 	return host + "|" + hex.EncodeToString(sum[:8])
-}
-
-// extractHost returns the host from a URL string
-func extractHost(rawURL string) string {
-	u, err := url.Parse(rawURL)
-	if err != nil {
-		return ""
-	}
-	return u.Host
 }
 
 func normalizeHost(host string) string {
@@ -743,8 +861,6 @@ func normalizeHost(host string) string {
 		return ""
 	}
 
-	// Cache keys use "host|hash" format (see buildCookieCacheKey).
-	// Normalize only the host portion and preserve the profile suffix.
 	cacheSuffix := ""
 	if parts := strings.SplitN(host, "|", 2); len(parts) == 2 {
 		host = parts[0]
@@ -753,7 +869,6 @@ func normalizeHost(host string) string {
 
 	host = strings.TrimSuffix(host, ".")
 
-	// If host contains a port, split it safely.
 	if strings.Contains(host, ":") {
 		if splitHost, _, err := net.SplitHostPort(host); err == nil {
 			host = splitHost
@@ -765,7 +880,7 @@ func normalizeHost(host string) string {
 	return strings.ToLower(host) + cacheSuffix
 }
 
-// truncateForLog safely truncates a string for logging purposes
+// truncateForLog safely truncates a string for logging purposes.
 func truncateForLog(s string) string {
 	if len(s) <= 16 {
 		return s

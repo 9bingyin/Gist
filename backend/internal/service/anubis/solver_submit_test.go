@@ -53,20 +53,20 @@ func newSolverWithSession(t *testing.T, store *anubis.Store, session anubis.Azur
 	t.Helper()
 	clientFactory := network.NewClientFactoryForTest(&http.Client{})
 	solver := anubis.NewSolver(clientFactory, store)
-	anubis.SetNewSessionForTest(solver, func(ctx context.Context, timeout time.Duration) anubis.AzureSession {
-		return session
+	anubis.SetNewSessionForTest(solver, func(ctx context.Context, timeout time.Duration) (anubis.AzureSession, error) {
+		return session, nil
 	})
 	return solver
 }
 
 func buildChallengeBody(algorithm string, difficulty int, id, randomData string) []byte {
-	return []byte(fmt.Sprintf(
+	return fmt.Appendf(nil,
 		`<script id="anubis_challenge" type="application/json">{"rules":{"algorithm":"%s","difficulty":%d},"challenge":{"id":"%s","randomData":"%s"}}</script>`,
 		algorithm,
 		difficulty,
 		id,
 		randomData,
-	))
+	)
 }
 
 func sha256Hex(data string) string {
@@ -89,9 +89,9 @@ func findHeader(headers azuretls.OrderedHeaders, key string) (string, bool) {
 func TestSolveFromBody_NotChallenge(t *testing.T) {
 	solver := anubis.NewSolver(nil, nil)
 	called := false
-	anubis.SetNewSessionForTest(solver, func(ctx context.Context, timeout time.Duration) anubis.AzureSession {
+	anubis.SetNewSessionForTest(solver, func(ctx context.Context, timeout time.Duration) (anubis.AzureSession, error) {
 		called = true
-		return &stubSession{}
+		return &stubSession{}, nil
 	})
 
 	cookie, err := solver.SolveFromBody(context.Background(), []byte("<html>ok</html>"), "https://example.com", nil)
@@ -103,9 +103,9 @@ func TestSolveFromBody_NotChallenge(t *testing.T) {
 func TestSolveFromBody_ParseError(t *testing.T) {
 	solver := anubis.NewSolver(nil, nil)
 	called := false
-	anubis.SetNewSessionForTest(solver, func(ctx context.Context, timeout time.Duration) anubis.AzureSession {
+	anubis.SetNewSessionForTest(solver, func(ctx context.Context, timeout time.Duration) (anubis.AzureSession, error) {
 		called = true
-		return &stubSession{}
+		return &stubSession{}, nil
 	})
 
 	body := []byte(`<script id="anubis_challenge" type="application/json">{bad</script>`)
@@ -306,7 +306,7 @@ func TestSolveFromBody_WaitForOngoingSolve(t *testing.T) {
 	require.Equal(t, firstCookie, secondCookie)
 }
 
-func TestSolveFromBody_WaitMissingCache(t *testing.T) {
+func TestSolveFromBody_WaitSharesResultWithoutStore(t *testing.T) {
 	started := make(chan struct{})
 	proceed := make(chan struct{})
 	session := &stubSession{
@@ -327,26 +327,28 @@ func TestSolveFromBody_WaitMissingCache(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(2)
 
+	var firstCookie, secondCookie string
+	var firstErr, secondErr error
 	go func() {
 		defer wg.Done()
-		_, _ = solver.SolveFromBody(context.Background(), body, originalURL, nil)
+		firstCookie, firstErr = solver.SolveFromBody(context.Background(), body, originalURL, nil)
 	}()
 
 	<-started
 
-	var secondErr error
 	go func() {
 		defer wg.Done()
-		_, secondErr = solver.SolveFromBody(context.Background(), body, originalURL, nil)
+		secondCookie, secondErr = solver.SolveFromBody(context.Background(), body, originalURL, nil)
 	}()
 
-	// Give second goroutine time to start waiting
 	time.Sleep(50 * time.Millisecond)
 	close(proceed)
 	wg.Wait()
 
-	require.Error(t, secondErr)
-	require.Contains(t, secondErr.Error(), "no cookie cached")
+	require.NoError(t, firstErr)
+	require.NoError(t, secondErr)
+	require.Equal(t, "techaro.lol-anubis=cookie-value", firstCookie)
+	require.Equal(t, firstCookie, secondCookie)
 }
 
 func TestSolveFromBody_WaitContextCanceled(t *testing.T) {
@@ -677,8 +679,8 @@ func TestSolveFromBody_SolveContextCanceled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	solver := anubis.NewSolver(nil, nil)
-	anubis.SetNewSessionForTest(solver, func(ctx context.Context, timeout time.Duration) anubis.AzureSession {
-		return &stubSession{}
+	anubis.SetNewSessionForTest(solver, func(ctx context.Context, timeout time.Duration) (anubis.AzureSession, error) {
+		return &stubSession{}, nil
 	})
 
 	// Use preact algorithm with difficulty > 0 to ensure some wait time

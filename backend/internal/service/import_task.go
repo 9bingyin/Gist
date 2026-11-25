@@ -24,33 +24,40 @@ type ImportTask struct {
 
 type ImportTaskService interface {
 	Start(total int) (string, context.Context)
-	Update(current int, feed string)
-	Complete(result ImportResult)
-	Fail(err error)
+	SetTotal(taskID string, total int)
+	Update(taskID string, current int, feed string)
+	Complete(taskID string, result ImportResult)
+	Fail(taskID string, err error)
 	Get() *ImportTask
 	Cancel() bool
+	Shutdown()
 }
 
 type importTaskManager struct {
-	mu      sync.RWMutex
-	current *ImportTask
-	cancel  context.CancelFunc
+	mu       sync.RWMutex
+	rootCtx  context.Context
+	rootStop context.CancelFunc
+	current  *ImportTask
+	cancel   context.CancelFunc
 }
 
 func NewImportTaskService() ImportTaskService {
-	return &importTaskManager{}
+	rootCtx, rootStop := context.WithCancel(context.Background())
+	return &importTaskManager{
+		rootCtx:  rootCtx,
+		rootStop: rootStop,
+	}
 }
 
 func (m *importTaskManager) Start(total int) (string, context.Context) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// Cancel any existing task
 	if m.cancel != nil {
 		m.cancel()
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(m.rootCtx)
 	m.cancel = cancel
 
 	id := uuid.New().String()
@@ -59,27 +66,36 @@ func (m *importTaskManager) Start(total int) (string, context.Context) {
 		Status:    "running",
 		Total:     total,
 		Current:   0,
-		CreatedAt: time.Now(),
+		CreatedAt: time.Now().UTC(),
 	}
 	logger.Info("import task started", "module", "service", "action", "import", "resource", "opml", "result", "ok", "task_id", id, "total", total)
 	return id, ctx
 }
 
-func (m *importTaskManager) Update(current int, feed string) {
+func (m *importTaskManager) SetTotal(taskID string, total int) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if m.current != nil && m.current.Status == "running" {
+	if m.current != nil && m.current.ID == taskID && m.current.Status == "running" {
+		m.current.Total = total
+	}
+}
+
+func (m *importTaskManager) Update(taskID string, current int, feed string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.current != nil && m.current.ID == taskID && m.current.Status == "running" {
 		m.current.Current = current
 		m.current.Feed = feed
 	}
 }
 
-func (m *importTaskManager) Complete(result ImportResult) {
+func (m *importTaskManager) Complete(taskID string, result ImportResult) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if m.current != nil {
+	if m.current != nil && m.current.ID == taskID && m.current.Status == "running" {
 		m.current.Status = "done"
 		m.current.Result = &result
 		m.current.Feed = ""
@@ -87,11 +103,11 @@ func (m *importTaskManager) Complete(result ImportResult) {
 	}
 }
 
-func (m *importTaskManager) Fail(err error) {
+func (m *importTaskManager) Fail(taskID string, err error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if m.current != nil {
+	if m.current != nil && m.current.ID == taskID && m.current.Status == "running" {
 		m.current.Status = "error"
 		m.current.Error = err.Error()
 		m.current.Feed = ""
@@ -107,7 +123,6 @@ func (m *importTaskManager) Get() *ImportTask {
 		return nil
 	}
 
-	// Return a copy
 	task := *m.current
 	if m.current.Result != nil {
 		result := *m.current.Result
@@ -133,4 +148,14 @@ func (m *importTaskManager) Cancel() bool {
 	m.current.Feed = ""
 	logger.Warn("import task cancelled", "module", "service", "action", "import", "resource", "opml", "result", "cancelled", "task_id", m.current.ID)
 	return true
+}
+
+func (m *importTaskManager) Shutdown() {
+	m.mu.Lock()
+	if m.cancel != nil {
+		m.cancel()
+		m.cancel = nil
+	}
+	m.rootStop()
+	m.mu.Unlock()
 }

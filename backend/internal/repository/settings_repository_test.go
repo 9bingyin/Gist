@@ -136,3 +136,18 @@ func TestSettingsRepository_DeleteByPrefix(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, setting)
 }
+
+func TestSettingsRepository_PrefixEscapesWildcards(t *testing.T) {
+	t.Parallel()
+	db := testutil.NewTestDB(t)
+	repo := repository.NewSettingsRepository(db)
+	ctx := context.Background()
+
+	testutil.SeedSetting(t, db, "a_b.key1", "v1")
+	testutil.SeedSetting(t, db, "axb.key2", "v2")
+
+	got, err := repo.GetByPrefix(ctx, "a_b.")
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	require.Equal(t, "a_b.key1", got[0].Key)
+}

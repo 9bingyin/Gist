@@ -216,11 +216,7 @@ func TestFolderService_UpdateType_CascadeToFeeds(t *testing.T) {
 		Return(model.Folder{ID: folderID, Name: "Test", Type: "article"}, nil)
 
 	mockFolders.EXPECT().
-		UpdateType(ctx, folderID, "picture").
-		Return(nil)
-
-	mockFeeds.EXPECT().
-		UpdateTypeByFolderID(ctx, folderID, "picture").
+		UpdateTypeWithFeeds(ctx, folderID, "picture").
 		Return(nil)
 
 	err := svc.UpdateType(ctx, folderID, "picture")
@@ -239,22 +235,18 @@ func TestFolderService_Delete_Success(t *testing.T) {
 	folderID := int64(123)
 
 	mockFolders.EXPECT().
-		GetByID(ctx, folderID).
-		Return(model.Folder{ID: folderID, Name: "Test"}, nil)
-
-	mockFeeds.EXPECT().
-		List(ctx, &folderID).
-		Return([]model.Feed{}, nil)
+		List(ctx).
+		Return([]model.Folder{{ID: folderID, Name: "Test"}}, nil)
 
 	mockFolders.EXPECT().
-		Delete(ctx, folderID).
+		DeleteBatchWithFeeds(ctx, []int64{folderID}).
 		Return(nil)
 
 	err := svc.Delete(ctx, folderID)
 	require.NoError(t, err)
 }
 
-func TestFolderService_Delete_WithFeeds(t *testing.T) {
+func TestFolderService_Delete_WithDescendants(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -263,30 +255,21 @@ func TestFolderService_Delete_WithFeeds(t *testing.T) {
 	svc := service.NewFolderService(mockFolders, mockFeeds)
 	ctx := context.Background()
 
-	folderID := int64(123)
+	parentID := int64(123)
+	childID := int64(456)
 
 	mockFolders.EXPECT().
-		GetByID(ctx, folderID).
-		Return(model.Folder{ID: folderID, Name: "Test"}, nil)
-
-	feeds := []model.Feed{
-		{ID: 1, FolderID: &folderID, Title: "Feed 1"},
-		{ID: 2, FolderID: &folderID, Title: "Feed 2"},
-	}
-
-	mockFeeds.EXPECT().
-		List(ctx, &folderID).
-		Return(feeds, nil)
-
-	mockFeeds.EXPECT().
-		DeleteBatch(ctx, []int64{1, 2}).
-		Return(int64(2), nil)
+		List(ctx).
+		Return([]model.Folder{
+			{ID: parentID, Name: "Parent"},
+			{ID: childID, Name: "Child", ParentID: &parentID},
+		}, nil)
 
 	mockFolders.EXPECT().
-		Delete(ctx, folderID).
+		DeleteBatchWithFeeds(ctx, gomock.InAnyOrder([]int64{parentID, childID})).
 		Return(nil)
 
-	err := svc.Delete(ctx, folderID)
+	err := svc.Delete(ctx, parentID)
 	require.NoError(t, err)
 }
 
@@ -300,8 +283,8 @@ func TestFolderService_Delete_NotFound(t *testing.T) {
 	ctx := context.Background()
 
 	mockFolders.EXPECT().
-		GetByID(ctx, int64(999)).
-		Return(model.Folder{}, sql.ErrNoRows)
+		List(ctx).
+		Return([]model.Folder{}, nil)
 
 	err := svc.Delete(ctx, 999)
 	require.ErrorIs(t, err, service.ErrNotFound)
@@ -515,20 +498,14 @@ func TestFolderService_UpdateType_FolderUpdateFails(t *testing.T) {
 		Return(model.Folder{ID: folderID, Name: "Test"}, nil)
 
 	mockFolders.EXPECT().
-		UpdateType(ctx, folderID, "picture").
+		UpdateTypeWithFeeds(ctx, folderID, "picture").
 		Return(dbError)
 
 	err := svc.UpdateType(ctx, folderID, "picture")
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
-
-	if !errors.Is(err, dbError) {
-		t.Errorf("expected original error, got: %v", err)
-	}
+	require.ErrorIs(t, err, dbError)
 }
 
-func TestFolderService_UpdateType_BatchUpdateFails(t *testing.T) {
+func TestFolderService_Delete_ListFoldersFails(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -538,101 +515,18 @@ func TestFolderService_UpdateType_BatchUpdateFails(t *testing.T) {
 	ctx := context.Background()
 
 	folderID := int64(123)
-	dbError := errors.New("batch update failed")
+	dbError := errors.New("list folders failed")
 
 	mockFolders.EXPECT().
-		GetByID(ctx, folderID).
-		Return(model.Folder{ID: folderID, Name: "Test"}, nil)
-
-	mockFolders.EXPECT().
-		UpdateType(ctx, folderID, "picture").
-		Return(nil)
-
-	mockFeeds.EXPECT().
-		UpdateTypeByFolderID(ctx, folderID, "picture").
-		Return(dbError)
-
-	err := svc.UpdateType(ctx, folderID, "picture")
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
-
-	if !strings.Contains(err.Error(), "update feeds type in folder") {
-		t.Errorf("expected wrapped error with context, got: %v", err)
-	}
-}
-
-func TestFolderService_Delete_ListFeedsFails(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockFolders := mock.NewMockFolderRepository(ctrl)
-	mockFeeds := mock.NewMockFeedRepository(ctrl)
-	svc := service.NewFolderService(mockFolders, mockFeeds)
-	ctx := context.Background()
-
-	folderID := int64(123)
-	dbError := errors.New("list feeds failed")
-
-	mockFolders.EXPECT().
-		GetByID(ctx, folderID).
-		Return(model.Folder{ID: folderID, Name: "Test"}, nil)
-
-	mockFeeds.EXPECT().
-		List(ctx, &folderID).
+		List(ctx).
 		Return(nil, dbError)
 
 	err := svc.Delete(ctx, folderID)
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
-
-	if !strings.Contains(err.Error(), "list feeds in folder") {
-		t.Errorf("expected wrapped error with context, got: %v", err)
-	}
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "list folders")
 }
 
-func TestFolderService_Delete_FeedDeleteBatchFails(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockFolders := mock.NewMockFolderRepository(ctrl)
-	mockFeeds := mock.NewMockFeedRepository(ctrl)
-	svc := service.NewFolderService(mockFolders, mockFeeds)
-	ctx := context.Background()
-
-	folderID := int64(123)
-	dbError := errors.New("feed batch delete failed")
-
-	mockFolders.EXPECT().
-		GetByID(ctx, folderID).
-		Return(model.Folder{ID: folderID, Name: "Test"}, nil)
-
-	feeds := []model.Feed{
-		{ID: 1, FolderID: &folderID, Title: "Feed 1"},
-		{ID: 2, FolderID: &folderID, Title: "Feed 2"},
-	}
-
-	mockFeeds.EXPECT().
-		List(ctx, &folderID).
-		Return(feeds, nil)
-
-	// Batch delete fails
-	mockFeeds.EXPECT().
-		DeleteBatch(ctx, []int64{1, 2}).
-		Return(int64(0), dbError)
-
-	err := svc.Delete(ctx, folderID)
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
-
-	if !strings.Contains(err.Error(), "delete feeds in folder") {
-		t.Errorf("expected error mentioning feed deletion, got: %v", err)
-	}
-}
-
-func TestFolderService_Delete_FolderDeleteFails(t *testing.T) {
+func TestFolderService_Delete_DeleteBatchFails(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -645,23 +539,13 @@ func TestFolderService_Delete_FolderDeleteFails(t *testing.T) {
 	dbError := errors.New("folder delete failed")
 
 	mockFolders.EXPECT().
-		GetByID(ctx, folderID).
-		Return(model.Folder{ID: folderID, Name: "Test"}, nil)
-
-	mockFeeds.EXPECT().
-		List(ctx, &folderID).
-		Return([]model.Feed{}, nil)
+		List(ctx).
+		Return([]model.Folder{{ID: folderID, Name: "Test"}}, nil)
 
 	mockFolders.EXPECT().
-		Delete(ctx, folderID).
+		DeleteBatchWithFeeds(ctx, []int64{folderID}).
 		Return(dbError)
 
 	err := svc.Delete(ctx, folderID)
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
-
-	if !errors.Is(err, dbError) {
-		t.Errorf("expected original error, got: %v", err)
-	}
+	require.ErrorIs(t, err, dbError)
 }

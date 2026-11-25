@@ -32,7 +32,7 @@ func TestEntryHandler_List_Success(t *testing.T) {
 
 	mockService.EXPECT().
 		List(gomock.Any(), gomock.Any()).
-		Return(entries, nil)
+		Return(entries, false, nil)
 
 	err := h.List(c)
 	require.NoError(t, err)
@@ -54,19 +54,16 @@ func TestEntryHandler_List_HasMore(t *testing.T) {
 	req := newJSONRequest(http.MethodGet, "/entries?limit=2", nil)
 	c, rec := newTestContext(e, req)
 
-	// Return 3 entries when limit is 2 (limit+1 pattern)
 	title1 := "Entry 1"
 	title2 := "Entry 2"
-	title3 := "Entry 3"
 	entries := []model.Entry{
 		{ID: 1, Title: &title1},
 		{ID: 2, Title: &title2},
-		{ID: 3, Title: &title3},
 	}
 
 	mockService.EXPECT().
 		List(gomock.Any(), gomock.Any()).
-		Return(entries, nil)
+		Return(entries, true, nil)
 
 	err := h.List(c)
 	require.NoError(t, err)
@@ -74,7 +71,7 @@ func TestEntryHandler_List_HasMore(t *testing.T) {
 	var resp handler.EntryListResponse
 	assertJSONResponse(t, rec, http.StatusOK, &resp)
 	require.Len(t, resp.Entries, 2, "should return only limit entries")
-	require.True(t, resp.HasMore, "should have more when returned entries > limit")
+	require.True(t, resp.HasMore, "should have more when service signals hasMore")
 }
 
 func TestEntryHandler_GetByID_Success(t *testing.T) {
@@ -117,7 +114,7 @@ func TestEntryHandler_UpdateRead_Success(t *testing.T) {
 	h := handler.NewEntryHandlerHelper(mockService, nil)
 
 	e := newTestEcho()
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"read": true,
 	}
 	req := newJSONRequest(http.MethodPatch, "/entries/123/read", reqBody)
@@ -142,7 +139,7 @@ func TestEntryHandler_UpdateManyRead_Success(t *testing.T) {
 	h := handler.NewEntryHandlerHelper(mockService, nil)
 
 	e := newTestEcho()
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"ids":  []string{"123", "456", "123"},
 		"read": true,
 	}
@@ -167,7 +164,7 @@ func TestEntryHandler_UpdateManyRead_InvalidID(t *testing.T) {
 	h := handler.NewEntryHandlerHelper(mockService, nil)
 
 	e := newTestEcho()
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"ids":  []string{"bad"},
 		"read": true,
 	}
@@ -188,7 +185,7 @@ func TestEntryHandler_UpdateStarred_Success(t *testing.T) {
 	h := handler.NewEntryHandlerHelper(mockService, nil)
 
 	e := newTestEcho()
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"starred": true,
 	}
 	req := newJSONRequest(http.MethodPatch, "/entries/123/starred", reqBody)
@@ -238,7 +235,7 @@ func TestEntryHandler_MarkAllAsRead_Success(t *testing.T) {
 	h := handler.NewEntryHandlerHelper(mockService, nil)
 
 	e := newTestEcho()
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"feedId": "123",
 	}
 	req := newJSONRequest(http.MethodPost, "/entries/mark-read", reqBody)
@@ -378,7 +375,7 @@ func TestEntryHandler_List_Errors(t *testing.T) {
 			name:  "service error",
 			query: "?limit=10",
 			mockSetup: func(m *mock.MockEntryService) {
-				m.EXPECT().List(gomock.Any(), gomock.Any()).Return(nil, fmtErrorf("db error"))
+				m.EXPECT().List(gomock.Any(), gomock.Any()).Return(nil, false, fmtErrorf("db error"))
 			},
 			wantStatus: http.StatusInternalServerError,
 		},

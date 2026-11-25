@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/mmcdole/gofeed"
-
 	"gist/backend/internal/model"
 )
 
@@ -29,27 +27,16 @@ func DetectImageFormatExtForTest(data []byte) (string, error) {
 }
 
 // FetchIconsForFeedsForTest exposes icon fetching for feeds in tests.
-func FetchIconsForFeedsForTest(svc IconService, ctx context.Context, parser *gofeed.Parser, feeds []model.Feed) error {
+func FetchIconsForFeedsForTest(svc IconService, ctx context.Context, feeds []model.Feed) error {
 	impl, ok := svc.(*iconService)
 	if !ok {
 		return fmt.Errorf("invalid icon service")
 	}
-	impl.fetchIconsForFeeds(ctx, parser, feeds)
+	impl.fetchIconsForFeeds(ctx, feeds, false)
 	return nil
 }
 
-// DownloadIconWithFreshClientForTest exposes fresh-client download for tests.
-func DownloadIconWithFreshClientForTest(svc IconService, ctx context.Context, iconURL, cookie string, retryCount int) error {
-	impl, ok := svc.(*iconService)
-	if !ok {
-		return fmt.Errorf("invalid icon service")
-	}
-	_, err := impl.downloadIconWithFreshClient(ctx, iconURL, cookie, retryCount)
-	return err
-}
-
 // BuildDDGFaviconURLForTest exposes the DuckDuckGo favicon URL builder for tests.
-// See commit 8a23586: fix: Add DuckDuckGo Favicon API as fallback
 func BuildDDGFaviconURLForTest(svc IconService, siteURL string) string {
 	impl, ok := svc.(*iconService)
 	if !ok {

@@ -5,54 +5,51 @@ const SCROLL_TOP_THRESHOLD = 48;
 // Module-level cache: entryId -> scrollTop
 const entryScrollPositions = new Map<string, number>();
 
-export function useEntryContentScroll(entryId: string | null) {
-  const [scrollNode, setScrollNode] = useState<HTMLDivElement | null>(null);
-  const [isAtTop, setIsAtTop] = useState(true);
-  const processedEntryIdRef = useRef<string | null>(null);
+export function clearEntryScrollPositions(): void {
+  entryScrollPositions.clear();
+}
 
-  // Callback ref - triggers when DOM node is attached/detached
+export function useEntryContentScroll(entryId: string | null) {
+  const scrollNodeRef = useRef<HTMLDivElement | null>(null);
+  const [scrollNode, setScrollNode] = useState<HTMLDivElement | null>(null);
+  const [scrollState, setScrollState] = useState<{
+    entryId: string | null;
+    isAtTop: boolean;
+  } | null>(null);
+
   const scrollRef = useCallback((node: HTMLDivElement | null) => {
+    scrollNodeRef.current = node;
     setScrollNode(node);
   }, []);
 
   useLayoutEffect(() => {
-    // Mark this entryId as processed
-    processedEntryIdRef.current = entryId;
-
-    if (!scrollNode) return;
+    const node = scrollNodeRef.current;
+    if (!node) return;
 
     const handleScroll = () => {
-      const top = scrollNode.scrollTop;
+      const top = node.scrollTop;
       const atTop = top < SCROLL_TOP_THRESHOLD;
-      setIsAtTop(atTop);
-      // Save position for restoration
+      setScrollState({ entryId, isAtTop: atTop });
       if (entryId) {
         entryScrollPositions.set(entryId, top);
       }
     };
 
-    // Restore saved position, or reset to top
     const saved = entryId ? entryScrollPositions.get(entryId) : undefined;
-    if (saved) {
-      // eslint-disable-next-line react-hooks/immutability
-      scrollNode.scrollTop = saved;
-      setIsAtTop(saved < SCROLL_TOP_THRESHOLD);
-    } else {
-      scrollNode.scrollTop = 0;
-      setIsAtTop(true);
-    }
+    node.scrollTop = saved ?? 0;
 
-    scrollNode.addEventListener("scroll", handleScroll, { passive: true });
+    node.addEventListener("scroll", handleScroll, { passive: true });
 
     return () => {
-      scrollNode.removeEventListener("scroll", handleScroll);
+      node.removeEventListener("scroll", handleScroll);
     };
   }, [entryId, scrollNode]);
 
-  // If entryId hasn't been processed by effect yet, force return true
-  // This prevents flash when switching articles (old isAtTop value being used)
+  const savedScrollTop = entryId ? (entryScrollPositions.get(entryId) ?? 0) : 0;
   const effectiveIsAtTop =
-    processedEntryIdRef.current !== entryId ? true : isAtTop;
+    scrollState !== null && scrollState.entryId === entryId
+      ? scrollState.isAtTop
+      : savedScrollTop < SCROLL_TOP_THRESHOLD;
 
   return { scrollRef, isAtTop: effectiveIsAtTop, scrollNode };
 }

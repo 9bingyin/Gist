@@ -18,8 +18,8 @@ func StripFragment(raw string) string {
 		return parsed.String()
 	}
 
-	if idx := strings.Index(trimmed, "#"); idx >= 0 {
-		return trimmed[:idx]
+	if before, _, ok := strings.Cut(trimmed, "#"); ok {
+		return before
 	}
 	return trimmed
 }

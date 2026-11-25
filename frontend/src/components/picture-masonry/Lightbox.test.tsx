@@ -50,8 +50,8 @@ vi.mock("embla-carousel-react", () => ({
   ],
 }));
 
-// Mock framer-motion to avoid animation issues in tests
-vi.mock("framer-motion", () => ({
+// Mock motion/react to avoid animation issues in tests
+vi.mock("motion/react", () => ({
   AnimatePresence: ({ children }: { children: React.ReactNode }) => children,
   motion: {
     div: ({
@@ -546,12 +546,8 @@ describe("Lightbox", () => {
 
       render(<Lightbox />, { wrapper: createWrapper() });
 
-      // Find star button by its SVG path (star shape)
-      const buttons = screen.getAllByRole("button");
-      const starButton = buttons.find((btn) => {
-        const svg = btn.querySelector("svg.size-5");
-        const path = svg?.querySelector("path");
-        return path?.getAttribute("d")?.includes("M12 2l3.09");
+      const starButton = screen.getByRole("button", {
+        name: "entry.add_to_starred",
       });
       expect(starButton).toBeDefined();
     });
@@ -564,16 +560,12 @@ describe("Lightbox", () => {
 
       render(<Lightbox />, { wrapper: createWrapper() });
 
-      // Find star button
-      const buttons = screen.getAllByRole("button");
-      const starButton = buttons.find((btn) => {
-        const svg = btn.querySelector("svg.size-5");
-        const path = svg?.querySelector("path");
-        return path?.getAttribute("d")?.includes("M12 2l3.09");
+      const starButton = screen.getByRole("button", {
+        name: "entry.remove_from_starred",
       });
 
       // Should have amber color class when starred
-      expect(starButton?.className).toContain("amber");
+      expect(starButton.className).toContain("amber");
     });
   });
 

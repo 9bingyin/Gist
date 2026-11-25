@@ -9,10 +9,7 @@ export function dispatchScrollToTop(scope?: string) {
 }
 
 type ScrollToTopTarget =
-  | RefObject<HTMLElement | null>
-  | HTMLElement
-  | (() => void)
-  | null;
+  RefObject<HTMLElement | null> | HTMLElement | (() => void) | null;
 
 // Listen for scroll-to-top events and scroll the active target to top.
 // Element targets retain the visibility check used by overlapping mobile views.

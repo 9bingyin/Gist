@@ -38,11 +38,22 @@ func TestHTMLToText(t *testing.T) {
 }
 
 func TestReplaceRestoreMedia(t *testing.T) {
-	html := `<p>Hello <img src="a.png"> world <video>v</video></p>`
+	html := `<p>Hello <img src="a.png"/> world <video>v</video></p>`
 
 	replaced, elements := ai.ReplaceMediaWithPlaceholders(html)
 	require.Contains(t, replaced, ai.MediaPlaceholderPrefix)
 	require.Len(t, elements, 2)
+
+	restored := ai.RestoreMediaFromPlaceholders(replaced, elements)
+	require.Equal(t, html, restored)
+}
+
+func TestReplaceRestoreMedia_AttrWithGreaterThan(t *testing.T) {
+	html := `<p>Check <img src="a.png" alt="a &gt; b"/> end</p>`
+
+	replaced, elements := ai.ReplaceMediaWithPlaceholders(html)
+	require.Contains(t, replaced, ai.MediaPlaceholderPrefix)
+	require.Len(t, elements, 1)
 
 	restored := ai.RestoreMediaFromPlaceholders(replaced, elements)
 	require.Equal(t, html, restored)

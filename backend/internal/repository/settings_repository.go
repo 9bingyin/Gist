@@ -4,6 +4,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -21,11 +22,11 @@ type SettingsRepository interface {
 }
 
 type settingsRepository struct {
-	db *sql.DB
+	db dbtx
 }
 
 // NewSettingsRepository creates a new settings repository.
-func NewSettingsRepository(db *sql.DB) SettingsRepository {
+func NewSettingsRepository(db dbtx) SettingsRepository {
 	return &settingsRepository{db: db}
 }
 
@@ -38,20 +39,23 @@ func (r *settingsRepository) Get(ctx context.Context, key string) (*model.Settin
 	var s model.Setting
 	var updatedAt string
 	if err := row.Scan(&s.Key, &s.Value, &updatedAt); err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
 		}
 		return nil, err
 	}
 
-	t, _ := time.Parse(time.RFC3339, updatedAt)
+	t, err := parseTime(updatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("parse setting updated_at: %w", err)
+	}
 	s.UpdatedAt = t
 	return &s, nil
 }
 
 // Set creates or updates a setting.
 func (r *settingsRepository) Set(ctx context.Context, key, value string) error {
-	now := time.Now().UTC().Format(time.RFC3339)
+	now := formatTime(time.Now())
 	_, err := r.db.ExecContext(ctx, `
 		INSERT INTO settings (key, value, updated_at)
 		VALUES (?, ?, ?)
@@ -66,31 +70,26 @@ func (r *settingsRepository) SetMany(ctx context.Context, values map[string]stri
 		return nil
 	}
 
-	tx, err := r.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
-	now := time.Now().UTC().Format(time.RFC3339)
-	for key, value := range values {
-		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO settings (key, value, updated_at)
-			VALUES (?, ?, ?)
-			ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
-		`, key, value, now); err != nil {
-			return fmt.Errorf("set setting %s: %w", key, err)
+	now := formatTime(time.Now())
+	return withTx(ctx, r.db, func(exec dbtx) error {
+		for key, value := range values {
+			if _, err := exec.ExecContext(ctx, `
+				INSERT INTO settings (key, value, updated_at)
+				VALUES (?, ?, ?)
+				ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+			`, key, value, now); err != nil {
+				return fmt.Errorf("set setting %s: %w", key, err)
+			}
 		}
-	}
-
-	return tx.Commit()
+		return nil
+	})
 }
 
 // GetByPrefix retrieves all settings with keys starting with the given prefix.
 func (r *settingsRepository) GetByPrefix(ctx context.Context, prefix string) ([]model.Setting, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT key, value, updated_at FROM settings WHERE key LIKE ?
-	`, prefix+"%")
+		SELECT key, value, updated_at FROM settings WHERE key LIKE ? ESCAPE '\'
+	`, escapeLikePrefix(prefix)+"%")
 	if err != nil {
 		return nil, err
 	}
@@ -103,7 +102,10 @@ func (r *settingsRepository) GetByPrefix(ctx context.Context, prefix string) ([]
 		if err := rows.Scan(&s.Key, &s.Value, &updatedAt); err != nil {
 			return nil, err
 		}
-		t, _ := time.Parse(time.RFC3339, updatedAt)
+		t, err := parseTime(updatedAt)
+		if err != nil {
+			return nil, fmt.Errorf("parse setting updated_at: %w", err)
+		}
 		s.UpdatedAt = t
 		settings = append(settings, s)
 	}
@@ -118,7 +120,7 @@ func (r *settingsRepository) Delete(ctx context.Context, key string) error {
 
 // DeleteByPrefix removes all settings with keys starting with the given prefix.
 func (r *settingsRepository) DeleteByPrefix(ctx context.Context, prefix string) (int64, error) {
-	result, err := r.db.ExecContext(ctx, `DELETE FROM settings WHERE key LIKE ?`, prefix+"%")
+	result, err := r.db.ExecContext(ctx, `DELETE FROM settings WHERE key LIKE ? ESCAPE '\'`, escapeLikePrefix(prefix)+"%")
 	if err != nil {
 		return 0, err
 	}

@@ -1,5 +1,34 @@
 basePath: /api
 definitions:
+  gist_backend_internal_service.AISettings:
+    properties:
+      apiKey:
+        type: string
+      autoSummary:
+        type: boolean
+      autoTranslate:
+        type: boolean
+      baseUrl:
+        type: string
+      model:
+        type: string
+      provider:
+        type: string
+      rateLimit:
+        type: integer
+      requestOptions:
+        additionalProperties: {}
+        type: object
+      summaryLanguage:
+        type: string
+    type: object
+  gist_backend_internal_service.AppearanceSettings:
+    properties:
+      contentTypes:
+        items:
+          type: string
+        type: array
+    type: object
   gist_backend_internal_service.BatchTranslateResult:
     properties:
       cached:
@@ -10,6 +39,15 @@ definitions:
         type: string
       title:
         type: string
+    type: object
+  gist_backend_internal_service.GeneralSettings:
+    properties:
+      autoReadability:
+        type: boolean
+      fallbackUserAgent:
+        type: string
+      markReadOnScroll:
+        type: boolean
     type: object
   gist_backend_internal_service.ImportResult:
     properties:
@@ -42,48 +80,23 @@ definitions:
       total:
         type: integer
     type: object
-  internal_handler.aiSettingsRequest:
+  gist_backend_internal_service.NetworkSettings:
     properties:
-      apiKey:
-        type: string
-      autoSummary:
+      enabled:
         type: boolean
-      autoTranslate:
-        type: boolean
-      baseUrl:
+      host:
         type: string
-      model:
+      ipStack:
+        description: default, ipv4, ipv6
         type: string
-      provider:
+      password:
         type: string
-      rateLimit:
+      port:
         type: integer
-      requestOptions:
-        additionalProperties: {}
-        type: object
-      summaryLanguage:
+      type:
+        description: http, https, socks5, socks5h
         type: string
-    type: object
-  internal_handler.aiSettingsResponse:
-    properties:
-      apiKey:
-        type: string
-      autoSummary:
-        type: boolean
-      autoTranslate:
-        type: boolean
-      baseUrl:
-        type: string
-      model:
-        type: string
-      provider:
-        type: string
-      rateLimit:
-        type: integer
-      requestOptions:
-        additionalProperties: {}
-        type: object
-      summaryLanguage:
+      username:
         type: string
     type: object
   internal_handler.aiTestRequest:
@@ -108,20 +121,6 @@ definitions:
         type: string
       success:
         type: boolean
-    type: object
-  internal_handler.appearanceSettingsRequest:
-    properties:
-      contentTypes:
-        items:
-          type: string
-        type: array
-    type: object
-  internal_handler.appearanceSettingsResponse:
-    properties:
-      contentTypes:
-        items:
-          type: string
-        type: array
     type: object
   internal_handler.authResponse:
     properties:
@@ -339,24 +338,6 @@ definitions:
       updatedAt:
         type: string
     type: object
-  internal_handler.generalSettingsRequest:
-    properties:
-      autoReadability:
-        type: boolean
-      fallbackUserAgent:
-        type: string
-      markReadOnScroll:
-        type: boolean
-    type: object
-  internal_handler.generalSettingsResponse:
-    properties:
-      autoReadability:
-        type: boolean
-      fallbackUserAgent:
-        type: string
-      markReadOnScroll:
-        type: boolean
-    type: object
   internal_handler.iconClearResponse:
     properties:
       deleted:
@@ -386,40 +367,6 @@ definitions:
       feedId:
         type: string
       folderId:
-        type: string
-    type: object
-  internal_handler.networkSettingsRequest:
-    properties:
-      enabled:
-        type: boolean
-      host:
-        type: string
-      ipStack:
-        type: string
-      password:
-        type: string
-      port:
-        type: integer
-      type:
-        type: string
-      username:
-        type: string
-    type: object
-  internal_handler.networkSettingsResponse:
-    properties:
-      enabled:
-        type: boolean
-      host:
-        type: string
-      ipStack:
-        type: string
-      password:
-        type: string
-      port:
-        type: integer
-      type:
-        type: string
-      username:
         type: string
     type: object
   internal_handler.networkTestRequest:
@@ -525,8 +472,6 @@ definitions:
         type: string
       title:
         type: string
-    required:
-    - title
     type: object
   internal_handler.updateFolderTypeRequest:
     properties:
@@ -614,7 +559,7 @@ paths:
       consumes:
       - application/json
       description: Generate an AI summary of the article content. Returns cached result
-        if available, otherwise streams the response.
+        if available, otherwise streams summary events via SSE.
       parameters:
       - description: Summarize request
         in: body
@@ -704,77 +649,6 @@ paths:
       summary: Batch translate articles
       tags:
       - ai
-  /api/domain-rate-limits:
-    get:
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/internal_handler.domainRateLimitListResponse'
-      summary: List all domain rate limits
-      tags:
-      - domain-rate-limits
-    post:
-      consumes:
-      - application/json
-      parameters:
-      - description: Domain rate limit
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/internal_handler.domainRateLimitRequest'
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            $ref: '#/definitions/internal_handler.domainRateLimitResponse'
-      summary: Create a domain rate limit
-      tags:
-      - domain-rate-limits
-  /api/domain-rate-limits/{host}:
-    delete:
-      parameters:
-      - description: Host
-        in: path
-        name: host
-        required: true
-        type: string
-      responses:
-        "204":
-          description: No Content
-      summary: Delete a domain rate limit
-      tags:
-      - domain-rate-limits
-    put:
-      consumes:
-      - application/json
-      parameters:
-      - description: Host
-        in: path
-        name: host
-        required: true
-        type: string
-      - description: Domain rate limit
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/internal_handler.domainRateLimitRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/internal_handler.domainRateLimitResponse'
-      summary: Update a domain rate limit
-      tags:
-      - domain-rate-limits
   /api/proxy/image/{encoded}:
     get:
       description: Proxies external images to avoid triggering anti-crawling mechanisms
@@ -975,6 +849,77 @@ paths:
       summary: Check user status
       tags:
       - auth
+  /domain-rate-limits:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handler.domainRateLimitListResponse'
+      summary: List all domain rate limits
+      tags:
+      - domain-rate-limits
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Domain rate limit
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.domainRateLimitRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/internal_handler.domainRateLimitResponse'
+      summary: Create a domain rate limit
+      tags:
+      - domain-rate-limits
+  /domain-rate-limits/{host}:
+    delete:
+      parameters:
+      - description: Host
+        in: path
+        name: host
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+      summary: Delete a domain rate limit
+      tags:
+      - domain-rate-limits
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Host
+        in: path
+        name: host
+        required: true
+        type: string
+      - description: Domain rate limit
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.domainRateLimitRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handler.domainRateLimitResponse'
+      summary: Update a domain rate limit
+      tags:
+      - domain-rate-limits
   /entries:
     get:
       description: Get a list of entries with optional filters and pagination
@@ -1646,10 +1591,6 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/internal_handler.errorResponse'
-        "413":
-          description: Request Entity Too Large
-          schema:
-            $ref: '#/definitions/internal_handler.errorResponse'
       summary: Import OPML
       tags:
       - opml
@@ -1675,7 +1616,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_handler.aiSettingsResponse'
+            $ref: '#/definitions/gist_backend_internal_service.AISettings'
         "500":
           description: Internal Server Error
           schema:
@@ -1686,22 +1627,21 @@ paths:
     put:
       consumes:
       - application/json
-      description: Update the AI provider configuration. Empty apiKey keeps existing
-        key.
+      description: Update the AI provider configuration.
       parameters:
       - description: AI settings
         in: body
         name: settings
         required: true
         schema:
-          $ref: '#/definitions/internal_handler.aiSettingsRequest'
+          $ref: '#/definitions/gist_backend_internal_service.AISettings'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_handler.aiSettingsResponse'
+            $ref: '#/definitions/gist_backend_internal_service.AISettings'
         "400":
           description: Bad Request
           schema:
@@ -1765,7 +1705,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_handler.appearanceSettingsResponse'
+            $ref: '#/definitions/gist_backend_internal_service.AppearanceSettings'
         "500":
           description: Internal Server Error
           schema:
@@ -1783,14 +1723,14 @@ paths:
         name: settings
         required: true
         schema:
-          $ref: '#/definitions/internal_handler.appearanceSettingsRequest'
+          $ref: '#/definitions/gist_backend_internal_service.AppearanceSettings'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_handler.appearanceSettingsResponse'
+            $ref: '#/definitions/gist_backend_internal_service.AppearanceSettings'
         "400":
           description: Bad Request
           schema:
@@ -1812,7 +1752,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_handler.generalSettingsResponse'
+            $ref: '#/definitions/gist_backend_internal_service.GeneralSettings'
         "500":
           description: Internal Server Error
           schema:
@@ -1830,14 +1770,14 @@ paths:
         name: settings
         required: true
         schema:
-          $ref: '#/definitions/internal_handler.generalSettingsRequest'
+          $ref: '#/definitions/gist_backend_internal_service.GeneralSettings'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_handler.generalSettingsResponse'
+            $ref: '#/definitions/gist_backend_internal_service.GeneralSettings'
         "400":
           description: Bad Request
           schema:
@@ -1858,7 +1798,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_handler.networkSettingsResponse'
+            $ref: '#/definitions/gist_backend_internal_service.NetworkSettings'
         "500":
           description: Internal Server Error
           schema:
@@ -1869,22 +1809,21 @@ paths:
     put:
       consumes:
       - application/json
-      description: Update the network proxy configuration. Empty password keeps existing
-        password.
+      description: Update the network proxy configuration.
       parameters:
       - description: Network settings
         in: body
         name: settings
         required: true
         schema:
-          $ref: '#/definitions/internal_handler.networkSettingsRequest'
+          $ref: '#/definitions/gist_backend_internal_service.NetworkSettings'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_handler.networkSettingsResponse'
+            $ref: '#/definitions/gist_backend_internal_service.NetworkSettings'
         "400":
           description: Bad Request
           schema:

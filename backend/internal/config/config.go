@@ -3,25 +3,25 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 )
 
 const (
 	AppName    = "Gist"
 	AppVersion = "1.2.0"
 	AppRepo    = "https://github.com/9bingyin/Gist"
-)
 
-// GistUserAgent identifies as Gist RSS reader
-var GistUserAgent = "Mozilla/5.0 (compatible; " + AppName + "/" + AppVersion + "; +" + AppRepo + ")"
+	// GistUserAgent identifies as Gist RSS reader.
+	GistUserAgent = "Mozilla/5.0 (compatible; " + AppName + "/" + AppVersion + "; +" + AppRepo + ")"
 
-// Chrome headers for TLS fingerprinting (must match azuretls Chrome profile version)
-const (
+	// Chrome headers for TLS fingerprinting (must match azuretls Chrome profile version).
 	ChromeUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36"
 	ChromeSecChUa   = `"Google Chrome";v="135", "Chromium";v="135", "Not-A.Brand";v="8"`
-)
 
-// DefaultUserAgent for RSS fetching
-var DefaultUserAgent = GistUserAgent
+	// DefaultUserAgent for RSS fetching.
+	DefaultUserAgent = GistUserAgent
+)
 
 type Config struct {
 	Addr          string
@@ -56,10 +56,13 @@ func Load() Config {
 		logLevel = "info"
 	}
 
-	enableSwagger := os.Getenv("GIST_SWAGGER") == "true"
-	pprofAddr := os.Getenv("GIST_PPROF_ADDR")
-	if os.Getenv("GIST_ENABLE_PPROF") == "true" && pprofAddr == "" {
-		pprofAddr = "127.0.0.1:6060"
+	enableSwagger := parseEnvBool("GIST_SWAGGER")
+	var pprofAddr string
+	if parseEnvBool("GIST_ENABLE_PPROF") {
+		pprofAddr = os.Getenv("GIST_PPROF_ADDR")
+		if pprofAddr == "" {
+			pprofAddr = "127.0.0.1:6060"
+		}
 	}
 
 	return Config{
@@ -71,6 +74,18 @@ func Load() Config {
 		EnableSwagger: enableSwagger,
 		PprofAddr:     pprofAddr,
 	}
+}
+
+func parseEnvBool(key string) bool {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return false
+	}
+	v, err := strconv.ParseBool(raw)
+	if err != nil {
+		return false
+	}
+	return v
 }
 
 func detectStaticDir() string {

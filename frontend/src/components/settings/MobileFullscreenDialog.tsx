@@ -18,7 +18,6 @@ export function MobileFullscreenDialog({
     <Dialog open={open} onOpenChange={onOpenChange} modal={false}>
       <DialogContent
         fullscreen
-        aria-modal="true"
         data-slot="mobile-dialog-scroller"
         onPointerDownOutside={(event) => event.preventDefault()}
         onInteractOutside={(event) => event.preventDefault()}

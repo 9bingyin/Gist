@@ -207,7 +207,7 @@ func TestFolderRepository_Create_Concurrent(t *testing.T) {
 	var mu sync.Mutex
 	ids := make(map[int64]bool)
 
-	for i := 0; i < goroutines; i++ {
+	for i := range goroutines {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()

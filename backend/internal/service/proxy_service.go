@@ -7,6 +7,7 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -20,7 +21,11 @@ import (
 	"gist/backend/pkg/network"
 )
 
-const proxyTimeout = 30 * time.Second
+const (
+	proxyTimeout     = 30 * time.Second
+	proxySniffBytes  = 4096
+	proxyMaxSVGProbe = 256 << 10 // 256 KB probe for XML/SVG with long headers
+)
 
 var (
 	ErrInvalidURL       = fmt.Errorf("invalid URL")
@@ -33,12 +38,12 @@ var (
 
 type ProxyResult struct {
 	Data        []byte
+	Body        io.ReadCloser
 	ContentType string
 }
 
 type ProxyService interface {
 	FetchImage(ctx context.Context, imageURL, refererURL string) (*ProxyResult, error)
-	Close()
 }
 
 type proxyService struct {
@@ -53,43 +58,35 @@ func NewProxyService(clientFactory *network.ClientFactory, anubisSolver AnubisSo
 	}
 }
 
-func (s *proxyService) Close() {
-	// No persistent resources to release
+type sessionStreamCloser struct {
+	reader  io.Reader
+	rawBody io.Closer
+	session *azuretls.Session
+}
+
+func (s *sessionStreamCloser) Read(p []byte) (int, error) {
+	return s.reader.Read(p)
+}
+
+func (s *sessionStreamCloser) Close() error {
+	var err error
+	if s.rawBody != nil {
+		err = s.rawBody.Close()
+	}
+	if s.session != nil {
+		s.session.Close()
+	}
+	return err
 }
 
 func (s *proxyService) FetchImage(ctx context.Context, imageURL, refererURL string) (*ProxyResult, error) {
-	return s.fetchImageWithRetry(ctx, imageURL, refererURL, "", 0)
-}
-
-func (s *proxyService) fetchImageWithRetry(ctx context.Context, imageURL, refererURL, cookie string, retryCount int) (*ProxyResult, error) {
-	session := s.clientFactory.NewAzureSession(ctx, proxyTimeout)
-	defer session.Close()
-	return s.doFetch(ctx, session, imageURL, refererURL, cookie, retryCount)
-}
-
-// fetchWithFreshSession creates a new azuretls session to avoid connection reuse after Anubis
-func (s *proxyService) fetchWithFreshSession(ctx context.Context, imageURL, refererURL, cookie string, retryCount int) (*ProxyResult, error) {
-	session := s.clientFactory.NewAzureSession(ctx, proxyTimeout)
-	defer session.Close()
-	return s.doFetch(ctx, session, imageURL, refererURL, cookie, retryCount)
-}
-
-// doFetch performs the actual HTTP request with the given session
-func (s *proxyService) doFetch(ctx context.Context, session *azuretls.Session, imageURL, refererURL, cookie string, retryCount int) (*ProxyResult, error) {
-	parsedURL, err := url.Parse(imageURL)
+	parsedURL, err := validateProxyImageURL(imageURL)
 	if err != nil {
-		return nil, ErrInvalidURL
+		return nil, err
 	}
 
-	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
-		return nil, ErrInvalidProtocol
-	}
-
-	// Build Referer
 	referer := buildReferer(refererURL, parsedURL)
-
-	// Build headers
-	headers := azuretls.OrderedHeaders{
+	baseHeaders := azuretls.OrderedHeaders{
 		{"accept", "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"},
 		{"accept-language", "zh-CN,zh;q=0.9"},
 		{"referer", referer},
@@ -102,60 +99,239 @@ func (s *proxyService) doFetch(ctx context.Context, session *azuretls.Session, i
 		{"user-agent", config.ChromeUserAgent},
 	}
 
-	// Add cookie
+	cookie := ""
+	for retryCount := 0; ; {
+		result, nextCookie, retry, err := s.doFetchOnce(ctx, imageURL, parsedURL.Host, baseHeaders, cookie, retryCount)
+		if err != nil {
+			return nil, err
+		}
+		if !retry {
+			return result, nil
+		}
+		cookie = nextCookie
+		retryCount++
+	}
+}
+
+func validateProxyImageURL(imageURL string) (*url.URL, error) {
+	trimmed := strings.TrimSpace(imageURL)
+	if trimmed == "" {
+		return nil, ErrInvalidURL
+	}
+	parsed, err := url.Parse(trimmed)
+	if err != nil || parsed.Host == "" {
+		return nil, ErrInvalidURL
+	}
+	scheme := strings.ToLower(parsed.Scheme)
+	if scheme != "http" && scheme != "https" {
+		return nil, ErrInvalidProtocol
+	}
+	if _, err := network.ValidateFetchURL(trimmed); err != nil {
+		if errors.Is(err, network.ErrBlockedAddress) {
+			return nil, fmt.Errorf("%w: %v", ErrInvalidURL, err)
+		}
+		return nil, ErrInvalidURL
+	}
+	return parsed, nil
+}
+
+func (s *proxyService) doFetchOnce(
+	ctx context.Context,
+	imageURL string,
+	host string,
+	baseHeaders azuretls.OrderedHeaders,
+	cookie string,
+	retryCount int,
+) (*ProxyResult, string, bool, error) {
+	session, err := s.clientFactory.NewAzureSession(ctx, proxyTimeout)
+	if err != nil {
+		return nil, "", false, fmt.Errorf("%w: %v", ErrFetchFailed, err)
+	}
+	keepSessionOpen := false
+	defer func() {
+		if !keepSessionOpen {
+			session.Close()
+		}
+	}()
+
+	headers := make(azuretls.OrderedHeaders, len(baseHeaders), len(baseHeaders)+1)
+	copy(headers, baseHeaders)
 	requestHeaders := orderedHeadersToHTTPHeader(headers)
+
 	if cookie != "" {
 		headers = append(headers, []string{"cookie", cookie})
-	} else {
-		if cachedCookie := getCachedAnubisCookie(ctx, s.anubis, parsedURL.Host, requestHeaders); cachedCookie != "" {
-			headers = append(headers, []string{"cookie", cachedCookie})
-		}
+	} else if cached := getCachedAnubisCookie(ctx, s.anubis, host, requestHeaders); cached != "" {
+		headers = append(headers, []string{"cookie", cached})
 	}
 
 	resp, err := session.Do(&azuretls.Request{
 		Method:         http.MethodGet,
 		Url:            imageURL,
 		OrderedHeaders: headers,
+		IgnoreBody:     true,
 	})
 	if err != nil {
-		logger.Warn("proxy fetch failed", "module", "service", "action", "fetch", "resource", "proxy", "result", "failed", "host", parsedURL.Host, "error", err)
-		return nil, fmt.Errorf("%w: %v", ErrFetchFailed, err)
+		if errors.Is(err, network.ErrBlockedAddress) || errors.Is(err, network.ErrInvalidURL) {
+			return nil, "", false, fmt.Errorf("%w: %v", ErrInvalidURL, err)
+		}
+		if isTimeoutError(err) {
+			logger.Warn("proxy fetch timeout", "module", "service", "action", "fetch", "resource", "proxy", "result", "failed", "host", host, "error", err)
+			return nil, "", false, fmt.Errorf("%w: %v", ErrRequestTimeout, err)
+		}
+		logger.Warn("proxy fetch failed", "module", "service", "action", "fetch", "resource", "proxy", "result", "failed", "host", host, "error", err)
+		return nil, "", false, fmt.Errorf("%w: %v", ErrFetchFailed, err)
 	}
 
-	if resp.StatusCode != http.StatusOK {
-		logger.Error("proxy http error", "module", "service", "action", "fetch", "resource", "proxy", "result", "failed", "host", parsedURL.Host, "status_code", resp.StatusCode)
-		return nil, fmt.Errorf("%w: %d", ErrFetchFailed, resp.StatusCode)
+	closeResp := true
+	defer func() {
+		if closeResp {
+			_ = resp.CloseBody()
+		}
+	}()
+
+	effectiveURL := imageURL
+	if strings.TrimSpace(resp.Url) != "" {
+		if _, vErr := network.ValidateFetchURL(resp.Url); vErr != nil {
+			return nil, "", false, fmt.Errorf("%w: %v", ErrInvalidURL, vErr)
+		}
+		effectiveURL = resp.Url
 	}
 
-	data := resp.Body
+	upstreamCT := strings.ToLower(resp.Header.Get("Content-Type"))
 
-	newCookie, anubisErr := trySolveAnubisChallenge(ctx, s.anubis, data, imageURL, cookiesFromMap(resp.Cookies), requestHeaders, retryCount)
-	switch {
-	case anubisErr == nil:
-		return s.fetchWithFreshSession(ctx, imageURL, refererURL, newCookie, retryCount+1)
-	case errors.Is(anubisErr, errAnubisNotPage):
-		// Not an Anubis page; continue normal proxy response handling.
-	case errors.Is(anubisErr, errAnubisRejected):
-		logger.Warn("proxy upstream rejected", "module", "service", "action", "fetch", "resource", "proxy", "result", "failed", "host", parsedURL.Host)
-		return nil, ErrUpstreamRejected
-	case errors.Is(anubisErr, errAnubisRetryExceeded):
-		logger.Warn("proxy anubis persists", "module", "service", "action", "fetch", "resource", "proxy", "result", "failed", "host", parsedURL.Host, "retry_count", retryCount)
-		return nil, fmt.Errorf("%w: anubis challenge persists after %d retries", ErrFetchFailed, retryCount)
-	default:
-		logger.Warn("proxy anubis solve failed", "module", "service", "action", "fetch", "resource", "proxy", "result", "failed", "host", parsedURL.Host, "error", anubisErr)
-		return nil, ErrFetchFailed
+	// If response looks like HTML or a non-200 error, read a bounded buffer to check for Anubis first.
+	isLikelyHTML := strings.Contains(upstreamCT, "text/html") || strings.Contains(upstreamCT, "application/xhtml")
+	if resp.StatusCode != http.StatusOK || (isLikelyHTML && s.anubis != nil) {
+		var body []byte
+		if resp.RawBody != nil {
+			body, err = readLimited(resp.RawBody, maxAnubisBodyBytes)
+			if err != nil {
+				return nil, "", false, fmt.Errorf("%w: %v", ErrFetchFailed, err)
+			}
+		} else {
+			body = resp.Body
+		}
+
+		if s.anubis != nil {
+			newCookie, anubisErr := trySolveAnubisChallenge(ctx, s.anubis, body, effectiveURL, cookiesFromMap(resp.Cookies), requestHeaders, retryCount)
+			switch {
+			case anubisErr == nil:
+				return nil, newCookie, true, nil
+			case errors.Is(anubisErr, errAnubisNotPage):
+			case errors.Is(anubisErr, errAnubisRejected):
+				logger.Warn("proxy upstream rejected", "module", "service", "action", "fetch", "resource", "proxy", "result", "failed", "host", host)
+				return nil, "", false, ErrUpstreamRejected
+			case errors.Is(anubisErr, errAnubisRetryExceeded):
+				logger.Warn("proxy anubis persists", "module", "service", "action", "fetch", "resource", "proxy", "result", "failed", "host", host, "retry_count", retryCount)
+				return nil, "", false, fmt.Errorf("%w: anubis challenge persists after %d retries", ErrFetchFailed, retryCount)
+			default:
+				logger.Warn("proxy anubis solve failed", "module", "service", "action", "fetch", "resource", "proxy", "result", "failed", "host", host, "error", anubisErr)
+				return nil, "", false, ErrFetchFailed
+			}
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			logger.Error("proxy http error", "module", "service", "action", "fetch", "resource", "proxy", "result", "failed", "host", host, "status_code", resp.StatusCode)
+			return nil, "", false, fmt.Errorf("%w: %d", ErrFetchFailed, resp.StatusCode)
+		}
+
+		contentType, err := detectProxyImageContentType(body)
+		if err != nil {
+			logger.Warn("proxy invalid image", "module", "service", "action", "fetch", "resource", "proxy", "result", "failed", "host", host, "error", err)
+			return nil, "", false, err
+		}
+		return &ProxyResult{
+			Data:        body,
+			Body:        io.NopCloser(bytes.NewReader(body)),
+			ContentType: contentType,
+		}, "", false, nil
 	}
 
-	contentType, err := detectProxyImageContentType(data)
+	// Streaming path for normal 200 image responses: sniff only the header prefix and stream the rest.
+	var src io.Reader
+	if resp.RawBody != nil {
+		src = resp.RawBody
+	} else {
+		src = bytes.NewReader(resp.Body)
+	}
+
+	prefix, err := readAtMost(src, proxySniffBytes)
 	if err != nil {
-		logger.Warn("proxy invalid image", "module", "service", "action", "fetch", "resource", "proxy", "result", "failed", "host", parsedURL.Host, "error", err)
-		return nil, err
+		return nil, "", false, fmt.Errorf("%w: %v", ErrFetchFailed, err)
+	}
+
+	// Check for Anubis when server omitted Content-Type on an HTML challenge page.
+	if s.anubis != nil && bytes.Contains(prefix, []byte("anubis_challenge")) {
+		rest, err := readLimited(src, maxAnubisBodyBytes-int64(len(prefix)))
+		if err != nil {
+			return nil, "", false, fmt.Errorf("%w: %v", ErrFetchFailed, err)
+		}
+		fullBody := append(prefix, rest...)
+		newCookie, anubisErr := trySolveAnubisChallenge(ctx, s.anubis, fullBody, effectiveURL, cookiesFromMap(resp.Cookies), requestHeaders, retryCount)
+		switch {
+		case anubisErr == nil:
+			return nil, newCookie, true, nil
+		case errors.Is(anubisErr, errAnubisNotPage):
+			prefix = fullBody
+			src = bytes.NewReader(nil)
+		case errors.Is(anubisErr, errAnubisRejected):
+			logger.Warn("proxy upstream rejected", "module", "service", "action", "fetch", "resource", "proxy", "result", "failed", "host", host)
+			return nil, "", false, ErrUpstreamRejected
+		case errors.Is(anubisErr, errAnubisRetryExceeded):
+			logger.Warn("proxy anubis persists", "module", "service", "action", "fetch", "resource", "proxy", "result", "failed", "host", host, "retry_count", retryCount)
+			return nil, "", false, fmt.Errorf("%w: anubis challenge persists after %d retries", ErrFetchFailed, retryCount)
+		default:
+			logger.Warn("proxy anubis solve failed", "module", "service", "action", "fetch", "resource", "proxy", "result", "failed", "host", host, "error", anubisErr)
+			return nil, "", false, ErrFetchFailed
+		}
+	}
+
+	contentType, err := detectProxyImageContentType(prefix)
+	if err != nil && looksLikeXML(prefix, upstreamCT) {
+		// SVG files with long XML comments/headers may need a larger probe window.
+		more, readErr := readAtMost(src, proxyMaxSVGProbe-len(prefix))
+		if readErr == nil && len(more) > 0 {
+			prefix = append(prefix, more...)
+			contentType, err = detectProxyImageContentType(prefix)
+		}
+	}
+	if err != nil {
+		logger.Warn("proxy invalid image", "module", "service", "action", "fetch", "resource", "proxy", "result", "failed", "host", host, "error", err)
+		return nil, "", false, err
+	}
+
+	// Hand ownership of resp.RawBody and session to the caller via ProxyResult.Body.
+	closeResp = false
+	keepSessionOpen = true
+
+	stream := &sessionStreamCloser{
+		reader:  io.MultiReader(bytes.NewReader(prefix), src),
+		rawBody: resp.RawBody,
+		session: session,
 	}
 
 	return &ProxyResult{
-		Data:        data,
+		Body:        stream,
 		ContentType: contentType,
-	}, nil
+	}, "", false, nil
+}
+
+func readAtMost(r io.Reader, n int) ([]byte, error) {
+	if n <= 0 {
+		return nil, nil
+	}
+	return io.ReadAll(io.LimitReader(r, int64(n)))
+}
+
+func looksLikeXML(prefix []byte, upstreamCT string) bool {
+	if strings.Contains(upstreamCT, "xml") || strings.Contains(upstreamCT, "svg") {
+		return true
+	}
+	trimmed := bytes.TrimSpace(prefix)
+	return bytes.HasPrefix(trimmed, []byte("<?xml")) ||
+		bytes.HasPrefix(trimmed, []byte("<!DOCTYPE")) ||
+		bytes.HasPrefix(trimmed, []byte("<!--")) ||
+		bytes.HasPrefix(trimmed, []byte("<svg"))
 }
 
 func detectProxyImageContentType(data []byte) (string, error) {
@@ -183,11 +359,14 @@ func isSVGDocument(data []byte) bool {
 	}
 }
 
-// buildReferer constructs the Referer header value
+// buildReferer constructs a valid HTTP(S) origin Referer header value.
 func buildReferer(refererURL string, parsedURL *url.URL) string {
 	if refererURL != "" {
 		if parsed, err := url.Parse(refererURL); err == nil {
-			return parsed.Scheme + "://" + parsed.Host + "/"
+			scheme := strings.ToLower(parsed.Scheme)
+			if (scheme == "http" || scheme == "https") && parsed.Host != "" {
+				return scheme + "://" + parsed.Host + "/"
+			}
 		}
 	}
 	return parsedURL.Scheme + "://" + parsedURL.Host + "/"

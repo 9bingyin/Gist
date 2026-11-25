@@ -4,6 +4,7 @@ interface ImagePreviewState {
   isOpen: boolean;
   images: string[];
   currentIndex: number;
+  initialIndex: number;
 
   open: (images: string[], startIndex?: number) => void;
   close: () => void;
@@ -15,6 +16,7 @@ const initialState = {
   isOpen: false,
   images: [] as string[],
   currentIndex: 0,
+  initialIndex: 0,
 };
 
 export const useImagePreviewStore = create<ImagePreviewState>((set, get) => ({
@@ -25,6 +27,7 @@ export const useImagePreviewStore = create<ImagePreviewState>((set, get) => ({
       isOpen: true,
       images,
       currentIndex: startIndex,
+      initialIndex: startIndex,
     });
   },
 

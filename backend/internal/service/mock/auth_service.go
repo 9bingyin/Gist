@@ -117,16 +117,16 @@ func (mr *MockAuthServiceMockRecorder) UpdateProfile(ctx, nickname, email, curre
 }
 
 // ValidateToken mocks base method.
-func (m *MockAuthService) ValidateToken(token string) (bool, error) {
+func (m *MockAuthService) ValidateToken(ctx context.Context, token string) (bool, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ValidateToken", token)
+	ret := m.ctrl.Call(m, "ValidateToken", ctx, token)
 	ret0, _ := ret[0].(bool)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ValidateToken indicates an expected call of ValidateToken.
-func (mr *MockAuthServiceMockRecorder) ValidateToken(token any) *gomock.Call {
+func (mr *MockAuthServiceMockRecorder) ValidateToken(ctx, token any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateToken", reflect.TypeOf((*MockAuthService)(nil).ValidateToken), token)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateToken", reflect.TypeOf((*MockAuthService)(nil).ValidateToken), ctx, token)
 }

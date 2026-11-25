@@ -2,9 +2,21 @@ import { useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getRefreshStatus } from "@/api";
 
+export const REFRESH_STATUS_QUERY_KEY = ["refreshStatus"] as const;
+
+export function useRefreshStatusQuery() {
+  return useQuery({
+    queryKey: REFRESH_STATUS_QUERY_KEY,
+    queryFn: getRefreshStatus,
+    refetchInterval: (query) =>
+      query.state.data?.isRefreshing ? 1500 : 15_000,
+    staleTime: 1000,
+  });
+}
+
 /**
  * Polls the backend refresh status and automatically invalidates
- * entries/unreadCounts/feeds caches when a scheduled refresh completes.
+ * entries/unreadCounts/feeds caches when a scheduled or manual refresh completes.
  *
  * Mount this hook once at the app level (e.g., AuthenticatedApp).
  */
@@ -14,26 +26,30 @@ export function useRefreshStatus() {
   // undefined = server returned no lastRefreshedAt (no refresh has happened)
   // string = last known timestamp
   const prevTimestampRef = useRef<string | undefined | null>(null);
+  const wasRefreshingRef = useRef(false);
 
-  const { data } = useQuery({
-    queryKey: ["refreshStatus"],
-    queryFn: getRefreshStatus,
-    refetchInterval: 15_000,
-    staleTime: 10_000,
-  });
+  const { data } = useRefreshStatusQuery();
 
   useEffect(() => {
     if (!data) return;
 
     const current = data.lastRefreshedAt;
-    if (
-      prevTimestampRef.current !== null &&
-      prevTimestampRef.current !== current
-    ) {
+    const timestampChanged =
+      prevTimestampRef.current !== null && prevTimestampRef.current !== current;
+    const finishedRefreshing = wasRefreshingRef.current && !data.isRefreshing;
+
+    if (timestampChanged || finishedRefreshing) {
       queryClient.invalidateQueries({ queryKey: ["entries"] });
       queryClient.invalidateQueries({ queryKey: ["unreadCounts"] });
       queryClient.invalidateQueries({ queryKey: ["feeds"] });
     }
+
     prevTimestampRef.current = current;
+    wasRefreshingRef.current = data.isRefreshing;
   }, [data, queryClient]);
+
+  return {
+    isRefreshing: data?.isRefreshing ?? false,
+    lastRefreshedAt: data?.lastRefreshedAt,
+  };
 }

@@ -11,6 +11,8 @@ import (
 	"gist/backend/pkg/logger"
 )
 
+const defaultEntryListLimit = 50
+
 type EntryListParams struct {
 	FeedID       *int64
 	FolderID     *int64
@@ -23,7 +25,7 @@ type EntryListParams struct {
 }
 
 type EntryService interface {
-	List(ctx context.Context, params EntryListParams) ([]model.Entry, error)
+	List(ctx context.Context, params EntryListParams) ([]model.Entry, bool, error)
 	GetByID(ctx context.Context, id int64) (model.Entry, error)
 	MarkAsRead(ctx context.Context, id int64, read bool) error
 	MarkManyAsRead(ctx context.Context, ids []int64, read bool) error
@@ -31,9 +33,7 @@ type EntryService interface {
 	MarkAllAsRead(ctx context.Context, feedID *int64, folderID *int64, contentType *string) error
 	GetUnreadCounts(ctx context.Context) (map[int64]int, error)
 	GetStarredCount(ctx context.Context) (int, error)
-	// ClearReadabilityCache clears all readable_content from entries
 	ClearReadabilityCache(ctx context.Context) (int64, error)
-	// ClearEntryCache deletes all unstarred entries
 	ClearEntryCache(ctx context.Context) (int64, error)
 }
 
@@ -55,39 +55,32 @@ func NewEntryService(
 	}
 }
 
-func (s *entryService) List(ctx context.Context, params EntryListParams) ([]model.Entry, error) {
-	// Validate feedID exists if provided
+func (s *entryService) List(ctx context.Context, params EntryListParams) ([]model.Entry, bool, error) {
 	if params.FeedID != nil {
-		_, err := s.feeds.GetByID(ctx, *params.FeedID)
-		if err != nil {
+		if _, err := s.feeds.GetByID(ctx, *params.FeedID); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
-				return nil, ErrNotFound
+				return nil, false, ErrNotFound
 			}
-			return nil, err
+			return nil, false, err
 		}
 	}
 
-	// Validate folderID exists if provided
 	if params.FolderID != nil {
-		_, err := s.folders.GetByID(ctx, *params.FolderID)
-		if err != nil {
+		if _, err := s.folders.GetByID(ctx, *params.FolderID); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
-				return nil, ErrNotFound
+				return nil, false, ErrNotFound
 			}
-			return nil, err
+			return nil, false, err
 		}
 	}
 
-	// Set default limit
-	// Allow up to 101 for internal hasMore check (handler requests limit+1)
 	limit := params.Limit
 	if limit <= 0 {
-		limit = 50
+		limit = defaultEntryListLimit
 	}
-	if limit > 101 {
-		limit = 101
-	}
+	offset := max(params.Offset, 0)
 
+	// Request limit+1 rows to determine whether another page exists.
 	filter := repository.EntryListFilter{
 		FeedID:       params.FeedID,
 		FolderID:     params.FolderID,
@@ -95,17 +88,23 @@ func (s *entryService) List(ctx context.Context, params EntryListParams) ([]mode
 		UnreadOnly:   params.UnreadOnly,
 		StarredOnly:  params.StarredOnly,
 		HasThumbnail: params.HasThumbnail,
-		Limit:        limit,
-		Offset:       params.Offset,
+		Limit:        limit + 1,
+		Offset:       offset,
 	}
 
 	entries, err := s.entries.List(ctx, filter)
 	if err != nil {
 		logger.Error("entry list failed", "module", "service", "action", "list", "resource", "entry", "result", "failed", "error", err)
-		return nil, err
+		return nil, false, err
 	}
-	logger.Debug("entry list", "module", "service", "action", "list", "resource", "entry", "result", "ok", "count", len(entries))
-	return entries, nil
+
+	hasMore := len(entries) > limit
+	if hasMore {
+		entries = entries[:limit]
+	}
+
+	logger.Debug("entry list", "module", "service", "action", "list", "resource", "entry", "result", "ok", "count", len(entries), "has_more", hasMore)
+	return entries, hasMore, nil
 }
 
 func (s *entryService) GetByID(ctx context.Context, id int64) (model.Entry, error) {
@@ -121,9 +120,7 @@ func (s *entryService) GetByID(ctx context.Context, id int64) (model.Entry, erro
 }
 
 func (s *entryService) MarkAsRead(ctx context.Context, id int64, read bool) error {
-	// Check entry exists
-	_, err := s.entries.GetByID(ctx, id)
-	if err != nil {
+	if _, err := s.entries.GetByID(ctx, id); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrNotFound
 		}
@@ -152,10 +149,8 @@ func (s *entryService) MarkManyAsRead(ctx context.Context, ids []int64, read boo
 }
 
 func (s *entryService) MarkAllAsRead(ctx context.Context, feedID *int64, folderID *int64, contentType *string) error {
-	// Validate feedID exists if provided
 	if feedID != nil {
-		_, err := s.feeds.GetByID(ctx, *feedID)
-		if err != nil {
+		if _, err := s.feeds.GetByID(ctx, *feedID); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return ErrNotFound
 			}
@@ -163,10 +158,8 @@ func (s *entryService) MarkAllAsRead(ctx context.Context, feedID *int64, folderI
 		}
 	}
 
-	// Validate folderID exists if provided
 	if folderID != nil {
-		_, err := s.folders.GetByID(ctx, *folderID)
-		if err != nil {
+		if _, err := s.folders.GetByID(ctx, *folderID); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return ErrNotFound
 			}
@@ -174,15 +167,13 @@ func (s *entryService) MarkAllAsRead(ctx context.Context, feedID *int64, folderI
 		}
 	}
 
-	var feedIDValue any
+	var feedIDValue, folderIDValue, contentTypeValue any
 	if feedID != nil {
 		feedIDValue = *feedID
 	}
-	var folderIDValue any
 	if folderID != nil {
 		folderIDValue = *folderID
 	}
-	var contentTypeValue any
 	if contentType != nil {
 		contentTypeValue = *contentType
 	}
@@ -202,18 +193,15 @@ func (s *entryService) GetUnreadCounts(ctx context.Context) (map[int64]int, erro
 		return nil, err
 	}
 
-	result := make(map[int64]int)
+	result := make(map[int64]int, len(counts))
 	for _, uc := range counts {
 		result[uc.FeedID] = uc.Count
 	}
-
 	return result, nil
 }
 
 func (s *entryService) MarkAsStarred(ctx context.Context, id int64, starred bool) error {
-	// Check entry exists
-	_, err := s.entries.GetByID(ctx, id)
-	if err != nil {
+	if _, err := s.entries.GetByID(ctx, id); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrNotFound
 		}
@@ -254,8 +242,6 @@ func (s *entryService) ClearEntryCache(ctx context.Context) (int64, error) {
 		logger.Error("entry cache clear failed", "module", "service", "action", "clear", "resource", "entry", "result", "failed", "error", err)
 		return 0, err
 	}
-	// 重置所有 feeds 的 Conditional GET 信息，强制下次刷新时全量拉取
-	// 避免因 304 Not Modified 导致已删除的文章无法被重新拉取
 	if _, resetErr := s.feeds.ClearAllConditionalGet(ctx); resetErr != nil {
 		logger.Warn("feed conditional get reset failed", "module", "service", "action", "update", "resource", "feed", "result", "failed", "error", resetErr)
 	}

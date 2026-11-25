@@ -56,27 +56,27 @@ func (mr *MockImportTaskServiceMockRecorder) Cancel() *gomock.Call {
 }
 
 // Complete mocks base method.
-func (m *MockImportTaskService) Complete(result service.ImportResult) {
+func (m *MockImportTaskService) Complete(taskID string, result service.ImportResult) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Complete", result)
+	m.ctrl.Call(m, "Complete", taskID, result)
 }
 
 // Complete indicates an expected call of Complete.
-func (mr *MockImportTaskServiceMockRecorder) Complete(result any) *gomock.Call {
+func (mr *MockImportTaskServiceMockRecorder) Complete(taskID, result any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Complete", reflect.TypeOf((*MockImportTaskService)(nil).Complete), result)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Complete", reflect.TypeOf((*MockImportTaskService)(nil).Complete), taskID, result)
 }
 
 // Fail mocks base method.
-func (m *MockImportTaskService) Fail(err error) {
+func (m *MockImportTaskService) Fail(taskID string, err error) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Fail", err)
+	m.ctrl.Call(m, "Fail", taskID, err)
 }
 
 // Fail indicates an expected call of Fail.
-func (mr *MockImportTaskServiceMockRecorder) Fail(err any) *gomock.Call {
+func (mr *MockImportTaskServiceMockRecorder) Fail(taskID, err any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Fail", reflect.TypeOf((*MockImportTaskService)(nil).Fail), err)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Fail", reflect.TypeOf((*MockImportTaskService)(nil).Fail), taskID, err)
 }
 
 // Get mocks base method.
@@ -91,6 +91,30 @@ func (m *MockImportTaskService) Get() *service.ImportTask {
 func (mr *MockImportTaskServiceMockRecorder) Get() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockImportTaskService)(nil).Get))
+}
+
+// SetTotal mocks base method.
+func (m *MockImportTaskService) SetTotal(taskID string, total int) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetTotal", taskID, total)
+}
+
+// SetTotal indicates an expected call of SetTotal.
+func (mr *MockImportTaskServiceMockRecorder) SetTotal(taskID, total any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetTotal", reflect.TypeOf((*MockImportTaskService)(nil).SetTotal), taskID, total)
+}
+
+// Shutdown mocks base method.
+func (m *MockImportTaskService) Shutdown() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Shutdown")
+}
+
+// Shutdown indicates an expected call of Shutdown.
+func (mr *MockImportTaskServiceMockRecorder) Shutdown() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Shutdown", reflect.TypeOf((*MockImportTaskService)(nil).Shutdown))
 }
 
 // Start mocks base method.
@@ -109,13 +133,13 @@ func (mr *MockImportTaskServiceMockRecorder) Start(total any) *gomock.Call {
 }
 
 // Update mocks base method.
-func (m *MockImportTaskService) Update(current int, feed string) {
+func (m *MockImportTaskService) Update(taskID string, current int, feed string) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Update", current, feed)
+	m.ctrl.Call(m, "Update", taskID, current, feed)
 }
 
 // Update indicates an expected call of Update.
-func (mr *MockImportTaskServiceMockRecorder) Update(current, feed any) *gomock.Call {
+func (mr *MockImportTaskServiceMockRecorder) Update(taskID, current, feed any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Update", reflect.TypeOf((*MockImportTaskService)(nil).Update), current, feed)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Update", reflect.TypeOf((*MockImportTaskService)(nil).Update), taskID, current, feed)
 }

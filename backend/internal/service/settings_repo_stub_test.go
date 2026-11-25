@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"context"
+	"maps"
 	"sort"
 	"strings"
 	"sync"
@@ -66,9 +67,7 @@ func (s *settingsRepoStub) SetMany(ctx context.Context, values map[string]string
 			return err
 		}
 	}
-	for key, value := range values {
-		s.data[key] = value
-	}
+	maps.Copy(s.data, values)
 	return nil
 }
 

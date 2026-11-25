@@ -8,6 +8,7 @@ import (
 	"io"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"gist/backend/internal/model"
@@ -19,6 +20,7 @@ import (
 type OPMLService interface {
 	Import(ctx context.Context, reader io.Reader, onProgress func(ImportProgress)) (ImportResult, error)
 	Export(ctx context.Context) ([]byte, error)
+	Shutdown()
 }
 
 type ImportResult struct {
@@ -42,6 +44,10 @@ type opmlService struct {
 	iconService    IconService
 	folders        repository.FolderRepository
 	feeds          repository.FeedRepository
+
+	bgCtx    context.Context
+	bgCancel context.CancelFunc
+	bgWG     sync.WaitGroup
 }
 
 func NewOPMLService(
@@ -52,6 +58,7 @@ func NewOPMLService(
 	folders repository.FolderRepository,
 	feeds repository.FeedRepository,
 ) OPMLService {
+	bgCtx, bgCancel := context.WithCancel(context.Background())
 	return &opmlService{
 		folderService:  folderService,
 		feedService:    feedService,
@@ -59,7 +66,23 @@ func NewOPMLService(
 		iconService:    iconService,
 		folders:        folders,
 		feeds:          feeds,
+		bgCtx:          bgCtx,
+		bgCancel:       bgCancel,
 	}
+}
+
+func (s *opmlService) Shutdown() {
+	s.bgCancel()
+	s.bgWG.Wait()
+}
+
+type importRunner struct {
+	svc        *opmlService
+	total      int
+	current    int
+	result     ImportResult
+	newFeedIDs []int64
+	onProgress func(ImportProgress)
 }
 
 func (s *opmlService) Import(ctx context.Context, reader io.Reader, onProgress func(ImportProgress)) (ImportResult, error) {
@@ -68,42 +91,104 @@ func (s *opmlService) Import(ctx context.Context, reader io.Reader, onProgress f
 		return ImportResult{}, ErrInvalid
 	}
 
-	// Count total feeds
 	total := countFeeds(doc.Body.Outlines)
-
 	logger.Info("opml import parsed", "module", "service", "action", "import", "resource", "opml", "result", "ok", "count", total)
-	// Send started progress
+
 	if onProgress != nil {
 		onProgress(ImportProgress{Total: total, Current: 0, Status: "started"})
 	}
 
-	result := ImportResult{}
-	current := 0
-	var newFeedIDs []int64
+	runner := &importRunner{
+		svc:        s,
+		total:      total,
+		onProgress: onProgress,
+	}
 
 	for _, outline := range doc.Body.Outlines {
-		if err := s.importOutline(ctx, outline, nil, "article", &result, &current, total, onProgress, &newFeedIDs); err != nil {
+		if err := runner.importOutline(ctx, outline, nil, "article"); err != nil {
 			logger.Error("opml import failed", "module", "service", "action", "import", "resource", "opml", "result", "failed", "error", err)
-			return result, err
+			return runner.result, err
 		}
-
 	}
 
-	// Concurrently refresh newly created feeds and backfill icons
-	if len(newFeedIDs) > 0 {
-		go func() {
-			bgCtx := context.Background()
+	if len(runner.newFeedIDs) > 0 && s.bgCtx.Err() == nil {
+		feedIDs := runner.newFeedIDs
+		s.bgWG.Go(func() {
 			if s.refreshService != nil {
-				_ = s.refreshService.RefreshFeeds(bgCtx, newFeedIDs)
+				_ = s.refreshService.RefreshFeeds(s.bgCtx, feedIDs)
 			}
-			if s.iconService != nil {
-				_ = s.iconService.BackfillIcons(bgCtx)
+			if s.iconService != nil && s.bgCtx.Err() == nil {
+				_ = s.iconService.BackfillIcons(s.bgCtx)
 			}
-		}()
+		})
 	}
 
-	logger.Info("opml import completed", "module", "service", "action", "import", "resource", "opml", "result", "ok", "folders_created", result.FoldersCreated, "folders_skipped", result.FoldersSkipped, "feeds_created", result.FeedsCreated, "feeds_skipped", result.FeedsSkipped)
-	return result, nil
+	logger.Info("opml import completed", "module", "service", "action", "import", "resource", "opml", "result", "ok", "folders_created", runner.result.FoldersCreated, "folders_skipped", runner.result.FoldersSkipped, "feeds_created", runner.result.FeedsCreated, "feeds_skipped", runner.result.FeedsSkipped)
+	return runner.result, nil
+}
+
+func (r *importRunner) importOutline(ctx context.Context, outline opml.Outline, parentID *int64, folderType string) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+
+	if isFeedOutline(outline) {
+		return r.importFeed(ctx, outline, parentID, folderType)
+	}
+
+	folderName := pickOutlineTitle(outline)
+	folder, created, err := r.svc.ensureFolder(ctx, folderName, parentID)
+	if err != nil {
+		return err
+	}
+	if created {
+		r.result.FoldersCreated++
+	} else {
+		r.result.FoldersSkipped++
+	}
+
+	for _, child := range outline.Outlines {
+		if err := r.importOutline(ctx, child, &folder.ID, folder.Type); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *importRunner) importFeed(ctx context.Context, outline opml.Outline, folderID *int64, folderType string) error {
+	feedURL := strings.TrimSpace(outline.XMLURL)
+	title := strings.TrimSpace(outline.Title)
+	if title == "" {
+		title = strings.TrimSpace(outline.Text)
+	}
+
+	r.current++
+	if r.onProgress != nil {
+		r.onProgress(ImportProgress{
+			Total:   r.total,
+			Current: r.current,
+			Feed:    title,
+			Status:  "importing",
+		})
+	}
+
+	if feedURL == "" {
+		r.result.FeedsSkipped++
+		return nil
+	}
+
+	feed, isNew, err := r.svc.feedService.AddWithoutFetch(ctx, feedURL, folderID, title, folderType)
+	if err != nil {
+		return fmt.Errorf("add feed %s: %w", feedURL, err)
+	}
+
+	if isNew {
+		r.result.FeedsCreated++
+		r.newFeedIDs = append(r.newFeedIDs, feed.ID)
+	} else {
+		r.result.FeedsSkipped++
+	}
+	return nil
 }
 
 func countFeeds(outlines []opml.Outline) int {
@@ -151,64 +236,20 @@ func (s *opmlService) Export(ctx context.Context) ([]byte, error) {
 	return payload, nil
 }
 
-func (s *opmlService) importOutline(
-	ctx context.Context,
-	outline opml.Outline,
-	parentID *int64,
-	folderType string,
-	result *ImportResult,
-	current *int,
-	total int,
-	onProgress func(ImportProgress),
-	newFeedIDs *[]int64,
-) error {
-	// Check if context is cancelled
-	if ctx.Err() != nil {
-		return ctx.Err()
-	}
-
-	if isFeedOutline(outline) {
-		return s.importFeed(ctx, outline, parentID, folderType, result, current, total, onProgress, newFeedIDs)
-	}
-
-	folderName := pickOutlineTitle(outline)
-	folder, created, err := s.ensureFolder(ctx, folderName, parentID)
-	if err != nil {
-		return err
-	}
-	if created {
-		result.FoldersCreated++
-	} else {
-		result.FoldersSkipped++
-	}
-
-	for _, child := range outline.Outlines {
-		// Use the folder's actual type (may differ from parent if folder already existed)
-		if err := s.importOutline(ctx, child, &folder.ID, folder.Type, result, current, total, onProgress, newFeedIDs); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
 func (s *opmlService) ensureFolder(ctx context.Context, name string, parentID *int64) (model.Folder, bool, error) {
 	if strings.TrimSpace(name) == "" {
 		name = "Untitled"
 	}
 
-	// Try to find existing folder first
 	if existing, err := s.folders.FindByName(ctx, name, parentID); err != nil {
 		return model.Folder{}, false, fmt.Errorf("find folder: %w", err)
 	} else if existing != nil {
 		return *existing, false, nil
 	}
 
-	// Create new folder using FolderService
 	folder, err := s.folderService.Create(ctx, name, parentID, "article")
 	if err != nil {
 		if errors.Is(err, ErrConflict) {
-			// Race condition: folder was created between check and create
 			if existing, findErr := s.folders.FindByName(ctx, name, parentID); findErr == nil && existing != nil {
 				return *existing, false, nil
 			}
@@ -216,55 +257,6 @@ func (s *opmlService) ensureFolder(ctx context.Context, name string, parentID *i
 		return model.Folder{}, false, fmt.Errorf("create folder: %w", err)
 	}
 	return folder, true, nil
-}
-
-func (s *opmlService) importFeed(
-	ctx context.Context,
-	outline opml.Outline,
-	folderID *int64,
-	folderType string,
-	result *ImportResult,
-	current *int,
-	total int,
-	onProgress func(ImportProgress),
-	newFeedIDs *[]int64,
-) error {
-	feedURL := strings.TrimSpace(outline.XMLURL)
-	title := strings.TrimSpace(outline.Title)
-	if title == "" {
-		title = strings.TrimSpace(outline.Text)
-	}
-
-	// Send progress before importing
-	*current++
-	if onProgress != nil {
-		onProgress(ImportProgress{
-			Total:   total,
-			Current: *current,
-			Feed:    title,
-			Status:  "importing",
-		})
-	}
-
-	if feedURL == "" {
-		result.FeedsSkipped++
-		return nil
-	}
-
-	// Use AddWithoutFetch to quickly create feed record without network request
-	feed, isNew, err := s.feedService.AddWithoutFetch(ctx, feedURL, folderID, title, folderType)
-	if err != nil {
-		return fmt.Errorf("add feed %s: %w", feedURL, err)
-	}
-
-	if isNew {
-		result.FeedsCreated++
-		*newFeedIDs = append(*newFeedIDs, feed.ID)
-	} else {
-		result.FeedsSkipped++
-	}
-
-	return nil
 }
 
 func isFeedOutline(outline opml.Outline) bool {

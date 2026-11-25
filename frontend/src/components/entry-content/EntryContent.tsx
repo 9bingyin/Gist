@@ -15,6 +15,10 @@ import { useAISummary } from "@/hooks/useAISummary";
 import { useAITranslation } from "@/hooks/useAITranslation";
 import { EntryContentHeader } from "./EntryContentHeader";
 import { EntryContentBody } from "./EntryContentBody";
+import {
+  EntryContentEmpty,
+  EntryContentSkeleton,
+} from "./EntryContentPlaceholders";
 
 interface EntryContentProps {
   entryId: string | null;
@@ -34,7 +38,6 @@ export function EntryContent({ entryId, isMobile, onBack }: EntryContentProps) {
 
   useScrollToTop(scrollNode, "entrycontent");
 
-  // Track entries marked as read to trigger list removal on switch
   const markedAsReadRef = useRef<Set<string>>(new Set());
 
   const autoTranslate = aiSettings?.autoTranslate ?? false;
@@ -42,7 +45,6 @@ export function EntryContent({ entryId, isMobile, onBack }: EntryContentProps) {
   const autoReadability = generalSettings?.autoReadability ?? false;
   const autoSummary = aiSettings?.autoSummary ?? false;
 
-  // Readability hook
   const {
     isReadableLoading,
     readableContent,
@@ -52,7 +54,6 @@ export function EntryContent({ entryId, isMobile, onBack }: EntryContentProps) {
     handleToggleReadable,
   } = useReadability({ entry, autoReadability });
 
-  // AI Summary hook
   const { aiSummary, isLoadingSummary, summaryError, handleToggleSummary } =
     useAISummary({
       entry,
@@ -61,7 +62,6 @@ export function EntryContent({ entryId, isMobile, onBack }: EntryContentProps) {
       autoSummary,
     });
 
-  // AI Translation hook
   const {
     isTranslating,
     hasTranslation,
@@ -78,8 +78,6 @@ export function EntryContent({ entryId, isMobile, onBack }: EntryContentProps) {
     targetLanguage,
   });
 
-  // Mark as read when entry is loaded
-  // Use skipInvalidate to prevent list item from disappearing immediately
   useEffect(() => {
     if (entry && !entry.read) {
       markedAsReadRef.current.add(entry.id);
@@ -87,8 +85,6 @@ export function EntryContent({ entryId, isMobile, onBack }: EntryContentProps) {
     }
   }, [entry, markAsRead]);
 
-  // Remove read entries from unreadOnly list when component unmounts (switching articles)
-  // Note: EntryContent uses key={entryId} in App.tsx, so it unmounts/remounts on switch
   useEffect(() => {
     const markedAsReadSet = markedAsReadRef.current;
     return () => {
@@ -105,7 +101,6 @@ export function EntryContent({ entryId, isMobile, onBack }: EntryContentProps) {
     }
   }, [entry, markAsStarred]);
 
-  // Determine display content
   const displayContent = combinedTranslatedContent ?? baseContent;
   const highlightContent = combinedTranslatedContent ?? baseContent ?? "";
 
@@ -154,61 +149,6 @@ export function EntryContent({ entryId, isMobile, onBack }: EntryContentProps) {
         isLoadingSummary={isLoadingSummary}
         summaryError={summaryError}
       />
-    </div>
-  );
-}
-
-function EntryContentEmpty({ message }: { message: string }) {
-  return (
-    <div className="flex h-full flex-col">
-      <div className="flex h-12 items-center px-6" />
-      <div className="flex flex-1 items-center justify-center">
-        <div className="text-center text-muted-foreground">
-          <svg
-            className="mx-auto size-12 opacity-50"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={1.5}
-              d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-            />
-          </svg>
-          <p className="mt-2 text-sm">{message}</p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function EntryContentSkeleton() {
-  return (
-    <div className="relative flex h-full flex-col animate-pulse">
-      <div className="absolute inset-x-0 top-0 z-20">
-        <div className="h-12" />
-      </div>
-      <div className="flex-1 overflow-auto">
-        <div className="mx-auto w-full max-w-[720px] px-6 pb-20 pt-16">
-          <div className="mb-10 space-y-5">
-            <div className="h-10 w-3/4 rounded bg-muted" />
-            <div className="flex gap-6">
-              <div className="h-4 w-24 rounded bg-muted" />
-              <div className="h-4 w-32 rounded bg-muted" />
-            </div>
-            <hr className="border-border/60" />
-          </div>
-          <div className="space-y-4">
-            <div className="h-4 w-full rounded bg-muted" />
-            <div className="h-4 w-full rounded bg-muted" />
-            <div className="h-4 w-3/4 rounded bg-muted" />
-            <div className="h-4 w-full rounded bg-muted" />
-            <div className="h-4 w-5/6 rounded bg-muted" />
-          </div>
-        </div>
-      </div>
     </div>
   );
 }

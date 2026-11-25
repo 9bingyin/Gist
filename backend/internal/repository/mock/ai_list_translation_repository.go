@@ -56,20 +56,6 @@ func (mr *MockAIListTranslationRepositoryMockRecorder) DeleteAll(ctx any) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteAll", reflect.TypeOf((*MockAIListTranslationRepository)(nil).DeleteAll), ctx)
 }
 
-// DeleteByEntryID mocks base method.
-func (m *MockAIListTranslationRepository) DeleteByEntryID(ctx context.Context, entryID int64) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeleteByEntryID", ctx, entryID)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// DeleteByEntryID indicates an expected call of DeleteByEntryID.
-func (mr *MockAIListTranslationRepositoryMockRecorder) DeleteByEntryID(ctx, entryID any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteByEntryID", reflect.TypeOf((*MockAIListTranslationRepository)(nil).DeleteByEntryID), ctx, entryID)
-}
-
 // Get mocks base method.
 func (m *MockAIListTranslationRepository) Get(ctx context.Context, entryID int64, language string) (*model.AIListTranslation, error) {
 	m.ctrl.T.Helper()

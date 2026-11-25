@@ -1,8 +1,6 @@
 package repository
 
-// Export for testing
-var NullableInt64 = nullableInt64
-var NullableString = nullableString
+// Export for testing.
 var FormatTime = formatTime
 var ParseTime = parseTime
-var ParseTimePtr = parseTimePtr
+var EscapeLikePrefix = escapeLikePrefix

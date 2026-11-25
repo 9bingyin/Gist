@@ -20,7 +20,7 @@ func newTestEcho() *echo.Echo {
 }
 
 // newJSONRequest creates a new HTTP request with JSON body.
-func newJSONRequest(method, target string, body interface{}) *http.Request {
+func newJSONRequest(method, target string, body any) *http.Request {
 	var bodyReader io.Reader
 	if body != nil {
 		jsonBytes, _ := json.Marshal(body)
@@ -65,13 +65,13 @@ func setPathParams(c echo.Context, params map[string]string) {
 }
 
 // parseJSONResponse parses the JSON response body into the given target.
-func parseJSONResponse(t *testing.T, rec *httptest.ResponseRecorder, target interface{}) {
+func parseJSONResponse(t *testing.T, rec *httptest.ResponseRecorder, target any) {
 	err := json.Unmarshal(rec.Body.Bytes(), target)
 	require.NoError(t, err, "failed to parse JSON response")
 }
 
 // assertJSONResponse asserts the response status code and parses the JSON body.
-func assertJSONResponse(t *testing.T, rec *httptest.ResponseRecorder, expectedStatus int, target interface{}) {
+func assertJSONResponse(t *testing.T, rec *httptest.ResponseRecorder, expectedStatus int, target any) {
 	require.Equal(t, expectedStatus, rec.Code, "unexpected status code")
 	if target != nil {
 		parseJSONResponse(t, rec, target)

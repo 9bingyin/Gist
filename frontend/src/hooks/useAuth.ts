@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { useAuthStore } from "@/stores/auth-store";
 
 export function useAuth() {
@@ -7,23 +7,28 @@ export function useAuth() {
     user,
     error,
     shouldRedirectToRoot,
-    initialize,
     login,
     register,
     logout,
     retry,
     clearError,
     consumeRootRedirect,
-  } = useAuthStore();
-
-  useEffect(() => {
-    if (state === "loading") {
-      initialize();
-    }
-  }, [state, initialize]);
+  } = useAuthStore(
+    useShallow((s) => ({
+      state: s.state,
+      user: s.user,
+      error: s.error,
+      shouldRedirectToRoot: s.shouldRedirectToRoot,
+      login: s.login,
+      register: s.register,
+      logout: s.logout,
+      retry: s.retry,
+      clearError: s.clearError,
+      consumeRootRedirect: s.consumeRootRedirect,
+    })),
+  );
 
   return {
-    // State
     isLoading: state === "loading",
     isAuthenticated: state === "authenticated",
     needsRegistration: state === "no-user",
@@ -33,7 +38,6 @@ export function useAuth() {
     error,
     shouldRedirectToRoot,
 
-    // Actions
     login,
     register,
     logout,

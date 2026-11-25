@@ -14,7 +14,6 @@ interface SidebarHeaderProps {
   title?: string;
   avatarUrl?: string;
   userName?: string;
-  starredCount?: number;
   isStarredSelected?: boolean;
   onAddClick?: () => void;
   onStarredClick?: () => void;
@@ -33,7 +32,6 @@ export function SidebarHeader({
   title = "Gist",
   avatarUrl,
   userName,
-  starredCount,
   isStarredSelected,
   onAddClick,
   onStarredClick,
@@ -46,15 +44,12 @@ export function SidebarHeader({
 
   return (
     <div className="flex items-center justify-between px-3 pt-2.5 pb-2">
-      {/* Logo and title */}
       <div className="flex items-center gap-1 text-lg font-semibold">
         <GistLogo className="mr-1 size-6" />
         <span className="tracking-tight">{title}</span>
       </div>
 
-      {/* Action buttons */}
       <div className="relative flex items-center gap-1">
-        {/* Add/Discover button */}
         <button
           type="button"
           className={actionButtonStyles}
@@ -64,11 +59,9 @@ export function SidebarHeader({
           <AddIcon className="size-5 text-muted-foreground" />
         </button>
 
-        {/* User avatar dropdown */}
         <ProfileButton
           avatarUrl={avatarUrl}
           userName={displayName}
-          starredCount={starredCount}
           isStarredSelected={isStarredSelected}
           onStarredClick={onStarredClick}
           onProfileClick={onProfileClick}

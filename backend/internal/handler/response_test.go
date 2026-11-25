@@ -62,7 +62,3 @@ func TestIDPtrToString(t *testing.T) {
 	require.NotNil(t, got)
 	require.Equal(t, "42", *got)
 }
-
-func TestItoa(t *testing.T) {
-	require.Equal(t, "123", handler.Itoa(123))
-}

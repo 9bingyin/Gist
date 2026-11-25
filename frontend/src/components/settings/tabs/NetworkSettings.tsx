@@ -1,10 +1,10 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
+import { testNetworkProxy, ApiError } from "@/api";
 import {
-  getNetworkSettings,
-  updateNetworkSettings,
-  testNetworkProxy,
-} from "@/api";
+  useNetworkSettings,
+  useUpdateNetworkSettings,
+} from "@/hooks/useSettings";
 import type {
   NetworkSettings as NetworkSettingsType,
   ProxyType,
@@ -14,45 +14,66 @@ import { cn } from "@/lib/utils";
 import { Switch } from "@/components/ui/switch";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 
+const defaultNetworkSettings: NetworkSettingsType = {
+  enabled: false,
+  type: "http",
+  host: "",
+  port: 0,
+  username: "",
+  password: "",
+  ipStack: "default",
+};
+
 export function NetworkSettings() {
   const { t } = useTranslation();
-  const [settings, setSettings] = useState<NetworkSettingsType>({
-    enabled: false,
-    type: "http",
-    host: "",
-    port: 0,
-    username: "",
-    password: "",
-    ipStack: "default",
-  });
-  const [isSaving, setIsSaving] = useState(false);
+  const {
+    data: serverSettings,
+    isLoading,
+    error: loadError,
+  } = useNetworkSettings();
+  const updateNetworkMutation = useUpdateNetworkSettings();
+
+  const [settings, setSettings] = useState<NetworkSettingsType>(
+    defaultNetworkSettings,
+  );
   const [isTesting, setIsTesting] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"idle" | "success" | "error">(
     "idle",
   );
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [testStatus, setTestStatus] = useState<"idle" | "success" | "error">(
     "idle",
   );
   const [testMessage, setTestMessage] = useState("");
 
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const testTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
-    getNetworkSettings()
-      .then((data) => {
-        setSettings(data);
-      })
-      .catch(() => {
-        // ignore
-      });
+    if (serverSettings) {
+      setSettings(serverSettings);
+    }
+  }, [serverSettings]);
+
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      if (testTimerRef.current) clearTimeout(testTimerRef.current);
+    };
   }, []);
 
   const handleEnabledChange = async (checked: boolean) => {
+    const previous = settings;
     const newSettings = { ...settings, enabled: checked };
     setSettings(newSettings);
+    setSaveError(null);
     try {
-      await updateNetworkSettings(newSettings);
-    } catch {
-      // Revert on error
-      setSettings(settings);
+      await updateNetworkMutation.mutateAsync(newSettings);
+    } catch (err) {
+      setSettings(previous);
+      setSaveError(
+        err instanceof Error ? err.message : t("ai_settings.failed_to_save"),
+      );
     }
   };
 
@@ -61,27 +82,34 @@ export function NetworkSettings() {
   };
 
   const handleIPStackChange = async (ipStack: IPStack) => {
+    const previous = settings;
     const newSettings = { ...settings, ipStack };
     setSettings(newSettings);
+    setSaveError(null);
     try {
-      await updateNetworkSettings(newSettings);
-    } catch {
-      // Revert on error
-      setSettings(settings);
+      await updateNetworkMutation.mutateAsync(newSettings);
+    } catch (err) {
+      setSettings(previous);
+      setSaveError(
+        err instanceof Error ? err.message : t("ai_settings.failed_to_save"),
+      );
     }
   };
 
   const handleSave = async () => {
-    setIsSaving(true);
     setSaveStatus("idle");
+    setSaveError(null);
     try {
-      await updateNetworkSettings(settings);
+      const saved = await updateNetworkMutation.mutateAsync(settings);
+      setSettings(saved);
       setSaveStatus("success");
-      setTimeout(() => setSaveStatus("idle"), 2000);
-    } catch {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = setTimeout(() => setSaveStatus("idle"), 2000);
+    } catch (err) {
       setSaveStatus("error");
-    } finally {
-      setIsSaving(false);
+      setSaveError(
+        err instanceof ApiError ? err.message : t("ai_settings.failed_to_save"),
+      );
     }
   };
 
@@ -105,7 +133,8 @@ export function NetworkSettings() {
       );
     } finally {
       setIsTesting(false);
-      setTimeout(() => {
+      if (testTimerRef.current) clearTimeout(testTimerRef.current);
+      testTimerRef.current = setTimeout(() => {
         setTestStatus("idle");
         setTestMessage("");
       }, 3000);
@@ -129,10 +158,28 @@ export function NetworkSettings() {
     [t],
   );
 
-  const canTest = settings.host && settings.port > 0;
+  if (isLoading && !serverSettings) {
+    return (
+      <div className="flex h-40 items-center justify-center">
+        <div className="size-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+      </div>
+    );
+  }
+
+  const canTest = Boolean(settings.host && settings.port > 0);
+  const isSaving = updateNetworkMutation.isPending;
 
   return (
     <div className="space-y-6">
+      {(loadError || saveError) && (
+        <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {saveError ||
+            (loadError instanceof Error
+              ? loadError.message
+              : t("ai_settings.failed_to_load"))}
+        </div>
+      )}
+
       {/* IP Stack */}
       <section>
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -170,8 +217,9 @@ export function NetworkSettings() {
       </section>
 
       {/* Proxy Configuration */}
-      <section
-        className={cn(!settings.enabled && "opacity-50 pointer-events-none")}
+      <fieldset
+        disabled={!settings.enabled}
+        className={cn(!settings.enabled && "opacity-50")}
       >
         <div className="space-y-4">
           {/* Proxy Type */}
@@ -322,7 +370,7 @@ export function NetworkSettings() {
             )}
           </div>
         </div>
-      </section>
+      </fieldset>
     </div>
   );
 }

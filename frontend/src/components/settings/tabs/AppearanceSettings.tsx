@@ -6,12 +6,14 @@ import {
   useRef,
   useState,
 } from "react";
-import { Reorder } from "framer-motion";
+import { Reorder } from "motion/react";
+import { Monitor, Moon, Sun } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { useQueryClient } from "@tanstack/react-query";
 import { useTheme, type Theme } from "@/hooks/useTheme";
-import { useAppearanceSettings } from "@/hooks/useAppearanceSettings";
-import { updateAppearanceSettings } from "@/api";
+import {
+  useAppearanceSettings,
+  useUpdateAppearanceSettings,
+} from "@/hooks/useSettings";
 import { cn } from "@/lib/utils";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import {
@@ -31,8 +33,8 @@ const defaultContentTypes: ContentType[] = [
 export function AppearanceSettings() {
   const { t } = useTranslation();
   const { theme, setTheme } = useTheme();
-  const queryClient = useQueryClient();
   const { data: appearanceSettings } = useAppearanceSettings();
+  const updateAppearanceMutation = useUpdateAppearanceSettings();
 
   const themeOptions = useMemo(
     () => [
@@ -40,19 +42,7 @@ export function AppearanceSettings() {
         value: "system" as Theme,
         label: (
           <>
-            <svg
-              className="size-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={1.5}
-                d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-              />
-            </svg>
+            <Monitor className="size-4" strokeWidth={1.5} />
             <span>{t("theme.system")}</span>
           </>
         ),
@@ -61,19 +51,7 @@ export function AppearanceSettings() {
         value: "light" as Theme,
         label: (
           <>
-            <svg
-              className="size-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={1.5}
-                d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"
-              />
-            </svg>
+            <Sun className="size-4" strokeWidth={1.5} />
             <span>{t("theme.light")}</span>
           </>
         ),
@@ -82,19 +60,7 @@ export function AppearanceSettings() {
         value: "dark" as Theme,
         label: (
           <>
-            <svg
-              className="size-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={1.5}
-                d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"
-              />
-            </svg>
+            <Moon className="size-4" strokeWidth={1.5} />
             <span>{t("theme.dark")}</span>
           </>
         ),
@@ -112,18 +78,18 @@ export function AppearanceSettings() {
     );
   }, [appearanceSettings]);
 
-  const disabledContentTypes = useMemo(() => {
-    return defaultContentTypes.filter(
-      (type) => !enabledContentTypes.includes(type),
-    );
-  }, [enabledContentTypes]);
-
   const [orderedTypes, setOrderedTypes] =
     useState<ContentType[]>(enabledContentTypes);
 
   useEffect(() => {
     setOrderedTypes(enabledContentTypes);
   }, [enabledContentTypes]);
+
+  // Derive disabled types directly from orderedTypes to avoid flicker
+  const disabledContentTypes = useMemo(
+    () => defaultContentTypes.filter((type) => !orderedTypes.includes(type)),
+    [orderedTypes],
+  );
 
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -133,16 +99,11 @@ export function AppearanceSettings() {
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current);
       }
-      saveTimeoutRef.current = setTimeout(async () => {
-        try {
-          await updateAppearanceSettings({ contentTypes: nextTypes });
-          queryClient.invalidateQueries({ queryKey: ["appearanceSettings"] });
-        } catch {
-          // ignore
-        }
+      saveTimeoutRef.current = setTimeout(() => {
+        updateAppearanceMutation.mutate({ contentTypes: nextTypes });
       }, 150);
     },
-    [queryClient],
+    [updateAppearanceMutation],
   );
 
   useEffect(() => {
@@ -233,7 +194,6 @@ export function AppearanceSettings() {
         </div>
 
         <div className="space-y-3">
-          {/* Horizontal draggable chips */}
           <div className="flex flex-wrap gap-2">
             <Reorder.Group
               axis="x"
@@ -260,11 +220,8 @@ export function AppearanceSettings() {
                     )}
                     aria-roledescription={t("settings.appearance_drag")}
                   >
-                    {/* Icon */}
                     <span className="text-muted-foreground">{meta.icon}</span>
-                    {/* Label */}
                     <span className="text-sm font-medium">{meta.label}</span>
-                    {/* Hide button */}
                     {!isOnlyOne && (
                       <button
                         type="button"
@@ -278,6 +235,7 @@ export function AppearanceSettings() {
                           "hover:bg-destructive/10 hover:text-destructive",
                         )}
                         title={t("settings.appearance_hide")}
+                        aria-label={`${t("settings.appearance_hide")} ${meta.label}`}
                       >
                         <EyeOffIcon className="size-3.5" />
                       </button>
@@ -288,7 +246,6 @@ export function AppearanceSettings() {
             </Reorder.Group>
           </div>
 
-          {/* Hidden types */}
           {disabledContentTypes.length > 0 && (
             <div>
               <div className="mb-2 text-xs text-muted-foreground">

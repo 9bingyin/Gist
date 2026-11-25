@@ -56,92 +56,60 @@ func TestReadabilityService_FetchReadableContent_InvalidURL(t *testing.T) {
 	require.ErrorIs(t, err, service.ErrInvalid)
 }
 
-func TestReadabilityService_Close(t *testing.T) {
-	svc := service.NewReadabilityService(nil, network.NewClientFactoryForTest(&http.Client{}), nil)
-	svc.Close()
-}
-
 func TestReadabilityService_FetchWithChrome_InvalidURL(t *testing.T) {
 	svc := service.NewReadabilityService(nil, network.NewClientFactoryForTest(&http.Client{}), nil)
 
-	_, err := service.ReadabilityFetchWithChromeForTest(svc, context.Background(), "http://[::1", "", 0)
-	require.ErrorIs(t, err, service.ErrFeedFetch)
-}
+	_, err := service.ReadabilityFetchWithChromeForTest(svc, context.Background(), "http://[::1")
+	require.ErrorIs(t, err, service.ErrInvalid)
 
-func TestReadabilityService_FetchWithFreshSession_InvalidScheme(t *testing.T) {
-	svc := service.NewReadabilityService(nil, network.NewClientFactoryForTest(&http.Client{}), nil)
-
-	_, err := service.ReadabilityFetchWithFreshSessionForTest(svc, context.Background(), "file:///etc/passwd", "", 0)
+	_, err = service.ReadabilityFetchWithChromeForTest(svc, context.Background(), "file:///etc/passwd")
 	require.ErrorIs(t, err, service.ErrInvalid)
 }
 
-func TestReadabilityService_DoFetch_InvalidURL(t *testing.T) {
-	svc := service.NewReadabilityService(nil, network.NewClientFactoryForTest(&http.Client{}), nil)
-
-	_, err := service.ReadabilityDoFetchForTest(svc, context.Background(), "http://[::1", "", 0)
-	require.ErrorIs(t, err, service.ErrFeedFetch)
-}
-
-// TestFixLazyImages_RuyoNet tests lazy image fix for 51.ruyo.net style pages.
-// Real case: https://51.ruyo.net/19255.html
-// These pages use data-original with a placeholder SVG in src.
 func TestFixLazyImages_RuyoNet(t *testing.T) {
-	// Real HTML pattern from 51.ruyo.net
 	input := []byte(`<html><body>
 		<p><img data-original="https://img10.360buyimg.com/ddimg/jfs/t1/361234/10/6826/72925/691c15d1Fc812aa5a/390c89b15cb1a566.jpg" src="https://51.ruyo.net/wp-content/themes/CorePress-Pro/static/img/loading/doublering.svg"/></p>
 		<p><img data-original="https://img13.360buyimg.com/ddimg/jfs/t1/390401/27/3049/13985/696ee149F9745f050/00155a01f4c85f94.jpg" src="https://51.ruyo.net/wp-content/themes/CorePress-Pro/static/img/loading/doublering.svg" width="714" height="248" class=""/></p>
 	</body></html>`)
 
-	result := string(service.FixLazyImagesForTest(input))
+	result := service.CleanReadabilityHTMLForTest(input)
 
-	// Should replace placeholder SVG with real image from data-original
 	require.Contains(t, result, `src="https://img10.360buyimg.com/ddimg/jfs/t1/361234/10/6826/72925/691c15d1Fc812aa5a/390c89b15cb1a566.jpg"`)
 	require.Contains(t, result, `src="https://img13.360buyimg.com/ddimg/jfs/t1/390401/27/3049/13985/696ee149F9745f050/00155a01f4c85f94.jpg"`)
-
-	// Should NOT contain placeholder SVG as src
 	require.NotContains(t, result, `src="https://51.ruyo.net/wp-content/themes/CorePress-Pro/static/img/loading/doublering.svg"`)
 }
 
-// TestFixLazyImages_PreservesNormalImages ensures normal images are not modified.
 func TestFixLazyImages_PreservesNormalImages(t *testing.T) {
 	input := []byte(`<html><body>
 		<img src="https://example.com/normal-image.jpg" alt="Normal image"/>
 		<img src="https://cdn.example.com/photo.png" width="800"/>
 	</body></html>`)
 
-	result := string(service.FixLazyImagesForTest(input))
+	result := service.CleanReadabilityHTMLForTest(input)
 
 	require.Contains(t, result, `src="https://example.com/normal-image.jpg"`)
 	require.Contains(t, result, `src="https://cdn.example.com/photo.png"`)
 }
 
-// TestFixLazyImages_IgnoresDataOriginalWithDataURI ensures data: URIs in data-original are ignored.
 func TestFixLazyImages_IgnoresDataOriginalWithDataURI(t *testing.T) {
 	input := []byte(`<html><body>
 		<img data-original="data:image/svg+xml;base64,PHN2ZyB4bWxucz0i" src="https://example.com/real.jpg"/>
 	</body></html>`)
 
-	result := string(service.FixLazyImagesForTest(input))
-
-	// Should keep original src since data-original is a data URI
+	result := service.CleanReadabilityHTMLForTest(input)
 	require.Contains(t, result, `src="https://example.com/real.jpg"`)
 }
 
-// TestFixLazyImages_AddsSourceWhenMissing handles images with data-original but no src.
 func TestFixLazyImages_AddsSourceWhenMissing(t *testing.T) {
 	input := []byte(`<html><body>
 		<img data-original="https://example.com/lazy-image.jpg" alt="Lazy"/>
 	</body></html>`)
 
-	result := string(service.FixLazyImagesForTest(input))
-
+	result := service.CleanReadabilityHTMLForTest(input)
 	require.Contains(t, result, `src="https://example.com/lazy-image.jpg"`)
 }
 
-// TestRemoveMetadataElements_GoogleBlog tests date removal for Google Developer Blog.
-// Real case: https://developers.googleblog.com/en/a-guide-to-fine-tuning-functiongemma/
 func TestRemoveMetadataElements_GoogleBlog(t *testing.T) {
-	// Real HTML pattern from Google Developer Blog
 	input := []byte(`<html><body>
 		<div class="summary-container">
 			<div class="published-date">JAN. 16, 2026</div>
@@ -154,24 +122,18 @@ func TestRemoveMetadataElements_GoogleBlog(t *testing.T) {
 		<p>Normal content that should remain.</p>
 	</body></html>`)
 
-	result := service.RemoveMetadataElementsForTest(input)
+	result := service.CleanReadabilityHTMLForTest(input)
 
-	// Should remove date elements (Safari Reader style: /date/.test(className))
 	require.NotContains(t, result, "published-date")
 	require.NotContains(t, result, "JAN. 16, 2026")
 	require.NotContains(t, result, "date-time")
 	require.NotContains(t, result, "post-date")
-
-	// Should remove itemprop="datePublished" elements
 	require.NotContains(t, result, "datePublished")
-
-	// Should preserve normal content and code blocks
 	require.Contains(t, result, `class="language-python"`)
 	require.Contains(t, result, `print(&#34;hello&#34;)`)
 	require.Contains(t, result, "Normal content that should remain")
 }
 
-// TestRemoveMetadataElements_MediumStyle tests date removal for Medium-style blogs.
 func TestRemoveMetadataElements_MediumStyle(t *testing.T) {
 	input := []byte(`<html><body>
 		<div class="article-meta">
@@ -184,19 +146,15 @@ func TestRemoveMetadataElements_MediumStyle(t *testing.T) {
 		</article>
 	</body></html>`)
 
-	result := service.RemoveMetadataElementsForTest(input)
+	result := service.CleanReadabilityHTMLForTest(input)
 
-	// Should remove datetime class element
 	require.NotContains(t, result, "datetime")
 	require.NotContains(t, result, "Jan 15")
-
-	// Should preserve article content
 	require.Contains(t, result, "Article Title")
 	require.Contains(t, result, "Article content here")
 	require.Contains(t, result, "reading-time")
 }
 
-// TestRemoveMetadataElements_WordPressStyle tests date removal for WordPress blogs.
 func TestRemoveMetadataElements_WordPressStyle(t *testing.T) {
 	input := []byte(`<html><body>
 		<div class="entry-meta">
@@ -210,41 +168,39 @@ func TestRemoveMetadataElements_WordPressStyle(t *testing.T) {
 		</div>
 	</body></html>`)
 
-	result := service.RemoveMetadataElementsForTest(input)
+	result := service.CleanReadabilityHTMLForTest(input)
 
-	// Should remove entry-date class element
 	require.NotContains(t, result, "entry-date")
 	require.NotContains(t, result, "January 10, 2026")
-
-	// Should preserve article content
 	require.Contains(t, result, "WordPress article content")
 }
 
-// TestRemoveMetadataElements_PreservesUpdateDate tests that "updated" dates are also removed.
-func TestRemoveMetadataElements_PreservesUpdateDate(t *testing.T) {
+func TestRemoveMetadataElements_PreservesNonDateWords(t *testing.T) {
 	input := []byte(`<html><body>
 		<div class="post-info">
 			<span class="publish-date">Published: 2026-01-01</span>
 			<span class="update-date">Updated: 2026-01-15</span>
 		</div>
+		<div class="update-notice">Important update notice</div>
+		<div class="outdated-warning">Outdated API warning</div>
+		<div class="candidate-list">Candidate items</div>
 		<p>Content here.</p>
 	</body></html>`)
 
-	result := service.RemoveMetadataElementsForTest(input)
+	result := service.CleanReadabilityHTMLForTest(input)
 
-	// Should remove both publish-date and update-date (both contain "date")
 	require.NotContains(t, result, "publish-date")
 	require.NotContains(t, result, "update-date")
 	require.NotContains(t, result, "Published: 2026-01-01")
 	require.NotContains(t, result, "Updated: 2026-01-15")
 
-	// Should preserve content
+	// Word-boundary matching must preserve unrelated classes containing "date" as a substring
+	require.Contains(t, result, "Important update notice")
+	require.Contains(t, result, "Outdated API warning")
+	require.Contains(t, result, "Candidate items")
 	require.Contains(t, result, "Content here")
 }
 
-// TestReadabilityService_PreservesCodeBlockLanguageClass tests code highlighting preservation.
-// Regression test: go-readability strips class attributes by default.
-// Real case: https://developers.googleblog.com/en/a-guide-to-fine-tuning-functiongemma/
 func TestReadabilityService_PreservesCodeBlockLanguageClass(t *testing.T) {
 	htmlContent := `<!DOCTYPE html>
 <html><head><title>Code Test</title></head>
@@ -279,19 +235,14 @@ func main() {
 	result, err := service.ParseHTMLForTest(htmlContent, "https://example.com/test")
 	require.NoError(t, err)
 
-	// Verify language classes are preserved
 	require.Contains(t, result, `class="language-python"`, "language-python class should be preserved")
 	require.Contains(t, result, `class="language-javascript"`, "language-javascript class should be preserved")
 	require.Contains(t, result, `class="language-go"`, "language-go class should be preserved")
-
-	// Verify code content is preserved
 	require.Contains(t, result, "def hello():")
 	require.Contains(t, result, "const greet")
 	require.Contains(t, result, "package main")
 }
 
-// TestReadabilityService_HandlesComplexHTML tests parsing of complex real-world HTML.
-// Note: Readability's algorithm requires sufficient content to identify article body.
 func TestReadabilityService_HandlesComplexHTML(t *testing.T) {
 	htmlContent := `<!DOCTYPE html>
 <html lang="zh-CN">
@@ -335,15 +286,14 @@ func TestReadabilityService_HandlesComplexHTML(t *testing.T) {
 </body>
 </html>`
 
-	result, err := service.ParseHTMLForTest(htmlContent, "https://example.com/complex")
+	result, err := service.ParseAndCleanReadabilityForTest([]byte(htmlContent), "https://example.com/complex")
 	require.NoError(t, err)
 
-	// Should preserve main article content
 	require.Contains(t, result, "This is the lead paragraph")
 	require.Contains(t, result, "Section One")
 	require.Contains(t, result, "Section Two")
 	require.Contains(t, result, "This is a blockquote")
-
-	// Should preserve structured elements
 	require.Contains(t, result, "List item one")
+	require.NotContains(t, result, "<html>")
+	require.NotContains(t, result, "<body>")
 }

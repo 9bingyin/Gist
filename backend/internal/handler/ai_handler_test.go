@@ -22,7 +22,7 @@ func TestAIHandler_Summarize_CacheHit(t *testing.T) {
 	h := handler.NewAIHandlerHelper(mockService)
 
 	e := newTestEcho()
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"entryId": "123",
 		"content": "test content",
 		"title":   "test title",
@@ -55,7 +55,7 @@ func TestAIHandler_Summarize_InvalidRequest(t *testing.T) {
 	h := handler.NewAIHandlerHelper(mockService)
 
 	e := newTestEcho()
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"entryId": "123",
 	}
 	req := newJSONRequest(http.MethodPost, "/ai/summarize", reqBody)
@@ -75,7 +75,7 @@ func TestAIHandler_Translate_CacheHit(t *testing.T) {
 	h := handler.NewAIHandlerHelper(mockService)
 
 	e := newTestEcho()
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"entryId": "123",
 		"content": "test content",
 		"title":   "test title",
@@ -108,34 +108,8 @@ func TestAIHandler_TranslateBatch_InvalidRequest(t *testing.T) {
 	h := handler.NewAIHandlerHelper(mockService)
 
 	e := newTestEcho()
-	reqBody := map[string]interface{}{
-		"articles": []interface{}{},
-	}
-	req := newJSONRequest(http.MethodPost, "/ai/translate/batch", reqBody)
-	c, rec := newTestContext(e, req)
-
-	err := h.TranslateBatch(c)
-	require.NoError(t, err)
-
-	require.Equal(t, http.StatusBadRequest, rec.Code)
-}
-
-func TestAIHandler_TranslateBatch_TooManyArticles(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockService := mock.NewMockAIService(ctrl)
-	h := handler.NewAIHandlerHelper(mockService)
-
-	// Create 101 articles to exceed the limit
-	articles := make([]map[string]string, 101)
-	for i := range articles {
-		articles[i] = map[string]string{"id": "1", "title": "test", "summary": "test"}
-	}
-
-	e := newTestEcho()
-	reqBody := map[string]interface{}{
-		"articles": articles,
+	reqBody := map[string]any{
+		"articles": []any{},
 	}
 	req := newJSONRequest(http.MethodPost, "/ai/translate/batch", reqBody)
 	c, rec := newTestContext(e, req)
@@ -171,7 +145,7 @@ func TestAIHandler_TranslateBatch_ServiceError(t *testing.T) {
 	h := handler.NewAIHandlerHelper(mockService)
 
 	e := newTestEcho()
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"articles": []map[string]string{
 			{"id": "1", "title": "Test", "summary": "Summary"},
 		},
@@ -181,7 +155,7 @@ func TestAIHandler_TranslateBatch_ServiceError(t *testing.T) {
 
 	mockService.EXPECT().
 		TranslateBatch(gomock.Any(), gomock.Any()).
-		Return(nil, nil, errors.New("service error"))
+		Return(nil, errors.New("service error"))
 
 	err := h.TranslateBatch(c)
 	require.NoError(t, err)
@@ -197,7 +171,7 @@ func TestAIHandler_TranslateBatch_Success(t *testing.T) {
 	h := handler.NewAIHandlerHelper(mockService)
 
 	e := newTestEcho()
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"articles": []map[string]string{
 			{"id": "1", "title": "Test", "summary": "Summary"},
 		},
@@ -205,23 +179,22 @@ func TestAIHandler_TranslateBatch_Success(t *testing.T) {
 	req := newJSONRequest(http.MethodPost, "/ai/translate/batch", reqBody)
 	c, rec := newTestContext(e, req)
 
-	resultChan := make(chan service.BatchTranslateResult, 1)
+	eventChan := make(chan service.BatchTranslateEvent, 1)
 	title := "Translated Title"
 	summary := "Translated Summary"
-	resultChan <- service.BatchTranslateResult{
-		ID:      "1",
-		Title:   &title,
-		Summary: &summary,
-		Cached:  true,
+	eventChan <- service.BatchTranslateEvent{
+		Result: &service.BatchTranslateResult{
+			ID:      "1",
+			Title:   &title,
+			Summary: &summary,
+			Cached:  true,
+		},
 	}
-	close(resultChan)
-
-	errChan := make(chan error)
-	close(errChan)
+	close(eventChan)
 
 	mockService.EXPECT().
 		TranslateBatch(gomock.Any(), gomock.Any()).
-		Return((<-chan service.BatchTranslateResult)(resultChan), (<-chan error)(errChan), nil)
+		Return((<-chan service.BatchTranslateEvent)(eventChan), nil)
 
 	err := h.TranslateBatch(c)
 	require.NoError(t, err)
@@ -263,28 +236,22 @@ func TestAIHandler_Summarize_StreamResponse(t *testing.T) {
 	mockService := mock.NewMockAIService(ctrl)
 	h := handler.NewAIHandlerHelper(mockService)
 
-	// Mock service return nil (cache miss)
 	mockService.EXPECT().
 		GetCachedSummary(gomock.Any(), int64(123), false).
 		Return(nil, nil)
 
-	// Mock service return channel
-	resultChan := make(chan string, 3)
-	resultChan <- "First chunk"
-	resultChan <- "Second chunk"
-	resultChan <- "Final chunk"
-	close(resultChan)
+	eventChan := make(chan service.SummarizeEvent, 3)
+	eventChan <- service.SummarizeEvent{Text: "First chunk"}
+	eventChan <- service.SummarizeEvent{Text: "Second chunk"}
+	eventChan <- service.SummarizeEvent{Text: "Final chunk"}
+	close(eventChan)
 
 	mockService.EXPECT().
 		Summarize(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-		Return(resultChan, make(<-chan error), nil)
-
-	mockService.EXPECT().
-		SaveSummary(gomock.Any(), int64(123), false, "First chunkSecond chunkFinal chunk").
-		Return(nil)
+		Return((<-chan service.SummarizeEvent)(eventChan), nil)
 
 	e := newTestEcho()
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"entryId": "123",
 		"content": "test content",
 		"title":   "test title",
@@ -299,9 +266,51 @@ func TestAIHandler_Summarize_StreamResponse(t *testing.T) {
 	require.Contains(t, rec.Header().Get("Content-Type"), "text/event-stream")
 
 	body := rec.Body.String()
-	require.Contains(t, body, "First chunk")
-	require.Contains(t, body, "Second chunk")
-	require.Contains(t, body, "Final chunk")
+	require.Contains(t, body, `data: {"chunk":"First chunk"}`)
+	require.Contains(t, body, `data: {"chunk":"Second chunk"}`)
+	require.Contains(t, body, `data: {"chunk":"Final chunk"}`)
+	require.Contains(t, body, `data: {"done":true}`)
+}
+
+func TestAIHandler_Summarize_StreamErrorEvent(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock.NewMockAIService(ctrl)
+	h := handler.NewAIHandlerHelper(mockService)
+
+	mockService.EXPECT().
+		GetCachedSummary(gomock.Any(), int64(123), false).
+		Return(nil, nil)
+
+	eventChan := make(chan service.SummarizeEvent, 2)
+	eventChan <- service.SummarizeEvent{Text: "Partial chunk"}
+	eventChan <- service.SummarizeEvent{Err: errors.New("upstream rate limit")}
+	close(eventChan)
+
+	mockService.EXPECT().
+		Summarize(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return((<-chan service.SummarizeEvent)(eventChan), nil)
+
+	e := newTestEcho()
+	reqBody := map[string]any{
+		"entryId": "123",
+		"content": "test content",
+		"title":   "test title",
+	}
+	req := newJSONRequest(http.MethodPost, "/ai/summarize", reqBody)
+	c, rec := newTestContext(e, req)
+
+	err := h.Summarize(c)
+	require.NoError(t, err)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Contains(t, rec.Header().Get("Content-Type"), "text/event-stream")
+
+	body := rec.Body.String()
+	require.Contains(t, body, `data: {"chunk":"Partial chunk"}`)
+	require.Contains(t, body, `data: {"error":`)
+	require.NotContains(t, body, `data: {"done":true}`)
 }
 
 func TestAIHandler_Translate_StreamResponse(t *testing.T) {
@@ -311,23 +320,21 @@ func TestAIHandler_Translate_StreamResponse(t *testing.T) {
 	mockService := mock.NewMockAIService(ctrl)
 	h := handler.NewAIHandlerHelper(mockService)
 
-	// Mock service return nil (cache miss)
 	mockService.EXPECT().
 		GetCachedTranslation(gomock.Any(), int64(123), false).
 		Return(nil, nil)
 
-	// Mock service return channel
-	resultChan := make(chan service.TranslateBlockResult, 2)
-	resultChan <- service.TranslateBlockResult{Index: 0, HTML: "Translated chunk 1"}
-	resultChan <- service.TranslateBlockResult{Index: 1, HTML: "Translated chunk 2"}
-	close(resultChan)
+	eventChan := make(chan service.TranslateBlockEvent, 2)
+	eventChan <- service.TranslateBlockEvent{Result: &service.TranslateBlockResult{Index: 0, HTML: "Translated chunk 1"}}
+	eventChan <- service.TranslateBlockEvent{Result: &service.TranslateBlockResult{Index: 1, HTML: "Translated chunk 2"}}
+	close(eventChan)
 
 	mockService.EXPECT().
 		TranslateBlocks(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-		Return([]service.TranslateBlockInfo{{Index: 0}, {Index: 1}}, resultChan, make(<-chan error), nil)
+		Return([]service.TranslateBlockInfo{{Index: 0}, {Index: 1}}, (<-chan service.TranslateBlockEvent)(eventChan), nil)
 
 	e := newTestEcho()
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"entryId": "123",
 		"content": "test content",
 		"title":   "test title",
@@ -359,10 +366,10 @@ func TestAIHandler_Summarize_ServiceError(t *testing.T) {
 
 	mockService.EXPECT().
 		Summarize(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-		Return(nil, nil, errors.New("AI service error"))
+		Return(nil, errors.New("AI service error"))
 
 	e := newTestEcho()
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"entryId": "123",
 		"content": "test content",
 		"title":   "test title",
@@ -383,9 +390,8 @@ func TestAIHandler_Translate_InvalidRequest(t *testing.T) {
 	h := handler.NewAIHandlerHelper(mockService)
 
 	e := newTestEcho()
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"entryId": "123",
-		// missing content and title
 	}
 	req := newJSONRequest(http.MethodPost, "/ai/translate", reqBody)
 	c, rec := newTestContext(e, req)
@@ -408,10 +414,10 @@ func TestAIHandler_Translate_ServiceError(t *testing.T) {
 
 	mockService.EXPECT().
 		TranslateBlocks(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-		Return(nil, nil, nil, errors.New("AI service error"))
+		Return(nil, nil, errors.New("AI service error"))
 
 	e := newTestEcho()
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"entryId": "123",
 		"content": "test content",
 		"title":   "test title",
@@ -483,26 +489,20 @@ func TestAIHandler_Summarize_CacheLookupError_ContinuesWithService(t *testing.T)
 	mockService := mock.NewMockAIService(ctrl)
 	h := handler.NewAIHandlerHelper(mockService)
 
-	// Cache lookup fails, but handler continues with service call
 	mockService.EXPECT().
 		GetCachedSummary(gomock.Any(), int64(123), false).
 		Return(nil, errors.New("cache lookup error"))
 
-	// Handler continues to call Summarize after cache error
-	resultChan := make(chan string, 1)
-	resultChan <- "Summary content"
-	close(resultChan)
+	eventChan := make(chan service.SummarizeEvent, 1)
+	eventChan <- service.SummarizeEvent{Text: "Summary content"}
+	close(eventChan)
 
 	mockService.EXPECT().
 		Summarize(gomock.Any(), int64(123), "test content", "test title", false).
-		Return(resultChan, make(<-chan error), nil)
-
-	mockService.EXPECT().
-		SaveSummary(gomock.Any(), int64(123), false, "Summary content").
-		Return(nil)
+		Return((<-chan service.SummarizeEvent)(eventChan), nil)
 
 	e := newTestEcho()
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"entryId": "123",
 		"content": "test content",
 		"title":   "test title",
@@ -522,22 +522,20 @@ func TestAIHandler_Translate_CacheLookupError_ContinuesWithService(t *testing.T)
 	mockService := mock.NewMockAIService(ctrl)
 	h := handler.NewAIHandlerHelper(mockService)
 
-	// Cache lookup fails, but handler continues with service call
 	mockService.EXPECT().
 		GetCachedTranslation(gomock.Any(), int64(123), false).
 		Return(nil, errors.New("cache lookup error"))
 
-	// Handler continues to call TranslateBlocks after cache error
-	resultChan := make(chan service.TranslateBlockResult, 1)
-	resultChan <- service.TranslateBlockResult{Index: 0, HTML: "Translated"}
-	close(resultChan)
+	eventChan := make(chan service.TranslateBlockEvent, 1)
+	eventChan <- service.TranslateBlockEvent{Result: &service.TranslateBlockResult{Index: 0, HTML: "Translated"}}
+	close(eventChan)
 
 	mockService.EXPECT().
 		TranslateBlocks(gomock.Any(), int64(123), "test content", "test title", false).
-		Return([]service.TranslateBlockInfo{{Index: 0}}, resultChan, make(<-chan error), nil)
+		Return([]service.TranslateBlockInfo{{Index: 0}}, (<-chan service.TranslateBlockEvent)(eventChan), nil)
 
 	e := newTestEcho()
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"entryId": "123",
 		"content": "test content",
 		"title":   "test title",

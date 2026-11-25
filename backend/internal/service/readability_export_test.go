@@ -7,16 +7,30 @@ import (
 	"strings"
 
 	readability "codeberg.org/readeck/go-readability/v2"
+	"golang.org/x/net/html"
 )
 
-// RemoveMetadataElementsForTest exposes removeMetadataElements for tests.
-func RemoveMetadataElementsForTest(htmlContent []byte) string {
-	return removeMetadataElements(htmlContent)
+// CleanReadabilityHTMLForTest parses HTML, runs cleanReadabilityTree, and returns the rendered HTML.
+func CleanReadabilityHTMLForTest(htmlContent []byte) string {
+	doc, err := html.Parse(bytes.NewReader(htmlContent))
+	if err != nil {
+		return string(htmlContent)
+	}
+	cleanReadabilityTree(doc)
+	var buf bytes.Buffer
+	if err := html.Render(&buf, doc); err != nil {
+		return string(htmlContent)
+	}
+	return buf.String()
 }
 
-// FixLazyImagesForTest exposes fixLazyImages for tests.
-func FixLazyImagesForTest(htmlContent []byte) []byte {
-	return fixLazyImages(htmlContent)
+// ParseAndCleanReadabilityForTest exposes parseAndCleanReadability for tests.
+func ParseAndCleanReadabilityForTest(htmlContent []byte, pageURL string) (string, error) {
+	parsedURL, err := url.Parse(pageURL)
+	if err != nil {
+		return "", err
+	}
+	return parseAndCleanReadability(htmlContent, parsedURL)
 }
 
 // ParseHTMLForTest exposes the readability parsing logic for tests.
@@ -42,30 +56,10 @@ func ParseHTMLForTest(htmlContent string, pageURL string) (string, error) {
 }
 
 // ReadabilityFetchWithChromeForTest exposes fetchWithChrome for tests.
-func ReadabilityFetchWithChromeForTest(svc ReadabilityService, ctx context.Context, targetURL, cookie string, retryCount int) ([]byte, error) {
+func ReadabilityFetchWithChromeForTest(svc ReadabilityService, ctx context.Context, targetURL string) ([]byte, error) {
 	impl, ok := svc.(*readabilityService)
 	if !ok {
 		return nil, ErrInvalid
 	}
-	return impl.fetchWithChrome(ctx, targetURL, cookie, retryCount)
-}
-
-// ReadabilityFetchWithFreshSessionForTest exposes fetchWithFreshSession for tests.
-func ReadabilityFetchWithFreshSessionForTest(svc ReadabilityService, ctx context.Context, targetURL, cookie string, retryCount int) ([]byte, error) {
-	impl, ok := svc.(*readabilityService)
-	if !ok {
-		return nil, ErrInvalid
-	}
-	return impl.fetchWithFreshSession(ctx, targetURL, cookie, retryCount)
-}
-
-// ReadabilityDoFetchForTest exposes doFetch for tests.
-func ReadabilityDoFetchForTest(svc ReadabilityService, ctx context.Context, targetURL, cookie string, retryCount int) ([]byte, error) {
-	impl, ok := svc.(*readabilityService)
-	if !ok {
-		return nil, ErrInvalid
-	}
-	session := impl.clientFactory.NewAzureSession(ctx, readabilityTimeout)
-	defer session.Close()
-	return impl.doFetch(ctx, session, targetURL, cookie, retryCount)
+	return impl.fetchWithChrome(ctx, targetURL)
 }

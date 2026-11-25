@@ -1,29 +1,23 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { listFolders, deleteFolders } from "@/api";
+import { useQueryClient } from "@tanstack/react-query";
+import { Folder as FolderIcon, Trash2 } from "lucide-react";
+import { useFolders } from "@/hooks/useFolders";
+import { deleteFolders } from "@/api";
 import { cn } from "@/lib/utils";
+import { formatDate, formatDateTime, compareStrings } from "@/lib/table-utils";
 import {
-  formatDate,
-  formatDateTime,
-  compareStrings,
-  getSortIcon,
-} from "@/lib/table-utils";
+  SortableTableHeader,
+  TableCheckbox,
+  type SortDirection,
+} from "./SortableTableHeader";
 import type { Folder } from "@/types/api";
 
 type SortField = "name" | "createdAt" | "updatedAt";
-type SortDirection = "asc" | "desc";
 
 export function FoldersSettings() {
   const { t } = useTranslation();
-  const {
-    data: folders = [],
-    isLoading,
-    refetch,
-  } = useQuery({
-    queryKey: ["folders"],
-    queryFn: listFolders,
-  });
+  const { data: folders = [], isLoading, refetch } = useFolders();
   const queryClient = useQueryClient();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isDeleting, setIsDeleting] = useState(false);
@@ -54,13 +48,6 @@ export function FoldersSettings() {
     }
   };
 
-  const renderSortIcon = (field: SortField) => {
-    const icon = getSortIcon(sortField, field, sortDirection);
-    const className =
-      sortField === field ? "ml-1" : "ml-1 text-muted-foreground/50";
-    return <span className={className}>{icon}</span>;
-  };
-
   const handleSelectAll = () => {
     if (selectedIds.size === folders.length) {
       setSelectedIds(new Set());
@@ -89,6 +76,7 @@ export function FoldersSettings() {
       setSelectedIds(new Set());
       await refetch();
       queryClient.invalidateQueries({ queryKey: ["feeds"] });
+      queryClient.invalidateQueries({ queryKey: ["entries"] });
       queryClient.invalidateQueries({ queryKey: ["unreadCounts"] });
     } catch {
       setError(t("folders.delete_failed"));
@@ -102,6 +90,23 @@ export function FoldersSettings() {
   const isPartialSelected =
     selectedIds.size > 0 && selectedIds.size < folders.length;
 
+  const columns = useMemo(
+    () => [
+      { field: "name" as const, label: t("folders.name") },
+      {
+        field: "createdAt" as const,
+        label: t("folders.create_date"),
+        className: "hidden sm:table-cell w-28",
+      },
+      {
+        field: "updatedAt" as const,
+        label: t("folders.last_update"),
+        className: "hidden sm:table-cell w-36",
+      },
+    ],
+    [t],
+  );
+
   if (isLoading) {
     return (
       <div className="flex h-40 items-center justify-center">
@@ -112,8 +117,7 @@ export function FoldersSettings() {
 
   return (
     <div className="space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-muted-foreground">
           {t("folders.title", { count: folders.length })}
         </h3>
@@ -128,19 +132,7 @@ export function FoldersSettings() {
               "disabled:cursor-not-allowed disabled:opacity-50",
             )}
           >
-            <svg
-              className="size-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-              />
-            </svg>
+            <Trash2 className="size-4" />
             <span>
               {isDeleting
                 ? t("folders.deleting")
@@ -150,19 +142,16 @@ export function FoldersSettings() {
         </div>
       </div>
 
-      {/* Warning */}
       <div className="rounded-md bg-amber-500/10 px-3 py-2 text-sm text-amber-600 dark:text-amber-400">
         {t("folders.delete_warning")}
       </div>
 
-      {/* Error message */}
       {error && (
         <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
           {error}
         </div>
       )}
 
-      {/* Table */}
       {folders.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border bg-muted/20 p-8 text-center">
           <p className="text-sm text-muted-foreground">
@@ -171,71 +160,17 @@ export function FoldersSettings() {
         </div>
       ) : (
         <div className="overflow-x-auto rounded-lg border border-border">
-          <table className="w-full min-w-[600px] text-sm">
-            <thead className="bg-muted/50">
-              <tr>
-                <th className="w-10 px-3 py-2 text-left">
-                  <button
-                    type="button"
-                    onClick={handleSelectAll}
-                    className={cn(
-                      "flex size-4 items-center justify-center rounded border transition-colors",
-                      isAllSelected
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : isPartialSelected
-                          ? "border-primary bg-primary/50 text-primary-foreground"
-                          : "border-border bg-background hover:border-primary/50",
-                    )}
-                  >
-                    {(isAllSelected || isPartialSelected) && (
-                      <svg
-                        className="size-3"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={3}
-                          d={isPartialSelected ? "M5 12h14" : "M5 13l4 4L19 7"}
-                        />
-                      </svg>
-                    )}
-                  </button>
-                </th>
-                <th className="px-3 py-2 text-left font-medium text-muted-foreground">
-                  <button
-                    type="button"
-                    onClick={() => handleSort("name")}
-                    className="flex items-center hover:text-foreground transition-colors"
-                  >
-                    {t("folders.name")}
-                    {renderSortIcon("name")}
-                  </button>
-                </th>
-                <th className="hidden sm:table-cell w-28 px-3 py-2 text-left font-medium text-muted-foreground">
-                  <button
-                    type="button"
-                    onClick={() => handleSort("createdAt")}
-                    className="flex items-center hover:text-foreground transition-colors"
-                  >
-                    {t("folders.create_date")}
-                    {renderSortIcon("createdAt")}
-                  </button>
-                </th>
-                <th className="hidden sm:table-cell w-36 px-3 py-2 text-left font-medium text-muted-foreground">
-                  <button
-                    type="button"
-                    onClick={() => handleSort("updatedAt")}
-                    className="flex items-center hover:text-foreground transition-colors"
-                  >
-                    {t("folders.last_update")}
-                    {renderSortIcon("updatedAt")}
-                  </button>
-                </th>
-              </tr>
-            </thead>
+          <table className="w-full text-sm">
+            <SortableTableHeader
+              columns={columns}
+              sortField={sortField}
+              sortDirection={sortDirection}
+              onSort={handleSort}
+              isAllSelected={isAllSelected}
+              isPartialSelected={isPartialSelected}
+              onSelectAll={handleSelectAll}
+              selectAllLabel={t("folders.name")}
+            />
             <tbody className="divide-y divide-border">
               {sortedFolders.map((folder: Folder) => {
                 const isSelected = selectedIds.has(folder.id);
@@ -248,49 +183,16 @@ export function FoldersSettings() {
                     )}
                   >
                     <td className="px-3 py-2">
-                      <button
-                        type="button"
-                        onClick={() => handleSelect(folder.id)}
-                        className={cn(
-                          "flex size-4 items-center justify-center rounded border transition-colors",
-                          isSelected
-                            ? "border-primary bg-primary text-primary-foreground"
-                            : "border-border bg-background hover:border-primary/50",
-                        )}
-                      >
-                        {isSelected && (
-                          <svg
-                            className="size-3"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={3}
-                              d="M5 13l4 4L19 7"
-                            />
-                          </svg>
-                        )}
-                      </button>
+                      <TableCheckbox
+                        checked={isSelected}
+                        onToggle={() => handleSelect(folder.id)}
+                        ariaLabel={folder.name}
+                      />
                     </td>
                     <td className="max-w-[200px] px-3 py-2">
                       <div className="flex items-center gap-2">
                         <div className="flex size-4 shrink-0 items-center justify-center rounded bg-muted text-muted-foreground">
-                          <svg
-                            className="size-3"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={1.5}
-                              d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
-                            />
-                          </svg>
+                          <FolderIcon className="size-3" strokeWidth={1.5} />
                         </div>
                         <span
                           className="truncate font-medium"

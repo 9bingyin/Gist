@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { getAuthToken, setAuthToken } from "@/api";
+import { queryClient } from "@/lib/queryClient";
+import { useImagePreviewStore } from "./image-preview-store";
+import { useLightboxStore } from "./lightbox-store";
+import { useTranslationStore } from "./translation-store";
 import { useAuthStore } from "./auth-store";
 
 describe("auth-store", () => {
@@ -89,5 +93,55 @@ describe("auth-store", () => {
     useAuthStore.getState().consumeRootRedirect();
 
     expect(useAuthStore.getState().shouldRedirectToRoot).toBe(false);
+  });
+
+  it("initialize 并发调用会幂等复用同一 Promise", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ exists: false }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    await Promise.all([
+      useAuthStore.getState().initialize(),
+      useAuthStore.getState().initialize(),
+    ]);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(useAuthStore.getState().state).toBe("no-user");
+  });
+
+  it("handleUnauthorized 会清空 queryClient、翻译缓存与媒体预览状态", () => {
+    setAuthToken("expired-token");
+    queryClient.setQueryData(["entries"], { items: [] });
+    useTranslationStore
+      .getState()
+      .setTranslation("entry-1", "zh-CN", { title: "标题" });
+    useImagePreviewStore.getState().open(["https://example.com/a.jpg"]);
+    useLightboxStore.getState().open(
+      {
+        id: "entry-1",
+        feedId: "feed-1",
+        title: "Pic",
+        url: "https://example.com/1",
+        content: "",
+        read: false,
+        starred: false,
+        createdAt: "2026-01-01T00:00:00Z",
+        updatedAt: "2026-01-01T00:00:00Z",
+      },
+      undefined,
+      ["https://example.com/a.jpg"],
+    );
+
+    useAuthStore.getState().handleUnauthorized();
+
+    expect(queryClient.getQueryData(["entries"])).toBeUndefined();
+    expect(
+      useTranslationStore.getState().getTranslation("entry-1", "zh-CN"),
+    ).toBeUndefined();
+    expect(useImagePreviewStore.getState().isOpen).toBe(false);
+    expect(useLightboxStore.getState().isOpen).toBe(false);
   });
 });

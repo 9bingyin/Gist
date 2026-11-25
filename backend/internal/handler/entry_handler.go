@@ -13,8 +13,6 @@ import (
 	"gist/backend/pkg/logger"
 )
 
-const maxEntryReadBatchIDs = 1000
-
 type EntryHandler struct {
 	service            service.EntryService
 	readabilityService service.ReadabilityService
@@ -98,9 +96,6 @@ func parseEntryIDList(rawIDs []string) ([]int64, string) {
 	if len(rawIDs) == 0 {
 		return nil, "ids required"
 	}
-	if len(rawIDs) > maxEntryReadBatchIDs {
-		return nil, "too many ids"
-	}
 
 	ids := make([]int64, 0, len(rawIDs))
 	seen := make(map[int64]struct{}, len(rawIDs))
@@ -157,7 +152,7 @@ func (h *EntryHandler) List(c echo.Context) error {
 	}
 
 	if raw := c.QueryParam("contentType"); raw != "" {
-		if raw != "article" && raw != "picture" && raw != "notification" {
+		if !isValidContentType(raw) {
 			return c.JSON(http.StatusBadRequest, errorResponse{Error: "invalid contentType"})
 		}
 		params.ContentType = &raw
@@ -177,7 +172,7 @@ func (h *EntryHandler) List(c echo.Context) error {
 
 	if raw := c.QueryParam("limit"); raw != "" {
 		limit, err := strconv.Atoi(raw)
-		if err == nil && limit > 0 && limit <= 100 {
+		if err == nil && limit > 0 {
 			params.Limit = limit
 		}
 	}
@@ -189,20 +184,9 @@ func (h *EntryHandler) List(c echo.Context) error {
 		}
 	}
 
-	// Request one extra to determine if there are more results
-	queryParams := params
-	queryParams.Limit = params.Limit + 1
-
-	entries, err := h.service.List(c.Request().Context(), queryParams)
+	entries, hasMore, err := h.service.List(c.Request().Context(), params)
 	if err != nil {
-		logger.Error("entry list failed", "module", "handler", "action", "list", "resource", "entry", "result", "failed", "error", err)
 		return writeServiceError(c, err)
-	}
-
-	// Determine hasMore by checking if we got more than requested
-	hasMore := len(entries) > params.Limit
-	if hasMore {
-		entries = entries[:params.Limit] // Trim to requested limit
 	}
 
 	response := entryListResponse{
@@ -234,7 +218,6 @@ func (h *EntryHandler) GetByID(c echo.Context) error {
 
 	entry, err := h.service.GetByID(c.Request().Context(), id)
 	if err != nil {
-		logger.Warn("entry get failed", "module", "handler", "action", "fetch", "resource", "entry", "result", "failed", "entry_id", id, "error", err)
 		return writeServiceError(c, err)
 	}
 
@@ -266,7 +249,6 @@ func (h *EntryHandler) UpdateReadStatus(c echo.Context) error {
 	}
 
 	if err := h.service.MarkAsRead(c.Request().Context(), id, req.Read); err != nil {
-		logger.Error("entry read status update failed", "module", "handler", "action", "update", "resource", "entry", "result", "failed", "entry_id", id, "read", req.Read, "error", err)
 		return writeServiceError(c, err)
 	}
 
@@ -295,7 +277,6 @@ func (h *EntryHandler) UpdateManyReadStatus(c echo.Context) error {
 	}
 
 	if err := h.service.MarkManyAsRead(c.Request().Context(), ids, req.Read); err != nil {
-		logger.Error("entries read status update failed", "module", "handler", "action", "update", "resource", "entry", "result", "failed", "count", len(ids), "read", req.Read, "error", err)
 		return writeServiceError(c, err)
 	}
 
@@ -330,7 +311,6 @@ func (h *EntryHandler) FetchReadable(c echo.Context) error {
 			return c.JSON(http.StatusBadRequest, errorResponse{Error: "no URL or empty content"})
 		}
 		logger.Error("readability fetch failed", "module", "handler", "action", "fetch", "resource", "entry", "result", "failed", "entry_id", id, "error", err)
-		// Return the actual error message
 		return c.JSON(http.StatusBadGateway, errorResponse{Error: err.Error()})
 	}
 
@@ -370,11 +350,10 @@ func (h *EntryHandler) MarkAllAsRead(c echo.Context) error {
 		folderID = &id
 	}
 
-	// Validate contentType if provided
 	var contentType *string
 	if req.ContentType != nil {
 		ct := *req.ContentType
-		if ct != "article" && ct != "picture" && ct != "notification" {
+		if !isValidContentType(ct) {
 			return c.JSON(http.StatusBadRequest, errorResponse{Error: "invalid contentType"})
 		}
 		contentType = &ct
@@ -394,7 +373,6 @@ func (h *EntryHandler) MarkAllAsRead(c echo.Context) error {
 	}
 
 	if err := h.service.MarkAllAsRead(c.Request().Context(), feedID, folderID, contentType); err != nil {
-		logger.Error("entries mark all read failed", "module", "handler", "action", "update", "resource", "entry", "result", "failed", "feed_id", feedIDValue, "folder_id", folderIDValue, "content_type", contentTypeValue, "error", err)
 		return writeServiceError(c, err)
 	}
 
@@ -412,12 +390,10 @@ func (h *EntryHandler) MarkAllAsRead(c echo.Context) error {
 func (h *EntryHandler) GetUnreadCounts(c echo.Context) error {
 	counts, err := h.service.GetUnreadCounts(c.Request().Context())
 	if err != nil {
-		logger.Error("entry unread counts failed", "module", "handler", "action", "list", "resource", "entry", "result", "failed", "error", err)
 		return writeServiceError(c, err)
 	}
 
-	// Convert int64 keys to string keys for JSON
-	stringCounts := make(map[string]int)
+	stringCounts := make(map[string]int, len(counts))
 	for feedID, count := range counts {
 		stringCounts[strconv.FormatInt(feedID, 10)] = count
 	}
@@ -449,7 +425,6 @@ func (h *EntryHandler) UpdateStarredStatus(c echo.Context) error {
 	}
 
 	if err := h.service.MarkAsStarred(c.Request().Context(), id, req.Starred); err != nil {
-		logger.Error("entry starred status update failed", "module", "handler", "action", "update", "resource", "entry", "result", "failed", "entry_id", id, "starred", req.Starred, "error", err)
 		return writeServiceError(c, err)
 	}
 
@@ -467,7 +442,6 @@ func (h *EntryHandler) UpdateStarredStatus(c echo.Context) error {
 func (h *EntryHandler) GetStarredCount(c echo.Context) error {
 	count, err := h.service.GetStarredCount(c.Request().Context())
 	if err != nil {
-		logger.Error("entry starred count failed", "module", "handler", "action", "list", "resource", "entry", "result", "failed", "error", err)
 		return writeServiceError(c, err)
 	}
 
@@ -486,7 +460,7 @@ func (h *EntryHandler) ClearReadabilityCache(c echo.Context) error {
 	deleted, err := h.service.ClearReadabilityCache(c.Request().Context())
 	if err != nil {
 		logger.Error("readability cache clear failed", "module", "handler", "action", "clear", "resource", "entry", "result", "failed", "error", err)
-		return c.JSON(http.StatusInternalServerError, errorResponse{Error: err.Error()})
+		return c.JSON(http.StatusInternalServerError, errorResponse{Error: "failed to clear readability cache"})
 	}
 
 	logger.Info("readability cache cleared", "module", "handler", "action", "clear", "resource", "entry", "result", "ok", "count", deleted)
@@ -505,7 +479,7 @@ func (h *EntryHandler) ClearEntryCache(c echo.Context) error {
 	deleted, err := h.service.ClearEntryCache(c.Request().Context())
 	if err != nil {
 		logger.Error("entry cache clear failed", "module", "handler", "action", "clear", "resource", "entry", "result", "failed", "error", err)
-		return c.JSON(http.StatusInternalServerError, errorResponse{Error: err.Error()})
+		return c.JSON(http.StatusInternalServerError, errorResponse{Error: "failed to clear entry cache"})
 	}
 
 	logger.Info("entry cache cleared", "module", "handler", "action", "clear", "resource", "entry", "result", "ok", "count", deleted)

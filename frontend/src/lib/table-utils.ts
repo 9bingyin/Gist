@@ -1,11 +1,17 @@
+import i18n from "@/i18n";
+
 type SortDirection = "asc" | "desc";
 
+function getActiveLocale(locale?: string): string | undefined {
+  return locale || i18n.language || undefined;
+}
+
 /**
- * Format date as YYYY-MM-DD
+ * Format date as localized date string
  */
-export function formatDate(dateString: string): string {
+export function formatDate(dateString: string, locale?: string): string {
   const date = new Date(dateString);
-  return date.toLocaleDateString("zh-CN", {
+  return date.toLocaleDateString(getActiveLocale(locale), {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
@@ -13,11 +19,11 @@ export function formatDate(dateString: string): string {
 }
 
 /**
- * Format date as YYYY-MM-DD HH:mm
+ * Format date as localized date-time string
  */
-export function formatDateTime(dateString: string): string {
+export function formatDateTime(dateString: string, locale?: string): string {
   const date = new Date(dateString);
-  return date.toLocaleString("zh-CN", {
+  return date.toLocaleString(getActiveLocale(locale), {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
@@ -27,16 +33,26 @@ export function formatDateTime(dateString: string): string {
 }
 
 /**
- * Compare strings with ASCII-first sorting (English before Chinese)
+ * Compare strings with ASCII-first sorting (English before CJK)
  */
-export function compareStrings(a: string, b: string): number {
-  // eslint-disable-next-line no-control-regex
-  const isAscii = (str: string) => /^[\x00-\x7F]/.test(str);
+export function compareStrings(a: string, b: string, locale?: string): number {
+  const isAscii = (str: string) => {
+    if (str.length === 0) return false;
+    const code = str.charCodeAt(0);
+    return code >= 0x20 && code <= 0x7e;
+  };
   const aIsAscii = isAscii(a);
   const bIsAscii = isAscii(b);
   if (aIsAscii && !bIsAscii) return -1;
   if (!aIsAscii && bIsAscii) return 1;
-  return a.localeCompare(b, "zh-CN");
+  const resolvedLocale = getActiveLocale(locale);
+  const hasCjk = /[\u4e00-\u9fff]/.test(a) || /[\u4e00-\u9fff]/.test(b);
+  const collationLocale =
+    locale ??
+    (hasCjk && (!resolvedLocale || !resolvedLocale.startsWith("zh"))
+      ? "zh-CN"
+      : (resolvedLocale ?? "zh-CN"));
+  return a.localeCompare(b, collationLocale);
 }
 
 /**

@@ -84,21 +84,34 @@ func TestFeedService_Add_Success(t *testing.T) {
 
 	var createdFeed model.Feed
 	mockFeeds.EXPECT().FindByURL(gomock.Any(), feedURL).Return(nil, nil)
-	mockFeeds.EXPECT().Create(gomock.Any(), gomock.Any()).DoAndReturn(
+	createCall := mockFeeds.EXPECT().Create(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, feed model.Feed) (model.Feed, error) {
+			require.Nil(t, feed.ETag)
+			require.Nil(t, feed.LastModified)
 			createdFeed = feed
 			feed.ID = 123
 			return feed, nil
 		},
 	)
 
-	mockEntries.EXPECT().CreateOrUpdate(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(_ context.Context, entry model.Entry) error {
-			require.Equal(t, int64(123), entry.FeedID)
-			require.NotEmpty(t, *entry.URL)
+	batchCall := mockEntries.EXPECT().CreateOrUpdateBatch(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, entries []model.Entry) error {
+			require.Len(t, entries, 1)
+			require.Equal(t, int64(123), entries[0].FeedID)
+			require.NotEmpty(t, *entries[0].URL)
 			return nil
 		},
-	).Times(1)
+	).After(createCall)
+
+	mockFeeds.EXPECT().UpdateConditionalGet(gomock.Any(), int64(123), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, _ int64, etag, lastModified *string) error {
+			require.NotNil(t, etag)
+			require.Equal(t, "etag-value", *etag)
+			require.NotNil(t, lastModified)
+			require.Equal(t, "Mon, 02 Jan 2006 15:04:05 GMT", *lastModified)
+			return nil
+		},
+	).After(batchCall)
 
 	clientFactory := network.NewClientFactoryForTest(client)
 	svc := service.NewFeedService(mockFeeds, mockFolders, mockEntries, nil, nil, clientFactory, nil)
@@ -107,7 +120,8 @@ func TestFeedService_Add_Success(t *testing.T) {
 	require.Equal(t, int64(123), feed.ID)
 	require.Equal(t, "Test Feed", createdFeed.Title)
 	require.Equal(t, "https://example.com", *createdFeed.SiteURL)
-	require.Equal(t, "etag-value", *createdFeed.ETag)
+	require.NotNil(t, feed.ETag)
+	require.Equal(t, "etag-value", *feed.ETag)
 }
 
 func TestFeedService_Add_InvalidURL(t *testing.T) {
@@ -224,10 +238,13 @@ func TestFeedService_Add_EntryCreateErrorIgnored(t *testing.T) {
 	client := &http.Client{
 		Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
 			require.Equal(t, feedURL, req.URL.String())
+			header := make(http.Header)
+			header.Set("ETag", `"etag-initial"`)
+			header.Set("Last-Modified", "Mon, 02 Jan 2006 15:04:05 GMT")
 			return &http.Response{
 				StatusCode: http.StatusOK,
 				Body:       io.NopCloser(strings.NewReader(sampleRSS)),
-				Header:     make(http.Header),
+				Header:     header,
 				Request:    req,
 			}, nil
 		}),
@@ -236,18 +253,23 @@ func TestFeedService_Add_EntryCreateErrorIgnored(t *testing.T) {
 	mockFeeds.EXPECT().FindByURL(gomock.Any(), feedURL).Return(nil, nil)
 	mockFeeds.EXPECT().Create(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, feed model.Feed) (model.Feed, error) {
+			require.Nil(t, feed.ETag)
+			require.Nil(t, feed.LastModified)
 			feed.ID = 123
 			return feed, nil
 		},
 	)
 
-	mockEntries.EXPECT().CreateOrUpdate(gomock.Any(), gomock.Any()).Return(errors.New("entry error")).Times(1)
+	mockEntries.EXPECT().CreateOrUpdateBatch(gomock.Any(), gomock.Any()).Return(errors.New("entry error")).Times(1)
+	// UpdateConditionalGet MUST NOT be called when initial entries fail to persist.
 
 	clientFactory := network.NewClientFactoryForTest(client)
 	svc := service.NewFeedService(mockFeeds, mockFolders, mockEntries, nil, nil, clientFactory, nil)
 	feed, err := svc.Add(context.Background(), feedURL, nil, "", "article")
 	require.NoError(t, err)
 	require.Equal(t, int64(123), feed.ID)
+	require.Nil(t, feed.ETag)
+	require.Nil(t, feed.LastModified)
 }
 
 func TestFeedService_Add_IconFetchUpdatesPath(t *testing.T) {
@@ -286,7 +308,7 @@ func TestFeedService_Add_IconFetchUpdatesPath(t *testing.T) {
 		UpdateIconPath(gomock.Any(), int64(123), "example.com.png").
 		Return(nil)
 
-	mockEntries.EXPECT().CreateOrUpdate(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+	mockEntries.EXPECT().CreateOrUpdateBatch(gomock.Any(), gomock.Any()).Return(nil).Times(1)
 
 	clientFactory := network.NewClientFactoryForTest(client)
 	svc := service.NewFeedService(mockFeeds, mockFolders, mockEntries, mockIcons, nil, clientFactory, nil)
@@ -516,6 +538,12 @@ func TestFeedService_HelperFunctions(t *testing.T) {
 	item := &gofeed.Item{Description: "Filed: 2025-12-17", PublishedParsed: &published}
 	got := service.ExtractPublishedAt(item, false)
 	require.NotNil(t, got)
+	require.Equal(t, "2025-01-02", got.Format("2006-01-02"))
+
+	// Falls back to summary date when standard pubDate is missing
+	itemNoPub := &gofeed.Item{Description: "Filed: 2025-12-17"}
+	got = service.ExtractPublishedAt(itemNoPub, false)
+	require.NotNil(t, got)
 	require.Equal(t, "2025-12-17", got.Format("2006-01-02"))
 
 	thumbItem := &gofeed.Item{
@@ -684,6 +712,13 @@ func (s *settingsServiceStub) SetNetworkSettings(ctx context.Context, settings *
 	return nil
 }
 
+func (s *settingsServiceStub) TestNetworkProxy(ctx context.Context, settings *service.NetworkSettings) error {
+	return nil
+}
+
+func (s *settingsServiceStub) SetClientFactory(factory *network.ClientFactory)    {}
+func (s *settingsServiceStub) SetAnubisStore(clearer service.AnubisCookieClearer) {}
+
 func (s *settingsServiceStub) GetProxyURL(ctx context.Context) string {
 	return s.proxyURL
 }
@@ -826,7 +861,7 @@ func TestFeedService_Add_TitleOverride(t *testing.T) {
 			return feed, nil
 		},
 	)
-	mockEntries.EXPECT().CreateOrUpdate(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	mockEntries.EXPECT().CreateOrUpdateBatch(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 
 	clientFactory := network.NewClientFactoryForTest(client)
 	svc := service.NewFeedService(mockFeeds, mockFolders, mockEntries, nil, nil, clientFactory, nil)
@@ -992,10 +1027,6 @@ func TestFeedService_Update_SummaryPromptReminderClearAndValidate(t *testing.T) 
 	updated, err := svc.Update(context.Background(), 1, "New Title", nil, &clearReminder)
 	require.NoError(t, err)
 	require.Nil(t, updated.SummaryPromptReminder)
-
-	tooLongReminder := strings.Repeat("a", 2001)
-	_, err = svc.Update(context.Background(), 1, "New Title", nil, &tooLongReminder)
-	require.ErrorIs(t, err, service.ErrInvalid)
 }
 
 func TestFeedService_Update_FolderNotFound(t *testing.T) {
@@ -1165,7 +1196,7 @@ func TestFeedService_Add_IconFetchError(t *testing.T) {
 		FetchAndSaveIcon(gomock.Any(), "https://example.com/icon.png", "https://example.com").
 		Return("", errors.New("icon fetch error"))
 
-	mockEntries.EXPECT().CreateOrUpdate(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	mockEntries.EXPECT().CreateOrUpdateBatch(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 
 	clientFactory := network.NewClientFactoryForTest(client)
 	svc := service.NewFeedService(mockFeeds, nil, mockEntries, mockIcons, nil, clientFactory, nil)
@@ -1421,7 +1452,8 @@ func TestFeedService_Add_SameTypeSucceeds(t *testing.T) {
 		},
 	)
 
-	mockEntries.EXPECT().CreateOrUpdate(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	mockEntries.EXPECT().CreateOrUpdateBatch(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	mockFeeds.EXPECT().UpdateConditionalGet(gomock.Any(), int64(123), gomock.Any(), gomock.Any()).Return(nil)
 
 	clientFactory := network.NewClientFactoryForTest(client)
 	svc := service.NewFeedService(mockFeeds, mockFolders, mockEntries, nil, nil, clientFactory, nil)

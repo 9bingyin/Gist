@@ -3,10 +3,12 @@ package service_test
 import (
 	"context"
 	"errors"
-	"gist/backend/internal/service"
 	"testing"
+	"time"
 
+	"gist/backend/internal/service"
 	"gist/backend/internal/service/ai"
+	"gist/backend/internal/service/anubis"
 
 	"github.com/stretchr/testify/require"
 )
@@ -80,7 +82,7 @@ func TestSettingsService_SetAISettings_StoresAndUpdatesLimiter(t *testing.T) {
 	require.Equal(t, 20, limiter.GetLimit())
 
 	repo.data[service.KeyAIAPIKey] = "sk-existing"
-	settings.APIKey = "***"
+	settings.APIKey = service.MaskAPIKey("sk-existing")
 	settings.RateLimit = 0
 	err = svc.SetAISettings(context.Background(), settings)
 	require.NoError(t, err)
@@ -145,10 +147,10 @@ func TestSettingsService_TestAI_InvalidConfig(t *testing.T) {
 	svc := service.NewSettingsService(repo, ai.NewRateLimiter(0))
 
 	_, err := svc.TestAI(context.Background(), ai.ProviderOpenAI, "", "", "", nil)
-	require.Error(t, err)
+	require.ErrorIs(t, err, ai.ErrMissingAPIKey)
 
 	repo.data[service.KeyAIAPIKey] = ""
-	_, err = svc.TestAI(context.Background(), ai.ProviderOpenAI, "***", "", "gpt-4", nil)
+	_, err = svc.TestAI(context.Background(), ai.ProviderOpenAI, "", "https://api.example.com/v1", "gpt-4", nil)
 	require.ErrorIs(t, err, ai.ErrMissingAPIKey)
 }
 
@@ -158,7 +160,17 @@ func TestMaskAPIKey(t *testing.T) {
 	masked := service.MaskAPIKey("sk-test-1234567890")
 	require.NotEqual(t, "sk-test-1234567890", masked)
 	require.NotEmpty(t, masked)
-	require.True(t, service.IsMaskedKey(masked))
+	val, changed := service.ResolveSecretUpdate(masked, "sk-test-1234567890")
+	require.False(t, changed)
+	require.Equal(t, "sk-test-1234567890", val)
+
+	val, changed = service.ResolveSecretUpdate("", "sk-test-1234567890")
+	require.True(t, changed)
+	require.Equal(t, "", val)
+
+	val, changed = service.ResolveSecretUpdate("new***secret", "sk-test-1234567890")
+	require.True(t, changed)
+	require.Equal(t, "new***secret", val)
 }
 
 func TestSettingsService_GetNetworkSettings_Defaults(t *testing.T) {
@@ -249,7 +261,7 @@ func TestSettingsService_GetIPStack(t *testing.T) {
 
 	require.Equal(t, "default", svc.GetIPStack(context.Background()))
 
-	repo.data[service.KeyNetworkIPStack] = "ipv6"
+	require.NoError(t, svc.SetNetworkSettings(context.Background(), &service.NetworkSettings{IPStack: "ipv6"}))
 	require.Equal(t, "ipv6", svc.GetIPStack(context.Background()))
 }
 
@@ -264,7 +276,7 @@ func TestSettingsService_SetNetworkSettings_MaskedPassword(t *testing.T) {
 		Type:     "http",
 		Host:     "proxy.example.com",
 		Port:     8080,
-		Password: "***", // masked password
+		Password: service.MaskAPIKey("existing-password"),
 	}
 
 	err := svc.SetNetworkSettings(context.Background(), settings)
@@ -374,4 +386,28 @@ func TestSettingsService_GetProxyURL(t *testing.T) {
 			require.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+func TestSettingsService_ClearAnubisCookies_ClearsMemoryAndDatabase(t *testing.T) {
+	ctx := context.Background()
+	repo := newSettingsRepoStub()
+	store := anubis.NewStore(repo)
+
+	require.NoError(t, store.SetCookie(ctx, "protected.example.com", "anubis=token123", time.Now().Add(time.Hour)))
+	got, err := store.GetCookie(ctx, "protected.example.com")
+	require.NoError(t, err)
+	require.Equal(t, "anubis=token123", got)
+
+	svc := service.NewSettingsService(repo, ai.NewRateLimiter(0))
+	svc.SetAnubisStore(store)
+
+	deleted, err := svc.ClearAnubisCookies(ctx)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), deleted)
+
+	// Same store instance must no longer serve stale cookie from memory cache.
+	gotAfterClear, err := store.GetCookie(ctx, "protected.example.com")
+	require.NoError(t, err)
+	require.Empty(t, gotAfterClear)
+	require.Empty(t, repo.data)
 }

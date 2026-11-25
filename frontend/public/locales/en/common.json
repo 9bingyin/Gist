@@ -174,7 +174,8 @@
     "close": "Close",
     "min_read": "{{mins}} min read",
     "ai_summary": "AI Summary",
-    "select_article": "Select an article to read"
+    "select_article": "Select an article to read",
+    "back_to_top": "Back to top"
   },
   "ai_settings": {
     "provider": "AI Provider",
@@ -198,7 +199,7 @@
     "request_options_hint": "JSON object merged into the current request body",
     "request_options_invalid": "Request options must be a valid JSON object",
     "rate_limit_label": "Rate Limit",
-    "rate_limit_hint": "Maximum API requests per second. Range 1-100, default 10",
+    "rate_limit_hint": "Maximum API requests per second (default 10)",
     "summary_language_hint": "The language used for AI-generated summaries and translations",
     "auto_translate_hint": "Automatically translate articles that are not in your target language",
     "auto_summary_hint": "Automatically generate AI summary when viewing articles",

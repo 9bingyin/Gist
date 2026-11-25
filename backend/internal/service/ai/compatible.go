@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"net/http"
 
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
@@ -16,26 +17,30 @@ type CompatibleProvider struct {
 }
 
 // NewCompatibleProvider creates a new OpenAI-compatible provider.
-func NewCompatibleProvider(apiKey, baseURL, model string, requestOptions map[string]any) (*CompatibleProvider, error) {
-	client := openai.NewClient(
+func NewCompatibleProvider(apiKey, baseURL, model string, requestOptions map[string]any, httpClient *http.Client) *CompatibleProvider {
+	opts := []option.RequestOption{
 		option.WithAPIKey(apiKey),
 		option.WithBaseURL(baseURL),
-	)
+	}
+	if httpClient != nil {
+		opts = append(opts, option.WithHTTPClient(httpClient))
+	}
+
 	return &CompatibleProvider{
-		client:         client,
+		client:         openai.NewClient(opts...),
 		model:          model,
 		requestOptions: requestOptions,
-	}, nil
+	}
 }
 
 // Test sends a test message and returns the response.
+// Does not hardcode MaxCompletionTokens so reasoning/thinking models are not truncated.
 func (p *CompatibleProvider) Test(ctx context.Context) (string, error) {
 	params := openai.ChatCompletionNewParams{
 		Model: openai.ChatModel(p.model),
 		Messages: []openai.ChatCompletionMessageParamUnion{
 			openai.UserMessage("Hello world"),
 		},
-		MaxCompletionTokens: openai.Int(50),
 	}
 
 	applyRequestOptions(&params, p.requestOptions)
@@ -56,16 +61,14 @@ func (p *CompatibleProvider) Name() string {
 	return ProviderCompatible
 }
 
-// SummarizeStream generates a summary using streaming.
-func (p *CompatibleProvider) SummarizeStream(ctx context.Context, systemPrompt, content string) (<-chan string, <-chan error) {
-	textCh := make(chan string)
-	errCh := make(chan error, 1)
+// SummarizeStream generates a summary using a single ordered event channel.
+func (p *CompatibleProvider) SummarizeStream(ctx context.Context, systemPrompt, content string) <-chan TextStreamEvent {
+	ch := make(chan TextStreamEvent, 16)
 
 	go func() {
-		defer close(textCh)
-		defer close(errCh)
+		defer close(ch)
 
-		messages := []openai.ChatCompletionMessageParamUnion{}
+		messages := make([]openai.ChatCompletionMessageParamUnion, 0, 2)
 		if systemPrompt != "" {
 			messages = append(messages, openai.SystemMessage(systemPrompt))
 		}
@@ -86,7 +89,7 @@ func (p *CompatibleProvider) SummarizeStream(ctx context.Context, systemPrompt, 
 			for _, choice := range chunk.Choices {
 				if choice.Delta.Content != "" {
 					select {
-					case textCh <- choice.Delta.Content:
+					case ch <- TextStreamEvent{Text: choice.Delta.Content}:
 					case <-ctx.Done():
 						return
 					}
@@ -96,18 +99,18 @@ func (p *CompatibleProvider) SummarizeStream(ctx context.Context, systemPrompt, 
 
 		if err := stream.Err(); err != nil {
 			select {
-			case errCh <- err:
-			default:
+			case ch <- TextStreamEvent{Err: err}:
+			case <-ctx.Done():
 			}
 		}
 	}()
 
-	return textCh, errCh
+	return ch
 }
 
 // Complete generates a response without streaming.
 func (p *CompatibleProvider) Complete(ctx context.Context, systemPrompt, content string) (string, error) {
-	messages := []openai.ChatCompletionMessageParamUnion{}
+	messages := make([]openai.ChatCompletionMessageParamUnion, 0, 2)
 	if systemPrompt != "" {
 		messages = append(messages, openai.SystemMessage(systemPrompt))
 	}

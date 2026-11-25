@@ -20,7 +20,7 @@ func TestFolderHandler_Create_Success(t *testing.T) {
 	h := handler.NewFolderHandlerHelper(mockService)
 
 	e := newTestEcho()
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"name": "Test Folder",
 		"type": "article",
 	}
@@ -82,7 +82,7 @@ func TestFolderHandler_Update_Success(t *testing.T) {
 	h := handler.NewFolderHandlerHelper(mockService)
 
 	e := newTestEcho()
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"name": "Updated Name",
 	}
 	req := newJSONRequest(http.MethodPut, "/folders/123", reqBody)
@@ -136,7 +136,7 @@ func TestFolderHandler_UpdateType_Success(t *testing.T) {
 	h := handler.NewFolderHandlerHelper(mockService)
 
 	e := newTestEcho()
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"type": "picture",
 	}
 	req := newJSONRequest(http.MethodPatch, "/folders/123/type", reqBody)
@@ -161,17 +161,14 @@ func TestFolderHandler_DeleteBatch_Success(t *testing.T) {
 	h := handler.NewFolderHandlerHelper(mockService)
 
 	e := newTestEcho()
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"ids": []string{"1", "2"},
 	}
 	req := newJSONRequest(http.MethodDelete, "/folders", reqBody)
 	c, rec := newTestContext(e, req)
 
 	mockService.EXPECT().
-		Delete(gomock.Any(), int64(1)).
-		Return(nil)
-	mockService.EXPECT().
-		Delete(gomock.Any(), int64(2)).
+		DeleteBatch(gomock.Any(), []int64{1, 2}).
 		Return(nil)
 
 	err := h.DeleteBatch(c)

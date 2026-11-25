@@ -24,7 +24,6 @@ interface UseSelectionReturn {
   unreadOnly: boolean;
   toggleUnreadOnly: () => void;
   contentType: ContentType;
-  setContentType: (contentType: ContentType) => void;
 }
 
 export function useSelection(): UseSelectionReturn {
@@ -134,20 +133,6 @@ export function useSelection(): UseSelectionReturn {
     routeState.contentType,
   ]);
 
-  const setContentType = useCallback(
-    (contentType: ContentType) => {
-      navigate(
-        buildPath(
-          routeState.selection,
-          routeState.entryId,
-          routeState.unreadOnly,
-          contentType,
-        ),
-      );
-    },
-    [navigate, routeState.selection, routeState.entryId, routeState.unreadOnly],
-  );
-
   return {
     selection: routeState.selection,
     selectAll,
@@ -159,7 +144,6 @@ export function useSelection(): UseSelectionReturn {
     unreadOnly: routeState.unreadOnly,
     toggleUnreadOnly,
     contentType: routeState.contentType,
-    setContentType,
   };
 }
 
@@ -179,7 +163,6 @@ export function selectionToParams(
     contentType?: ContentType;
   } = {};
 
-  // Only include contentType for 'all' selection since feed/folder already filter by their own type
   if (selection.type === "all" && contentType) {
     base.contentType = contentType;
   }

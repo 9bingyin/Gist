@@ -70,6 +70,20 @@ func (mr *MockFolderRepositoryMockRecorder) Delete(ctx, id any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Delete", reflect.TypeOf((*MockFolderRepository)(nil).Delete), ctx, id)
 }
 
+// DeleteBatchWithFeeds mocks base method.
+func (m *MockFolderRepository) DeleteBatchWithFeeds(ctx context.Context, folderIDs []int64) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteBatchWithFeeds", ctx, folderIDs)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteBatchWithFeeds indicates an expected call of DeleteBatchWithFeeds.
+func (mr *MockFolderRepositoryMockRecorder) DeleteBatchWithFeeds(ctx, folderIDs any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteBatchWithFeeds", reflect.TypeOf((*MockFolderRepository)(nil).DeleteBatchWithFeeds), ctx, folderIDs)
+}
+
 // FindByName mocks base method.
 func (m *MockFolderRepository) FindByName(ctx context.Context, name string, parentID *int64) (*model.Folder, error) {
 	m.ctrl.T.Helper()
@@ -142,4 +156,18 @@ func (m *MockFolderRepository) UpdateType(ctx context.Context, id int64, folderT
 func (mr *MockFolderRepositoryMockRecorder) UpdateType(ctx, id, folderType any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateType", reflect.TypeOf((*MockFolderRepository)(nil).UpdateType), ctx, id, folderType)
+}
+
+// UpdateTypeWithFeeds mocks base method.
+func (m *MockFolderRepository) UpdateTypeWithFeeds(ctx context.Context, id int64, folderType string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateTypeWithFeeds", ctx, id, folderType)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateTypeWithFeeds indicates an expected call of UpdateTypeWithFeeds.
+func (mr *MockFolderRepositoryMockRecorder) UpdateTypeWithFeeds(ctx, id, folderType any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateTypeWithFeeds", reflect.TypeOf((*MockFolderRepository)(nil).UpdateTypeWithFeeds), ctx, id, folderType)
 }

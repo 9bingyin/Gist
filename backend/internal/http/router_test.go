@@ -8,16 +8,16 @@ import (
 	"gist/backend/internal/handler"
 	gh "gist/backend/internal/http"
 	"gist/backend/internal/service/mock"
-	"gist/backend/pkg/network"
 
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
 
-func TestNewRouter_RegistersRoutes(t *testing.T) {
+func newTestRouter(t *testing.T, enableSwagger bool) *echo.Echo {
+	t.Helper()
 	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
+	t.Cleanup(ctrl.Finish)
 
 	folderService := mock.NewMockFolderService(ctrl)
 	feedService := mock.NewMockFeedService(ctrl)
@@ -33,32 +33,25 @@ func TestNewRouter_RegistersRoutes(t *testing.T) {
 	readabilityService := mock.NewMockReadabilityService(ctrl)
 	importTaskService := mock.NewMockImportTaskService(ctrl)
 
-	folderHandler := handler.NewFolderHandler(folderService)
-	feedHandler := handler.NewFeedHandler(feedService, refreshService)
-	entryHandler := handler.NewEntryHandler(entryService, readabilityService)
-	opmlHandler := handler.NewOPMLHandler(opmlService, importTaskService)
-	iconHandler := handler.NewIconHandler(iconService)
-	proxyHandler := handler.NewProxyHandler(proxyService)
-	settingsHandler := handler.NewSettingsHandler(settingsService, network.NewClientFactoryForTest(&http.Client{}))
-	aiHandler := handler.NewAIHandler(aiService)
-	authHandler := handler.NewAuthHandler(authService)
-	domainRateLimitHandler := handler.NewDomainRateLimitHandler(domainRateLimitService)
+	return gh.NewRouter(gh.RouterDeps{
+		FolderHandler:          handler.NewFolderHandler(folderService),
+		FeedHandler:            handler.NewFeedHandler(feedService, refreshService),
+		EntryHandler:           handler.NewEntryHandler(entryService, readabilityService),
+		OPMLHandler:            handler.NewOPMLHandler(opmlService, importTaskService),
+		IconHandler:            handler.NewIconHandler(iconService),
+		ProxyHandler:           handler.NewProxyHandler(proxyService),
+		SettingsHandler:        handler.NewSettingsHandler(settingsService),
+		AIHandler:              handler.NewAIHandler(aiService),
+		AuthHandler:            handler.NewAuthHandler(authService),
+		DomainRateLimitHandler: handler.NewDomainRateLimitHandler(domainRateLimitService),
+		AuthService:            authService,
+		StaticDir:              "",
+		EnableSwagger:          enableSwagger,
+	})
+}
 
-	e := gh.NewRouter(
-		folderHandler,
-		feedHandler,
-		entryHandler,
-		opmlHandler,
-		iconHandler,
-		proxyHandler,
-		settingsHandler,
-		aiHandler,
-		authHandler,
-		domainRateLimitHandler,
-		authService,
-		"",
-		true,
-	)
+func TestNewRouter_RegistersRoutes(t *testing.T) {
+	e := newTestRouter(t, true)
 
 	require.NotNil(t, e)
 	require.True(t, hasRoute(e, http.MethodGet, "/swagger/*"))
@@ -68,49 +61,7 @@ func TestNewRouter_RegistersRoutes(t *testing.T) {
 }
 
 func TestNewRouter_SwaggerDisabled(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	folderService := mock.NewMockFolderService(ctrl)
-	feedService := mock.NewMockFeedService(ctrl)
-	entryService := mock.NewMockEntryService(ctrl)
-	opmlService := mock.NewMockOPMLService(ctrl)
-	iconService := mock.NewMockIconService(ctrl)
-	proxyService := mock.NewMockProxyService(ctrl)
-	settingsService := mock.NewMockSettingsService(ctrl)
-	aiService := mock.NewMockAIService(ctrl)
-	authService := mock.NewMockAuthService(ctrl)
-	domainRateLimitService := mock.NewMockDomainRateLimitService(ctrl)
-	refreshService := mock.NewMockRefreshService(ctrl)
-	readabilityService := mock.NewMockReadabilityService(ctrl)
-	importTaskService := mock.NewMockImportTaskService(ctrl)
-
-	folderHandler := handler.NewFolderHandler(folderService)
-	feedHandler := handler.NewFeedHandler(feedService, refreshService)
-	entryHandler := handler.NewEntryHandler(entryService, readabilityService)
-	opmlHandler := handler.NewOPMLHandler(opmlService, importTaskService)
-	iconHandler := handler.NewIconHandler(iconService)
-	proxyHandler := handler.NewProxyHandler(proxyService)
-	settingsHandler := handler.NewSettingsHandler(settingsService, network.NewClientFactoryForTest(&http.Client{}))
-	aiHandler := handler.NewAIHandler(aiService)
-	authHandler := handler.NewAuthHandler(authService)
-	domainRateLimitHandler := handler.NewDomainRateLimitHandler(domainRateLimitService)
-
-	e := gh.NewRouter(
-		folderHandler,
-		feedHandler,
-		entryHandler,
-		opmlHandler,
-		iconHandler,
-		proxyHandler,
-		settingsHandler,
-		aiHandler,
-		authHandler,
-		domainRateLimitHandler,
-		authService,
-		"",
-		false,
-	)
+	e := newTestRouter(t, false)
 
 	require.NotNil(t, e)
 	require.False(t, hasRoute(e, http.MethodGet, "/swagger/*"))
@@ -120,49 +71,7 @@ func TestNewRouter_SwaggerDisabled(t *testing.T) {
 }
 
 func TestNewRouter_LogoutRouteIsPublic(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	folderService := mock.NewMockFolderService(ctrl)
-	feedService := mock.NewMockFeedService(ctrl)
-	entryService := mock.NewMockEntryService(ctrl)
-	opmlService := mock.NewMockOPMLService(ctrl)
-	iconService := mock.NewMockIconService(ctrl)
-	proxyService := mock.NewMockProxyService(ctrl)
-	settingsService := mock.NewMockSettingsService(ctrl)
-	aiService := mock.NewMockAIService(ctrl)
-	authService := mock.NewMockAuthService(ctrl)
-	domainRateLimitService := mock.NewMockDomainRateLimitService(ctrl)
-	refreshService := mock.NewMockRefreshService(ctrl)
-	readabilityService := mock.NewMockReadabilityService(ctrl)
-	importTaskService := mock.NewMockImportTaskService(ctrl)
-
-	folderHandler := handler.NewFolderHandler(folderService)
-	feedHandler := handler.NewFeedHandler(feedService, refreshService)
-	entryHandler := handler.NewEntryHandler(entryService, readabilityService)
-	opmlHandler := handler.NewOPMLHandler(opmlService, importTaskService)
-	iconHandler := handler.NewIconHandler(iconService)
-	proxyHandler := handler.NewProxyHandler(proxyService)
-	settingsHandler := handler.NewSettingsHandler(settingsService, network.NewClientFactoryForTest(&http.Client{}))
-	aiHandler := handler.NewAIHandler(aiService)
-	authHandler := handler.NewAuthHandler(authService)
-	domainRateLimitHandler := handler.NewDomainRateLimitHandler(domainRateLimitService)
-
-	e := gh.NewRouter(
-		folderHandler,
-		feedHandler,
-		entryHandler,
-		opmlHandler,
-		iconHandler,
-		proxyHandler,
-		settingsHandler,
-		aiHandler,
-		authHandler,
-		domainRateLimitHandler,
-		authService,
-		"",
-		false,
-	)
+	e := newTestRouter(t, false)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/logout", nil)
 	rec := httptest.NewRecorder()
@@ -181,6 +90,21 @@ func TestNewRouter_LogoutRouteIsPublic(t *testing.T) {
 	}
 	require.NotNil(t, authCookie)
 	require.Equal(t, -1, authCookie.MaxAge)
+}
+
+func TestNewRouter_RecoverPanicReturns500(t *testing.T) {
+	e := newTestRouter(t, false)
+	e.GET("/panic-test", func(c echo.Context) error {
+		panic("boom")
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/panic-test", nil)
+	rec := httptest.NewRecorder()
+
+	require.NotPanics(t, func() {
+		e.ServeHTTP(rec, req)
+	})
+	require.Equal(t, http.StatusInternalServerError, rec.Code)
 }
 
 func hasRoute(e *echo.Echo, method, path string) bool {

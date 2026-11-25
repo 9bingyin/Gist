@@ -1,11 +1,6 @@
-import {
-  useState,
-  useCallback,
-  useRef,
-  type FormEvent,
-  type KeyboardEvent,
-} from "react";
+import { useState, useCallback, useRef, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
+import { Loader2, Rss, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { normalizeUrl } from "@/lib/url";
 
@@ -39,21 +34,6 @@ export function FeedUrlForm({ onSubmit, isLoading = false }: FeedUrlFormProps) {
     [inputValue, isLoading, onSubmit],
   );
 
-  const handleKeyDown = useCallback(
-    (e: KeyboardEvent<HTMLInputElement>) => {
-      if (e.key === "Enter" && !e.nativeEvent.isComposing) {
-        e.preventDefault();
-        if (inputValue.trim() && !isLoading) {
-          const url = normalizeUrl(inputValue);
-          if (url) {
-            onSubmit(url);
-          }
-        }
-      }
-    },
-    [inputValue, isLoading, onSubmit],
-  );
-
   const handleClear = useCallback(() => {
     setInputValue("");
     inputRef.current?.focus();
@@ -69,30 +49,15 @@ export function FeedUrlForm({ onSubmit, isLoading = false }: FeedUrlFormProps) {
           "focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-primary/20",
         )}
       >
-        {/* RSS Icon */}
         <div className="shrink-0 text-muted-foreground">
-          <svg
-            className="size-5"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={1.5}
-              d="M6 5c7.18 0 13 5.82 13 13M6 11a7 7 0 017 7m-6 0a1 1 0 11-2 0 1 1 0 012 0z"
-            />
-          </svg>
+          <Rss className="size-5" strokeWidth={1.5} />
         </div>
 
-        {/* Input */}
         <input
           ref={inputRef}
           type="text"
           value={inputValue}
           onChange={handleInputChange}
-          onKeyDown={handleKeyDown}
           placeholder="https://example.com/feed.xml"
           disabled={isLoading}
           className={cn(
@@ -107,7 +72,6 @@ export function FeedUrlForm({ onSubmit, isLoading = false }: FeedUrlFormProps) {
           spellCheck={false}
         />
 
-        {/* Clear button */}
         {inputValue && !isLoading && (
           <button
             type="button"
@@ -119,23 +83,10 @@ export function FeedUrlForm({ onSubmit, isLoading = false }: FeedUrlFormProps) {
             )}
             aria-label={t("add_feed.clear_input")}
           >
-            <svg
-              className="size-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
+            <X className="size-4" />
           </button>
         )}
 
-        {/* Submit button */}
         <button
           type="submit"
           disabled={!inputValue.trim() || isLoading}
@@ -149,25 +100,7 @@ export function FeedUrlForm({ onSubmit, isLoading = false }: FeedUrlFormProps) {
         >
           {isLoading ? (
             <div className="flex items-center gap-2">
-              <svg
-                className="size-4 animate-spin"
-                fill="none"
-                viewBox="0 0 24 24"
-              >
-                <circle
-                  className="opacity-25"
-                  cx="12"
-                  cy="12"
-                  r="10"
-                  stroke="currentColor"
-                  strokeWidth="4"
-                />
-                <path
-                  className="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                />
-              </svg>
+              <Loader2 className="size-4 animate-spin" />
               <span>{t("add_feed.loading")}</span>
             </div>
           ) : (

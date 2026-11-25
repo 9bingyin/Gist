@@ -1,12 +1,15 @@
-import { useState, useEffect, type FormEvent } from "react";
+import { useState, useEffect, useRef, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
+import { useShallow } from "zustand/react/shallow";
 import { getCurrentUser, updateProfile, setAuthToken } from "@/api";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth-store";
 
 export function ProfileSettings() {
   const { t } = useTranslation();
-  const { user, setUser } = useAuthStore();
+  const { user, setUser } = useAuthStore(
+    useShallow((s) => ({ user: s.user, setUser: s.setUser })),
+  );
   const [username, setUsername] = useState("");
   const [nickname, setNickname] = useState("");
   const [email, setEmail] = useState("");
@@ -27,22 +30,48 @@ export function ProfileSettings() {
   >("idle");
   const [error, setError] = useState<string | null>(null);
 
+  const timersRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
+
+  const scheduleReset = (callback: () => void, delayMs: number) => {
+    const id = setTimeout(() => {
+      timersRef.current.delete(id);
+      callback();
+    }, delayMs);
+    timersRef.current.add(id);
+  };
+
+  useEffect(() => {
+    const timers = timersRef.current;
+    return () => {
+      for (const id of timers) {
+        clearTimeout(id);
+      }
+      timers.clear();
+    };
+  }, []);
+
   useEffect(() => {
     if (user) {
       setUsername(user.username);
       setNickname(user.nickname);
       setEmail(user.email);
-    } else {
-      getCurrentUser()
-        .then((userData) => {
-          setUsername(userData.username);
-          setNickname(userData.nickname);
-          setEmail(userData.email);
-        })
-        .catch(() => {
-          // ignore
-        });
+      return;
     }
+
+    let cancelled = false;
+    getCurrentUser()
+      .then((userData) => {
+        if (cancelled) return;
+        setUsername(userData.username);
+        setNickname(userData.nickname);
+        setEmail(userData.email);
+      })
+      .catch(() => {
+        // ignore
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [user]);
 
   const handleSaveNickname = async () => {
@@ -53,7 +82,7 @@ export function ProfileSettings() {
       const result = await updateProfile({ nickname });
       setUser(result.user);
       setNicknameStatus("success");
-      setTimeout(() => setNicknameStatus("idle"), 2000);
+      scheduleReset(() => setNicknameStatus("idle"), 2000);
     } catch (err) {
       setNicknameStatus("error");
       setError(
@@ -72,7 +101,7 @@ export function ProfileSettings() {
       const result = await updateProfile({ email });
       setUser(result.user);
       setEmailStatus("success");
-      setTimeout(() => setEmailStatus("idle"), 2000);
+      scheduleReset(() => setEmailStatus("idle"), 2000);
     } catch (err) {
       setEmailStatus("error");
       setError(err instanceof Error ? err.message : "Failed to update email");
@@ -99,7 +128,6 @@ export function ProfileSettings() {
     setPasswordStatus("idle");
     try {
       const result = await updateProfile({ currentPassword, newPassword });
-      // Update token if password was changed (old tokens are invalidated)
       if (result.token) {
         setAuthToken(result.token);
       }
@@ -107,7 +135,7 @@ export function ProfileSettings() {
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
-      setTimeout(() => setPasswordStatus("idle"), 2000);
+      scheduleReset(() => setPasswordStatus("idle"), 2000);
     } catch (err) {
       setPasswordStatus("error");
       setError(

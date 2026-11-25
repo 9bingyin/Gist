@@ -1,11 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  getAISettings,
-  updateAISettings,
-  testAIConnection,
-  ApiError,
-} from "@/api";
+import { Zap } from "lucide-react";
+import { testAIConnection, ApiError } from "@/api";
+import { useAISettings, useUpdateAISettings } from "@/hooks/useSettings";
 import { cn } from "@/lib/utils";
 import { Switch } from "@/components/ui/switch";
 import type {
@@ -44,6 +41,8 @@ function parseRequestOptions(
 
 export function AISettings() {
   const { t } = useTranslation();
+  const { data: serverSettings, isLoading, error: loadError } = useAISettings();
+  const updateAISettingsMutation = useUpdateAISettings();
 
   const PROVIDERS: { value: AIProvider; label: string }[] = useMemo(
     () => [
@@ -70,8 +69,6 @@ export function AISettings() {
 
   const [settings, setSettings] = useState<AISettingsType | null>(null);
   const [requestOptionsText, setRequestOptionsText] = useState("");
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -80,6 +77,16 @@ export function AISettings() {
     message?: string;
     error?: string;
   } | null>(null);
+
+  useEffect(() => {
+    if (serverSettings) {
+      setSettings(serverSettings);
+      setRequestOptionsText(
+        formatRequestOptions(serverSettings.requestOptions),
+      );
+    }
+  }, [serverSettings]);
+
   const isBaseURLRequired = settings
     ? settings.provider === "openai" || settings.provider === "compatible"
     : false;
@@ -91,29 +98,6 @@ export function AISettings() {
   const requestOptionsError = requestOptionsResult.ok
     ? null
     : t("ai_settings.request_options_invalid");
-
-  useEffect(() => {
-    loadSettings();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const loadSettings = async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const data = await getAISettings();
-      setSettings(data);
-      setRequestOptionsText(formatRequestOptions(data.requestOptions));
-    } catch (err) {
-      if (err instanceof ApiError) {
-        setError(err.message);
-      } else {
-        setError(t("ai_settings.failed_to_load"));
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const handleChange = (
     field: keyof AISettingsType,
@@ -157,11 +141,10 @@ export function AISettings() {
   const handleSave = async () => {
     const payload = buildSettingsPayload();
     if (!payload) return;
-    setIsSaving(true);
     setError(null);
     setSuccessMessage(null);
     try {
-      const saved = await updateAISettings(payload);
+      const saved = await updateAISettingsMutation.mutateAsync(payload);
       setSettings(saved);
       setRequestOptionsText(formatRequestOptions(saved.requestOptions));
       setSuccessMessage(t("ai_settings.settings_saved"));
@@ -171,12 +154,10 @@ export function AISettings() {
       } else {
         setError(t("ai_settings.failed_to_save"));
       }
-    } finally {
-      setIsSaving(false);
     }
   };
 
-  if (isLoading) {
+  if (isLoading && !settings) {
     return (
       <div className="flex h-40 items-center justify-center">
         <div className="size-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
@@ -185,9 +166,13 @@ export function AISettings() {
   }
 
   if (!settings) {
+    const loadMessage =
+      loadError instanceof ApiError
+        ? loadError.message
+        : t("ai_settings.failed_to_load");
     return (
       <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
-        {error || t("ai_settings.failed_to_load")}
+        {error || loadMessage}
       </div>
     );
   }
@@ -196,12 +181,19 @@ export function AISettings() {
     "h-9 w-full sm:w-48 rounded-md border border-border bg-background px-3 text-sm focus:border-primary focus:outline-none";
   const inputClass =
     "h-9 w-full sm:w-48 rounded-md border border-border bg-background px-3 text-sm focus:border-primary focus:outline-none";
-  const canSubmit = Boolean(
+  const canTest = Boolean(
     settings.apiKey &&
     settings.model &&
     (!isBaseURLRequired || hasBaseURL) &&
     !requestOptionsError,
   );
+  // Allow saving even when apiKey is cleared to "" so user can clear stored key
+  const canSave = Boolean(
+    !requestOptionsError &&
+    (!settings.apiKey ||
+      (settings.model && (!isBaseURLRequired || hasBaseURL))),
+  );
+  const isSaving = updateAISettingsMutation.isPending;
 
   return (
     <div className="space-y-1">
@@ -380,7 +372,7 @@ export function AISettings() {
         />
       </div>
 
-      {/* Rate Limit */}
+      {/* Rate Limit (no artificial max=100 cap) */}
       <div className="flex flex-wrap items-center justify-between gap-2 py-2">
         <div className="min-w-0">
           <span className="text-sm font-medium">
@@ -394,10 +386,12 @@ export function AISettings() {
           type="number"
           value={settings.rateLimit}
           onChange={(e) =>
-            handleChange("rateLimit", parseInt(e.target.value) || 10)
+            handleChange(
+              "rateLimit",
+              Math.max(1, parseInt(e.target.value, 10) || 10),
+            )
           }
           min={1}
-          max={100}
           className={cn(inputClass, "w-20 shrink-0")}
         />
       </div>
@@ -407,7 +401,7 @@ export function AISettings() {
         <button
           type="button"
           onClick={handleTest}
-          disabled={isTesting || !canSubmit}
+          disabled={isTesting || !canTest}
           className={cn(
             "flex h-8 shrink-0 items-center gap-1.5 rounded-md px-4 text-sm font-medium transition-colors",
             "bg-muted hover:bg-muted/80",
@@ -421,19 +415,7 @@ export function AISettings() {
             </>
           ) : (
             <>
-              <svg
-                className="size-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M13 10V3L4 14h7v7l9-11h-7z"
-                />
-              </svg>
+              <Zap className="size-4" />
               <span>{t("ai_settings.test")}</span>
             </>
           )}
@@ -442,7 +424,7 @@ export function AISettings() {
         <button
           type="button"
           onClick={handleSave}
-          disabled={isSaving || !canSubmit}
+          disabled={isSaving || !canSave}
           className={cn(
             "flex h-8 shrink-0 items-center gap-1.5 rounded-md px-4 text-sm font-medium transition-colors",
             "bg-primary text-primary-foreground hover:bg-primary/90",
@@ -475,7 +457,6 @@ export function AISettings() {
         )}
       </div>
 
-      {/* Messages */}
       {error && (
         <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
           {error}

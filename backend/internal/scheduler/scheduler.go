@@ -9,46 +9,51 @@ import (
 	"gist/backend/pkg/logger"
 )
 
+const defaultRefreshInterval = 15 * time.Minute
+
 type Scheduler struct {
 	refreshService service.RefreshService
 	interval       time.Duration
-	stopCh         chan struct{}
+	ctx            context.Context
+	cancel         context.CancelFunc
 	wg             sync.WaitGroup
-	cancelFunc     context.CancelFunc // cancels the current refresh operation
-	mu             sync.Mutex         // protects cancelFunc
+	startOnce      sync.Once
+	stopOnce       sync.Once
 }
 
 func New(refreshService service.RefreshService, interval time.Duration) *Scheduler {
+	if interval <= 0 {
+		interval = defaultRefreshInterval
+	}
+	ctx, cancel := context.WithCancel(context.Background())
 	return &Scheduler{
 		refreshService: refreshService,
 		interval:       interval,
-		stopCh:         make(chan struct{}),
+		ctx:            ctx,
+		cancel:         cancel,
 	}
 }
 
 func (s *Scheduler) Start() {
-	s.wg.Add(1)
-	go s.run()
-	logger.Info("scheduler started", "module", "scheduler", "action", "refresh", "resource", "feed", "result", "ok", "interval_ms", s.interval.Milliseconds())
+	s.startOnce.Do(func() {
+		s.wg.Add(1)
+		go s.run()
+		logger.Info("scheduler started", "module", "scheduler", "action", "refresh", "resource", "feed", "result", "ok", "interval_ms", s.interval.Milliseconds())
+	})
 }
 
 func (s *Scheduler) Stop() {
-	// Cancel any ongoing refresh operation first
-	s.mu.Lock()
-	if s.cancelFunc != nil {
-		s.cancelFunc()
-	}
-	s.mu.Unlock()
-
-	close(s.stopCh)
-	s.wg.Wait()
-	logger.Info("scheduler stopped", "module", "scheduler", "action", "refresh", "resource", "feed", "result", "ok")
+	s.stopOnce.Do(func() {
+		s.cancel()
+		s.wg.Wait()
+		logger.Info("scheduler stopped", "module", "scheduler", "action", "refresh", "resource", "feed", "result", "ok")
+	})
 }
 
 func (s *Scheduler) run() {
 	defer s.wg.Done()
 
-	// Run immediately on start
+	// Run immediately on start.
 	s.refresh()
 
 	ticker := time.NewTicker(s.interval)
@@ -58,27 +63,19 @@ func (s *Scheduler) run() {
 		select {
 		case <-ticker.C:
 			s.refresh()
-		case <-s.stopCh:
+		case <-s.ctx.Done():
 			return
 		}
 	}
 }
 
 func (s *Scheduler) refresh() {
-	// Use the same timeout as the refresh interval
-	ctx, cancel := context.WithTimeout(context.Background(), s.interval)
+	if s.ctx.Err() != nil {
+		return
+	}
 
-	// Store cancel function so Stop() can cancel ongoing refresh
-	s.mu.Lock()
-	s.cancelFunc = cancel
-	s.mu.Unlock()
-
-	defer func() {
-		cancel()
-		s.mu.Lock()
-		s.cancelFunc = nil
-		s.mu.Unlock()
-	}()
+	ctx, cancel := context.WithTimeout(s.ctx, s.interval)
+	defer cancel()
 
 	logger.Info("scheduled feed refresh started", "module", "scheduler", "action", "refresh", "resource", "feed", "result", "ok")
 	if err := s.refreshService.RefreshAll(ctx); err != nil {
@@ -87,6 +84,7 @@ func (s *Scheduler) refresh() {
 			return
 		}
 		logger.Error("scheduled refresh failed", "module", "scheduler", "action", "refresh", "resource", "feed", "result", "failed", "error", err)
+		return
 	}
 	logger.Info("scheduled feed refresh completed", "module", "scheduler", "action", "refresh", "resource", "feed", "result", "ok")
 }

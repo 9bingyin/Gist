@@ -6,20 +6,40 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"gist/backend/internal/model"
 	"gist/backend/internal/repository"
 	"gist/backend/internal/service/ai"
 	"gist/backend/pkg/logger"
+	"gist/backend/pkg/network"
 )
+
+const (
+	aiRequestTimeout   = 5 * time.Minute
+	aiCacheSaveTimeout = 5 * time.Second
+)
+
+// SummarizeEvent represents a single text delta or error in a summary stream.
+type SummarizeEvent struct {
+	Text string
+	Err  error
+}
 
 // TranslateBlockResult represents a translated block result.
 type TranslateBlockResult struct {
 	Index int    `json:"index"`
 	HTML  string `json:"html"`
+}
+
+// TranslateBlockEvent represents an ordered event in a block translation stream.
+type TranslateBlockEvent struct {
+	Result *TranslateBlockResult
+	Err    error
 }
 
 // TranslateBlockInfo represents original block info.
@@ -44,31 +64,30 @@ type BatchTranslateResult struct {
 	Cached  bool    `json:"cached,omitempty"`
 }
 
+// BatchTranslateEvent represents an ordered event in a batch translation stream.
+type BatchTranslateEvent struct {
+	Result *BatchTranslateResult
+	Err    error
+}
+
 // AIService provides AI-related operations like summarization and translation.
 type AIService interface {
-	// GetCachedSummary returns a cached summary if available.
 	GetCachedSummary(ctx context.Context, entryID int64, isReadability bool) (*model.AISummary, error)
-	// Summarize generates a summary using AI streaming.
-	// Returns channels for text chunks and errors.
-	Summarize(ctx context.Context, entryID int64, content, title string, isReadability bool) (<-chan string, <-chan error, error)
-	// SaveSummary saves a summary to cache.
+	Summarize(ctx context.Context, entryID int64, content, title string, isReadability bool) (<-chan SummarizeEvent, error)
 	SaveSummary(ctx context.Context, entryID int64, isReadability bool, summary string) error
-	// GetSummaryLanguage returns the configured summary language.
 	GetSummaryLanguage(ctx context.Context) string
 
-	// GetCachedTranslation returns a cached translation if available.
 	GetCachedTranslation(ctx context.Context, entryID int64, isReadability bool) (*model.AITranslation, error)
-	// TranslateBlocks parses HTML into blocks and translates them in parallel.
-	// Returns block info, a channel of results (in completion order), and an error channel.
-	TranslateBlocks(ctx context.Context, entryID int64, content, title string, isReadability bool) ([]TranslateBlockInfo, <-chan TranslateBlockResult, <-chan error, error)
-	// SaveTranslation saves a translation to cache.
+	TranslateBlocks(ctx context.Context, entryID int64, content, title string, isReadability bool) ([]TranslateBlockInfo, <-chan TranslateBlockEvent, error)
 	SaveTranslation(ctx context.Context, entryID int64, isReadability bool, content string) error
-	// TranslateBatch translates multiple articles' titles and summaries.
-	// Returns a channel of results and an error channel.
-	TranslateBatch(ctx context.Context, articles []BatchArticleInput) (<-chan BatchTranslateResult, <-chan error, error)
-	// ClearAllCache deletes all AI cache data (summaries, translations, list translations).
-	// Returns the number of deleted records for each type.
+	TranslateBatch(ctx context.Context, articles []BatchArticleInput) (<-chan BatchTranslateEvent, error)
 	ClearAllCache(ctx context.Context) (summaries, translations, listTranslations int64, err error)
+}
+
+type inflightJob struct {
+	done   chan struct{}
+	result string
+	err    error
 }
 
 type aiService struct {
@@ -79,20 +98,15 @@ type aiService struct {
 	entryRepo           repository.EntryRepository
 	feedRepo            repository.FeedRepository
 	rateLimiter         *ai.RateLimiter
+	clientFactory       *network.ClientFactory
+
+	inflightMu   sync.Mutex
+	inflightJobs map[string]*inflightJob
 }
 
-// NewAIService creates a new AI service.
+// NewAIService creates a new AI service with full dependencies.
+// Optional dependencies (entryRepo, feedRepo, clientFactory) may be nil in unit tests.
 func NewAIService(
-	summaryRepo repository.AISummaryRepository,
-	translationRepo repository.AITranslationRepository,
-	listTranslationRepo repository.AIListTranslationRepository,
-	settingsRepo repository.SettingsRepository,
-	rateLimiter *ai.RateLimiter,
-) AIService {
-	return NewAIServiceWithFeedContext(summaryRepo, translationRepo, listTranslationRepo, settingsRepo, rateLimiter, nil, nil)
-}
-
-func NewAIServiceWithFeedContext(
 	summaryRepo repository.AISummaryRepository,
 	translationRepo repository.AITranslationRepository,
 	listTranslationRepo repository.AIListTranslationRepository,
@@ -100,6 +114,7 @@ func NewAIServiceWithFeedContext(
 	rateLimiter *ai.RateLimiter,
 	entryRepo repository.EntryRepository,
 	feedRepo repository.FeedRepository,
+	clientFactory *network.ClientFactory,
 ) AIService {
 	return &aiService{
 		summaryRepo:         summaryRepo,
@@ -109,6 +124,8 @@ func NewAIServiceWithFeedContext(
 		entryRepo:           entryRepo,
 		feedRepo:            feedRepo,
 		rateLimiter:         rateLimiter,
+		clientFactory:       clientFactory,
+		inflightJobs:        make(map[string]*inflightJob),
 	}
 }
 
@@ -117,45 +134,128 @@ func (s *aiService) GetCachedSummary(ctx context.Context, entryID int64, isReada
 	return s.summaryRepo.Get(ctx, entryID, isReadability, language)
 }
 
-func (s *aiService) Summarize(ctx context.Context, entryID int64, content, title string, isReadability bool) (<-chan string, <-chan error, error) {
-	// Get AI configuration
+func (s *aiService) Summarize(ctx context.Context, entryID int64, content, title string, isReadability bool) (<-chan SummarizeEvent, error) {
+	// Snapshot language once at request entry so prompt & cache key stay consistent.
+	language := s.GetSummaryLanguage(ctx)
+	dedupKey := fmt.Sprintf("summary:%d:%t:%s", entryID, isReadability, language)
+
+	// Deduplicate concurrent summary requests for the same (entry, mode, language).
+	s.inflightMu.Lock()
+	if existing, ok := s.inflightJobs[dedupKey]; ok {
+		s.inflightMu.Unlock()
+		ch := make(chan SummarizeEvent, 1)
+		go func() {
+			defer close(ch)
+			select {
+			case <-ctx.Done():
+				return
+			case <-existing.done:
+				if existing.err != nil {
+					ch <- SummarizeEvent{Err: existing.err}
+					return
+				}
+				if existing.result != "" {
+					ch <- SummarizeEvent{Text: existing.result}
+				}
+			}
+		}()
+		return ch, nil
+	}
+
 	cfg, err := s.getAIConfig(ctx)
 	if err != nil {
-		return nil, nil, err
+		s.inflightMu.Unlock()
+		return nil, err
 	}
 
-	// Create provider
 	provider, err := ai.NewProvider(cfg)
 	if err != nil {
+		s.inflightMu.Unlock()
 		logger.Warn("ai provider create failed", "module", "service", "action", "fetch", "resource", "ai", "result", "failed", "provider", cfg.Provider, "model", cfg.Model, "error", err)
-		return nil, nil, fmt.Errorf("create provider: %w", err)
+		return nil, fmt.Errorf("create provider: %w", err)
 	}
 
-	// Wait for rate limiter
+	job := &inflightJob{done: make(chan struct{})}
+	s.inflightJobs[dedupKey] = job
+	s.inflightMu.Unlock()
+
+	releaseJob := func(result string, jobErr error) {
+		job.result = result
+		job.err = jobErr
+		s.inflightMu.Lock()
+		delete(s.inflightJobs, dedupKey)
+		s.inflightMu.Unlock()
+		close(job.done)
+	}
+
 	if err := s.rateLimiter.Wait(ctx); err != nil {
+		releaseJob("", fmt.Errorf("rate limit: %w", err))
 		logger.Warn("ai rate limit wait failed", "module", "service", "action", "fetch", "resource", "ai", "result", "failed", "error", err)
-		return nil, nil, fmt.Errorf("rate limit: %w", err)
+		return nil, fmt.Errorf("rate limit: %w", err)
 	}
 
-	// Get language setting
-	// Build system prompt
-	systemPrompt := s.buildSummarizeSystemPrompt(ctx, entryID, title)
-
-	// Convert HTML to plain text to save tokens
+	systemPrompt := s.buildSummarizeSystemPromptWithLanguage(ctx, entryID, title, language)
 	plainText := ai.HTMLToText(content)
-
-	// Wrap input with <input> tags
 	wrappedInput := ai.WrapInput(plainText)
 
-	// Start streaming
-	textCh, errCh := provider.SummarizeStream(ctx, systemPrompt, wrappedInput)
+	upstreamCh := provider.SummarizeStream(ctx, systemPrompt, wrappedInput)
 	logger.Info("ai summarize stream started", "module", "service", "action", "fetch", "resource", "ai", "result", "ok", "entry_id", entryID, "provider", cfg.Provider, "model", cfg.Model)
 
-	return textCh, errCh, nil
+	outCh := make(chan SummarizeEvent, 16)
+	go func() {
+		defer close(outCh)
+
+		var fullText strings.Builder
+		var streamErr error
+
+		for ev := range upstreamCh {
+			if ev.Err != nil {
+				streamErr = ev.Err
+				select {
+				case outCh <- SummarizeEvent{Err: ev.Err}:
+				case <-ctx.Done():
+				}
+				break
+			}
+			if ev.Text != "" {
+				fullText.WriteString(ev.Text)
+				select {
+				case outCh <- SummarizeEvent{Text: ev.Text}:
+				case <-ctx.Done():
+					streamErr = ctx.Err()
+				}
+				if streamErr != nil {
+					break
+				}
+			}
+		}
+
+		summary := fullText.String()
+		if streamErr == nil && ctx.Err() == nil && summary != "" {
+			saveCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), aiCacheSaveTimeout)
+			if err := s.summaryRepo.Save(saveCtx, entryID, isReadability, language, summary); err != nil {
+				logger.Warn("ai summary save failed", "module", "service", "action", "save", "resource", "ai", "result", "failed", "entry_id", entryID, "error", err)
+			} else {
+				logger.Info("ai summary saved", "module", "service", "action", "save", "resource", "ai", "result", "ok", "entry_id", entryID, "readability", isReadability)
+			}
+			cancel()
+		}
+
+		if streamErr == nil && ctx.Err() != nil {
+			streamErr = ctx.Err()
+		}
+		releaseJob(summary, streamErr)
+	}()
+
+	return outCh, nil
 }
 
 func (s *aiService) buildSummarizeSystemPrompt(ctx context.Context, entryID int64, title string) string {
-	return ai.GetSummarizePrompt(title, s.GetSummaryLanguage(ctx), s.getSummaryPromptReminder(ctx, entryID))
+	return s.buildSummarizeSystemPromptWithLanguage(ctx, entryID, title, s.GetSummaryLanguage(ctx))
+}
+
+func (s *aiService) buildSummarizeSystemPromptWithLanguage(ctx context.Context, entryID int64, title, language string) string {
+	return ai.GetSummarizePrompt(title, language, s.getSummaryPromptReminder(ctx, entryID))
 }
 
 func (s *aiService) getSummaryPromptReminder(ctx context.Context, entryID int64) string {
@@ -178,7 +278,6 @@ func (s *aiService) getSummaryPromptReminder(ctx context.Context, entryID int64)
 	if feed.SummaryPromptReminder == nil {
 		return ""
 	}
-
 	return strings.TrimSpace(*feed.SummaryPromptReminder)
 }
 
@@ -195,7 +294,7 @@ func (s *aiService) SaveSummary(ctx context.Context, entryID int64, isReadabilit
 func (s *aiService) GetSummaryLanguage(ctx context.Context) string {
 	setting, err := s.settingsRepo.Get(ctx, "ai.summary_language")
 	if err != nil || setting == nil || setting.Value == "" {
-		return "zh-CN" // default
+		return "zh-CN"
 	}
 	return setting.Value
 }
@@ -203,34 +302,28 @@ func (s *aiService) GetSummaryLanguage(ctx context.Context) string {
 func (s *aiService) getAIConfig(ctx context.Context) (ai.Config, error) {
 	var cfg ai.Config
 
-	// Batch fetch all ai.* settings in a single query
 	settings, err := s.settingsRepo.GetByPrefix(ctx, "ai.")
 	if err != nil {
 		return cfg, fmt.Errorf("get AI settings: %w", err)
 	}
 
-	// Build a map for quick lookup
 	settingsMap := make(map[string]string, len(settings))
-	for _, s := range settings {
-		settingsMap[s.Key] = s.Value
+	for _, setting := range settings {
+		settingsMap[setting.Key] = setting.Value
 	}
 
-	// Get provider
 	cfg.Provider = settingsMap["ai.provider"]
 	if cfg.Provider == "" {
 		cfg.Provider = ai.ProviderOpenAI
 	}
 
-	// Get API key
 	cfg.APIKey = settingsMap["ai.api_key"]
 	if cfg.APIKey == "" {
 		return cfg, fmt.Errorf("AI API key is not configured")
 	}
 
-	// Get base URL
 	cfg.BaseURL = settingsMap["ai.base_url"]
 
-	// Get model
 	cfg.Model = settingsMap["ai.model"]
 	if cfg.Model == "" {
 		return cfg, fmt.Errorf("AI model is not configured")
@@ -242,6 +335,10 @@ func (s *aiService) getAIConfig(ctx context.Context) (ai.Config, error) {
 			return cfg, fmt.Errorf("parse request options: %w", err)
 		}
 		cfg.RequestOptions = requestOptions
+	}
+
+	if s.clientFactory != nil {
+		cfg.HTTPClient = s.clientFactory.NewHTTPClient(ctx, aiRequestTimeout)
 	}
 
 	return cfg, nil
@@ -267,22 +364,18 @@ func (s *aiService) SaveTranslation(ctx context.Context, entryID int64, isReadab
 	return nil
 }
 
-// TranslateBlocks parses HTML into blocks and translates them in parallel.
-// Returns block info, a channel of results, an error channel, and any initial error.
-func (s *aiService) TranslateBlocks(ctx context.Context, entryID int64, content, title string, isReadability bool) ([]TranslateBlockInfo, <-chan TranslateBlockResult, <-chan error, error) {
-	// Parse HTML into blocks
+// TranslateBlocks parses HTML into blocks and translates them in parallel over a single ordered event channel.
+func (s *aiService) TranslateBlocks(ctx context.Context, entryID int64, content, title string, isReadability bool) ([]TranslateBlockInfo, <-chan TranslateBlockEvent, error) {
 	blocks, err := ai.ParseHTMLBlocks(content)
 	if err != nil {
 		logger.Warn("ai translate parse blocks failed", "module", "service", "action", "fetch", "resource", "ai", "result", "failed", "entry_id", entryID, "error", err)
-		return nil, nil, nil, fmt.Errorf("parse HTML blocks: %w", err)
+		return nil, nil, fmt.Errorf("parse HTML blocks: %w", err)
 	}
-
 	if len(blocks) == 0 {
 		logger.Warn("ai translate no blocks", "module", "service", "action", "fetch", "resource", "ai", "result", "failed", "entry_id", entryID)
-		return nil, nil, nil, fmt.Errorf("no blocks to translate")
+		return nil, nil, fmt.Errorf("no blocks to translate")
 	}
 
-	// Build block info for caller
 	blockInfos := make([]TranslateBlockInfo, len(blocks))
 	for i, b := range blocks {
 		blockInfos[i] = TranslateBlockInfo{
@@ -292,55 +385,95 @@ func (s *aiService) TranslateBlocks(ctx context.Context, entryID int64, content,
 		}
 	}
 
-	// Get AI configuration
-	cfg, err := s.getAIConfig(ctx)
-	if err != nil {
-		logger.Warn("ai translate get config failed", "module", "service", "action", "fetch", "resource", "ai", "result", "failed", "entry_id", entryID, "error", err)
-		return nil, nil, nil, err
+	language := s.GetSummaryLanguage(ctx)
+	dedupKey := fmt.Sprintf("translate:%d:%t:%s", entryID, isReadability, language)
+
+	// Deduplicate concurrent translation requests for the same (entry, mode, language).
+	s.inflightMu.Lock()
+	if existing, ok := s.inflightJobs[dedupKey]; ok {
+		s.inflightMu.Unlock()
+		ch := make(chan TranslateBlockEvent, 1)
+		go func() {
+			defer close(ch)
+			select {
+			case <-ctx.Done():
+				return
+			case <-existing.done:
+				if existing.err != nil {
+					ch <- TranslateBlockEvent{Err: existing.err}
+					return
+				}
+				if existing.result != "" {
+					if translatedBlocks, pErr := ai.ParseHTMLBlocks(existing.result); pErr == nil && len(translatedBlocks) == len(blockInfos) {
+						for i, tb := range translatedBlocks {
+							if !blockInfos[i].NeedTranslate {
+								continue
+							}
+							res := TranslateBlockResult{Index: blockInfos[i].Index, HTML: tb.HTML}
+							select {
+							case ch <- TranslateBlockEvent{Result: &res}:
+							case <-ctx.Done():
+								return
+							}
+						}
+					}
+				}
+			}
+		}()
+		return blockInfos, ch, nil
 	}
 
-	// Get language setting
-	language := s.GetSummaryLanguage(ctx)
+	cfg, err := s.getAIConfig(ctx)
+	if err != nil {
+		s.inflightMu.Unlock()
+		logger.Warn("ai translate get config failed", "module", "service", "action", "fetch", "resource", "ai", "result", "failed", "entry_id", entryID, "error", err)
+		return nil, nil, err
+	}
 
-	// Create channels
-	resultCh := make(chan TranslateBlockResult)
-	errCh := make(chan error, len(blocks))
+	// Create and validate the provider once before spawning worker goroutines.
+	provider, err := ai.NewProvider(cfg)
+	if err != nil {
+		s.inflightMu.Unlock()
+		logger.Warn("ai translate create provider failed", "module", "service", "action", "fetch", "resource", "ai", "result", "failed", "entry_id", entryID, "error", err)
+		return nil, nil, fmt.Errorf("create provider: %w", err)
+	}
 
-	// Start parallel translation
+	job := &inflightJob{done: make(chan struct{})}
+	s.inflightJobs[dedupKey] = job
+	s.inflightMu.Unlock()
+
+	eventCh := make(chan TranslateBlockEvent, 16)
+	systemPrompt := ai.GetTranslateBlockPrompt(title, language)
+
 	go func() {
-		defer close(resultCh)
-		defer close(errCh)
+		defer close(eventCh)
 
 		var wg sync.WaitGroup
-		sem := make(chan struct{}, 3) // Limit to 3 concurrent translations
+		sem := make(chan struct{}, 3)
 
-		// Collect results for caching
 		var results []TranslateBlockResult
 		var resultsMu sync.Mutex
 		var hasError atomic.Bool
+		var firstErr error
+		var firstErrOnce sync.Once
 
 	blockLoop:
 		for _, block := range blocks {
-			// Check if context is cancelled before processing each block
 			if ctx.Err() != nil {
 				break
 			}
 
 			if !block.NeedTranslate {
-				// No translation needed, add to results for caching
 				resultsMu.Lock()
 				results = append(results, TranslateBlockResult{
 					Index: block.Index,
 					HTML:  block.HTML,
 				})
 				resultsMu.Unlock()
-				// Don't send via channel - frontend already has original content
 				continue
 			}
 
 			wg.Add(1)
-
-			// Acquire semaphore with context cancellation support
 			select {
 			case sem <- struct{}{}:
 			case <-ctx.Done():
@@ -350,51 +483,36 @@ func (s *aiService) TranslateBlocks(ctx context.Context, entryID int64, content,
 
 			go func(b ai.Block) {
 				defer wg.Done()
-				defer func() { <-sem }() // Release semaphore
+				defer func() { <-sem }()
 
-				// Wait for rate limiter
 				if err := s.rateLimiter.Wait(ctx); err != nil {
+					hasError.Store(true)
+					errWrapped := fmt.Errorf("rate limit: %w", err)
+					firstErrOnce.Do(func() { firstErr = errWrapped })
 					select {
-					case errCh <- fmt.Errorf("rate limit: %w", err):
-						hasError.Store(true)
-					default:
+					case eventCh <- TranslateBlockEvent{Err: errWrapped}:
+					case <-ctx.Done():
 					}
 					return
 				}
 
-				// Create provider for this goroutine
-				provider, err := ai.NewProvider(cfg)
-				if err != nil {
-					select {
-					case errCh <- fmt.Errorf("create provider: %w", err):
-						hasError.Store(true)
-					default:
-					}
-					return
-				}
-
-				// Replace media elements with placeholders to prevent AI from modifying them
 				htmlForTranslation, mediaElements := ai.ReplaceMediaWithPlaceholders(b.HTML)
-
-				// Wrap input with <input> tags
 				wrappedInput := ai.WrapInput(htmlForTranslation)
 
-				// Translate single block using non-streaming Complete
-				systemPrompt := ai.GetTranslateBlockPrompt(title, language)
 				translatedHTML, err := provider.Complete(ctx, systemPrompt, wrappedInput)
 				if err != nil {
+					hasError.Store(true)
+					errWrapped := fmt.Errorf("translate block %d: %w", b.Index, err)
+					firstErrOnce.Do(func() { firstErr = errWrapped })
 					select {
-					case errCh <- fmt.Errorf("translate block %d: %w", b.Index, err):
-						hasError.Store(true)
-					default:
+					case eventCh <- TranslateBlockEvent{Err: errWrapped}:
+					case <-ctx.Done():
 					}
 					return
 				}
 
-				// Restore media elements from placeholders
 				translatedHTML = ai.RestoreMediaFromPlaceholders(translatedHTML, mediaElements)
 
-				// Send result
 				result := TranslateBlockResult{
 					Index: b.Index,
 					HTML:  translatedHTML,
@@ -404,73 +522,79 @@ func (s *aiService) TranslateBlocks(ctx context.Context, entryID int64, content,
 				resultsMu.Unlock()
 
 				select {
-				case resultCh <- result:
+				case eventCh <- TranslateBlockEvent{Result: &result}:
 				case <-ctx.Done():
-					return
 				}
 			}(block)
 		}
 
 		wg.Wait()
 
-		// Cache complete result if no errors and not cancelled
+		var fullContent string
 		if !hasError.Load() && len(results) > 0 && ctx.Err() == nil {
-			// Sort by index
 			sort.Slice(results, func(i, j int) bool {
 				return results[i].Index < results[j].Index
 			})
 
-			// Concatenate all blocks
 			var fullHTML strings.Builder
 			for _, r := range results {
 				fullHTML.WriteString(r.HTML)
 			}
+			fullContent = fullHTML.String()
 
-			// Save to cache
-			if err := s.SaveTranslation(ctx, entryID, isReadability, fullHTML.String()); err != nil {
+			saveCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), aiCacheSaveTimeout)
+			if err := s.translationRepo.Save(saveCtx, entryID, isReadability, language, fullContent); err != nil {
 				logger.Warn("ai translate cache save failed", "module", "service", "action", "save", "resource", "ai", "result", "failed", "entry_id", entryID, "error", err)
+			} else {
+				logger.Info("ai translation saved", "module", "service", "action", "save", "resource", "ai", "result", "ok", "entry_id", entryID, "readability", isReadability)
 			}
-
+			cancel()
 		}
 
+		job.result = fullContent
+		if firstErr != nil {
+			job.err = firstErr
+		} else if ctx.Err() != nil {
+			job.err = ctx.Err()
+		}
+		s.inflightMu.Lock()
+		delete(s.inflightJobs, dedupKey)
+		s.inflightMu.Unlock()
+		close(job.done)
 	}()
 
-	return blockInfos, resultCh, errCh, nil
+	return blockInfos, eventCh, nil
 }
 
-// TranslateBatch translates multiple articles' titles and summaries concurrently.
-// It first checks cache and only translates articles that don't have cached results.
-func (s *aiService) TranslateBatch(ctx context.Context, articles []BatchArticleInput) (<-chan BatchTranslateResult, <-chan error, error) {
+// TranslateBatch translates multiple articles' titles and summaries concurrently over a single event channel.
+func (s *aiService) TranslateBatch(ctx context.Context, articles []BatchArticleInput) (<-chan BatchTranslateEvent, error) {
 	if len(articles) == 0 {
 		logger.Warn("ai batch translate empty input", "module", "service", "action", "fetch", "resource", "ai", "result", "failed")
-		return nil, nil, fmt.Errorf("no articles to translate")
+		return nil, fmt.Errorf("no articles to translate")
 	}
 
-	// Get language setting
 	language := s.GetSummaryLanguage(ctx)
 
-	// Collect entry IDs for batch cache lookup
 	entryIDs := make([]int64, 0, len(articles))
-	articleMap := make(map[int64]BatchArticleInput)
+	articleMap := make(map[int64]BatchArticleInput, len(articles))
 	for _, a := range articles {
-		entryID, err := parseEntryID(a.ID)
+		entryID, err := strconv.ParseInt(strings.TrimSpace(a.ID), 10, 64)
 		if err != nil {
+			continue
+		}
+		if _, exists := articleMap[entryID]; exists {
 			continue
 		}
 		entryIDs = append(entryIDs, entryID)
 		articleMap[entryID] = a
 	}
 
-	// Batch fetch cached translations
 	cachedMap, err := s.listTranslationRepo.GetBatch(ctx, entryIDs, language)
 	if err != nil {
 		logger.Warn("ai batch translate cache lookup failed", "module", "service", "action", "fetch", "resource", "ai", "result", "failed", "error", err)
-		// Log error but continue without cache
 		cachedMap = make(map[int64]*model.AIListTranslation)
 	}
 
-	// Get AI configuration (only needed if there are uncached articles)
-	var cfg ai.Config
 	needsTranslation := false
 	for _, entryID := range entryIDs {
 		if _, ok := cachedMap[entryID]; !ok {
@@ -479,24 +603,30 @@ func (s *aiService) TranslateBatch(ctx context.Context, articles []BatchArticleI
 		}
 	}
 
+	var provider ai.Provider
 	if needsTranslation {
-		cfg, err = s.getAIConfig(ctx)
+		cfg, err := s.getAIConfig(ctx)
 		if err != nil {
 			logger.Warn("ai batch translate get config failed", "module", "service", "action", "fetch", "resource", "ai", "result", "failed", "error", err)
-			return nil, nil, err
+			return nil, err
+		}
+		// Create and validate provider once before spawning goroutines.
+		provider, err = ai.NewProvider(cfg)
+		if err != nil {
+			logger.Warn("ai batch translate provider create failed", "module", "service", "action", "fetch", "resource", "ai", "result", "failed", "provider", cfg.Provider, "model", cfg.Model, "error", err)
+			return nil, fmt.Errorf("create provider: %w", err)
 		}
 	}
 
-	// Create channels
-	resultCh := make(chan BatchTranslateResult)
-	errCh := make(chan error, len(articles))
+	eventCh := make(chan BatchTranslateEvent, 16)
+	titlePrompt := ai.GetTranslateTextPrompt("title", language)
+	summaryPrompt := ai.GetTranslateTextPrompt("summary", language)
 
 	go func() {
-		defer close(resultCh)
-		defer close(errCh)
+		defer close(eventCh)
 
 		var wg sync.WaitGroup
-		sem := make(chan struct{}, 5) // Limit to 5 concurrent translations
+		sem := make(chan struct{}, 5)
 
 	articleLoop:
 		for _, entryID := range entryIDs {
@@ -506,7 +636,6 @@ func (s *aiService) TranslateBatch(ctx context.Context, articles []BatchArticleI
 
 			article := articleMap[entryID]
 
-			// Check cache first
 			if cached, ok := cachedMap[entryID]; ok {
 				result := BatchTranslateResult{
 					ID:      article.ID,
@@ -515,7 +644,7 @@ func (s *aiService) TranslateBatch(ctx context.Context, articles []BatchArticleI
 					Cached:  true,
 				}
 				select {
-				case resultCh <- result:
+				case eventCh <- BatchTranslateEvent{Result: &result}:
 				case <-ctx.Done():
 					break articleLoop
 				}
@@ -524,8 +653,6 @@ func (s *aiService) TranslateBatch(ctx context.Context, articles []BatchArticleI
 			}
 
 			wg.Add(1)
-
-			// Acquire semaphore
 			select {
 			case sem <- struct{}{}:
 			case <-ctx.Done():
@@ -537,37 +664,21 @@ func (s *aiService) TranslateBatch(ctx context.Context, articles []BatchArticleI
 				defer wg.Done()
 				defer func() { <-sem }()
 
-				// Create provider for this goroutine
-				provider, err := ai.NewProvider(cfg)
-				if err != nil {
-					logger.Warn("ai batch translate provider create failed", "module", "service", "action", "fetch", "resource", "ai", "result", "failed", "provider", cfg.Provider, "model", cfg.Model, "error", err)
-					select {
-					case errCh <- fmt.Errorf("create provider: %w", err):
-					default:
-					}
-					return
-				}
-
-				// Translate title
 				var translatedTitle *string
 				titleStr := ""
 				if a.Title != "" {
-					// Wait for rate limiter
 					if err := s.rateLimiter.Wait(ctx); err != nil {
-						logger.Warn("ai batch translate rate limit", "module", "service", "action", "fetch", "resource", "ai", "result", "failed", "entry_id", eID, "error", err)
 						select {
-						case errCh <- fmt.Errorf("rate limit: %w", err):
-						default:
+						case eventCh <- BatchTranslateEvent{Err: fmt.Errorf("rate limit: %w", err)}:
+						case <-ctx.Done():
 						}
 						return
 					}
-					titlePrompt := ai.GetTranslateTextPrompt("title", language)
-					wrappedTitle := ai.WrapInput(a.Title)
-					translated, err := provider.Complete(ctx, titlePrompt, wrappedTitle)
+					translated, err := provider.Complete(ctx, titlePrompt, ai.WrapInput(a.Title))
 					if err != nil {
 						select {
-						case errCh <- fmt.Errorf("translate title for %s: %w", a.ID, err):
-						default:
+						case eventCh <- BatchTranslateEvent{Err: fmt.Errorf("translate title for %s: %w", a.ID, err)}:
+						case <-ctx.Done():
 						}
 						return
 					}
@@ -575,26 +686,29 @@ func (s *aiService) TranslateBatch(ctx context.Context, articles []BatchArticleI
 					titleStr = translated
 				}
 
-				// Translate summary
 				var translatedSummary *string
 				summaryStr := ""
 				if a.Summary != "" {
-					// Wait for rate limiter
 					if err := s.rateLimiter.Wait(ctx); err != nil {
-						logger.Warn("ai batch translate rate limit", "module", "service", "action", "fetch", "resource", "ai", "result", "failed", "entry_id", eID, "error", err)
+						// Preserve already translated title even if summary translation fails.
+						if translatedTitle != nil {
+							s.emitBatchPartialResult(ctx, eventCh, eID, language, a.ID, translatedTitle, titleStr, nil, "")
+						}
 						select {
-						case errCh <- fmt.Errorf("rate limit: %w", err):
-						default:
+						case eventCh <- BatchTranslateEvent{Err: fmt.Errorf("rate limit: %w", err)}:
+						case <-ctx.Done():
 						}
 						return
 					}
-					summaryPrompt := ai.GetTranslateTextPrompt("summary", language)
-					wrappedSummary := ai.WrapInput(a.Summary)
-					translated, err := provider.Complete(ctx, summaryPrompt, wrappedSummary)
+					translated, err := provider.Complete(ctx, summaryPrompt, ai.WrapInput(a.Summary))
 					if err != nil {
+						// Preserve already translated title when summary fails.
+						if translatedTitle != nil {
+							s.emitBatchPartialResult(ctx, eventCh, eID, language, a.ID, translatedTitle, titleStr, nil, "")
+						}
 						select {
-						case errCh <- fmt.Errorf("translate summary for %s: %w", a.ID, err):
-						default:
+						case eventCh <- BatchTranslateEvent{Err: fmt.Errorf("translate summary for %s: %w", a.ID, err)}:
+						case <-ctx.Done():
 						}
 						return
 					}
@@ -602,37 +716,44 @@ func (s *aiService) TranslateBatch(ctx context.Context, articles []BatchArticleI
 					summaryStr = translated
 				}
 
-				// Save to cache
-				if titleStr != "" || summaryStr != "" {
-					if err := s.listTranslationRepo.Save(ctx, eID, language, titleStr, summaryStr); err != nil {
-						logger.Warn("ai batch translate cache save failed", "module", "service", "action", "save", "resource", "ai", "result", "failed", "entry_id", eID, "error", err)
-					}
-				}
-
-				// Send result
-				result := BatchTranslateResult{
-					ID:      a.ID,
-					Title:   translatedTitle,
-					Summary: translatedSummary,
-				}
-
-				select {
-				case resultCh <- result:
-				case <-ctx.Done():
-				}
+				s.emitBatchPartialResult(ctx, eventCh, eID, language, a.ID, translatedTitle, titleStr, translatedSummary, summaryStr)
 			}(article, entryID)
 		}
 
 		wg.Wait()
 	}()
 
-	return resultCh, errCh, nil
+	return eventCh, nil
 }
 
-func parseEntryID(id string) (int64, error) {
-	var entryID int64
-	_, err := fmt.Sscanf(id, "%d", &entryID)
-	return entryID, err
+func (s *aiService) emitBatchPartialResult(
+	ctx context.Context,
+	eventCh chan<- BatchTranslateEvent,
+	entryID int64,
+	language string,
+	articleID string,
+	translatedTitle *string,
+	titleStr string,
+	translatedSummary *string,
+	summaryStr string,
+) {
+	if titleStr != "" || summaryStr != "" {
+		saveCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), aiCacheSaveTimeout)
+		if err := s.listTranslationRepo.Save(saveCtx, entryID, language, titleStr, summaryStr); err != nil {
+			logger.Warn("ai batch translate cache save failed", "module", "service", "action", "save", "resource", "ai", "result", "failed", "entry_id", entryID, "error", err)
+		}
+		cancel()
+	}
+
+	result := BatchTranslateResult{
+		ID:      articleID,
+		Title:   translatedTitle,
+		Summary: translatedSummary,
+	}
+	select {
+	case eventCh <- BatchTranslateEvent{Result: &result}:
+	case <-ctx.Done():
+	}
 }
 
 func (s *aiService) ClearAllCache(ctx context.Context) (summaries, translations, listTranslations int64, err error) {

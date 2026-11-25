@@ -7,13 +7,11 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"regexp"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/mmcdole/gofeed"
 
@@ -27,7 +25,6 @@ import (
 )
 
 const feedTimeout = 30 * time.Second
-const maxFeedSummaryPromptReminderLength = 2000
 
 type FeedService interface {
 	Add(ctx context.Context, feedURL string, folderID *int64, titleOverride string, feedType string) (model.Feed, error)
@@ -91,7 +88,6 @@ func (s *feedService) Add(ctx context.Context, feedURL string, folderID *int64, 
 	fetched, fetchErr := s.fetchFeed(ctx, trimmedURL)
 	if fetchErr != nil {
 		logger.Warn("feed fetch failed", "module", "service", "action", "fetch", "resource", "feed", "result", "failed", "host", network.ExtractHost(trimmedURL), "error", fetchErr)
-		// Fetch failed, create feed with error message
 		finalTitle := strings.TrimSpace(titleOverride)
 		if finalTitle == "" {
 			finalTitle = trimmedURL
@@ -116,14 +112,12 @@ func (s *feedService) Add(ctx context.Context, feedURL string, folderID *int64, 
 	}
 
 	feed := model.Feed{
-		FolderID:     folderID,
-		Title:        finalTitle,
-		URL:          trimmedURL,
-		SiteURL:      optionalString(fetched.siteURL),
-		Description:  optionalString(fetched.description),
-		Type:         feedType,
-		ETag:         optionalString(fetched.etag),
-		LastModified: optionalString(fetched.lastModified),
+		FolderID:    folderID,
+		Title:       finalTitle,
+		URL:         trimmedURL,
+		SiteURL:     optionalString(fetched.siteURL),
+		Description: optionalString(fetched.description),
+		Type:        feedType,
 	}
 
 	created, err := s.feeds.Create(ctx, feed)
@@ -134,14 +128,13 @@ func (s *feedService) Add(ctx context.Context, feedURL string, folderID *int64, 
 
 	logger.Info("feed created", "module", "service", "action", "create", "resource", "feed", "result", "ok", "feed_id", created.ID, "feed_title", created.Title, "host", network.ExtractHost(created.URL))
 
-	// Download and save icon
 	if s.icons != nil {
 		siteURL := ""
 		if created.SiteURL != nil {
 			siteURL = *created.SiteURL
 		}
 		if siteURL == "" {
-			siteURL = trimmedURL // Use feed URL as fallback for favicon
+			siteURL = trimmedURL
 		}
 		if iconPath, err := s.icons.FetchAndSaveIcon(ctx, fetched.imageURL, siteURL); err == nil && iconPath != "" {
 			_ = s.feeds.UpdateIconPath(ctx, created.ID, iconPath)
@@ -149,15 +142,27 @@ func (s *feedService) Add(ctx context.Context, feedURL string, folderID *int64, 
 		}
 	}
 
-	// Save entries from the fetched feed
-	dynamicTime := hasDynamicTime(fetched.items)
-	for _, item := range fetched.items {
-		entry := itemToEntry(created.ID, item, dynamicTime)
-		if entry.URL == nil || *entry.URL == "" {
-			continue
+	entries := itemsToEntries(created.ID, fetched.items)
+	entriesSaved := true
+	if len(entries) > 0 {
+		if err := s.entries.CreateOrUpdateBatch(ctx, entries); err != nil {
+			entriesSaved = false
+			logger.Warn("entry batch create failed", "module", "service", "action", "create", "resource", "entry", "result", "failed", "feed_id", created.ID, "feed_title", created.Title, "count", len(entries), "error", err)
 		}
-		if err := s.entries.CreateOrUpdate(ctx, entry); err != nil {
-			logger.Warn("entry create failed", "module", "service", "action", "create", "resource", "entry", "result", "failed", "feed_id", created.ID, "feed_title", created.Title, "host", network.ExtractHost(*entry.URL), "error", err)
+	}
+
+	// Only persist conditional GET validators after initial entries succeed so a failed
+	// initial write does not cause subsequent 304 responses to skip backfilling entries.
+	if entriesSaved {
+		newETag := optionalString(fetched.etag)
+		newLastModified := optionalString(fetched.lastModified)
+		if newETag != nil || newLastModified != nil {
+			if err := s.feeds.UpdateConditionalGet(ctx, created.ID, newETag, newLastModified); err != nil {
+				logger.Warn("update feed conditional get failed", "module", "service", "action", "update", "resource", "feed", "result", "failed", "feed_id", created.ID, "feed_title", created.Title, "error", err)
+			} else {
+				created.ETag = newETag
+				created.LastModified = newLastModified
+			}
 		}
 	}
 
@@ -174,7 +179,7 @@ func (s *feedService) AddWithoutFetch(ctx context.Context, feedURL string, folde
 	if existing, err := s.feeds.FindByURL(ctx, trimmedURL); err != nil {
 		return model.Feed{}, false, fmt.Errorf("check feed url: %w", err)
 	} else if existing != nil {
-		return *existing, false, nil // Feed already exists, not an error
+		return *existing, false, nil
 	}
 	if folderID != nil {
 		folder, err := s.folders.GetByID(ctx, *folderID)
@@ -230,7 +235,7 @@ func (s *feedService) Preview(ctx context.Context, feedURL string) (FeedPreview,
 	if title == "" {
 		title = trimmedURL
 	}
-	preview := FeedPreview{
+	return FeedPreview{
 		URL:         trimmedURL,
 		Title:       title,
 		Description: optionalString(fetched.description),
@@ -238,9 +243,7 @@ func (s *feedService) Preview(ctx context.Context, feedURL string) (FeedPreview,
 		ImageURL:    optionalString(fetched.imageURL),
 		ItemCount:   fetched.itemCount,
 		LastUpdated: optionalString(fetched.lastUpdated),
-	}
-
-	return preview, nil
+	}, nil
 }
 
 func (s *feedService) List(ctx context.Context, folderID *int64) ([]model.Feed, error) {
@@ -259,12 +262,8 @@ func (s *feedService) Update(ctx context.Context, id int64, title string, folder
 	}
 
 	var normalizedReminder *string
-	var err error
 	if summaryPromptReminder != nil {
-		normalizedReminder, err = normalizeSummaryPromptReminder(*summaryPromptReminder)
-		if err != nil {
-			return model.Feed{}, err
-		}
+		normalizedReminder = optionalString(*summaryPromptReminder)
 	}
 
 	feed, err := s.feeds.GetByID(ctx, id)
@@ -275,15 +274,8 @@ func (s *feedService) Update(ctx context.Context, id int64, title string, folder
 		return model.Feed{}, fmt.Errorf("get feed: %w", err)
 	}
 
-	// Check if folder is actually changing (value comparison, not pointer comparison)
-	folderChanged := false
-	if folderID == nil && feed.FolderID != nil {
-		folderChanged = true // moving from folder to no folder
-	} else if folderID != nil && feed.FolderID == nil {
-		folderChanged = true // moving from no folder to folder
-	} else if folderID != nil && feed.FolderID != nil && *folderID != *feed.FolderID {
-		folderChanged = true // moving from one folder to another
-	}
+	folderChanged := (folderID == nil) != (feed.FolderID == nil) ||
+		(folderID != nil && feed.FolderID != nil && *folderID != *feed.FolderID)
 
 	if folderID != nil && folderChanged {
 		folder, err := s.folders.GetByID(ctx, *folderID)
@@ -313,17 +305,6 @@ func (s *feedService) Update(ctx context.Context, id int64, title string, folder
 	return updated, nil
 }
 
-func normalizeSummaryPromptReminder(raw string) (*string, error) {
-	trimmed := strings.TrimSpace(raw)
-	if trimmed == "" {
-		return nil, nil
-	}
-	if utf8.RuneCountInString(trimmed) > maxFeedSummaryPromptReminderLength {
-		return nil, ErrInvalid
-	}
-	return &trimmed, nil
-}
-
 func (s *feedService) Delete(ctx context.Context, id int64) error {
 	if _, err := s.feeds.GetByID(ctx, id); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -340,11 +321,23 @@ func (s *feedService) Delete(ctx context.Context, id int64) error {
 }
 
 func (s *feedService) UpdateType(ctx context.Context, id int64, feedType string) error {
-	if _, err := s.feeds.GetByID(ctx, id); err != nil {
+	feed, err := s.feeds.GetByID(ctx, id)
+	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrNotFound
 		}
 		return fmt.Errorf("get feed: %w", err)
+	}
+	if feed.FolderID != nil {
+		folder, err := s.folders.GetByID(ctx, *feed.FolderID)
+		if err != nil {
+			if !errors.Is(err, sql.ErrNoRows) {
+				return fmt.Errorf("check folder: %w", err)
+			}
+		} else if folder.Type != feedType {
+			logger.Warn("feed type mismatch with folder type", "module", "service", "action", "update", "resource", "feed", "result", "failed", "feed_id", id, "folder_id", *feed.FolderID, "folder_type", folder.Type, "feed_type", feedType)
+			return ErrInvalid
+		}
 	}
 	if err := s.feeds.UpdateType(ctx, id, feedType); err != nil {
 		logger.Error("feed update type failed", "module", "service", "action", "update", "resource", "feed", "result", "failed", "feed_id", id, "type", feedType, "error", err)
@@ -358,7 +351,6 @@ func (s *feedService) DeleteBatch(ctx context.Context, ids []int64) error {
 	if len(ids) == 0 {
 		return nil
 	}
-	// Delete and check affected rows to detect missing IDs
 	affected, err := s.feeds.DeleteBatch(ctx, ids)
 	if err != nil {
 		logger.Error("feed batch delete failed", "module", "service", "action", "delete", "resource", "feed", "result", "failed", "count", len(ids), "error", err)
@@ -385,177 +377,51 @@ type feedFetch struct {
 }
 
 func (s *feedService) fetchFeed(ctx context.Context, feedURL string) (feedFetch, error) {
-	return s.fetchFeedWithUA(ctx, feedURL, config.DefaultUserAgent, true)
-}
+	var fallbackFn func(context.Context) string
+	if s.settings != nil {
+		fallbackFn = s.settings.GetFallbackUserAgent
+	}
 
-func (s *feedService) fetchFeedWithUA(ctx context.Context, feedURL string, userAgent string, allowFallback bool) (feedFetch, error) {
-	return s.fetchFeedWithCookie(ctx, feedURL, userAgent, "", allowFallback, 0)
-}
-
-func (s *feedService) fetchFeedWithCookie(ctx context.Context, feedURL string, userAgent string, cookie string, allowFallback bool, retryCount int) (feedFetch, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, feedURL, nil)
+	res, err := fetchHTTPWithAnubis(ctx, httpFetchOptions{
+		URL:           feedURL,
+		Timeout:       feedTimeout,
+		MaxBodyBytes:  maxFeedBodyBytes,
+		UserAgent:     config.DefaultUserAgent,
+		FallbackUA:    fallbackFn,
+		ClientFactory: s.clientFactory,
+		Anubis:        s.anubis,
+		OnFallbackUA: func(statusCode int) {
+			logger.Warn("feed preview retry with fallback ua", "module", "service", "action", "fetch", "resource", "feed", "result", "failed", "host", network.ExtractHost(feedURL), "status_code", statusCode)
+		},
+	})
 	if err != nil {
-		return feedFetch{}, ErrFeedFetch
-	}
-	req.Header.Set("User-Agent", userAgent)
-
-	// Add cached Anubis cookie if available
-	if cookie == "" {
-		host := network.ExtractHost(feedURL)
-		if cachedCookie := getCachedAnubisCookie(ctx, s.anubis, host, req.Header); cachedCookie != "" {
-			cookie = cachedCookie
-		}
-	}
-
-	if cookie != "" {
-		req.Header.Set("Cookie", cookie)
-	}
-
-	httpClient := s.clientFactory.NewHTTPClient(ctx, feedTimeout)
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		logger.Warn("feed preview fetch failed", "module", "service", "action", "fetch", "resource", "feed", "result", "failed", "host", network.ExtractHost(feedURL), "error", err)
-		return feedFetch{}, ErrFeedFetch
-	}
-	defer resp.Body.Close()
-
-	// On HTTP error, try fallback UA if available
-	if resp.StatusCode >= http.StatusBadRequest && allowFallback && s.settings != nil {
-		fallbackUA := s.settings.GetFallbackUserAgent(ctx)
-		if fallbackUA != "" {
-			logger.Warn("feed preview retry with fallback ua", "module", "service", "action", "fetch", "resource", "feed", "result", "failed", "host", network.ExtractHost(feedURL), "status_code", resp.StatusCode)
-			return s.fetchFeedWithCookie(ctx, feedURL, fallbackUA, cookie, false, retryCount)
-		}
-	}
-
-	if resp.StatusCode >= http.StatusBadRequest {
-		logger.Error("feed preview http error", "module", "service", "action", "fetch", "resource", "feed", "result", "failed", "host", network.ExtractHost(feedURL), "status_code", resp.StatusCode)
-		return feedFetch{}, ErrFeedFetch
-	}
-
-	// Read body into memory for Anubis detection and RSS parsing
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		logger.Warn("feed preview read failed", "module", "service", "action", "fetch", "resource", "feed", "result", "failed", "host", network.ExtractHost(feedURL), "error", err)
-		return feedFetch{}, ErrFeedFetch
-	}
-
-	// Try to parse as RSS/Atom
-	parser := gofeed.NewParser()
-	parsed, parseErr := parser.Parse(bytes.NewReader(body))
-	if parseErr != nil {
-		newCookie, anubisErr := trySolveAnubisChallenge(ctx, s.anubis, body, feedURL, resp.Cookies(), req.Header.Clone(), retryCount)
-		switch {
-		case anubisErr == nil:
-			// Retry with fresh client and same request fingerprint.
-			return s.fetchFeedWithFreshClient(ctx, feedURL, userAgent, newCookie, retryCount+1)
-		case errors.Is(anubisErr, errAnubisNotPage):
-			// Not an Anubis page; keep original parse error handling.
-		case errors.Is(anubisErr, errAnubisRejected):
+		if errors.Is(err, ErrUpstreamRejected) {
 			logger.Warn("feed preview upstream rejected", "module", "service", "action", "fetch", "resource", "feed", "result", "failed", "host", network.ExtractHost(feedURL))
 			return feedFetch{}, fmt.Errorf("upstream rejected")
-		case errors.Is(anubisErr, errAnubisRetryExceeded):
-			logger.Warn("feed preview anubis persists", "module", "service", "action", "fetch", "resource", "feed", "result", "failed", "host", network.ExtractHost(feedURL), "retry_count", retryCount)
-			return feedFetch{}, fmt.Errorf("anubis challenge persists after %d retries", retryCount)
-		default:
-			logger.Warn("feed preview anubis solve failed", "module", "service", "action", "fetch", "resource", "feed", "result", "failed", "host", network.ExtractHost(feedURL), "error", anubisErr)
-			return feedFetch{}, ErrFeedFetch
 		}
-		logger.Error("feed preview parse failed", "module", "service", "action", "fetch", "resource", "feed", "result", "failed", "host", network.ExtractHost(feedURL), "error", parseErr)
-		return feedFetch{}, ErrFeedFetch
-
-	}
-
-	title := strings.TrimSpace(parsed.Title)
-	description := strings.TrimSpace(parsed.Description)
-	siteURL := strings.TrimSpace(parsed.Link)
-	imageURL := ""
-	if parsed.Image != nil {
-		imageURL = strings.TrimSpace(parsed.Image.URL)
-	}
-	lastUpdated := ""
-	if parsed.UpdatedParsed != nil {
-		lastUpdated = parsed.UpdatedParsed.UTC().Format(time.RFC3339)
-	} else if parsed.PublishedParsed != nil {
-		lastUpdated = parsed.PublishedParsed.UTC().Format(time.RFC3339)
-	}
-	var itemCount *int
-	if parsed.Items != nil {
-		count := len(parsed.Items)
-		itemCount = &count
-	}
-
-	etag := strings.TrimSpace(resp.Header.Get("ETag"))
-	lastModified := strings.TrimSpace(resp.Header.Get("Last-Modified"))
-
-	return feedFetch{
-		title:        title,
-		description:  description,
-		siteURL:      siteURL,
-		imageURL:     imageURL,
-		lastUpdated:  lastUpdated,
-		itemCount:    itemCount,
-		etag:         etag,
-		lastModified: lastModified,
-		items:        parsed.Items,
-	}, nil
-}
-
-// fetchFeedWithFreshClient creates a new http.Client to avoid connection reuse after Anubis
-func (s *feedService) fetchFeedWithFreshClient(ctx context.Context, feedURL string, userAgent string, cookie string, retryCount int) (feedFetch, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, feedURL, nil)
-	if err != nil {
-		return feedFetch{}, ErrFeedFetch
-	}
-	req.Header.Set("User-Agent", userAgent)
-	if cookie != "" {
-		req.Header.Set("Cookie", cookie)
-	}
-
-	// Use fresh client to avoid connection reuse
-	freshClient := s.clientFactory.NewHTTPClient(ctx, feedTimeout)
-	resp, err := freshClient.Do(req)
-	if err != nil {
+		if strings.Contains(err.Error(), "anubis challenge persists") {
+			logger.Warn("feed preview anubis persists", "module", "service", "action", "fetch", "resource", "feed", "result", "failed", "host", network.ExtractHost(feedURL), "error", err)
+			return feedFetch{}, err
+		}
 		logger.Warn("feed preview fetch failed", "module", "service", "action", "fetch", "resource", "feed", "result", "failed", "host", network.ExtractHost(feedURL), "error", err)
 		return feedFetch{}, ErrFeedFetch
 	}
-	defer resp.Body.Close()
 
-	if resp.StatusCode >= http.StatusBadRequest {
-		logger.Error("feed preview http error", "module", "service", "action", "fetch", "resource", "feed", "result", "failed", "host", network.ExtractHost(feedURL), "status_code", resp.StatusCode)
+	if res.StatusCode >= http.StatusBadRequest {
+		logger.Error("feed preview http error", "module", "service", "action", "fetch", "resource", "feed", "result", "failed", "host", network.ExtractHost(feedURL), "status_code", res.StatusCode)
 		return feedFetch{}, ErrFeedFetch
 	}
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		logger.Warn("feed preview read failed", "module", "service", "action", "fetch", "resource", "feed", "result", "failed", "host", network.ExtractHost(feedURL), "error", err)
-		return feedFetch{}, ErrFeedFetch
-	}
-
-	newCookie, anubisErr := trySolveAnubisChallenge(ctx, s.anubis, body, feedURL, resp.Cookies(), req.Header.Clone(), retryCount)
-	switch {
-	case anubisErr == nil:
-		return s.fetchFeedWithFreshClient(ctx, feedURL, userAgent, newCookie, retryCount+1)
-	case errors.Is(anubisErr, errAnubisNotPage):
-		// Not an Anubis page; continue normal parsing.
-	case errors.Is(anubisErr, errAnubisRejected):
-		logger.Warn("feed preview upstream rejected", "module", "service", "action", "fetch", "resource", "feed", "result", "failed", "host", network.ExtractHost(feedURL))
-		return feedFetch{}, fmt.Errorf("upstream rejected")
-	case errors.Is(anubisErr, errAnubisRetryExceeded):
-		logger.Warn("feed preview anubis persists", "module", "service", "action", "fetch", "resource", "feed", "result", "failed", "host", network.ExtractHost(feedURL), "retry_count", retryCount)
-		return feedFetch{}, fmt.Errorf("anubis challenge persists after %d retries", retryCount)
-	default:
-		logger.Warn("feed preview anubis solve failed", "module", "service", "action", "fetch", "resource", "feed", "result", "failed", "host", network.ExtractHost(feedURL), "error", anubisErr)
-		return feedFetch{}, ErrFeedFetch
-	}
-
-	parser := gofeed.NewParser()
-	parsed, parseErr := parser.Parse(bytes.NewReader(body))
+	parsed, parseErr := gofeed.NewParser().Parse(bytes.NewReader(res.Body))
 	if parseErr != nil {
 		logger.Error("feed preview parse failed", "module", "service", "action", "fetch", "resource", "feed", "result", "failed", "host", network.ExtractHost(feedURL), "error", parseErr)
 		return feedFetch{}, ErrFeedFetch
 	}
 
+	return buildFeedFetch(parsed, res.Header), nil
+}
+
+func buildFeedFetch(parsed *gofeed.Feed, header http.Header) feedFetch {
 	title := strings.TrimSpace(parsed.Title)
 	description := strings.TrimSpace(parsed.Description)
 	siteURL := strings.TrimSpace(parsed.Link)
@@ -575,9 +441,6 @@ func (s *feedService) fetchFeedWithFreshClient(ctx context.Context, feedURL stri
 		itemCount = &count
 	}
 
-	etag := strings.TrimSpace(resp.Header.Get("ETag"))
-	lastModified := strings.TrimSpace(resp.Header.Get("Last-Modified"))
-
 	return feedFetch{
 		title:        title,
 		description:  description,
@@ -585,13 +448,29 @@ func (s *feedService) fetchFeedWithFreshClient(ctx context.Context, feedURL stri
 		imageURL:     imageURL,
 		lastUpdated:  lastUpdated,
 		itemCount:    itemCount,
-		etag:         etag,
-		lastModified: lastModified,
+		etag:         strings.TrimSpace(header.Get("ETag")),
+		lastModified: strings.TrimSpace(header.Get("Last-Modified")),
 		items:        parsed.Items,
-	}, nil
+	}
 }
 
-// hasDynamicTime checks if all items have the same updated time (dynamic generation)
+func itemsToEntries(feedID int64, items []*gofeed.Item) []model.Entry {
+	if len(items) == 0 {
+		return nil
+	}
+	dynamicTime := hasDynamicTime(items)
+	entries := make([]model.Entry, 0, len(items))
+	for _, item := range items {
+		entry := itemToEntry(feedID, item, dynamicTime)
+		if entry.URL == nil || *entry.URL == "" {
+			continue
+		}
+		entries = append(entries, entry)
+	}
+	return entries
+}
+
+// hasDynamicTime checks if all items have the same updated time (dynamic generation).
 func hasDynamicTime(items []*gofeed.Item) bool {
 	if len(items) < 2 {
 		return false
@@ -635,7 +514,6 @@ func itemToEntry(feedID int64, item *gofeed.Item, ignoreDynamicTime bool) model.
 		entry.Content = &content
 	}
 
-	// Extract thumbnail from media tags
 	entry.ThumbnailURL = extractThumbnail(item)
 
 	if item.Author != nil && item.Author.Name != "" {
@@ -653,25 +531,16 @@ func itemToEntry(feedID int64, item *gofeed.Item, ignoreDynamicTime bool) model.
 
 func computeEntryHash(item *gofeed.Item, title string, content string) string {
 	if guid := strings.TrimSpace(item.GUID); guid != "" {
-		return hashToHex(guid)
+		return hashutil.SHA256Hex(guid)
 	}
 	if link := strings.TrimSpace(item.Link); link != "" {
-		return hashToHex(link)
+		return hashutil.SHA256Hex(link)
 	}
-	return hashToHex(strings.TrimSpace(title) + strings.TrimSpace(content))
-}
-
-func hashToHex(input string) string {
-	return hashutil.SHA256Hex(input)
+	return hashutil.SHA256Hex(strings.TrimSpace(title) + strings.TrimSpace(content))
 }
 
 func extractPublishedAt(item *gofeed.Item, ignoreDynamicTime bool) *time.Time {
-	// 1. Try to extract from summary (SEC RSS: "Filed: 2025-12-17")
-	if t := extractDateFromSummary(item.Description); t != nil {
-		return t
-	}
-
-	// 2. Try standard fields
+	// 1. Prefer standard PublishedParsed / UpdatedParsed timestamps.
 	if item.PublishedParsed != nil {
 		t := item.PublishedParsed.UTC()
 		return &t
@@ -681,7 +550,11 @@ func extractPublishedAt(item *gofeed.Item, ignoreDynamicTime bool) *time.Time {
 		return &t
 	}
 
-	// Fallback to current time when no date is available
+	// 2. Fallback to SEC-style "Filed: YYYY-MM-DD" in summary when standard dates are absent.
+	if t := extractDateFromSummary(item.Description); t != nil {
+		return t
+	}
+
 	now := time.Now().UTC()
 	return &now
 }
@@ -703,47 +576,40 @@ func extractDateFromSummary(summary string) *time.Time {
 }
 
 func extractThumbnail(item *gofeed.Item) *string {
-	// 1. Check item.Image
 	if item.Image != nil && item.Image.URL != "" {
-		url := strings.TrimSpace(item.Image.URL)
-		return &url
+		u := strings.TrimSpace(item.Image.URL)
+		return &u
 	}
 
-	// 2. Check enclosures for image type
 	for _, enc := range item.Enclosures {
 		if strings.HasPrefix(enc.Type, "image/") {
-			url := strings.TrimSpace(enc.URL)
-			if url != "" {
-				return &url
+			u := strings.TrimSpace(enc.URL)
+			if u != "" {
+				return &u
 			}
 		}
 	}
 
-	// 3. Check media:content and media:thumbnail
 	if media, ok := item.Extensions["media"]; ok {
-		// Check media:content
 		if content, ok := media["content"]; ok {
 			for _, c := range content {
-				url := strings.TrimSpace(c.Attrs["url"])
-				if url == "" {
+				u := strings.TrimSpace(c.Attrs["url"])
+				if u == "" {
 					continue
 				}
-				// Check type attribute
 				if typ := c.Attrs["type"]; strings.HasPrefix(typ, "image/") {
-					return &url
+					return &u
 				}
-				// Check medium attribute
 				if medium := c.Attrs["medium"]; medium == "image" {
-					return &url
+					return &u
 				}
 			}
 		}
-		// Check media:thumbnail
 		if thumb, ok := media["thumbnail"]; ok {
 			for _, t := range thumb {
-				url := strings.TrimSpace(t.Attrs["url"])
-				if url != "" {
-					return &url
+				u := strings.TrimSpace(t.Attrs["url"])
+				if u != "" {
+					return &u
 				}
 			}
 		}

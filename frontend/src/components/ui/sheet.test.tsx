@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Sheet } from "./sheet";
 
-vi.mock("framer-motion", async () => {
+vi.mock("motion/react", async () => {
   const { forwardRef } = await import("react");
 
   interface MockMotionDivProps {

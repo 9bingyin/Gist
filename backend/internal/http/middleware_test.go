@@ -43,7 +43,7 @@ func TestJWTAuthMiddleware(t *testing.T) {
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
 
-		mockAuth.EXPECT().ValidateToken("invalid-token").Return(false, nil)
+		mockAuth.EXPECT().ValidateToken(gomock.Any(), "invalid-token").Return(false, nil)
 
 		err := middleware(handler)(c)
 		require.NoError(t, err)
@@ -68,7 +68,7 @@ func TestJWTAuthMiddleware(t *testing.T) {
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
 
-		mockAuth.EXPECT().ValidateToken("error-token").Return(false, errors.New("validate failed"))
+		mockAuth.EXPECT().ValidateToken(gomock.Any(), "error-token").Return(false, errors.New("validate failed"))
 
 		err := middleware(handler)(c)
 		require.NoError(t, err)
@@ -81,7 +81,7 @@ func TestJWTAuthMiddleware(t *testing.T) {
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
 
-		mockAuth.EXPECT().ValidateToken("valid-token").Return(true, nil)
+		mockAuth.EXPECT().ValidateToken(gomock.Any(), "valid-token").Return(true, nil)
 
 		err := middleware(handler)(c)
 		require.NoError(t, err)
@@ -95,7 +95,7 @@ func TestJWTAuthMiddleware(t *testing.T) {
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
 
-		mockAuth.EXPECT().ValidateToken("cookie-token").Return(true, nil)
+		mockAuth.EXPECT().ValidateToken(gomock.Any(), "cookie-token").Return(true, nil)
 
 		err := middleware(handler)(c)
 		require.NoError(t, err)

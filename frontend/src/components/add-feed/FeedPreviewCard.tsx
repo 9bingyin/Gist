@@ -1,5 +1,16 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
+import {
+  Bell,
+  ChevronDown,
+  Clock,
+  ExternalLink,
+  FileText,
+  Image,
+  Loader2,
+  Plus,
+  Rss,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatRelativeTime } from "@/lib/date-utils";
 import { isSafeUrl, getSafeHostname } from "@/lib/url";
@@ -18,53 +29,11 @@ interface FeedPreviewCardProps {
 const getTypeIcon = (type: ContentType) => {
   switch (type) {
     case "article":
-      return (
-        <svg
-          className="size-3 text-muted-foreground"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-          />
-        </svg>
-      );
+      return <FileText className="size-3 text-muted-foreground" />;
     case "picture":
-      return (
-        <svg
-          className="size-3 text-muted-foreground"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-          />
-        </svg>
-      );
+      return <Image className="size-3 text-muted-foreground" />;
     case "notification":
-      return (
-        <svg
-          className="size-3 text-muted-foreground"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
-          />
-        </svg>
-      );
+      return <Bell className="size-3 text-muted-foreground" />;
   }
 };
 
@@ -161,19 +130,7 @@ export function FeedPreviewCard({
               className="size-12 rounded-lg object-cover"
             />
           ) : (
-            <svg
-              className="size-6 text-muted-foreground"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={1.5}
-                d="M6 5c7.18 0 13 5.82 13 13M6 11a7 7 0 017 7m-6 0a1 1 0 11-2 0 1 1 0 012 0z"
-              />
-            </svg>
+            <Rss className="size-6 text-muted-foreground" strokeWidth={1.5} />
           )}
         </div>
 
@@ -193,19 +150,7 @@ export function FeedPreviewCard({
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 hover:text-primary transition-colors"
               >
-                <svg
-                  className="size-3"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
-                  />
-                </svg>
+                <ExternalLink className="size-3" />
                 <span className="truncate max-w-[180px]">
                   {getSafeHostname(feed.siteUrl)}
                 </span>
@@ -213,37 +158,13 @@ export function FeedPreviewCard({
             )}
             {feed.itemCount !== undefined && (
               <span className="inline-flex items-center gap-1">
-                <svg
-                  className="size-3"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                  />
-                </svg>
+                <FileText className="size-3" />
                 {feed.itemCount} {t("add_feed.items")}
               </span>
             )}
             {feed.lastUpdated && (
               <span className="inline-flex items-center gap-1">
-                <svg
-                  className="size-3"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                  />
-                </svg>
+                <Clock className="size-3" />
                 {formatRelativeTime(feed.lastUpdated, t)}
               </span>
             )}
@@ -305,19 +226,7 @@ export function FeedPreviewCard({
                         "flex items-center gap-2 text-primary",
                       )}
                     >
-                      <svg
-                        className="size-4"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M12 4v16m8-8H4"
-                        />
-                      </svg>
+                      <Plus className="size-4" />
                       {t("add_feed.create_folder", {
                         name: folderInput.trim(),
                       })}
@@ -351,22 +260,12 @@ export function FeedPreviewCard({
             "transition-colors duration-200",
           )}
         >
-          <svg
+          <ChevronDown
             className={cn(
               "size-4 transition-transform duration-200",
               showOptions && "rotate-180",
             )}
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M19 9l-7 7-7-7"
-            />
-          </svg>
+          />
           {showOptions
             ? t("add_feed.hide_options")
             : t("add_feed.more_options")}
@@ -386,42 +285,12 @@ export function FeedPreviewCard({
         >
           {isLoading ? (
             <>
-              <svg
-                className="size-4 animate-spin"
-                fill="none"
-                viewBox="0 0 24 24"
-              >
-                <circle
-                  className="opacity-25"
-                  cx="12"
-                  cy="12"
-                  r="10"
-                  stroke="currentColor"
-                  strokeWidth="4"
-                />
-                <path
-                  className="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                />
-              </svg>
+              <Loader2 className="size-4 animate-spin" />
               <span>{t("add_feed.subscribing")}</span>
             </>
           ) : (
             <>
-              <svg
-                className="size-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 4v16m8-8H4"
-                />
-              </svg>
+              <Plus className="size-4" />
               <span>{t("add_feed.subscribe")}</span>
             </>
           )}

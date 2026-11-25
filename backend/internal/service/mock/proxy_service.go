@@ -41,18 +41,6 @@ func (m *MockProxyService) EXPECT() *MockProxyServiceMockRecorder {
 	return m.recorder
 }
 
-// Close mocks base method.
-func (m *MockProxyService) Close() {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Close")
-}
-
-// Close indicates an expected call of Close.
-func (mr *MockProxyServiceMockRecorder) Close() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockProxyService)(nil).Close))
-}
-
 // FetchImage mocks base method.
 func (m *MockProxyService) FetchImage(ctx context.Context, imageURL, refererURL string) (*service.ProxyResult, error) {
 	m.ctrl.T.Helper()

@@ -35,7 +35,7 @@ func TestOPMLHandler_Import_Success(t *testing.T) {
 	// We just test the immediate response.
 
 	mockTask.EXPECT().
-		Start(1).
+		Start(0).
 		Return("task-id", context.Background())
 
 	mockOPML.EXPECT().
@@ -43,14 +43,16 @@ func TestOPMLHandler_Import_Success(t *testing.T) {
 		Return(service.ImportResult{}, nil)
 
 	mockTask.EXPECT().
-		Complete(service.ImportResult{}).
+		Complete("task-id", service.ImportResult{}).
 		Return()
+
+	mockTask.EXPECT().Shutdown().Return()
+	mockOPML.EXPECT().Shutdown().Return()
 
 	err := h.Import(c)
 	require.NoError(t, err)
 
-	// Wait a bit for the goroutine to call Start and Import
-	time.Sleep(20 * time.Millisecond)
+	h.Shutdown()
 
 	var resp handler.ImportStartedResponse
 	assertJSONResponse(t, rec, http.StatusOK, &resp)

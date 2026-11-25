@@ -1,4 +1,6 @@
-import { useCallback, useSyncExternalStore } from "react";
+import { useCallback } from "react";
+import { create } from "zustand";
+import { persist } from "zustand/middleware";
 
 interface UISettings {
   feedColWidth: number;
@@ -14,101 +16,110 @@ export const defaultUISettings: UISettings = {
   sidebarVisible: true,
 };
 
-function getStoredSettings(): UISettings {
-  if (typeof window === "undefined") return defaultUISettings;
+interface UISettingsStore extends UISettings {
+  sidebarVisibleCustomized: boolean;
+  setSetting: <K extends keyof UISettings>(
+    key: K,
+    value: UISettings[K],
+  ) => void;
+  resetToDefaults: () => void;
+}
+
+function readLegacySettings(): Partial<UISettings> | null {
+  if (typeof window === "undefined") return null;
   try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      return { ...defaultUISettings, ...JSON.parse(stored) };
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    // Already in zustand persist format
+    if ("state" in parsed && typeof parsed.state === "object") {
+      return null;
     }
+    return parsed as Partial<UISettings>;
   } catch {
-    // ignore parse errors
-  }
-  return defaultUISettings;
-}
-
-let cachedSettings: UISettings = getStoredSettings();
-const listeners = new Set<() => void>();
-
-function emitChange() {
-  for (const listener of listeners) {
-    listener();
+    return null;
   }
 }
+
+const legacyInitial = readLegacySettings();
+
+const useUISettingsStore = create<UISettingsStore>()(
+  persist(
+    (set) => ({
+      ...defaultUISettings,
+      ...legacyInitial,
+      sidebarVisibleCustomized:
+        legacyInitial !== null && "sidebarVisible" in legacyInitial,
+
+      setSetting: (key, value) =>
+        set((state) => ({
+          ...state,
+          [key]: value,
+          sidebarVisibleCustomized:
+            key === "sidebarVisible" ? true : state.sidebarVisibleCustomized,
+        })),
+
+      resetToDefaults: () =>
+        set({
+          ...defaultUISettings,
+          sidebarVisibleCustomized: true,
+        }),
+    }),
+    {
+      name: STORAGE_KEY,
+      partialize: (state) => ({
+        feedColWidth: state.feedColWidth,
+        entryColWidth: state.entryColWidth,
+        sidebarVisible: state.sidebarVisible,
+        sidebarVisibleCustomized: state.sidebarVisibleCustomized,
+      }),
+    },
+  ),
+);
 
 export function getUISettings(): UISettings {
-  return cachedSettings;
+  const { feedColWidth, entryColWidth, sidebarVisible } =
+    useUISettingsStore.getState();
+  return { feedColWidth, entryColWidth, sidebarVisible };
 }
 
 export function hasSidebarVisibilitySetting(): boolean {
-  if (typeof window === "undefined") return false;
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      return "sidebarVisible" in parsed;
-    }
-  } catch {
-    // ignore parse errors
-  }
-  return false;
+  return useUISettingsStore.getState().sidebarVisibleCustomized;
 }
 
 export function setUISetting<K extends keyof UISettings>(
   key: K,
   value: UISettings[K],
 ): void {
-  cachedSettings = { ...cachedSettings, [key]: value };
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(cachedSettings));
-  } catch {
-    // ignore storage errors
-  }
-  emitChange();
-}
-
-function subscribe(callback: () => void): () => void {
-  listeners.add(callback);
-  return () => listeners.delete(callback);
-}
-
-function getSnapshot(): UISettings {
-  return cachedSettings;
-}
-
-export function useUISettings(): UISettings {
-  return useSyncExternalStore(subscribe, getSnapshot, () => defaultUISettings);
+  useUISettingsStore.getState().setSetting(key, value);
 }
 
 export function useUISettingKey<K extends keyof UISettings>(
   key: K,
 ): UISettings[K] {
-  const settings = useUISettings();
-  return settings[key];
+  return useUISettingsStore((state) => state[key]);
 }
 
 export function useUISettingActions() {
   const setFeedColWidth = useCallback((width: number) => {
-    setUISetting("feedColWidth", width);
+    useUISettingsStore.getState().setSetting("feedColWidth", width);
   }, []);
 
   const setEntryColWidth = useCallback((width: number) => {
-    setUISetting("entryColWidth", width);
+    useUISettingsStore.getState().setSetting("entryColWidth", width);
   }, []);
 
   const setSidebarVisible = useCallback((visible: boolean) => {
-    setUISetting("sidebarVisible", visible);
+    useUISettingsStore.getState().setSetting("sidebarVisible", visible);
   }, []);
 
   const toggleSidebarVisible = useCallback(() => {
-    const current = getUISettings().sidebarVisible;
-    setUISetting("sidebarVisible", !current);
+    const current = useUISettingsStore.getState().sidebarVisible;
+    useUISettingsStore.getState().setSetting("sidebarVisible", !current);
   }, []);
 
   const resetToDefaults = useCallback(() => {
-    setUISetting("feedColWidth", defaultUISettings.feedColWidth);
-    setUISetting("entryColWidth", defaultUISettings.entryColWidth);
-    setUISetting("sidebarVisible", defaultUISettings.sidebarVisible);
+    useUISettingsStore.getState().resetToDefaults();
   }, []);
 
   return {

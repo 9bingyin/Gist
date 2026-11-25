@@ -9,12 +9,16 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
+	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	readability "codeberg.org/readeck/go-readability/v2"
 	"github.com/Noooste/azuretls-client"
 	"golang.org/x/net/html"
+	"golang.org/x/sync/singleflight"
 
 	"gist/backend/internal/config"
 	"gist/backend/internal/repository"
@@ -26,13 +30,13 @@ const readabilityTimeout = 30 * time.Second
 
 type ReadabilityService interface {
 	FetchReadableContent(ctx context.Context, entryID int64) (string, error)
-	Close()
 }
 
 type readabilityService struct {
 	entries       repository.EntryRepository
 	clientFactory *network.ClientFactory
 	anubis        AnubisSolver
+	sf            singleflight.Group
 }
 
 func NewReadabilityService(entries repository.EntryRepository, clientFactory *network.ClientFactory, anubisSolver AnubisSolver) ReadabilityService {
@@ -44,6 +48,26 @@ func NewReadabilityService(entries repository.EntryRepository, clientFactory *ne
 }
 
 func (s *readabilityService) FetchReadableContent(ctx context.Context, entryID int64) (string, error) {
+	key := strconv.FormatInt(entryID, 10)
+	ch := s.sf.DoChan(key, func() (any, error) {
+		workCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), readabilityTimeout*2)
+		defer cancel()
+		return s.fetchReadableContentOnce(workCtx, entryID)
+	})
+
+	select {
+	case <-ctx.Done():
+		return "", ctx.Err()
+	case res := <-ch:
+		if res.Err != nil {
+			return "", res.Err
+		}
+		content, _ := res.Val.(string)
+		return content, nil
+	}
+}
+
+func (s *readabilityService) fetchReadableContentOnce(ctx context.Context, entryID int64) (string, error) {
 	entry, err := s.entries.GetByID(ctx, entryID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -52,59 +76,35 @@ func (s *readabilityService) FetchReadableContent(ctx context.Context, entryID i
 		return "", err
 	}
 
-	// Return cached content if available
 	if entry.ReadableContent != nil && *entry.ReadableContent != "" {
 		logger.Debug("readability cache hit", "module", "service", "action", "fetch", "resource", "entry", "result", "ok", "entry_id", entryID, "cache", "hit")
 		return *entry.ReadableContent, nil
 	}
 
-	// Validate URL
-	if entry.URL == nil || *entry.URL == "" {
+	if entry.URL == nil || strings.TrimSpace(*entry.URL) == "" {
 		return "", ErrInvalid
 	}
 
-	// Fetch with Chrome fingerprint and Anubis support
-	body, err := s.fetchWithChrome(ctx, *entry.URL, "", 0)
+	parsedURL, err := network.ValidateFetchURL(*entry.URL)
 	if err != nil {
-		logger.Warn("readability fetch failed", "module", "service", "action", "fetch", "resource", "entry", "result", "failed", "entry_id", entryID, "host", network.ExtractHost(*entry.URL), "error", err)
+		return "", ErrInvalid
+	}
+
+	body, err := s.fetchWithChrome(ctx, *entry.URL)
+	if err != nil {
+		logger.Warn("readability fetch failed", "module", "service", "action", "fetch", "resource", "entry", "result", "failed", "entry_id", entryID, "host", parsedURL.Host, "error", err)
 		return "", err
 	}
 
-	// Parse URL for readability
-	parsedURL, err := url.Parse(*entry.URL)
+	content, err := parseAndCleanReadability(body, parsedURL)
 	if err != nil {
-		return "", fmt.Errorf("parse URL failed: %w", err)
+		logger.Error("readability parse failed", "module", "service", "action", "fetch", "resource", "entry", "result", "failed", "entry_id", entryID, "host", parsedURL.Host, "error", err)
+		return "", err
 	}
-
-	// Parse with readability
-	// go-readability handles lazy images (unwrapNoscriptImages, fixLazyImages) and script removal internally
-	parser := readability.NewParser()
-	parser.KeepClasses = true // Preserve class attributes (e.g., language-python on code blocks)
-	article, err := parser.Parse(bytes.NewReader(body), parsedURL)
-	if err != nil {
-		logger.Error("readability parse failed", "module", "service", "action", "fetch", "resource", "entry", "result", "failed", "entry_id", entryID, "host", network.ExtractHost(*entry.URL), "error", err)
-		return "", fmt.Errorf("parse content failed: %w", err)
-	}
-
-	// Render HTML content
-	var buf bytes.Buffer
-	if err := article.RenderHTML(&buf); err != nil {
-		return "", fmt.Errorf("render failed: %w", err)
-	}
-
-	// Post-process: fix lazy images and remove metadata elements
-	rendered := buf.Bytes()
-
-	// Fix lazy images with data-original that go-readability doesn't handle
-	rendered = fixLazyImages(rendered)
-
-	// Remove date elements (Safari Reader style)
-	content := removeMetadataElements(rendered)
 	if content == "" {
 		return "", ErrInvalid
 	}
 
-	// Save to database
 	if err := s.entries.UpdateReadableContent(ctx, entryID, content); err != nil {
 		logger.Error("readability cache save failed", "module", "service", "action", "save", "resource", "entry", "result", "failed", "entry_id", entryID, "error", err)
 		return "", err
@@ -114,33 +114,35 @@ func (s *readabilityService) FetchReadableContent(ctx context.Context, entryID i
 	return content, nil
 }
 
-// Close releases resources held by the service
-func (s *readabilityService) Close() {
-	// No persistent resources to release
-}
-
-// fetchWithChrome fetches URL with Chrome TLS fingerprint and browser headers
-func (s *readabilityService) fetchWithChrome(ctx context.Context, targetURL string, cookie string, retryCount int) ([]byte, error) {
-	session := s.clientFactory.NewAzureSession(ctx, readabilityTimeout)
-	defer session.Close()
-	return s.doFetch(ctx, session, targetURL, cookie, retryCount)
-}
-
-// fetchWithFreshSession creates a new azuretls session to avoid connection reuse after Anubis
-func (s *readabilityService) fetchWithFreshSession(ctx context.Context, targetURL, cookie string, retryCount int) ([]byte, error) {
-	session := s.clientFactory.NewAzureSession(ctx, readabilityTimeout)
-	defer session.Close()
-	return s.doFetch(ctx, session, targetURL, cookie, retryCount)
-}
-
-// doFetch performs the actual HTTP request with the given session
-func (s *readabilityService) doFetch(ctx context.Context, session *azuretls.Session, targetURL, cookie string, retryCount int) ([]byte, error) {
-	parsedURL, err := url.Parse(targetURL)
+func parseAndCleanReadability(body []byte, parsedURL *url.URL) (string, error) {
+	parser := readability.NewParser()
+	parser.KeepClasses = true // Preserve class attributes (e.g., language-python on code blocks).
+	article, err := parser.Parse(bytes.NewReader(body), parsedURL)
 	if err != nil {
-		return nil, ErrFeedFetch
+		return "", fmt.Errorf("parse content failed: %w", err)
 	}
 
-	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
+	if article.Node == nil {
+		var buf bytes.Buffer
+		if err := article.RenderHTML(&buf); err != nil {
+			return "", fmt.Errorf("render failed: %w", err)
+		}
+		return strings.TrimSpace(buf.String()), nil
+	}
+
+	// Single AST pass directly on article.Node: fix lazy images and remove metadata elements
+	// without re-parsing/re-rendering HTML 3 times or introducing outer <html><body> wrappers.
+	cleanReadabilityTree(article.Node)
+
+	var buf bytes.Buffer
+	if err := html.Render(&buf, article.Node); err != nil {
+		return "", fmt.Errorf("render failed: %w", err)
+	}
+	return strings.TrimSpace(buf.String()), nil
+}
+
+func (s *readabilityService) fetchWithChrome(ctx context.Context, targetURL string) ([]byte, error) {
+	if _, err := network.ValidateFetchURL(targetURL); err != nil {
 		return nil, ErrInvalid
 	}
 
@@ -163,51 +165,55 @@ func (s *readabilityService) doFetch(ctx context.Context, session *azuretls.Sess
 		{"user-agent", config.ChromeUserAgent},
 	}
 
-	requestHeaders := orderedHeadersToHTTPHeader(headers)
-	if cookie != "" {
-		headers = append(headers, []string{"cookie", cookie})
-	} else {
-		if cachedCookie := getCachedAnubisCookie(ctx, s.anubis, parsedURL.Host, requestHeaders); cachedCookie != "" {
-			headers = append(headers, []string{"cookie", cachedCookie})
-		}
-	}
-
-	resp, err := session.Do(&azuretls.Request{
-		Method:         http.MethodGet,
-		Url:            targetURL,
-		OrderedHeaders: headers,
+	res, err := fetchAzureWithAnubis(ctx, azureFetchOptions{
+		URL:           targetURL,
+		Timeout:       readabilityTimeout,
+		MaxBodyBytes:  maxHTMLBodyBytes,
+		Headers:       headers,
+		ClientFactory: s.clientFactory,
+		Anubis:        s.anubis,
 	})
 	if err != nil {
-		logger.Warn("readability request failed", "module", "service", "action", "fetch", "resource", "entry", "result", "failed", "host", parsedURL.Host, "error", err)
+		if errors.Is(err, network.ErrInvalidURL) || errors.Is(err, network.ErrBlockedAddress) {
+			return nil, ErrInvalid
+		}
+		if errors.Is(err, ErrUpstreamRejected) {
+			return nil, fmt.Errorf("upstream rejected")
+		}
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
 
-	if resp.StatusCode != http.StatusOK {
-		logger.Error("readability http error", "module", "service", "action", "fetch", "resource", "entry", "result", "failed", "host", parsedURL.Host, "status_code", resp.StatusCode)
-		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
+	if res.StatusCode != http.StatusOK {
+		logger.Error("readability http error", "module", "service", "action", "fetch", "resource", "entry", "result", "failed", "host", network.ExtractHost(targetURL), "status_code", res.StatusCode)
+		return nil, fmt.Errorf("HTTP %d", res.StatusCode)
 	}
 
-	body := resp.Body
+	return res.Body, nil
+}
 
-	newCookie, anubisErr := trySolveAnubisChallenge(ctx, s.anubis, body, targetURL, cookiesFromMap(resp.Cookies), requestHeaders, retryCount)
-	switch {
-	case anubisErr == nil:
-		logger.Debug("readability detected anubis challenge", "module", "service", "action", "fetch", "resource", "entry", "result", "ok", "host", parsedURL.Host)
-		return s.fetchWithFreshSession(ctx, targetURL, newCookie, retryCount+1)
-	case errors.Is(anubisErr, errAnubisNotPage):
-		// Not an Anubis page; continue normal readability parsing.
-	case errors.Is(anubisErr, errAnubisRejected):
-		logger.Warn("readability upstream rejected", "module", "service", "action", "fetch", "resource", "entry", "result", "failed", "host", parsedURL.Host)
-		return nil, fmt.Errorf("upstream rejected")
-	case errors.Is(anubisErr, errAnubisRetryExceeded):
-		logger.Warn("readability anubis persists", "module", "service", "action", "fetch", "resource", "entry", "result", "failed", "host", parsedURL.Host, "retry_count", retryCount)
-		return nil, fmt.Errorf("anubis challenge persists after %d retries", retryCount)
-	default:
-		logger.Warn("readability anubis solve failed", "module", "service", "action", "fetch", "resource", "entry", "result", "failed", "host", parsedURL.Host, "error", anubisErr)
-		return nil, fmt.Errorf("anubis solve failed: %w", anubisErr)
+// cleanReadabilityTree mutates root in a single pass, fixing data-original lazy images
+// and removing date metadata elements.
+func cleanReadabilityTree(root *html.Node) {
+	if root == nil {
+		return
 	}
+	var nodesToRemove []*html.Node
 
-	return body, nil
+	walkTree(root, func(n *html.Node) {
+		if shouldRemoveMetadataElement(n) {
+			nodesToRemove = append(nodesToRemove, n)
+			return
+		}
+		if n.Data == "img" {
+			fixLazyImageNode(n)
+		}
+	})
+
+	for _, n := range nodesToRemove {
+		if n.Parent != nil {
+			n.Parent.RemoveChild(n)
+		}
+	}
 }
 
 // walkTree traverses all descendant element nodes and calls fn for each.
@@ -220,35 +226,24 @@ func walkTree(n *html.Node, fn func(*html.Node)) {
 	}
 }
 
-// removeMetadataElements removes date elements from HTML content.
-// This implements Safari Reader's approach to filter metadata that Readability doesn't handle:
-// - Elements with class containing "date" (Safari: /date/.test(className))
-// - Elements with itemprop containing "datePublished"
-func removeMetadataElements(htmlContent []byte) string {
-	doc, err := html.Parse(bytes.NewReader(htmlContent))
-	if err != nil {
-		return string(htmlContent)
-	}
-
-	var nodesToRemove []*html.Node
-
-	walkTree(doc, func(n *html.Node) {
-		if shouldRemoveMetadataElement(n) {
-			nodesToRemove = append(nodesToRemove, n)
-		}
-	})
-
-	for _, n := range nodesToRemove {
-		if n.Parent != nil {
-			n.Parent.RemoveChild(n)
+func fixLazyImageNode(n *html.Node) {
+	srcIdx := -1
+	var dataOriginal string
+	for i, attr := range n.Attr {
+		switch attr.Key {
+		case "src":
+			srcIdx = i
+		case "data-original":
+			dataOriginal = attr.Val
 		}
 	}
-
-	var buf bytes.Buffer
-	if err := html.Render(&buf, doc); err != nil {
-		return string(htmlContent)
+	if dataOriginal != "" && !strings.HasPrefix(dataOriginal, "data:") {
+		if srcIdx >= 0 {
+			n.Attr[srcIdx].Val = dataOriginal
+		} else {
+			n.Attr = append(n.Attr, html.Attribute{Key: "src", Val: dataOriginal})
+		}
 	}
-	return buf.String()
 }
 
 // shouldRemoveMetadataElement checks if an element should be removed as metadata.
@@ -260,13 +255,11 @@ func shouldRemoveMetadataElement(n *html.Node) bool {
 	for _, attr := range n.Attr {
 		switch attr.Key {
 		case "class":
-			// Safari Reader: /date/.test(className)
 			if containsDateClass(attr.Val) {
 				return true
 			}
 		case "itemprop":
-			// Safari Reader: /\bdatePublished\b/.test(itemprop)
-			if strings.Contains(attr.Val, "datePublished") {
+			if slices.Contains(strings.Fields(attr.Val), "datePublished") {
 				return true
 			}
 		}
@@ -274,55 +267,50 @@ func shouldRemoveMetadataElement(n *html.Node) bool {
 	return false
 }
 
-// containsDateClass checks if class string contains a date-related class.
+var dateClassTokens = map[string]struct{}{
+	"date":          {},
+	"datetime":      {},
+	"pubdate":       {},
+	"postdate":      {},
+	"datepublished": {},
+	"dateline":      {},
+	"timestamp":     {},
+}
+
+// containsDateClass matches date-related CSS class tokens on word boundaries
+// (hyphen/underscore/camelCase splits) so words like "update", "outdated", or
+// "candidate" are never mistakenly removed.
 func containsDateClass(classStr string) bool {
-	for _, class := range strings.Fields(classStr) {
-		if strings.Contains(strings.ToLower(class), "date") {
-			return true
+	for class := range strings.FieldsSeq(classStr) {
+		for _, tok := range splitClassTokens(class) {
+			if _, ok := dateClassTokens[tok]; ok {
+				return true
+			}
 		}
 	}
 	return false
 }
 
-// fixLazyImages fixes lazy-loaded images that go-readability doesn't handle.
-// go-readability's fixLazyImages only processes images with empty src or "lazy" class.
-// This function handles images with placeholder src and data-original attribute.
-func fixLazyImages(htmlContent []byte) []byte {
-	doc, err := html.Parse(bytes.NewReader(htmlContent))
-	if err != nil {
-		return htmlContent
-	}
-
-	walkTree(doc, func(n *html.Node) {
-		if n.Data != "img" {
-			return
-		}
-
-		var srcIdx = -1
-		var dataOriginal string
-
-		for i, attr := range n.Attr {
-			switch attr.Key {
-			case "src":
-				srcIdx = i
-			case "data-original":
-				dataOriginal = attr.Val
+func splitClassTokens(class string) []string {
+	var tokens []string
+	var buf strings.Builder
+	runes := []rune(class)
+	for i, r := range runes {
+		if r == '-' || r == '_' || r == ':' || r == '/' || r == '.' {
+			if buf.Len() > 0 {
+				tokens = append(tokens, strings.ToLower(buf.String()))
+				buf.Reset()
 			}
+			continue
 		}
-
-		// Replace src with data-original if data-original exists and is a real image URL
-		if dataOriginal != "" && !strings.HasPrefix(dataOriginal, "data:") {
-			if srcIdx >= 0 {
-				n.Attr[srcIdx].Val = dataOriginal
-			} else {
-				n.Attr = append(n.Attr, html.Attribute{Key: "src", Val: dataOriginal})
-			}
+		if i > 0 && unicode.IsUpper(r) && unicode.IsLower(runes[i-1]) && buf.Len() > 0 {
+			tokens = append(tokens, strings.ToLower(buf.String()))
+			buf.Reset()
 		}
-	})
-
-	var buf bytes.Buffer
-	if err := html.Render(&buf, doc); err != nil {
-		return htmlContent
+		buf.WriteRune(r)
 	}
-	return buf.Bytes()
+	if buf.Len() > 0 {
+		tokens = append(tokens, strings.ToLower(buf.String()))
+	}
+	return tokens
 }

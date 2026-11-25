@@ -12,10 +12,11 @@ import (
 func TestImportTaskService_Lifecycle(t *testing.T) {
 	svc := service.NewImportTaskService()
 
-	id, ctx := svc.Start(3)
+	id, ctx := svc.Start(0)
 	require.NotEmpty(t, id)
 
-	svc.Update(1, "Feed A")
+	svc.SetTotal(id, 3)
+	svc.Update(id, 1, "Feed A")
 	current := svc.Get()
 	require.NotNil(t, current)
 	require.Equal(t, "running", current.Status)
@@ -24,14 +25,14 @@ func TestImportTaskService_Lifecycle(t *testing.T) {
 	require.Equal(t, "Feed A", current.Feed)
 
 	result := service.ImportResult{FeedsCreated: 2, FeedsSkipped: 1}
-	svc.Complete(result)
+	svc.Complete(id, result)
 	completed := svc.Get()
 	require.Equal(t, "done", completed.Status)
 	require.NotNil(t, completed.Result)
 	require.Equal(t, 2, completed.Result.FeedsCreated)
 	require.Empty(t, completed.Feed)
 
-	svc.Update(2, "Feed B")
+	svc.Update(id, 2, "Feed B")
 	afterComplete := svc.Get()
 	require.Equal(t, completed.Current, afterComplete.Current)
 	require.Empty(t, afterComplete.Feed)
@@ -43,13 +44,13 @@ func TestImportTaskService_Lifecycle(t *testing.T) {
 	}
 }
 
-func TestImportTaskService_FailAndCancel(t *testing.T) {
+func TestImportTaskService_FailCancelAndStaleID(t *testing.T) {
 	svc := service.NewImportTaskService()
 
-	_, ctx := svc.Start(2)
-	svc.Update(1, "Feed A")
+	id1, ctx := svc.Start(2)
+	svc.Update(id1, 1, "Feed A")
 
-	svc.Fail(context.Canceled)
+	svc.Fail(id1, context.Canceled)
 	failed := svc.Get()
 	require.Equal(t, "error", failed.Status)
 	require.NotEmpty(t, failed.Error)
@@ -57,8 +58,15 @@ func TestImportTaskService_FailAndCancel(t *testing.T) {
 
 	require.False(t, svc.Cancel(), "cancel should return false when task is not running")
 
-	_, ctx2 := svc.Start(1)
-	svc.Update(1, "Feed B")
+	id2, ctx2 := svc.Start(1)
+	// Stale task ID mutations must be ignored
+	svc.Update(id1, 99, "Stale Feed")
+	svc.Complete(id1, service.ImportResult{FeedsCreated: 99})
+	current := svc.Get()
+	require.Equal(t, "running", current.Status)
+	require.Equal(t, 0, current.Current)
+
+	svc.Update(id2, 1, "Feed B")
 
 	require.True(t, svc.Cancel())
 	canceledTask := svc.Get()
@@ -82,8 +90,8 @@ func TestImportTaskService_FailAndCancel(t *testing.T) {
 
 func TestImportTaskService_GetReturnsCopy(t *testing.T) {
 	svc := service.NewImportTaskService()
-	svc.Start(1)
-	svc.Complete(service.ImportResult{FeedsCreated: 1})
+	id, _ := svc.Start(1)
+	svc.Complete(id, service.ImportResult{FeedsCreated: 1})
 
 	first := svc.Get()
 	require.NotNil(t, first)

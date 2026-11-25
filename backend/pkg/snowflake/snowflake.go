@@ -1,8 +1,20 @@
 package snowflake
 
-import "github.com/bwmarrin/snowflake"
+import (
+	"sync/atomic"
 
-var node *snowflake.Node
+	"github.com/bwmarrin/snowflake"
+)
+
+var node atomic.Pointer[snowflake.Node]
+
+func init() {
+	n, err := snowflake.NewNode(0)
+	if err != nil {
+		panic("snowflake default init: " + err.Error())
+	}
+	node.Store(n)
+}
 
 // Init initializes the snowflake node with the given node ID.
 // Node ID should be unique across all instances (0-1023).
@@ -11,11 +23,11 @@ func Init(nodeID int64) error {
 	if err != nil {
 		return err
 	}
-	node = n
+	node.Store(n)
 	return nil
 }
 
 // NextID generates a new unique snowflake ID.
 func NextID() int64 {
-	return node.Generate().Int64()
+	return node.Load().Generate().Int64()
 }

@@ -1,4 +1,4 @@
-import { useRef, useCallback } from "react";
+import { useRef, useCallback, useEffect } from "react";
 
 interface UseLongPressOptions {
   onLongPress: (e: {
@@ -10,6 +10,7 @@ interface UseLongPressOptions {
   onTouchMove?: (e: React.TouchEvent) => void;
   onTouchEnd?: (e: React.TouchEvent) => void;
   onTouchStart?: (e: React.TouchEvent) => void;
+  onTouchCancel?: (e: React.TouchEvent) => void;
   threshold?: number;
 }
 
@@ -17,87 +18,95 @@ interface UseLongPressOptions {
  * Hook for detecting long press on touch devices.
  * Returns touch event handlers that can be spread onto an element.
  */
-export function useLongPress({
-  onLongPress,
-  onClick,
-  threshold = 500,
-  ...events
-}: UseLongPressOptions) {
-  const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+export function useLongPress(options: UseLongPressOptions) {
+  const optionsRef = useRef(options);
+  useEffect(() => {
+    optionsRef.current = options;
+  });
+
+  const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const isLongPress = useRef(false);
   const startPosition = useRef<{ x: number; y: number } | undefined>(undefined);
 
-  const onTouchStart = useCallback(
-    (e: React.TouchEvent) => {
-      events.onTouchStart?.(e);
-      e.preventDefault();
-      isLongPress.current = false;
-      const touch = e.touches[0]!;
-
+  useEffect(() => {
+    return () => {
       clearTimeout(timerRef.current);
-      startPosition.current = {
-        x: touch.clientX + window.scrollX,
-        y: touch.clientY + window.scrollY,
-      };
+    };
+  }, []);
 
-      timerRef.current = setTimeout(() => {
-        isLongPress.current = true;
-        if (!startPosition.current) return;
+  const onTouchStart = useCallback((e: React.TouchEvent) => {
+    const {
+      onTouchStart: userTouchStart,
+      onLongPress,
+      threshold = 500,
+    } = optionsRef.current;
+    userTouchStart?.(e);
+    isLongPress.current = false;
+    const touch = e.touches[0];
+    if (!touch) return;
 
-        const compatEvent = {
-          pageX: startPosition.current.x,
-          pageY: startPosition.current.y,
-          target: e.target,
-          preventDefault: () => {},
-          stopPropagation: () => {},
-          clientX: touch.clientX,
-          clientY: touch.clientY,
-        };
+    clearTimeout(timerRef.current);
+    const target = e.target;
+    const clientX = touch.clientX;
+    const clientY = touch.clientY;
+    startPosition.current = {
+      x: clientX + window.scrollX,
+      y: clientY + window.scrollY,
+    };
 
-        onLongPress(compatEvent);
-      }, threshold);
-    },
-    [events, onLongPress, threshold],
-  );
-
-  const onTouchMove = useCallback(
-    (e: React.TouchEvent) => {
-      events.onTouchMove?.(e);
+    timerRef.current = setTimeout(() => {
+      isLongPress.current = true;
       if (!startPosition.current) return;
 
-      const touch = e.touches[0]!;
-      const currentX = touch.clientX + window.scrollX;
-      const currentY = touch.clientY + window.scrollY;
+      onLongPress({
+        pageX: startPosition.current.x,
+        pageY: startPosition.current.y,
+        target,
+      });
+    }, threshold);
+  }, []);
 
-      const moveOffset = Math.sqrt(
-        Math.pow(currentX - startPosition.current.x, 2) +
-          Math.pow(currentY - startPosition.current.y, 2),
-      );
+  const onTouchMove = useCallback((e: React.TouchEvent) => {
+    optionsRef.current.onTouchMove?.(e);
+    if (!startPosition.current) return;
 
-      // Cancel long press if moved more than 10px
-      if (moveOffset > 10) {
-        clearTimeout(timerRef.current);
-        startPosition.current = undefined;
-      }
-    },
-    [events],
-  );
+    const touch = e.touches[0];
+    if (!touch) return;
 
-  const onTouchEnd = useCallback(
-    (e: React.TouchEvent) => {
-      events.onTouchEnd?.(e);
+    const currentX = touch.clientX + window.scrollX;
+    const currentY = touch.clientY + window.scrollY;
+
+    const moveOffset = Math.hypot(
+      currentX - startPosition.current.x,
+      currentY - startPosition.current.y,
+    );
+
+    if (moveOffset > 10) {
       clearTimeout(timerRef.current);
-      if (!isLongPress.current && onClick) {
-        onClick(e);
-      }
       startPosition.current = undefined;
-    },
-    [events, onClick],
-  );
+    }
+  }, []);
+
+  const onTouchEnd = useCallback((e: React.TouchEvent) => {
+    optionsRef.current.onTouchEnd?.(e);
+    clearTimeout(timerRef.current);
+    if (!isLongPress.current && optionsRef.current.onClick) {
+      optionsRef.current.onClick(e);
+    }
+    startPosition.current = undefined;
+  }, []);
+
+  const onTouchCancel = useCallback((e: React.TouchEvent) => {
+    optionsRef.current.onTouchCancel?.(e);
+    clearTimeout(timerRef.current);
+    isLongPress.current = false;
+    startPosition.current = undefined;
+  }, []);
 
   return {
     onTouchStart,
     onTouchMove,
     onTouchEnd,
+    onTouchCancel,
   };
 }

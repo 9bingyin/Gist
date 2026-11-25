@@ -1,15 +1,10 @@
-import { useEffect, useCallback, useState, useRef, useMemo } from "react";
+import { useEffect, useCallback, useState, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { AnimatePresence, motion } from "framer-motion";
-import useEmblaCarousel from "embla-carousel-react";
-import { Play } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { useShallow } from "zustand/react/shallow";
+import { ExternalLink, Play, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { isVideoThumbnail } from "@/lib/media-utils";
-import {
-  MEDIA_OVERLAY_CLASSNAME,
-  MEDIA_OVERLAY_TOP_END_CLASSNAME,
-} from "@/lib/media-overlay";
-import { useMediaOverlayScrollLock } from "@/hooks/useMediaOverlayScrollLock";
 import { formatRelativeTime } from "@/lib/date-utils";
 import { stripHtml } from "@/lib/html-utils";
 import {
@@ -19,62 +14,54 @@ import {
 } from "@/hooks/useEntries";
 import { useLightboxStore } from "@/stores/lightbox-store";
 import { FeedIcon } from "@/components/ui/feed-icon";
+import { MediaCarouselOverlay } from "@/components/ui/media-carousel-overlay";
+import type { Entry } from "@/types/api";
 
 export function Lightbox() {
   const { t } = useTranslation();
   const {
     isOpen,
-    entry,
+    entryId,
+    storeEntry,
     feed,
     images,
     currentIndex,
+    initialIndex,
     close,
     reset,
     setIndex,
-    updateEntryStarred,
-  } = useLightboxStore();
+  } = useLightboxStore(
+    useShallow((s) => ({
+      isOpen: s.isOpen,
+      entryId: s.entryId,
+      storeEntry: s.entry,
+      feed: s.feed,
+      images: s.images,
+      currentIndex: s.currentIndex,
+      initialIndex: s.initialIndex,
+      close: s.close,
+      reset: s.reset,
+      setIndex: s.setIndex,
+    })),
+  );
+
+  // Subscribe to React Query cache for real-time updates (e.g. starred status)
+  const { data: cachedEntry } = useQuery<Entry | undefined>({
+    queryKey: ["entry", entryId],
+    queryFn: () => Promise.resolve(storeEntry ?? undefined),
+    enabled: false,
+  });
+  const entry = cachedEntry ?? storeEntry;
+
   const { mutate: markAsRead } = useMarkAsRead();
   const { mutate: markAsStarred } = useMarkAsStarred();
   const removeFromUnreadList = useRemoveFromUnreadList();
 
-  // Track which entries have been marked as read to avoid duplicate calls
   const markedAsReadRef = useRef<Set<string>>(new Set());
-
-  // Track pointer position to distinguish click from drag in carousel
-  const pointerDownPos = useRef<{ x: number; y: number } | null>(null);
-
-  // Track if index change is from embla interaction (to avoid scrollTo interrupting animation)
-  const isEmblaNavigatingRef = useRef(false);
-
-  // Capture initial index when lightbox opens to avoid reInit on every currentIndex change
-  const initialIndexRef = useRef(currentIndex);
-  if (!isOpen) {
-    initialIndexRef.current = currentIndex;
-  }
-
-  // Memoize options to prevent unnecessary reInit (which would skip animations)
-  // iOS-style animation: smooth, natural deceleration
-  const emblaOptions = useMemo(
-    () => ({
-      loop: false,
-      startIndex: initialIndexRef.current,
-      skipSnaps: false, // Snap to nearest slide (iOS behavior)
-      duration: 25, // iOS-like snap duration (default 25, range 20-60)
-    }),
-    // Only recreate options when lightbox opens (images change)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [images],
-  );
-
-  const [emblaRef, emblaApi] = useEmblaCarousel(emblaOptions);
-
-  const [iconError, setIconError] = useState(false);
-  const showIcon = feed?.iconPath && !iconError;
+  const [failedIconPath, setFailedIconPath] = useState<string | null>(null);
+  const showIcon = Boolean(feed?.iconPath && failedIconPath !== feed.iconPath);
 
   // Mark entry as read when lightbox opens
-  // This is done here instead of in PictureItem to avoid race condition
-  // when unreadOnly filter is enabled (list item would disappear before lightbox opens)
-  // Use skipInvalidate to prevent list refresh while lightbox is open
   useEffect(() => {
     if (
       isOpen &&
@@ -87,8 +74,7 @@ export function Lightbox() {
     }
   }, [isOpen, entry, markAsRead]);
 
-  // When lightbox closes, remove read entries from unreadOnly list
-  // This deferred removal prevents white screen on mobile when unreadOnly is enabled
+  // Deferred removal from unreadOnly list on close
   useEffect(() => {
     if (!isOpen && markedAsReadRef.current.size > 0) {
       removeFromUnreadList(markedAsReadRef.current);
@@ -96,369 +82,132 @@ export function Lightbox() {
     }
   }, [isOpen, removeFromUnreadList]);
 
-  // Sync embla with store
-  useEffect(() => {
-    if (!emblaApi) return;
-
-    const onSelect = () => {
-      // Mark that this index change is from embla interaction
-      isEmblaNavigatingRef.current = true;
-      const index = emblaApi.selectedScrollSnap();
-      setIndex(index);
-    };
-
-    emblaApi.on("select", onSelect);
-    return () => {
-      emblaApi.off("select", onSelect);
-    };
-  }, [emblaApi, setIndex]);
-
-  // Scroll to index when store changes (from external source, not embla)
-  useEffect(() => {
-    // Skip if change is from embla navigation (would interrupt animation)
-    if (isEmblaNavigatingRef.current) {
-      isEmblaNavigatingRef.current = false;
-      return;
-    }
-    if (emblaApi && emblaApi.selectedScrollSnap() !== currentIndex) {
-      emblaApi.scrollTo(currentIndex);
-    }
-  }, [emblaApi, currentIndex]);
-
-  // Keyboard navigation
-  useEffect(() => {
-    if (!isOpen) return;
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      switch (e.key) {
-        case "Escape":
-          close();
-          break;
-        case "ArrowLeft":
-          emblaApi?.scrollPrev();
-          break;
-        case "ArrowRight":
-          emblaApi?.scrollNext();
-          break;
-      }
-    };
-
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, close, emblaApi]);
-
-  useMediaOverlayScrollLock(isOpen);
-
-  const handleCarouselPointerDown = useCallback((e: React.PointerEvent) => {
-    pointerDownPos.current = { x: e.clientX, y: e.clientY };
-  }, []);
-
-  const handleCarouselClick = useCallback(
-    (e: React.MouseEvent) => {
-      // Only close if pointer moved less than 5px (pure click, not drag)
-      if (pointerDownPos.current) {
-        const dx = Math.abs(e.clientX - pointerDownPos.current.x);
-        const dy = Math.abs(e.clientY - pointerDownPos.current.y);
-        if (dx < 5 && dy < 5) {
-          close();
-        }
-      }
-      pointerDownPos.current = null;
-    },
-    [close],
-  );
-
-  const handleOverlayClick = useCallback(() => {
-    close();
-  }, [close]);
-
   const handleToggleStarred = useCallback(() => {
     if (entry) {
-      const newStarred = !entry.starred;
-      markAsStarred(
-        { id: entry.id, starred: newStarred },
-        {
-          onSuccess: () => {
-            updateEntryStarred(newStarred);
-          },
-        },
-      );
+      markAsStarred({ id: entry.id, starred: !entry.starred });
     }
-  }, [entry, markAsStarred, updateEntryStarred]);
+  }, [entry, markAsStarred]);
 
   const publishedAt = entry?.publishedAt
     ? formatRelativeTime(entry.publishedAt, t)
     : null;
 
-  // Strip HTML for content preview
   const contentPreview = entry?.content
     ? stripHtml(entry.content).slice(0, 200)
     : null;
 
+  const starLabel = entry?.starred
+    ? t("entry.remove_from_starred")
+    : t("entry.add_to_starred");
+
   return (
-    <AnimatePresence onExitComplete={reset}>
-      {isOpen && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.2 }}
-          className={MEDIA_OVERLAY_CLASSNAME}
-          onClick={handleOverlayClick}
+    <MediaCarouselOverlay
+      isOpen={isOpen}
+      images={images}
+      currentIndex={currentIndex}
+      initialIndex={initialIndex}
+      onClose={close}
+      onReset={reset}
+      onIndexChange={setIndex}
+      carouselContainerClassName="safe-area-x"
+      slideClassName="px-0 sm:px-2 lg:px-4"
+      topEndExtra={
+        <>
+          <button
+            type="button"
+            className={cn(
+              "flex size-10 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20",
+              entry?.starred &&
+                "bg-amber-500/20 text-amber-500 hover:bg-amber-500/30",
+            )}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleToggleStarred();
+            }}
+            title={starLabel}
+            aria-label={starLabel}
+          >
+            <Star
+              className="size-5"
+              fill={entry?.starred ? "currentColor" : "none"}
+            />
+          </button>
+          {entry?.url && (
+            <a
+              href={entry.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label={t("entry.open_original")}
+              className="flex size-10 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <ExternalLink className="size-5" />
+            </a>
+          )}
+        </>
+      }
+      singleImageOverlay={
+        isVideoThumbnail(entry?.thumbnailUrl) && entry?.url ? (
+          <a
+            href={entry.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={t("entry.open_original")}
+            className="absolute flex items-center justify-center transition-transform hover:scale-110"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Play className="size-20 fill-white text-white drop-shadow-lg" />
+          </a>
+        ) : null
+      }
+      bottomBar={
+        <div
+          className="absolute bottom-0 left-0 right-0 z-10 bg-gradient-to-t from-black/80 via-black/50 to-black/0 px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))] backdrop-blur-sm sm:bg-black/50 sm:px-6"
+          onClick={(e) => e.stopPropagation()}
         >
-          {/* Content container */}
-          <div className="flex min-h-0 flex-1 flex-col">
-            {/* Top right buttons */}
-            <div className={cn(MEDIA_OVERLAY_TOP_END_CLASSNAME, "flex gap-2")}>
-              {/* Star button */}
-              <button
-                type="button"
-                className={cn(
-                  "flex size-10 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20",
-                  entry?.starred &&
-                    "bg-amber-500/20 text-amber-500 hover:bg-amber-500/30",
-                )}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleToggleStarred();
-                }}
-                title={
-                  entry?.starred
-                    ? t("entry.remove_from_starred")
-                    : t("entry.add_to_starred")
-                }
-              >
-                <svg
-                  className="size-5"
-                  viewBox="0 0 24 24"
-                  fill={entry?.starred ? "currentColor" : "none"}
-                  stroke="currentColor"
-                  strokeWidth={2}
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"
-                  />
-                </svg>
-              </button>
-              {/* Open original page */}
-              {entry?.url && (
-                <a
-                  href={entry.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex size-10 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <svg
-                    className="size-5"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
-                    />
-                  </svg>
-                </a>
-              )}
-              {/* Close button */}
-              <button
-                type="button"
-                className="flex size-10 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
-                onClick={close}
-              >
-                <svg
-                  className="size-6"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                </svg>
-              </button>
-            </div>
-
-            {/* Image carousel */}
-            <div className="flex min-h-0 flex-1 items-center justify-center safe-area-x">
-              {images.length === 1 ? (
-                <motion.div
-                  initial={{ scale: 0.9, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  exit={{ scale: 0.9, opacity: 0 }}
-                  transition={{ duration: 0.2 }}
-                  className="relative flex size-full items-center justify-center"
-                >
-                  <img
-                    src={images[0]}
-                    alt=""
-                    className="max-h-full max-w-full object-contain"
-                  />
-                  {/* Video play overlay */}
-                  {isVideoThumbnail(entry?.thumbnailUrl) && entry?.url && (
-                    <a
-                      href={entry.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="absolute flex items-center justify-center transition-transform hover:scale-110"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <Play className="size-20 fill-white text-white drop-shadow-lg" />
-                    </a>
-                  )}
-                </motion.div>
+          <div className="mx-auto max-w-3xl">
+            <div className="mb-2 flex items-center gap-2 text-sm text-white/60">
+              {showIcon && feed?.iconPath ? (
+                <img
+                  src={`/icons/${feed.iconPath}`}
+                  alt=""
+                  className="size-4 shrink-0 rounded object-contain"
+                  onError={() => setFailedIconPath(feed.iconPath ?? null)}
+                />
               ) : (
-                <div
-                  ref={emblaRef}
-                  className="size-full min-h-0 overflow-hidden touch-none"
-                  onPointerDown={handleCarouselPointerDown}
-                  onClick={handleCarouselClick}
-                >
-                  <div className="flex size-full min-h-0 touch-none will-change-transform">
-                    {images.map((src, index) => (
-                      <div
-                        key={src}
-                        className="flex min-h-0 min-w-0 flex-[0_0_100%] items-center justify-center px-0 will-change-transform sm:px-2 lg:px-4"
-                      >
-                        <img
-                          src={src}
-                          alt=""
-                          className="max-h-full max-w-full object-contain"
-                          loading={
-                            Math.abs(index - currentIndex) <= 1
-                              ? "eager"
-                              : "lazy"
-                          }
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                <FeedIcon className="size-4 shrink-0" />
               )}
-
-              {/* Navigation arrows */}
+              <span>{feed?.title || t("entry.unknown_feed")}</span>
+              {publishedAt && (
+                <>
+                  <span>·</span>
+                  <span>{publishedAt}</span>
+                </>
+              )}
               {images.length > 1 && (
                 <>
-                  <button
-                    type="button"
-                    className={cn(
-                      "absolute left-4 top-1/2 z-10 flex size-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-white transition-colors",
-                      currentIndex === 0 ? "invisible" : "hover:bg-white/20",
-                    )}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      emblaApi?.scrollPrev();
-                    }}
-                    disabled={currentIndex === 0}
-                  >
-                    <svg
-                      className="size-6"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M15 19l-7-7 7-7"
-                      />
-                    </svg>
-                  </button>
-                  <button
-                    type="button"
-                    className={cn(
-                      "absolute right-4 top-1/2 z-10 flex size-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-white transition-colors",
-                      currentIndex === images.length - 1
-                        ? "invisible"
-                        : "hover:bg-white/20",
-                    )}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      emblaApi?.scrollNext();
-                    }}
-                    disabled={currentIndex === images.length - 1}
-                  >
-                    <svg
-                      className="size-6"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M9 5l7 7-7 7"
-                      />
-                    </svg>
-                  </button>
+                  <span>·</span>
+                  <span>
+                    {currentIndex + 1} / {images.length}
+                  </span>
                 </>
               )}
             </div>
 
-            {/* Bottom info bar */}
-            <div
-              className="absolute bottom-0 left-0 right-0 z-10 bg-gradient-to-t from-black/80 via-black/50 to-black/0 px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))] backdrop-blur-sm sm:bg-black/50 sm:px-6"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="mx-auto max-w-3xl">
-                {/* Source and time */}
-                <div className="mb-2 flex items-center gap-2 text-sm text-white/60">
-                  {showIcon ? (
-                    <img
-                      src={`/icons/${feed.iconPath}`}
-                      alt=""
-                      className="size-4 shrink-0 rounded object-contain"
-                      onError={() => setIconError(true)}
-                    />
-                  ) : (
-                    <FeedIcon className="size-4 shrink-0" />
-                  )}
-                  <span>{feed?.title || t("entry.unknown_feed")}</span>
-                  {publishedAt && (
-                    <>
-                      <span>·</span>
-                      <span>{publishedAt}</span>
-                    </>
-                  )}
-                  {images.length > 1 && (
-                    <>
-                      <span>·</span>
-                      <span>
-                        {currentIndex + 1} / {images.length}
-                      </span>
-                    </>
-                  )}
-                </div>
+            {entry?.title && (
+              <h2 className="mb-1 text-lg font-semibold text-white">
+                {entry.title}
+              </h2>
+            )}
 
-                {/* Title */}
-                {entry?.title && (
-                  <h2 className="mb-1 text-lg font-semibold text-white">
-                    {entry.title}
-                  </h2>
-                )}
-
-                {/* Content preview */}
-                {contentPreview && (
-                  <p className="line-clamp-2 text-sm text-white/70">
-                    {contentPreview}
-                  </p>
-                )}
-              </div>
-            </div>
+            {contentPreview && (
+              <p className="line-clamp-2 text-sm text-white/70">
+                {contentPreview}
+              </p>
+            )}
           </div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+        </div>
+      }
+    />
   );
 }

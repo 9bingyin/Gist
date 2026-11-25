@@ -33,25 +33,39 @@ function normalizeLanguage(lang: string): string {
   return aliases[lang.toLowerCase()] || lang.toLowerCase();
 }
 
-function createCopyButton(code: string): HTMLButtonElement {
+const COPY_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>`;
+const CHECK_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+
+function createCopyButton(
+  code: string,
+  activeTimers: Set<ReturnType<typeof setTimeout>>,
+): HTMLButtonElement {
   const button = document.createElement("button");
   button.className =
     "flex items-center justify-center p-1 bg-transparent text-muted-foreground rounded transition-colors hover:text-foreground hover:bg-foreground/10";
   button.type = "button";
   button.setAttribute("aria-label", "Copy code");
-  button.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>`;
+  button.innerHTML = COPY_ICON_SVG;
+
+  let resetTimer: ReturnType<typeof setTimeout> | null = null;
 
   button.addEventListener("click", async () => {
     try {
       await navigator.clipboard.writeText(code);
-      button.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+      button.innerHTML = CHECK_ICON_SVG;
       button.classList.add("!text-green-500");
-      setTimeout(() => {
-        button.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>`;
+      if (resetTimer) {
+        clearTimeout(resetTimer);
+        activeTimers.delete(resetTimer);
+      }
+      resetTimer = setTimeout(() => {
+        if (resetTimer) activeTimers.delete(resetTimer);
+        resetTimer = null;
+        button.innerHTML = COPY_ICON_SVG;
         button.classList.remove("!text-green-500");
       }, 2000);
+      activeTimers.add(resetTimer);
     } catch {
-      // Fallback for older browsers
       const textarea = document.createElement("textarea");
       textarea.value = code;
       textarea.style.position = "fixed";
@@ -78,6 +92,7 @@ export function useCodeHighlight(
     if (blocks.length === 0) return;
 
     let cancelled = false;
+    const activeTimers = new Set<ReturnType<typeof setTimeout>>();
 
     async function highlightBlocks() {
       const { highlightCode } = await getHighlightRuntime();
@@ -103,6 +118,7 @@ export function useCodeHighlight(
 
         try {
           const html = await highlightCode(code, lang);
+          if (cancelled) break;
 
           const temp = document.createElement("div");
           temp.innerHTML = html;
@@ -115,12 +131,10 @@ export function useCodeHighlight(
             }
             pre.className = `${pre.className} ${newPre.className}`.trim();
 
-            // Set data-language attribute for CSS targeting (rehype-pretty-code compatible)
             if (rawLang) {
               pre.dataset.language = rawLang;
             }
 
-            // Add header with language label and copy button
             if (!pre.querySelector("[data-code-header]")) {
               const header = document.createElement("div");
               header.className =
@@ -135,7 +149,7 @@ export function useCodeHighlight(
                 header.appendChild(langSpan);
               }
 
-              const copyBtn = createCopyButton(code);
+              const copyBtn = createCopyButton(code, activeTimers);
               header.appendChild(copyBtn);
 
               pre.insertBefore(header, pre.firstChild);
@@ -144,15 +158,20 @@ export function useCodeHighlight(
             pre.dataset.shikiHighlighted = "true";
           }
         } catch {
+          if (cancelled) break;
           pre.dataset.shikiHighlighted = "true";
         }
       }
     }
 
-    highlightBlocks();
+    void highlightBlocks();
 
     return () => {
       cancelled = true;
+      for (const timer of activeTimers) {
+        clearTimeout(timer);
+      }
+      activeTimers.clear();
     };
   }, [containerRef, content]);
 }

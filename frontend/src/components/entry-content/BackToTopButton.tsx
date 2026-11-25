@@ -1,4 +1,6 @@
 import { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
+import { ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface BackToTopButtonProps {
@@ -10,6 +12,7 @@ export function BackToTopButton({
   scrollNode,
   threshold = 300,
 }: BackToTopButtonProps) {
+  const { t } = useTranslation();
   const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
@@ -17,7 +20,6 @@ export function BackToTopButton({
       setIsVisible(scrollNode.scrollTop > threshold);
     };
 
-    // Initial check
     handleScroll();
 
     scrollNode.addEventListener("scroll", handleScroll, { passive: true });
@@ -32,6 +34,9 @@ export function BackToTopButton({
     <button
       type="button"
       onClick={handleClick}
+      tabIndex={isVisible ? 0 : -1}
+      aria-hidden={!isVisible}
+      aria-label={t("entry.back_to_top")}
       className={cn(
         "fixed bottom-6 right-6 z-30",
         "flex size-10 items-center justify-center rounded-full",
@@ -42,17 +47,8 @@ export function BackToTopButton({
           ? "opacity-100 translate-y-0"
           : "opacity-0 translate-y-4 pointer-events-none",
       )}
-      aria-label="Back to top"
     >
-      <svg
-        className="size-5"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={2}
-        viewBox="0 0 24 24"
-      >
-        <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
-      </svg>
+      <ChevronUp className="size-5" />
     </button>
   );
 }

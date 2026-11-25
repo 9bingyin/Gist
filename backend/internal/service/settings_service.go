@@ -4,13 +4,22 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net"
 	"net/url"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
 
 	"gist/backend/internal/repository"
 	"gist/backend/internal/service/ai"
 	"gist/backend/pkg/logger"
+	"gist/backend/pkg/network"
 )
+
+const proxyTestURL = "https://captive.apple.com/"
 
 // AISettings holds the AI configuration.
 type AISettings struct {
@@ -35,7 +44,7 @@ type GeneralSettings struct {
 // NetworkSettings holds network proxy configuration.
 type NetworkSettings struct {
 	Enabled  bool   `json:"enabled"`
-	Type     string `json:"type"` // http, socks5
+	Type     string `json:"type"` // http, https, socks5, socks5h
 	Host     string `json:"host"`
 	Port     int    `json:"port"`
 	Username string `json:"username"`
@@ -48,7 +57,7 @@ type AppearanceSettings struct {
 	ContentTypes []string `json:"contentTypes"`
 }
 
-// Setting keys
+// Setting keys.
 const (
 	keyAIProvider        = "ai.provider"
 	keyAIAPIKey          = "ai.api_key"
@@ -63,52 +72,53 @@ const (
 	keyFallbackUserAgent = "general.fallback_user_agent"
 	keyAutoReadability   = "general.auto_readability"
 	keyMarkReadOnScroll  = "general.mark_read_on_scroll"
-	keyNetworkEnabled    = "network.proxy_enabled"
-	keyNetworkType       = "network.proxy_type"
-	keyNetworkHost       = "network.proxy_host"
-	keyNetworkPort       = "network.proxy_port"
-	keyNetworkUsername   = "network.proxy_username"
-	keyNetworkPassword   = "network.proxy_password"
-	keyNetworkIPStack    = "network.ip_stack"
+
+	keyNetworkEnabled  = "network.proxy_enabled"
+	keyNetworkType     = "network.proxy_type"
+	keyNetworkHost     = "network.proxy_host"
+	keyNetworkPort     = "network.proxy_port"
+	keyNetworkUsername = "network.proxy_username"
+	keyNetworkPassword = "network.proxy_password"
+	keyNetworkIPStack  = "network.ip_stack"
 
 	keyAppearanceContentTypes = "appearance.content_types"
 )
 
+// AnubisCookieClearer clears cached and persisted Anubis cookies.
+type AnubisCookieClearer interface {
+	ClearAll(ctx context.Context) (int64, error)
+}
+
 // SettingsService provides settings management.
 type SettingsService interface {
-	// GetAISettings returns the AI configuration with masked API keys.
 	GetAISettings(ctx context.Context) (*AISettings, error)
-	// SetAISettings updates the AI configuration.
-	// If apiKey is empty string, it keeps the existing key.
 	SetAISettings(ctx context.Context, settings *AISettings) error
-	// TestAI tests the AI connection with the given configuration.
 	TestAI(ctx context.Context, provider, apiKey, baseURL, model string, requestOptions map[string]any) (string, error)
-	// GetGeneralSettings returns the general settings.
 	GetGeneralSettings(ctx context.Context) (*GeneralSettings, error)
-	// SetGeneralSettings updates the general settings.
 	SetGeneralSettings(ctx context.Context, settings *GeneralSettings) error
-	// GetFallbackUserAgent returns the fallback user agent if set.
 	GetFallbackUserAgent(ctx context.Context) string
-	// ClearAnubisCookies deletes all Anubis cookies from settings.
 	ClearAnubisCookies(ctx context.Context) (int64, error)
-	// GetNetworkSettings returns the network proxy configuration.
 	GetNetworkSettings(ctx context.Context) (*NetworkSettings, error)
-	// SetNetworkSettings updates the network proxy configuration.
 	SetNetworkSettings(ctx context.Context, settings *NetworkSettings) error
-	// GetProxyURL returns the formatted proxy URL (e.g., socks5://user:pass@host:port).
-	// Returns empty string if proxy is disabled.
+	TestNetworkProxy(ctx context.Context, settings *NetworkSettings) error
 	GetProxyURL(ctx context.Context) string
-	// GetIPStack returns the IP stack preference (default, ipv4, ipv6).
 	GetIPStack(ctx context.Context) string
-	// GetAppearanceSettings returns appearance settings.
 	GetAppearanceSettings(ctx context.Context) (*AppearanceSettings, error)
-	// SetAppearanceSettings updates appearance settings.
 	SetAppearanceSettings(ctx context.Context, settings *AppearanceSettings) error
+	SetClientFactory(factory *network.ClientFactory)
+	SetAnubisStore(clearer AnubisCookieClearer)
 }
 
 type settingsService struct {
-	repo        repository.SettingsRepository
-	rateLimiter *ai.RateLimiter
+	repo          repository.SettingsRepository
+	rateLimiter   *ai.RateLimiter
+	clientFactory *network.ClientFactory
+	anubisClearer AnubisCookieClearer
+
+	netMu          sync.RWMutex
+	netCacheLoaded bool
+	cachedProxyURL string
+	cachedIPStack  string
 }
 
 // NewSettingsService creates a new settings service.
@@ -116,104 +126,114 @@ func NewSettingsService(repo repository.SettingsRepository, rateLimiter *ai.Rate
 	return &settingsService{repo: repo, rateLimiter: rateLimiter}
 }
 
+func (s *settingsService) SetClientFactory(factory *network.ClientFactory) {
+	s.clientFactory = factory
+}
+
+func (s *settingsService) SetAnubisStore(clearer AnubisCookieClearer) {
+	s.anubisClearer = clearer
+}
+
+func (s *settingsService) getPrefixMap(ctx context.Context, prefix string) (map[string]string, error) {
+	items, err := s.repo.GetByPrefix(ctx, prefix)
+	if err != nil {
+		return nil, err
+	}
+	m := make(map[string]string, len(items))
+	for _, item := range items {
+		m[item.Key] = item.Value
+	}
+	return m, nil
+}
+
 // GetAISettings returns the AI configuration with masked API keys.
 func (s *settingsService) GetAISettings(ctx context.Context) (*AISettings, error) {
-	settings := &AISettings{
-		Provider:        ai.ProviderOpenAI, // default
-		SummaryLanguage: "zh-CN",           // default language
+	m, err := s.getPrefixMap(ctx, "ai.")
+	if err != nil {
+		return nil, fmt.Errorf("get ai settings: %w", err)
 	}
 
-	if val, err := s.getString(ctx, keyAIProvider); err == nil && val != "" {
+	settings := &AISettings{
+		Provider:        ai.ProviderOpenAI,
+		SummaryLanguage: "zh-CN",
+		RateLimit:       ai.DefaultRateLimit,
+	}
+
+	if val := m[keyAIProvider]; val != "" {
 		settings.Provider = val
 	}
-	if val, err := s.getString(ctx, keyAIAPIKey); err == nil && val != "" {
+	if val := m[keyAIAPIKey]; val != "" {
 		settings.APIKey = maskAPIKey(val)
 	}
-	if val, err := s.getString(ctx, keyAIBaseURL); err == nil {
-		settings.BaseURL = val
+	settings.BaseURL = m[keyAIBaseURL]
+	settings.Model = m[keyAIModel]
+
+	if rawOpts := m[keyAIRequestOptions]; rawOpts != "" {
+		var opts map[string]any
+		if err := json.Unmarshal([]byte(rawOpts), &opts); err != nil {
+			return nil, fmt.Errorf("unmarshal request options: %w", err)
+		}
+		settings.RequestOptions = opts
 	}
-	if val, err := s.getString(ctx, keyAIModel); err == nil {
-		settings.Model = val
-	}
-	if val, err := s.getRequestOptions(ctx); err != nil {
-		return nil, err
-	} else {
-		settings.RequestOptions = val
-	}
-	if val, err := s.getString(ctx, keyAISummaryLanguage); err == nil && val != "" {
+
+	if val := m[keyAISummaryLanguage]; val != "" {
 		settings.SummaryLanguage = val
 	}
-	settings.AutoTranslate = s.getBool(ctx, keyAIAutoTranslate)
-	settings.AutoSummary = s.getBool(ctx, keyAIAutoSummary)
-	if val, err := s.getInt(ctx, keyAIRateLimit); err == nil && val > 0 {
+	settings.AutoTranslate = m[keyAIAutoTranslate] == "true"
+	settings.AutoSummary = m[keyAIAutoSummary] == "true"
+	if val, err := strconv.Atoi(m[keyAIRateLimit]); err == nil && val > 0 {
 		settings.RateLimit = val
-	} else {
-		settings.RateLimit = ai.DefaultRateLimit
 	}
 
 	return settings, nil
 }
 
-// SetAISettings updates the AI configuration.
+// SetAISettings updates the AI configuration in a single transaction.
+// Passing the exact mask of the currently stored API key preserves the stored key;
+// passing an empty string clears it.
 func (s *settingsService) SetAISettings(ctx context.Context, settings *AISettings) error {
-	if settings.Provider != "" {
-		if err := s.repo.Set(ctx, keyAIProvider, settings.Provider); err != nil {
-			return fmt.Errorf("set provider: %w", err)
-		}
-	}
-	if err := s.setAPIKey(ctx, keyAIAPIKey, settings.APIKey); err != nil {
-		logger.Warn("ai settings update api key failed", "module", "service", "action", "update", "resource", "settings", "result", "failed", "error", err)
-		return fmt.Errorf("set api key: %w", err)
-	}
-	if err := s.repo.Set(ctx, keyAIBaseURL, settings.BaseURL); err != nil {
-		logger.Warn("ai settings update base url failed", "module", "service", "action", "update", "resource", "settings", "result", "failed", "error", err)
-		return fmt.Errorf("set base url: %w", err)
-	}
-	if err := s.repo.Set(ctx, keyAIModel, settings.Model); err != nil {
-		logger.Warn("ai settings update model failed", "module", "service", "action", "update", "resource", "settings", "result", "failed", "model", settings.Model, "error", err)
-		return fmt.Errorf("set model: %w", err)
-	}
 	requestOptions, err := json.Marshal(settings.RequestOptions)
 	if err != nil {
-		logger.Warn("ai settings marshal request options failed", "module", "service", "action", "update", "resource", "settings", "result", "failed", "error", err)
 		return fmt.Errorf("marshal request options: %w", err)
 	}
 	if string(requestOptions) == "null" {
 		requestOptions = []byte("{}")
 	}
-	if err := s.repo.Set(ctx, keyAIRequestOptions, string(requestOptions)); err != nil {
-		logger.Warn("ai settings update request options failed", "module", "service", "action", "update", "resource", "settings", "result", "failed", "error", err)
-		return fmt.Errorf("set request options: %w", err)
-	}
-	if err := s.repo.Set(ctx, keyAISummaryLanguage, settings.SummaryLanguage); err != nil {
-		logger.Warn("ai settings update summary language failed", "module", "service", "action", "update", "resource", "settings", "result", "failed", "error", err)
-		return fmt.Errorf("set summary language: %w", err)
-	}
-	autoTranslateVal := "false"
-	if settings.AutoTranslate {
-		autoTranslateVal = "true"
-	}
-	if err := s.repo.Set(ctx, keyAIAutoTranslate, autoTranslateVal); err != nil {
-		logger.Warn("ai settings update auto translate failed", "module", "service", "action", "update", "resource", "settings", "result", "failed", "error", err)
-		return fmt.Errorf("set auto translate: %w", err)
-	}
-	autoSummaryVal := "false"
-	if settings.AutoSummary {
-		autoSummaryVal = "true"
-	}
-	if err := s.repo.Set(ctx, keyAIAutoSummary, autoSummaryVal); err != nil {
-		logger.Warn("ai settings update auto summary failed", "module", "service", "action", "update", "resource", "settings", "result", "failed", "error", err)
-		return fmt.Errorf("set auto summary: %w", err)
-	}
-	// Set rate limit and update limiter
+
 	rateLimit := settings.RateLimit
 	if rateLimit <= 0 {
 		rateLimit = ai.DefaultRateLimit
 	}
-	if err := s.repo.Set(ctx, keyAIRateLimit, fmt.Sprintf("%d", rateLimit)); err != nil {
-		logger.Warn("ai settings update rate limit failed", "module", "service", "action", "update", "resource", "settings", "result", "failed", "error", err)
-		return fmt.Errorf("set rate limit: %w", err)
+
+	storedKey, err := s.getString(ctx, keyAIAPIKey)
+	if err != nil {
+		return fmt.Errorf("get stored api key: %w", err)
 	}
+
+	updates := map[string]string{
+		keyAIBaseURL:         settings.BaseURL,
+		keyAIModel:           settings.Model,
+		keyAIRequestOptions:  string(requestOptions),
+		keyAISummaryLanguage: settings.SummaryLanguage,
+		keyAIAutoTranslate:   strconv.FormatBool(settings.AutoTranslate),
+		keyAIAutoSummary:     strconv.FormatBool(settings.AutoSummary),
+		keyAIRateLimit:       strconv.Itoa(rateLimit),
+	}
+	if settings.Provider != "" {
+		updates[keyAIProvider] = settings.Provider
+	}
+
+	// Preserve existing secret only when the submitted value equals the exact mask of the stored secret.
+	// An empty string explicitly clears the secret.
+	if newKey, changed := resolveSecretUpdate(settings.APIKey, storedKey); changed {
+		updates[keyAIAPIKey] = newKey
+	}
+
+	if err := s.repo.SetMany(ctx, updates); err != nil {
+		logger.Warn("ai settings update failed", "module", "service", "action", "update", "resource", "settings", "result", "failed", "error", err)
+		return fmt.Errorf("set ai settings: %w", err)
+	}
+
 	if s.rateLimiter != nil {
 		s.rateLimiter.SetLimit(rateLimit)
 	}
@@ -221,17 +241,16 @@ func (s *settingsService) SetAISettings(ctx context.Context, settings *AISetting
 	return nil
 }
 
-// maskAPIKey returns a masked version of the API key for display.
-func maskAPIKey(apiKey string) string {
-	if apiKey == "" {
+// maskAPIKey returns a masked version of a secret for display.
+func maskAPIKey(secret string) string {
+	if secret == "" {
 		return ""
 	}
-	if len(apiKey) <= 8 {
+	if len(secret) <= 8 {
 		return "***"
 	}
-	// Find prefix (e.g., "sk-" for OpenAI)
 	prefixEnd := 0
-	for i, c := range apiKey {
+	for i, c := range secret {
 		if c == '-' {
 			prefixEnd = i + 1
 			break
@@ -240,32 +259,26 @@ func maskAPIKey(apiKey string) string {
 			break
 		}
 	}
-	prefix := apiKey[:prefixEnd]
-	suffix := apiKey[len(apiKey)-3:]
-	return prefix + "***" + suffix
+	return secret[:prefixEnd] + "***" + secret[len(secret)-3:]
 }
 
-// isMaskedKey checks if a string looks like a masked API key.
-func isMaskedKey(key string) bool {
-	if len(key) == 0 || len(key) >= 20 {
-		return false
+// resolveSecretUpdate checks whether submitted matches the exact mask of stored.
+// If so, the secret is unchanged (changed=false). Otherwise the submitted value
+// (including empty string to clear) is persisted (changed=true).
+func resolveSecretUpdate(submitted, stored string) (value string, changed bool) {
+	if stored != "" && submitted == maskAPIKey(stored) {
+		return stored, false
 	}
-	for i := 0; i <= len(key)-3; i++ {
-		if key[i:i+3] == "***" {
-			return true
-		}
-	}
-	return false
+	return submitted, true
 }
 
 // TestAI tests the AI connection with the given configuration.
 func (s *settingsService) TestAI(ctx context.Context, provider, apiKey, baseURL, model string, requestOptions map[string]any) (string, error) {
-	// If apiKey looks like a masked key, try to get the stored key
-	if isMaskedKey(apiKey) {
-		storedKey, err := s.getString(ctx, keyAIAPIKey)
-		if err != nil {
-			return "", fmt.Errorf("get stored api key: %w", err)
-		}
+	storedKey, err := s.getString(ctx, keyAIAPIKey)
+	if err != nil {
+		return "", fmt.Errorf("get stored api key: %w", err)
+	}
+	if storedKey != "" && apiKey == maskAPIKey(storedKey) {
 		apiKey = storedKey
 	}
 
@@ -275,6 +288,9 @@ func (s *settingsService) TestAI(ctx context.Context, provider, apiKey, baseURL,
 		BaseURL:        baseURL,
 		Model:          model,
 		RequestOptions: requestOptions,
+	}
+	if s.clientFactory != nil {
+		cfg.HTTPClient = s.clientFactory.NewHTTPClient(ctx, 30*time.Second)
 	}
 
 	p, err := ai.NewProvider(cfg)
@@ -293,7 +309,6 @@ func (s *settingsService) TestAI(ctx context.Context, provider, apiKey, baseURL,
 	return response, nil
 }
 
-// getString gets a plain string value from settings.
 func (s *settingsService) getString(ctx context.Context, key string) (string, error) {
 	setting, err := s.repo.Get(ctx, key)
 	if err != nil {
@@ -305,72 +320,25 @@ func (s *settingsService) getString(ctx context.Context, key string) (string, er
 	return setting.Value, nil
 }
 
-// getInt gets an integer value from settings.
-func (s *settingsService) getInt(ctx context.Context, key string) (int, error) {
-	val, err := s.getString(ctx, key)
-	if err != nil || val == "" {
-		return 0, err
-	}
-	var result int
-	_, err = fmt.Sscanf(val, "%d", &result)
-	return result, err
-}
-
-// getBool gets a boolean value from settings.
-func (s *settingsService) getBool(ctx context.Context, key string) bool {
-	val, err := s.getString(ctx, key)
-	return err == nil && val == "true"
-}
-
-func (s *settingsService) getRequestOptions(ctx context.Context) (map[string]any, error) {
-	val, err := s.getString(ctx, keyAIRequestOptions)
-	if err != nil || val == "" {
-		return nil, err
-	}
-
-	var options map[string]any
-	if err := json.Unmarshal([]byte(val), &options); err != nil {
-		return nil, fmt.Errorf("unmarshal request options: %w", err)
-	}
-	return options, nil
-}
-
-// setAPIKey sets an API key.
-// If the value is empty or looks like a masked key, it keeps the existing key.
-func (s *settingsService) setAPIKey(ctx context.Context, key, value string) error {
-	if value == "" || isMaskedKey(value) {
-		return nil
-	}
-	return s.repo.Set(ctx, key, value)
-}
-
 // GetGeneralSettings returns the general settings.
 func (s *settingsService) GetGeneralSettings(ctx context.Context) (*GeneralSettings, error) {
-	settings := &GeneralSettings{}
-
-	if val, err := s.getString(ctx, keyFallbackUserAgent); err == nil {
-		settings.FallbackUserAgent = val
+	m, err := s.getPrefixMap(ctx, "general.")
+	if err != nil {
+		return nil, fmt.Errorf("get general settings: %w", err)
 	}
-	settings.AutoReadability = s.getBool(ctx, keyAutoReadability)
-	settings.MarkReadOnScroll = s.getBool(ctx, keyMarkReadOnScroll)
-	return settings, nil
+	return &GeneralSettings{
+		FallbackUserAgent: m[keyFallbackUserAgent],
+		AutoReadability:   m[keyAutoReadability] == "true",
+		MarkReadOnScroll:  m[keyMarkReadOnScroll] == "true",
+	}, nil
 }
 
-// SetGeneralSettings updates the general settings.
+// SetGeneralSettings updates the general settings in a single transaction.
 func (s *settingsService) SetGeneralSettings(ctx context.Context, settings *GeneralSettings) error {
-	autoReadabilityVal := "false"
-	if settings.AutoReadability {
-		autoReadabilityVal = "true"
-	}
-	markReadOnScrollVal := "false"
-	if settings.MarkReadOnScroll {
-		markReadOnScrollVal = "true"
-	}
-
 	if err := s.repo.SetMany(ctx, map[string]string{
 		keyFallbackUserAgent: settings.FallbackUserAgent,
-		keyAutoReadability:   autoReadabilityVal,
-		keyMarkReadOnScroll:  markReadOnScrollVal,
+		keyAutoReadability:   strconv.FormatBool(settings.AutoReadability),
+		keyMarkReadOnScroll:  strconv.FormatBool(settings.MarkReadOnScroll),
 	}); err != nil {
 		logger.Warn("general settings update failed", "module", "service", "action", "update", "resource", "settings", "result", "failed", "error", err)
 		return fmt.Errorf("set general settings: %w", err)
@@ -380,18 +348,25 @@ func (s *settingsService) SetGeneralSettings(ctx context.Context, settings *Gene
 }
 
 // GetFallbackUserAgent returns the fallback user agent if set.
-// Returns empty string if disabled (user hasn't set one).
 func (s *settingsService) GetFallbackUserAgent(ctx context.Context) string {
 	val, err := s.getString(ctx, keyFallbackUserAgent)
-	if err != nil || val == "" {
+	if err != nil {
 		return ""
 	}
 	return val
 }
 
-// ClearAnubisCookies deletes all Anubis cookies from settings.
+// ClearAnubisCookies deletes all Anubis cookies from both in-memory cache and settings storage.
 func (s *settingsService) ClearAnubisCookies(ctx context.Context) (int64, error) {
-	deleted, err := s.repo.DeleteByPrefix(ctx, "anubis.cookie.")
+	var (
+		deleted int64
+		err     error
+	)
+	if s.anubisClearer != nil {
+		deleted, err = s.anubisClearer.ClearAll(ctx)
+	} else {
+		deleted, err = s.repo.DeleteByPrefix(ctx, "anubis.cookie.")
+	}
 	if err != nil {
 		logger.Warn("anubis cookies clear failed", "module", "service", "action", "clear", "resource", "settings", "result", "failed", "error", err)
 		return 0, err
@@ -400,155 +375,195 @@ func (s *settingsService) ClearAnubisCookies(ctx context.Context) (int64, error)
 	return deleted, nil
 }
 
-// GetNetworkSettings returns the network proxy configuration.
+// GetNetworkSettings returns the network proxy configuration with masked password.
 func (s *settingsService) GetNetworkSettings(ctx context.Context) (*NetworkSettings, error) {
-	settings := &NetworkSettings{
-		Type:    "http",    // default
-		IPStack: "default", // default
+	m, err := s.getPrefixMap(ctx, "network.")
+	if err != nil {
+		return nil, fmt.Errorf("get network settings: %w", err)
 	}
 
-	settings.Enabled = s.getBool(ctx, keyNetworkEnabled)
-	if val, err := s.getString(ctx, keyNetworkType); err == nil && val != "" {
+	settings := &NetworkSettings{
+		Enabled:  m[keyNetworkEnabled] == "true",
+		Type:     "http",
+		Host:     m[keyNetworkHost],
+		Username: m[keyNetworkUsername],
+		IPStack:  "default",
+	}
+	if val := m[keyNetworkType]; val != "" {
 		settings.Type = val
 	}
-	if val, err := s.getString(ctx, keyNetworkHost); err == nil {
-		settings.Host = val
+	if port, err := strconv.Atoi(m[keyNetworkPort]); err == nil && port > 0 {
+		settings.Port = port
 	}
-	if val, err := s.getInt(ctx, keyNetworkPort); err == nil && val > 0 {
-		settings.Port = val
-	}
-	if val, err := s.getString(ctx, keyNetworkUsername); err == nil {
-		settings.Username = val
-	}
-	if val, err := s.getString(ctx, keyNetworkPassword); err == nil && val != "" {
+	if val := m[keyNetworkPassword]; val != "" {
 		settings.Password = maskAPIKey(val)
 	}
-	if val, err := s.getString(ctx, keyNetworkIPStack); err == nil && val != "" {
+	if val := m[keyNetworkIPStack]; val != "" {
 		settings.IPStack = val
 	}
 
 	return settings, nil
 }
 
-// SetNetworkSettings updates the network proxy configuration.
+// SetNetworkSettings updates the network proxy configuration in a single transaction
+// and invalidates cached network transports.
 func (s *settingsService) SetNetworkSettings(ctx context.Context, settings *NetworkSettings) error {
-	enabledVal := "false"
-	if settings.Enabled {
-		enabledVal = "true"
-	}
-	if err := s.repo.Set(ctx, keyNetworkEnabled, enabledVal); err != nil {
-		logger.Warn("network settings update enabled failed", "module", "service", "action", "update", "resource", "settings", "result", "failed", "error", err)
-		return fmt.Errorf("set network enabled: %w", err)
+	storedPassword, err := s.getString(ctx, keyNetworkPassword)
+	if err != nil {
+		return fmt.Errorf("get stored proxy password: %w", err)
 	}
 
-	if settings.Type != "" {
-		if err := s.repo.Set(ctx, keyNetworkType, settings.Type); err != nil {
-			logger.Warn("network settings update type failed", "module", "service", "action", "update", "resource", "settings", "result", "failed", "error", err)
-			return fmt.Errorf("set network type: %w", err)
-		}
-	}
-
-	if err := s.repo.Set(ctx, keyNetworkHost, settings.Host); err != nil {
-		logger.Warn("network settings update host failed", "module", "service", "action", "update", "resource", "settings", "result", "failed", "error", err)
-		return fmt.Errorf("set network host: %w", err)
-	}
-
-	if err := s.repo.Set(ctx, keyNetworkPort, fmt.Sprintf("%d", settings.Port)); err != nil {
-		logger.Warn("network settings update port failed", "module", "service", "action", "update", "resource", "settings", "result", "failed", "error", err)
-		return fmt.Errorf("set network port: %w", err)
-	}
-
-	if err := s.repo.Set(ctx, keyNetworkUsername, settings.Username); err != nil {
-		logger.Warn("network settings update username failed", "module", "service", "action", "update", "resource", "settings", "result", "failed", "error", err)
-		return fmt.Errorf("set network username: %w", err)
-	}
-
-	// Only update password if it's not masked
-	if err := s.setAPIKey(ctx, keyNetworkPassword, settings.Password); err != nil {
-		logger.Warn("network settings update password failed", "module", "service", "action", "update", "resource", "settings", "result", "failed", "error", err)
-		return fmt.Errorf("set network password: %w", err)
-	}
-
-	// Set IP stack preference
 	ipStack := settings.IPStack
 	if ipStack == "" {
 		ipStack = "default"
 	}
-	if err := s.repo.Set(ctx, keyNetworkIPStack, ipStack); err != nil {
-		logger.Warn("network settings update ip stack failed", "module", "service", "action", "update", "resource", "settings", "result", "failed", "error", err)
-		return fmt.Errorf("set ip stack: %w", err)
+
+	updates := map[string]string{
+		keyNetworkEnabled:  strconv.FormatBool(settings.Enabled),
+		keyNetworkHost:     strings.TrimSpace(settings.Host),
+		keyNetworkPort:     strconv.Itoa(settings.Port),
+		keyNetworkUsername: settings.Username,
+		keyNetworkIPStack:  ipStack,
+	}
+	if settings.Type != "" {
+		updates[keyNetworkType] = strings.ToLower(strings.TrimSpace(settings.Type))
+	}
+	if newPwd, changed := resolveSecretUpdate(settings.Password, storedPassword); changed {
+		updates[keyNetworkPassword] = newPwd
+	}
+
+	if err := s.repo.SetMany(ctx, updates); err != nil {
+		logger.Warn("network settings update failed", "module", "service", "action", "update", "resource", "settings", "result", "failed", "error", err)
+		return fmt.Errorf("set network settings: %w", err)
+	}
+
+	s.invalidateNetworkCache()
+	if s.clientFactory != nil {
+		s.clientFactory.InvalidateTransports()
 	}
 
 	logger.Info("network settings updated", "module", "service", "action", "update", "resource", "settings", "result", "ok", "enabled", settings.Enabled, "type", settings.Type, "ip_stack", ipStack)
 	return nil
 }
 
-// GetIPStack returns the IP stack preference (default, ipv4, ipv6).
-func (s *settingsService) GetIPStack(ctx context.Context) string {
-	val, err := s.getString(ctx, keyNetworkIPStack)
-	if err != nil || val == "" {
-		return "default"
-	}
-	return val
-}
-
-// GetProxyURL returns the formatted proxy URL (e.g., socks5://user:pass@host:port).
-// Returns empty string if proxy is disabled or not configured.
-func (s *settingsService) GetProxyURL(ctx context.Context) string {
-	settings, err := s.repo.GetByPrefix(ctx, "network.")
-	if err != nil {
-		return ""
+// TestNetworkProxy safely builds the proxy URL (resolving masked saved passwords) and tests connectivity.
+func (s *settingsService) TestNetworkProxy(ctx context.Context, settings *NetworkSettings) error {
+	if !settings.Enabled {
+		return nil
 	}
 
-	// Build map for quick lookup
-	m := make(map[string]string, len(settings))
-	for _, setting := range settings {
-		m[setting.Key] = setting.Value
-	}
-
-	if m[keyNetworkEnabled] != "true" {
-		return ""
-	}
-
-	host := m[keyNetworkHost]
-	if host == "" {
-		return ""
-	}
-
-	var port int
-	if portStr := m[keyNetworkPort]; portStr != "" {
-		fmt.Sscanf(portStr, "%d", &port)
-	}
-	if port <= 0 {
-		return ""
-	}
-
-	proxyType := m[keyNetworkType]
+	proxyType := strings.ToLower(strings.TrimSpace(settings.Type))
 	if proxyType == "" {
 		proxyType = "http"
 	}
+	switch proxyType {
+	case "http", "https", "socks5", "socks5h":
+	default:
+		return fmt.Errorf("%w: unsupported proxy type %q", ErrInvalid, settings.Type)
+	}
 
-	username := m[keyNetworkUsername]
-	password := m[keyNetworkPassword]
+	host := strings.TrimSpace(settings.Host)
+	if host == "" {
+		return fmt.Errorf("%w: host is required", ErrInvalid)
+	}
+	if settings.Port <= 0 || settings.Port > 65535 {
+		return fmt.Errorf("%w: port must be between 1 and 65535", ErrInvalid)
+	}
 
+	password := settings.Password
+	if password != "" {
+		storedPassword, err := s.getString(ctx, keyNetworkPassword)
+		if err != nil {
+			return fmt.Errorf("get stored proxy password: %w", err)
+		}
+		if storedPassword != "" && password == maskAPIKey(storedPassword) {
+			password = storedPassword
+		}
+	}
+
+	proxyURL := buildProxyURL(proxyType, host, settings.Port, settings.Username, password)
+	if s.clientFactory == nil {
+		return errors.New("client factory is not initialized")
+	}
+	if err := s.clientFactory.TestProxyWithConfig(ctx, proxyURL, proxyTestURL); err != nil {
+		logger.Warn("network proxy test failed", "module", "service", "action", "test", "resource", "settings", "result", "failed", "type", proxyType, "host", host, "error", err)
+		return err
+	}
+	logger.Info("network proxy test ok", "module", "service", "action", "test", "resource", "settings", "result", "ok", "type", proxyType, "host", host)
+	return nil
+}
+
+func (s *settingsService) invalidateNetworkCache() {
+	s.netMu.Lock()
+	s.netCacheLoaded = false
+	s.cachedProxyURL = ""
+	s.cachedIPStack = ""
+	s.netMu.Unlock()
+}
+
+func (s *settingsService) loadNetworkCache(ctx context.Context) (proxyURL, ipStack string) {
+	s.netMu.RLock()
+	if s.netCacheLoaded {
+		p, ip := s.cachedProxyURL, s.cachedIPStack
+		s.netMu.RUnlock()
+		return p, ip
+	}
+	s.netMu.RUnlock()
+
+	m, err := s.getPrefixMap(ctx, "network.")
+	if err != nil {
+		return "", "default"
+	}
+
+	ipStack = m[keyNetworkIPStack]
+	if ipStack == "" {
+		ipStack = "default"
+	}
+
+	if m[keyNetworkEnabled] == "true" {
+		host := strings.TrimSpace(m[keyNetworkHost])
+		port, _ := strconv.Atoi(m[keyNetworkPort])
+		if host != "" && port > 0 && port <= 65535 {
+			proxyType := strings.ToLower(strings.TrimSpace(m[keyNetworkType]))
+			if proxyType == "" {
+				proxyType = "http"
+			}
+			proxyURL = buildProxyURL(proxyType, host, port, m[keyNetworkUsername], m[keyNetworkPassword])
+		}
+	}
+
+	s.netMu.Lock()
+	s.cachedProxyURL = proxyURL
+	s.cachedIPStack = ipStack
+	s.netCacheLoaded = true
+	s.netMu.Unlock()
+
+	return proxyURL, ipStack
+}
+
+// GetIPStack returns the IP stack preference (default, ipv4, ipv6).
+func (s *settingsService) GetIPStack(ctx context.Context) string {
+	_, ipStack := s.loadNetworkCache(ctx)
+	return ipStack
+}
+
+// GetProxyURL returns the formatted proxy URL or empty string if proxy is disabled.
+func (s *settingsService) GetProxyURL(ctx context.Context) string {
+	proxyURL, _ := s.loadNetworkCache(ctx)
+	return proxyURL
+}
+
+func buildProxyURL(scheme, host string, port int, username, password string) string {
+	u := &url.URL{
+		Scheme: scheme,
+		Host:   net.JoinHostPort(host, strconv.Itoa(port)),
+	}
 	if username != "" && password != "" {
-		return fmt.Sprintf("%s://%s:%s@%s:%d",
-			proxyType,
-			url.QueryEscape(username),
-			url.QueryEscape(password),
-			host,
-			port,
-		)
+		u.User = url.UserPassword(username, password)
+	} else if username != "" {
+		u.User = url.User(username)
 	}
-	if username != "" {
-		return fmt.Sprintf("%s://%s@%s:%d",
-			proxyType,
-			url.QueryEscape(username),
-			host,
-			port,
-		)
-	}
-	return fmt.Sprintf("%s://%s:%d", proxyType, host, port)
+	return u.String()
 }
 
 func (s *settingsService) GetAppearanceSettings(ctx context.Context) (*AppearanceSettings, error) {

@@ -1,101 +1,75 @@
-import { useCallback, useSyncExternalStore } from "react";
-
-interface CategoryState {
-  [categoryName: string]: boolean;
-}
+import { useCallback } from "react";
+import { create } from "zustand";
+import { persist } from "zustand/middleware";
 
 const STORAGE_KEY = "gist-category-state";
 
-function getStoredState(): CategoryState {
+interface CategoryStore {
+  openMap: Record<string, boolean>;
+  setOpen: (category: string, isOpen: boolean) => void;
+  toggle: (category: string) => void;
+}
+
+function readLegacyCategories(): Record<string, boolean> {
   if (typeof window === "undefined") return {};
   try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      return JSON.parse(stored);
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    if ("state" in parsed && typeof parsed.state === "object") {
+      return {};
     }
+    const result: Record<string, boolean> = {};
+    for (const [k, v] of Object.entries(parsed)) {
+      if (typeof v === "boolean") result[k] = v;
+    }
+    return result;
   } catch {
-    // ignore parse errors
-  }
-  return {};
-}
-
-let cachedState: CategoryState = getStoredState();
-const listeners = new Set<() => void>();
-
-function emitChange() {
-  for (const listener of listeners) {
-    listener();
+    return {};
   }
 }
 
-function subscribe(callback: () => void): () => void {
-  listeners.add(callback);
-  return () => listeners.delete(callback);
-}
-
-function getSnapshot(): CategoryState {
-  return cachedState;
-}
-
-function setCategoryState(category: string, isOpen: boolean): void {
-  cachedState = { ...cachedState, [category]: isOpen };
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(cachedState));
-  } catch {
-    // ignore storage errors
-  }
-  emitChange();
-}
-
-function toggleCategoryState(category: string): void {
-  const currentState = cachedState[category] ?? false;
-  setCategoryState(category, !currentState);
-}
+const useCategoryStore = create<CategoryStore>()(
+  persist(
+    (set) => ({
+      openMap: readLegacyCategories(),
+      setOpen: (category, isOpen) =>
+        set((state) => ({
+          openMap: { ...state.openMap, [category]: isOpen },
+        })),
+      toggle: (category) =>
+        set((state) => ({
+          openMap: {
+            ...state.openMap,
+            [category]: !(state.openMap[category] ?? false),
+          },
+        })),
+    }),
+    {
+      name: STORAGE_KEY,
+      partialize: (state) => ({ openMap: state.openMap }),
+    },
+  ),
+);
 
 export function useCategoryState(
   category: string,
   defaultOpen = false,
 ): [boolean, (isOpen: boolean) => void, () => void] {
-  const state = useSyncExternalStore(subscribe, getSnapshot, getStoredState);
-  const isOpen = state[category] ?? defaultOpen;
+  const isOpen = useCategoryStore(
+    (state) => state.openMap[category] ?? defaultOpen,
+  );
 
   const setOpen = useCallback(
     (open: boolean) => {
-      setCategoryState(category, open);
+      useCategoryStore.getState().setOpen(category, open);
     },
     [category],
   );
 
   const toggle = useCallback(() => {
-    toggleCategoryState(category);
+    useCategoryStore.getState().toggle(category);
   }, [category]);
 
   return [isOpen, setOpen, toggle];
-}
-
-export function useCategoryActions() {
-  const setAllCategories = useCallback(
-    (categories: string[], isOpen: boolean) => {
-      for (const category of categories) {
-        setCategoryState(category, isOpen);
-      }
-    },
-    [],
-  );
-
-  const expandAll = useCallback(
-    (categories: string[]) => {
-      setAllCategories(categories, true);
-    },
-    [setAllCategories],
-  );
-
-  const collapseAll = useCallback(
-    (categories: string[]) => {
-      setAllCategories(categories, false);
-    },
-    [setAllCategories],
-  );
-
-  return { expandAll, collapseAll, setAllCategories };
 }

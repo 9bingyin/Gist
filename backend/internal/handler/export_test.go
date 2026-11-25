@@ -1,5 +1,7 @@
 package handler
 
+import "gist/backend/internal/service"
+
 // Export for testing
 type SummarizeResponse = summarizeResponse
 type TranslateResponse = translateResponse
@@ -22,10 +24,10 @@ type ImportStartedResponse = importStartedResponse
 type ImportCancelledResponse = importCancelledResponse
 type AuthStatusResponse = authStatusResponse
 type AuthResponseDTO = authResponse
-type AISettingsResponse = aiSettingsResponse
+type AISettingsResponse = service.AISettings
 type NetworkTestResponse = networkTestResponse
-type GeneralSettingsResponse = generalSettingsResponse
-type AppearanceSettingsResponse = appearanceSettingsResponse
+type GeneralSettingsResponse = service.GeneralSettings
+type AppearanceSettingsResponse = service.AppearanceSettings
 type AITestResponse = aiTestResponse
 
 var NewFeedHandlerHelper = NewFeedHandler
@@ -41,4 +43,3 @@ var NewProxyHandlerHelper = NewProxyHandler
 
 var WriteServiceError = writeServiceError
 var IDPtrToString = idPtrToString
-var Itoa = itoa

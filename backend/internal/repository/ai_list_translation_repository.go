@@ -4,6 +4,8 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"fmt"
 	"time"
 
 	"gist/backend/internal/model"
@@ -14,7 +16,6 @@ type AIListTranslationRepository interface {
 	Get(ctx context.Context, entryID int64, language string) (*model.AIListTranslation, error)
 	GetBatch(ctx context.Context, entryIDs []int64, language string) (map[int64]*model.AIListTranslation, error)
 	Save(ctx context.Context, entryID int64, language, title, summary string) error
-	DeleteByEntryID(ctx context.Context, entryID int64) error
 	DeleteAll(ctx context.Context) (int64, error)
 }
 
@@ -38,58 +39,61 @@ func (r *aiListTranslationRepository) Get(ctx context.Context, entryID int64, la
 	var createdAt string
 
 	err := row.Scan(&t.ID, &t.EntryID, &t.Language, &t.Title, &t.Summary, &createdAt)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
 
-	t.CreatedAt, _ = parseTime(createdAt)
+	t.CreatedAt, err = parseTime(createdAt)
+	if err != nil {
+		return nil, fmt.Errorf("parse ai_list_translation created_at: %w", err)
+	}
 
 	return &t, nil
 }
 
 func (r *aiListTranslationRepository) GetBatch(ctx context.Context, entryIDs []int64, language string) (map[int64]*model.AIListTranslation, error) {
+	result := make(map[int64]*model.AIListTranslation)
 	if len(entryIDs) == 0 {
-		return make(map[int64]*model.AIListTranslation), nil
+		return result, nil
 	}
 
-	// Build query with placeholders
-	query := `SELECT id, entry_id, language, title, summary, created_at
-	          FROM ai_list_translations WHERE language = ? AND entry_id IN (`
-	args := make([]interface{}, 0, len(entryIDs)+1)
-	args = append(args, language)
-
-	for i, id := range entryIDs {
-		if i > 0 {
-			query += ","
+	err := chunkSlice(entryIDs, sqliteMaxBatchSize-1, func(chunk []int64) error {
+		args := make([]any, 0, len(chunk)+1)
+		args = append(args, language)
+		for _, id := range chunk {
+			args = append(args, id)
 		}
-		query += "?"
-		args = append(args, id)
-	}
-	query += ")"
 
-	rows, err := r.db.QueryContext(ctx, query, args...)
+		query := `SELECT id, entry_id, language, title, summary, created_at
+		          FROM ai_list_translations WHERE language = ? AND entry_id IN (` + placeholders(len(chunk)) + `)`
+
+		rows, err := r.db.QueryContext(ctx, query, args...)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var t model.AIListTranslation
+			var createdAt string
+			if err := rows.Scan(&t.ID, &t.EntryID, &t.Language, &t.Title, &t.Summary, &createdAt); err != nil {
+				return err
+			}
+			t.CreatedAt, err = parseTime(createdAt)
+			if err != nil {
+				return fmt.Errorf("parse ai_list_translation created_at: %w", err)
+			}
+			result[t.EntryID] = &t
+		}
+		return rows.Err()
+	})
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	result := make(map[int64]*model.AIListTranslation)
-	for rows.Next() {
-		var t model.AIListTranslation
-		var createdAt string
-
-		if err := rows.Scan(&t.ID, &t.EntryID, &t.Language, &t.Title, &t.Summary, &createdAt); err != nil {
-			return nil, err
-		}
-
-		t.CreatedAt, _ = parseTime(createdAt)
-		result[t.EntryID] = &t
-	}
-
-	return result, rows.Err()
+	return result, nil
 }
 
 func (r *aiListTranslationRepository) Save(ctx context.Context, entryID int64, language, title, summary string) error {
@@ -106,11 +110,6 @@ func (r *aiListTranslationRepository) Save(ctx context.Context, entryID int64, l
 		   created_at = excluded.created_at`,
 		id, entryID, language, title, summary, now,
 	)
-	return err
-}
-
-func (r *aiListTranslationRepository) DeleteByEntryID(ctx context.Context, entryID int64) error {
-	_, err := r.db.ExecContext(ctx, `DELETE FROM ai_list_translations WHERE entry_id = ?`, entryID)
 	return err
 }
 

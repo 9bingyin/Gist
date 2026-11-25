@@ -4,9 +4,11 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"strings"
 	"time"
 
+	"gist/backend/internal/hashutil"
 	"gist/backend/internal/model"
 	"gist/backend/internal/urlutil"
 	"gist/backend/pkg/snowflake"
@@ -39,8 +41,9 @@ type EntryRepository interface {
 	GetAllUnreadCounts(ctx context.Context) ([]UnreadCount, error)
 	GetStarredCount(ctx context.Context) (int, error)
 	CreateOrUpdate(ctx context.Context, entry model.Entry) error
+	CreateOrUpdateBatch(ctx context.Context, entries []model.Entry) error
+	GetExistingHashes(ctx context.Context, feedID int64, hashes []string) (map[string]struct{}, error)
 	ExistsByHash(ctx context.Context, feedID int64, hash string) (bool, error)
-	ExistsByLegacyURL(ctx context.Context, feedID int64, rawURL string, hash string) (bool, error)
 	ClearAllReadableContent(ctx context.Context) (int64, error)
 	DeleteUnstarred(ctx context.Context) (int64, error)
 }
@@ -64,7 +67,7 @@ func (r *entryRepository) GetByID(ctx context.Context, id int64) (model.Entry, e
 }
 
 func (r *entryRepository) List(ctx context.Context, filter EntryListFilter) ([]model.Entry, error) {
-	var args []interface{}
+	var args []any
 	query := `
 		SELECT e.id, e.feed_id, e.hash, e.title, e.url, e.content, e.readable_content, e.thumbnail_url, e.author,
 		       e.published_at, e.read, e.starred, e.created_at, e.updated_at
@@ -142,20 +145,11 @@ func (r *entryRepository) List(ctx context.Context, filter EntryListFilter) ([]m
 	return entries, nil
 }
 
-func boolToInt(value bool) int {
-	if value {
-		return 1
-	}
-	return 0
-}
-
 func (r *entryRepository) UpdateReadStatus(ctx context.Context, id int64, read bool) error {
-	readInt := boolToInt(read)
-
 	_, err := r.db.ExecContext(
 		ctx,
 		`UPDATE entries SET read = ?, updated_at = ? WHERE id = ?`,
-		readInt,
+		boolToInt(read),
 		formatTime(time.Now()),
 		id,
 	)
@@ -168,21 +162,24 @@ func (r *entryRepository) UpdateManyReadStatus(ctx context.Context, ids []int64,
 	}
 
 	readInt := boolToInt(read)
+	now := formatTime(time.Now())
 
-	args := make([]interface{}, 0, len(ids)+2)
-	args = append(args, readInt, formatTime(time.Now()))
-	placeholders := make([]string, len(ids))
-	for i, id := range ids {
-		placeholders[i] = "?"
-		args = append(args, id)
-	}
-
-	_, err := r.db.ExecContext(
-		ctx,
-		`UPDATE entries SET read = ?, updated_at = ? WHERE id IN (`+strings.Join(placeholders, ",")+")",
-		args...,
-	)
-	return err
+	return withTx(ctx, r.db, func(exec dbtx) error {
+		// Reserve 2 params for readInt and now.
+		return chunkSlice(ids, sqliteMaxBatchSize-2, func(chunk []int64) error {
+			args := make([]any, 0, len(chunk)+2)
+			args = append(args, readInt, now)
+			for _, id := range chunk {
+				args = append(args, id)
+			}
+			_, err := exec.ExecContext(
+				ctx,
+				`UPDATE entries SET read = ?, updated_at = ? WHERE id IN (`+placeholders(len(chunk))+`)`,
+				args...,
+			)
+			return err
+		})
+	})
 }
 
 func (r *entryRepository) MarkAllAsRead(ctx context.Context, feedID *int64, folderID *int64, contentType *string) error {
@@ -209,7 +206,6 @@ func (r *entryRepository) MarkAllAsRead(ctx context.Context, feedID *int64, fold
 		return err
 	}
 
-	// Mark all as read with optional content type filter
 	if contentType != nil {
 		_, err := r.db.ExecContext(
 			ctx,
@@ -221,7 +217,6 @@ func (r *entryRepository) MarkAllAsRead(ctx context.Context, feedID *int64, fold
 		return err
 	}
 
-	// Mark all as read without filter
 	_, err := r.db.ExecContext(
 		ctx,
 		`UPDATE entries SET read = 1, updated_at = ? WHERE read = 0`,
@@ -256,12 +251,7 @@ func (r *entryRepository) GetAllUnreadCounts(ctx context.Context) ([]UnreadCount
 	return counts, nil
 }
 
-// entryScanner is an interface for scanning entry rows.
-type entryScanner interface {
-	Scan(dest ...interface{}) error
-}
-
-func scanEntry(s entryScanner) (model.Entry, error) {
+func scanEntry(s rowScanner) (model.Entry, error) {
 	var e model.Entry
 	var publishedAt sql.NullString
 	var createdAt, updatedAt string
@@ -277,68 +267,76 @@ func scanEntry(s entryScanner) (model.Entry, error) {
 
 	e.Read = readInt == 1
 	e.Starred = starredInt == 1
-	if publishedAt.Valid {
-		e.PublishedAt = parseTimePtr(publishedAt.String)
+	if publishedAt.Valid && publishedAt.String != "" {
+		t, err := parseTime(publishedAt.String)
+		if err != nil {
+			return model.Entry{}, fmt.Errorf("parse entry published_at: %w", err)
+		}
+		e.PublishedAt = &t
 	}
-	e.CreatedAt, _ = parseTime(createdAt)
-	e.UpdatedAt, _ = parseTime(updatedAt)
+	e.CreatedAt, err = parseTime(createdAt)
+	if err != nil {
+		return model.Entry{}, fmt.Errorf("parse entry created_at: %w", err)
+	}
+	e.UpdatedAt, err = parseTime(updatedAt)
+	if err != nil {
+		return model.Entry{}, fmt.Errorf("parse entry updated_at: %w", err)
+	}
 
 	return e, nil
 }
 
-func parseTimePtr(s string) *time.Time {
-	if s == "" {
-		return nil
-	}
-	t, _ := parseTime(s)
-	return &t
-}
+const upsertEntrySQL = `INSERT INTO entries (id, feed_id, hash, title, url, content, thumbnail_url, author, published_at, read, created_at, updated_at)
+ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+ ON CONFLICT(feed_id, hash) DO UPDATE SET
+   title = excluded.title,
+   url = excluded.url,
+   content = excluded.content,
+   thumbnail_url = excluded.thumbnail_url,
+   author = excluded.author,
+   published_at = COALESCE(entries.published_at, excluded.published_at),
+   updated_at = excluded.updated_at`
+
+const upgradeLegacyEntrySQL = `UPDATE entries
+ SET hash = ?,
+     title = ?,
+     url = ?,
+     content = ?,
+     thumbnail_url = ?,
+     author = ?,
+     published_at = COALESCE(published_at, ?),
+     updated_at = ?
+ WHERE id = ?`
 
 func (r *entryRepository) CreateOrUpdate(ctx context.Context, entry model.Entry) error {
-	id := snowflake.NextID()
 	now := formatTime(time.Now())
+	return withTx(ctx, r.db, func(exec dbtx) error {
+		var publishedAt any
+		if entry.PublishedAt != nil {
+			publishedAt = formatTime(*entry.PublishedAt)
+		}
 
-	var publishedAt interface{}
-	if entry.PublishedAt != nil {
-		publishedAt = formatTime(*entry.PublishedAt)
-	}
+		if entry.URL != nil && strings.TrimSpace(*entry.URL) != "" {
+			exists, err := hashExistsOnExec(ctx, exec, entry.FeedID, entry.Hash)
+			if err != nil {
+				return err
+			}
+			if !exists {
+				upgraded, err := tryUpgradeLegacyURLHash(ctx, exec, entry, publishedAt, now)
+				if err != nil {
+					return err
+				}
+				if upgraded {
+					return nil
+				}
+			}
+		}
 
-	// Compatibility path:
-	// legacy databases might still carry URL-derived hashes after migration.
-	// If we receive the same URL with a new GUID-derived hash, upgrade that row in place
-	// so the first refresh after migration doesn't create duplicates.
-	if entry.URL != nil && *entry.URL != "" && entry.Hash != "" {
-		normalizedURL := urlutil.StripFragment(*entry.URL)
-		result, err := r.db.ExecContext(
+		_, err := exec.ExecContext(
 			ctx,
-			`UPDATE entries SET
-			   hash = ?,
-			   title = ?,
-			   url = ?,
-			   content = ?,
-			   thumbnail_url = ?,
-			   author = ?,
-			   published_at = COALESCE(entries.published_at, ?),
-			   updated_at = ?
-			 WHERE id = (
-			   SELECT id
-			   FROM entries
-			   WHERE feed_id = ?
-			     AND hash <> ?
-			     AND (
-			       url = ?
-			       OR (CASE WHEN instr(url, '#') > 0 THEN substr(url, 1, instr(url, '#') - 1) ELSE url END) = ?
-			     )
-			   ORDER BY updated_at DESC, id DESC
-			   LIMIT 1
-			 )
-			   AND NOT EXISTS (
-			     SELECT 1
-			     FROM entries e2
-			     WHERE e2.feed_id = ?
-			       AND e2.hash = ?
-			       AND e2.id <> entries.id
-			   )`,
+			upsertEntrySQL,
+			snowflake.NextID(),
+			entry.FeedID,
 			entry.Hash,
 			entry.Title,
 			entry.URL,
@@ -347,35 +345,203 @@ func (r *entryRepository) CreateOrUpdate(ctx context.Context, entry model.Entry)
 			entry.Author,
 			publishedAt,
 			now,
-			entry.FeedID,
-			entry.Hash,
-			entry.URL,
-			normalizedURL,
-			entry.FeedID,
-			entry.Hash,
+			now,
 		)
+		return err
+	})
+}
+
+// CreateOrUpdateBatch upserts all entries inside a single transaction using a prepared statement,
+// upgrading legacy URL-hashed rows in place when their GUID hash does not exist yet.
+func (r *entryRepository) CreateOrUpdateBatch(ctx context.Context, entries []model.Entry) error {
+	if len(entries) == 0 {
+		return nil
+	}
+
+	now := formatTime(time.Now())
+	return withTx(ctx, r.db, func(exec dbtx) error {
+		existingByFeed, err := loadExistingHashesByFeed(ctx, exec, entries)
 		if err != nil {
 			return err
 		}
-		if affected, err := result.RowsAffected(); err == nil && affected > 0 {
-			return nil
+
+		type preparer interface {
+			PrepareContext(ctx context.Context, query string) (*sql.Stmt, error)
+		}
+		var stmt *sql.Stmt
+		if p, ok := exec.(preparer); ok {
+			stmt, err = p.PrepareContext(ctx, upsertEntrySQL)
+			if err != nil {
+				return err
+			}
+			defer stmt.Close()
+		}
+
+		for _, entry := range entries {
+			var publishedAt any
+			if entry.PublishedAt != nil {
+				publishedAt = formatTime(*entry.PublishedAt)
+			}
+
+			feedHashes := existingByFeed[entry.FeedID]
+			if feedHashes == nil {
+				feedHashes = make(map[string]struct{})
+				existingByFeed[entry.FeedID] = feedHashes
+			}
+
+			if _, exists := feedHashes[entry.Hash]; !exists && entry.URL != nil && strings.TrimSpace(*entry.URL) != "" {
+				upgraded, err := tryUpgradeLegacyURLHash(ctx, exec, entry, publishedAt, now)
+				if err != nil {
+					return err
+				}
+				if upgraded {
+					feedHashes[entry.Hash] = struct{}{}
+					continue
+				}
+			}
+
+			args := []any{
+				snowflake.NextID(),
+				entry.FeedID,
+				entry.Hash,
+				entry.Title,
+				entry.URL,
+				entry.Content,
+				entry.ThumbnailURL,
+				entry.Author,
+				publishedAt,
+				now,
+				now,
+			}
+			if stmt != nil {
+				if _, err := stmt.ExecContext(ctx, args...); err != nil {
+					return err
+				}
+			} else {
+				if _, err := exec.ExecContext(ctx, upsertEntrySQL, args...); err != nil {
+					return err
+				}
+			}
+			feedHashes[entry.Hash] = struct{}{}
+		}
+		return nil
+	})
+}
+
+func hashExistsOnExec(ctx context.Context, exec dbtx, feedID int64, hash string) (bool, error) {
+	var exists int
+	err := exec.QueryRowContext(
+		ctx,
+		`SELECT 1 FROM entries WHERE feed_id = ? AND hash = ? LIMIT 1`,
+		feedID, hash,
+	).Scan(&exists)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func loadExistingHashesByFeed(ctx context.Context, exec dbtx, entries []model.Entry) (map[int64]map[string]struct{}, error) {
+	byFeed := make(map[int64][]string)
+	seen := make(map[int64]map[string]struct{})
+	for _, entry := range entries {
+		if seen[entry.FeedID] == nil {
+			seen[entry.FeedID] = make(map[string]struct{})
+		}
+		if _, dup := seen[entry.FeedID][entry.Hash]; !dup {
+			seen[entry.FeedID][entry.Hash] = struct{}{}
+			byFeed[entry.FeedID] = append(byFeed[entry.FeedID], entry.Hash)
 		}
 	}
 
-	_, err := r.db.ExecContext(
+	existing := make(map[int64]map[string]struct{}, len(byFeed))
+	for feedID, hashes := range byFeed {
+		feedSet := make(map[string]struct{})
+		err := chunkSlice(hashes, sqliteMaxBatchSize-1, func(chunk []string) error {
+			args := make([]any, 0, len(chunk)+1)
+			args = append(args, feedID)
+			for _, h := range chunk {
+				args = append(args, h)
+			}
+			rows, err := exec.QueryContext(
+				ctx,
+				`SELECT hash FROM entries WHERE feed_id = ? AND hash IN (`+placeholders(len(chunk))+`)`,
+				args...,
+			)
+			if err != nil {
+				return err
+			}
+			defer rows.Close()
+			for rows.Next() {
+				var h string
+				if err := rows.Scan(&h); err != nil {
+					return err
+				}
+				feedSet[h] = struct{}{}
+			}
+			return rows.Err()
+		})
+		if err != nil {
+			return nil, err
+		}
+		existing[feedID] = feedSet
+	}
+	return existing, nil
+}
+
+func isLegacyURLHash(storedHash, storedURL string) bool {
+	trimmed := strings.TrimSpace(storedURL)
+	if trimmed == "" {
+		return false
+	}
+	if storedHash == hashutil.SHA256Hex(trimmed) {
+		return true
+	}
+	stripped := urlutil.StripFragment(trimmed)
+	return stripped != trimmed && storedHash == hashutil.SHA256Hex(stripped)
+}
+
+const (
+	legacyExactLookupSQL = `SELECT id, hash, url FROM entries WHERE feed_id = ? AND url = ? ORDER BY id ASC`
+	legacyRangeLookupSQL = `SELECT id, hash, url FROM entries WHERE feed_id = ? AND url >= ? AND url < ?`
+)
+
+// tryUpgradeLegacyURLHash looks up legacy URL-hashed rows via idx_entries_feed_url_lookup
+// using separate exact and range queries (avoiding mixed-OR planner fallback) and updates
+// the matching row in place to preserve its ID, read/starred flags, and caches.
+func tryUpgradeLegacyURLHash(ctx context.Context, exec dbtx, entry model.Entry, publishedAt any, now string) (bool, error) {
+	rawURL := strings.TrimSpace(*entry.URL)
+	if rawURL == "" {
+		return false, nil
+	}
+	baseURL := urlutil.StripFragment(rawURL)
+
+	targetID, err := findLegacyCandidateID(ctx, exec, entry.FeedID, entry.Hash, legacyExactLookupSQL, entry.FeedID, rawURL)
+	if err != nil {
+		return false, err
+	}
+	if targetID == 0 && rawURL != baseURL {
+		targetID, err = findLegacyCandidateID(ctx, exec, entry.FeedID, entry.Hash, legacyExactLookupSQL, entry.FeedID, baseURL)
+		if err != nil {
+			return false, err
+		}
+	}
+	if targetID == 0 {
+		targetID, err = findLegacyCandidateID(ctx, exec, entry.FeedID, entry.Hash, legacyRangeLookupSQL, entry.FeedID, baseURL+"#", baseURL+"$")
+		if err != nil {
+			return false, err
+		}
+	}
+	if targetID == 0 {
+		return false, nil
+	}
+
+	_, err = exec.ExecContext(
 		ctx,
-		`INSERT INTO entries (id, feed_id, hash, title, url, content, thumbnail_url, author, published_at, read, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
-		 ON CONFLICT(feed_id, hash) DO UPDATE SET
-		   title = excluded.title,
-		   url = excluded.url,
-		   content = excluded.content,
-		   thumbnail_url = excluded.thumbnail_url,
-		   author = excluded.author,
-		   published_at = COALESCE(entries.published_at, excluded.published_at),
-		   updated_at = excluded.updated_at`,
-		id,
-		entry.FeedID,
+		upgradeLegacyEntrySQL,
 		entry.Hash,
 		entry.Title,
 		entry.URL,
@@ -384,9 +550,82 @@ func (r *entryRepository) CreateOrUpdate(ctx context.Context, entry model.Entry)
 		entry.Author,
 		publishedAt,
 		now,
-		now,
+		targetID,
 	)
-	return err
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func findLegacyCandidateID(ctx context.Context, exec dbtx, _ int64, targetHash, query string, args ...any) (int64, error) {
+	rows, err := exec.QueryContext(ctx, query, args...)
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+
+	var minID int64
+	for rows.Next() {
+		var (
+			id         int64
+			storedHash string
+			storedURL  sql.NullString
+		)
+		if err := rows.Scan(&id, &storedHash, &storedURL); err != nil {
+			return 0, err
+		}
+		if storedHash == targetHash || !storedURL.Valid {
+			continue
+		}
+		if isLegacyURLHash(storedHash, storedURL.String) {
+			if minID == 0 || id < minID {
+				minID = id
+			}
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+	return minID, nil
+}
+
+// GetExistingHashes returns the subset of hashes that already exist for feedID.
+func (r *entryRepository) GetExistingHashes(ctx context.Context, feedID int64, hashes []string) (map[string]struct{}, error) {
+	result := make(map[string]struct{})
+	if len(hashes) == 0 {
+		return result, nil
+	}
+
+	err := chunkSlice(hashes, sqliteMaxBatchSize-1, func(chunk []string) error {
+		args := make([]any, 0, len(chunk)+1)
+		args = append(args, feedID)
+		for _, h := range chunk {
+			args = append(args, h)
+		}
+		rows, err := r.db.QueryContext(
+			ctx,
+			`SELECT hash FROM entries WHERE feed_id = ? AND hash IN (`+placeholders(len(chunk))+`)`,
+			args...,
+		)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var h string
+			if err := rows.Scan(&h); err != nil {
+				return err
+			}
+			result[h] = struct{}{}
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
 func (r *entryRepository) ExistsByHash(ctx context.Context, feedID int64, hash string) (bool, error) {
@@ -396,34 +635,6 @@ func (r *entryRepository) ExistsByHash(ctx context.Context, feedID int64, hash s
 		`SELECT COUNT(*) FROM entries WHERE feed_id = ? AND hash = ?`,
 		feedID,
 		hash,
-	).Scan(&count)
-	if err != nil {
-		return false, err
-	}
-	return count > 0, nil
-}
-
-func (r *entryRepository) ExistsByLegacyURL(ctx context.Context, feedID int64, rawURL string, hash string) (bool, error) {
-	trimmedURL := strings.TrimSpace(rawURL)
-	if trimmedURL == "" {
-		return false, nil
-	}
-	normalizedURL := urlutil.StripFragment(trimmedURL)
-
-	var count int
-	err := r.db.QueryRowContext(
-		ctx,
-		`SELECT COUNT(*) FROM entries
-		 WHERE feed_id = ?
-		   AND hash <> ?
-		   AND (
-		     url = ?
-		     OR (CASE WHEN instr(url, '#') > 0 THEN substr(url, 1, instr(url, '#') - 1) ELSE url END) = ?
-		   )`,
-		feedID,
-		hash,
-		trimmedURL,
-		normalizedURL,
 	).Scan(&count)
 	if err != nil {
 		return false, err
@@ -443,15 +654,10 @@ func (r *entryRepository) UpdateReadableContent(ctx context.Context, id int64, c
 }
 
 func (r *entryRepository) UpdateStarredStatus(ctx context.Context, id int64, starred bool) error {
-	starredInt := 0
-	if starred {
-		starredInt = 1
-	}
-
 	_, err := r.db.ExecContext(
 		ctx,
 		`UPDATE entries SET starred = ?, updated_at = ? WHERE id = ?`,
-		starredInt,
+		boolToInt(starred),
 		formatTime(time.Now()),
 		id,
 	)

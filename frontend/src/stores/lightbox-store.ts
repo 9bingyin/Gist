@@ -3,10 +3,12 @@ import type { Entry, Feed } from "@/types/api";
 
 interface LightboxState {
   isOpen: boolean;
+  entryId: string | null;
   entry: Entry | null;
   feed: Feed | null;
   images: string[];
   currentIndex: number;
+  initialIndex: number;
 
   open: (
     entry: Entry,
@@ -24,10 +26,12 @@ interface LightboxState {
 
 const initialState = {
   isOpen: false,
-  entry: null,
-  feed: null,
+  entryId: null as string | null,
+  entry: null as Entry | null,
+  feed: null as Feed | null,
   images: [] as string[],
   currentIndex: 0,
+  initialIndex: 0,
 };
 
 export const useLightboxStore = create<LightboxState>((set, get) => ({
@@ -36,10 +40,12 @@ export const useLightboxStore = create<LightboxState>((set, get) => ({
   open: (entry, feed, images, startIndex = 0) => {
     set({
       isOpen: true,
+      entryId: entry.id,
       entry,
       feed: feed ?? null,
       images,
       currentIndex: startIndex,
+      initialIndex: startIndex,
     });
   },
 

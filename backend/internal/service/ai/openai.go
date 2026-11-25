@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"net/http"
 	"strings"
 
 	"github.com/openai/openai-go/v3"
@@ -18,20 +19,22 @@ type OpenAIProvider struct {
 }
 
 // NewOpenAIProvider creates a new OpenAI provider.
-func NewOpenAIProvider(apiKey, baseURL, model string, requestOptions map[string]any) (*OpenAIProvider, error) {
+func NewOpenAIProvider(apiKey, baseURL, model string, requestOptions map[string]any, httpClient *http.Client) *OpenAIProvider {
 	opts := []option.RequestOption{
 		option.WithAPIKey(apiKey),
 	}
 	if baseURL != "" {
 		opts = append(opts, option.WithBaseURL(baseURL))
 	}
+	if httpClient != nil {
+		opts = append(opts, option.WithHTTPClient(httpClient))
+	}
 
-	client := openai.NewClient(opts...)
 	return &OpenAIProvider{
-		client:         client,
+		client:         openai.NewClient(opts...),
 		model:          model,
 		requestOptions: requestOptions,
-	}, nil
+	}
 }
 
 // Test sends a test message and returns the response.
@@ -52,11 +55,6 @@ func (p *OpenAIProvider) Test(ctx context.Context) (string, error) {
 		return "", err
 	}
 
-	if len(resp.Output) == 0 {
-		return "", nil
-	}
-
-	// Extract text from first output item
 	for _, item := range resp.Output {
 		if item.Type == "message" {
 			msg := item.AsMessage()
@@ -76,14 +74,12 @@ func (p *OpenAIProvider) Name() string {
 	return ProviderOpenAI
 }
 
-// SummarizeStream generates a summary using streaming.
-func (p *OpenAIProvider) SummarizeStream(ctx context.Context, systemPrompt, content string) (<-chan string, <-chan error) {
-	textCh := make(chan string)
-	errCh := make(chan error, 1)
+// SummarizeStream generates a summary using a single ordered event channel.
+func (p *OpenAIProvider) SummarizeStream(ctx context.Context, systemPrompt, content string) <-chan TextStreamEvent {
+	ch := make(chan TextStreamEvent, 16)
 
 	go func() {
-		defer close(textCh)
-		defer close(errCh)
+		defer close(ch)
 
 		params := responses.ResponseNewParams{
 			Model: shared.ResponsesModel(p.model),
@@ -105,27 +101,24 @@ func (p *OpenAIProvider) SummarizeStream(ctx context.Context, systemPrompt, cont
 
 		for stream.Next() {
 			event := stream.Current()
-			// Extract text from response.output_text.delta events
-			if event.Type == "response.output_text.delta" {
-				if event.Delta != "" {
-					select {
-					case textCh <- event.Delta:
-					case <-ctx.Done():
-						return
-					}
+			if event.Type == "response.output_text.delta" && event.Delta != "" {
+				select {
+				case ch <- TextStreamEvent{Text: event.Delta}:
+				case <-ctx.Done():
+					return
 				}
 			}
 		}
 
 		if err := stream.Err(); err != nil {
 			select {
-			case errCh <- err:
-			default:
+			case ch <- TextStreamEvent{Err: err}:
+			case <-ctx.Done():
 			}
 		}
 	}()
 
-	return textCh, errCh
+	return ch
 }
 
 // Complete generates a response without streaming.
@@ -150,11 +143,6 @@ func (p *OpenAIProvider) Complete(ctx context.Context, systemPrompt, content str
 		return "", err
 	}
 
-	if len(resp.Output) == 0 {
-		return "", nil
-	}
-
-	// Extract text from output items
 	var result strings.Builder
 	for _, item := range resp.Output {
 		if item.Type == "message" {

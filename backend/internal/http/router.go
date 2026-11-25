@@ -11,55 +11,59 @@ import (
 	"gist/backend/pkg/logger"
 )
 
-func NewRouter(
-	folderHandler *handler.FolderHandler,
-	feedHandler *handler.FeedHandler,
-	entryHandler *handler.EntryHandler,
-	opmlHandler *handler.OPMLHandler,
-	iconHandler *handler.IconHandler,
-	proxyHandler *handler.ProxyHandler,
-	settingsHandler *handler.SettingsHandler,
-	aiHandler *handler.AIHandler,
-	authHandler *handler.AuthHandler,
-	domainRateLimitHandler *handler.DomainRateLimitHandler,
-	authService service.AuthService,
-	staticDir string,
-	enableSwagger bool,
-) *echo.Echo {
+// RouterDeps bundles all dependencies required to construct the HTTP router.
+type RouterDeps struct {
+	FolderHandler          *handler.FolderHandler
+	FeedHandler            *handler.FeedHandler
+	EntryHandler           *handler.EntryHandler
+	OPMLHandler            *handler.OPMLHandler
+	IconHandler            *handler.IconHandler
+	ProxyHandler           *handler.ProxyHandler
+	SettingsHandler        *handler.SettingsHandler
+	AIHandler              *handler.AIHandler
+	AuthHandler            *handler.AuthHandler
+	DomainRateLimitHandler *handler.DomainRateLimitHandler
+	AuthService            service.AuthService
+	StaticDir              string
+	EnableSwagger          bool
+}
+
+func NewRouter(deps RouterDeps) *echo.Echo {
 	e := echo.New()
 	e.HideBanner = true
-	e.Use(middleware.Recover())
+	// Register logger before Recover so panics caught by Recover are logged with status 500.
 	e.Use(RequestLoggerMiddleware())
+	e.Use(middleware.Recover())
 
-	logger.Info("router initialized", "module", "http", "action", "request", "resource", "http", "result", "ok", "static_dir", staticDir)
+	logger.Info("router initialized", "module", "http", "action", "request", "resource", "http", "result", "ok", "static_dir", deps.StaticDir)
 
-	if enableSwagger {
+	if deps.EnableSwagger {
 		e.GET("/swagger/*", echoSwagger.WrapHandler)
 	}
 
 	// Public API routes (no auth required)
 	publicAPI := e.Group("/api")
-	authHandler.RegisterPublicRoutes(publicAPI)
+	deps.AuthHandler.RegisterPublicRoutes(publicAPI)
 
 	// Protected API routes (auth required)
 	api := e.Group("/api")
-	api.Use(JWTAuthMiddleware(authService))
+	api.Use(JWTAuthMiddleware(deps.AuthService))
 
-	folderHandler.RegisterRoutes(api)
-	feedHandler.RegisterRoutes(api)
-	entryHandler.RegisterRoutes(api)
-	opmlHandler.RegisterRoutes(api)
-	proxyHandler.RegisterRoutes(api)
-	settingsHandler.RegisterRoutes(api)
-	aiHandler.RegisterRoutes(api)
-	iconHandler.RegisterAPIRoutes(api)
-	authHandler.RegisterProtectedRoutes(api)
-	domainRateLimitHandler.RegisterRoutes(api)
+	deps.FolderHandler.RegisterRoutes(api)
+	deps.FeedHandler.RegisterRoutes(api)
+	deps.EntryHandler.RegisterRoutes(api)
+	deps.OPMLHandler.RegisterRoutes(api)
+	deps.ProxyHandler.RegisterRoutes(api)
+	deps.SettingsHandler.RegisterRoutes(api)
+	deps.AIHandler.RegisterRoutes(api)
+	deps.IconHandler.RegisterAPIRoutes(api)
+	deps.AuthHandler.RegisterProtectedRoutes(api)
+	deps.DomainRateLimitHandler.RegisterRoutes(api)
 
 	// Icon routes with cache recovery
-	iconHandler.RegisterRoutes(e)
+	deps.IconHandler.RegisterRoutes(e)
 
-	registerStatic(e, staticDir)
+	registerStatic(e, deps.StaticDir)
 
 	return e
 }

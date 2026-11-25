@@ -176,7 +176,70 @@ func TestMigrate_EntryHashDeduplication_MergesHistoricalDuplicates(t *testing.T)
 	require.NoError(t, err)
 	require.Equal(t, 0, duplicateHashGroups)
 
+	// Verify v2 drops unused FTS5 and redundant indexes, and creates composite sort indexes.
+	var ftsCount int
+	err = database.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE name IN ('entries_fts', 'entries_ai', 'entries_ad', 'entries_au', 'idx_domain_rate_limits_host', 'idx_entries_feed_id')`).Scan(&ftsCount)
+	require.NoError(t, err)
+	require.Equal(t, 0, ftsCount)
+
+	var sortIdxCount int
+	err = database.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name IN ('idx_entries_published_id', 'idx_entries_feed_published_id')`).Scan(&sortIdxCount)
+	require.NoError(t, err)
+	require.Equal(t, 2, sortIdxCount)
+
 	// Migration should be idempotent.
 	err = db.Migrate(database)
 	require.NoError(t, err)
+}
+
+func TestMigrate_PreservesSubSecondPrecisionAndCreatesFeedURLIndex(t *testing.T) {
+	database, err := sql.Open("sqlite", "file:test_migrate_subsecond?mode=memory&cache=shared")
+	require.NoError(t, err)
+	defer database.Close()
+
+	// Seed a database at v1 with mixed RFC3339 / variable-width RFC3339Nano timestamps.
+	require.NoError(t, db.Migrate(database))
+	_, err = database.Exec(`PRAGMA user_version = 1`)
+	require.NoError(t, err)
+	_, err = database.Exec(`DROP INDEX IF EXISTS idx_entries_feed_url_lookup`)
+	require.NoError(t, err)
+
+	_, err = database.Exec(`INSERT INTO feeds (id, title, url, type, created_at, updated_at) VALUES (1, 'F', 'https://example.com/rss', 'article', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')`)
+	require.NoError(t, err)
+	_, err = database.Exec(`
+		INSERT INTO entries (id, feed_id, hash, title, url, published_at, read, starred, created_at, updated_at) VALUES
+		  (10, 1, 'h0', 'sec',  'https://example.com/0', '2026-01-01T12:00:00Z',      0, 0, '2026-01-01T12:00:00Z', '2026-01-01T12:00:00Z'),
+		  (11, 1, 'h1', 'ms15', 'https://example.com/1', '2026-01-01T12:00:00.15Z',   0, 0, '2026-01-01T12:00:00.15Z', '2026-01-01T12:00:00.15Z'),
+		  (12, 1, 'h2', 'ms2',  'https://example.com/2', '2026-01-01T12:00:00.2Z',    0, 0, '2026-01-01T12:00:00.2Z', '2026-01-01T12:00:00.2Z')
+	`)
+	require.NoError(t, err)
+
+	require.NoError(t, db.Migrate(database))
+
+	var version int
+	require.NoError(t, database.QueryRow(`PRAGMA user_version`).Scan(&version))
+	require.Equal(t, 3, version)
+
+	var urlIdxCount int
+	require.NoError(t, database.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = 'idx_entries_feed_url_lookup'`).Scan(&urlIdxCount))
+	require.Equal(t, 1, urlIdxCount)
+
+	rows, err := database.Query(`SELECT title, published_at FROM entries WHERE feed_id = 1 ORDER BY published_at DESC, id DESC`)
+	require.NoError(t, err)
+	defer rows.Close()
+
+	var titles, stamps []string
+	for rows.Next() {
+		var title, stamp string
+		require.NoError(t, rows.Scan(&title, &stamp))
+		titles = append(titles, title)
+		stamps = append(stamps, stamp)
+	}
+	require.NoError(t, rows.Err())
+	require.Equal(t, []string{"ms2", "ms15", "sec"}, titles)
+	require.Equal(t, []string{
+		"2026-01-01T12:00:00.200000000Z",
+		"2026-01-01T12:00:00.150000000Z",
+		"2026-01-01T12:00:00.000000000Z",
+	}, stamps)
 }

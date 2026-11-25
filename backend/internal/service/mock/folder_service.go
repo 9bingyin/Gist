@@ -70,6 +70,20 @@ func (mr *MockFolderServiceMockRecorder) Delete(ctx, id any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Delete", reflect.TypeOf((*MockFolderService)(nil).Delete), ctx, id)
 }
 
+// DeleteBatch mocks base method.
+func (m *MockFolderService) DeleteBatch(ctx context.Context, ids []int64) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteBatch", ctx, ids)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteBatch indicates an expected call of DeleteBatch.
+func (mr *MockFolderServiceMockRecorder) DeleteBatch(ctx, ids any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteBatch", reflect.TypeOf((*MockFolderService)(nil).DeleteBatch), ctx, ids)
+}
+
 // List mocks base method.
 func (m *MockFolderService) List(ctx context.Context) ([]model.Folder, error) {
 	m.ctrl.T.Helper()

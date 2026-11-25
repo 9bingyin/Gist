@@ -1,28 +1,30 @@
-import { useCallback, useEffect, useSyncExternalStore } from "react";
+import { useCallback, useEffect } from "react";
+import { create } from "zustand";
+import { persist } from "zustand/middleware";
 
 export type Theme = "light" | "dark" | "system";
 
 const STORAGE_KEY = "gist-theme";
 
-let cachedTheme: Theme = getStoredTheme();
-const listeners = new Set<() => void>();
+function isValidTheme(value: unknown): value is Theme {
+  return value === "light" || value === "dark" || value === "system";
+}
 
-function getStoredTheme(): Theme {
+function readLegacyTheme(): Theme {
   if (typeof window === "undefined") return "system";
-  const stored = localStorage.getItem(STORAGE_KEY);
-  if (stored === "light" || stored === "dark" || stored === "system") {
-    return stored;
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (isValidTheme(stored)) {
+      return stored;
+    }
+  } catch {
+    // ignore storage errors
   }
   return "system";
 }
 
-function emitChange() {
-  for (const listener of listeners) {
-    listener();
-  }
-}
-
 function applyTheme(theme: Theme) {
+  if (typeof window === "undefined") return;
   const root = document.documentElement;
   const systemDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
   const isDark = theme === "dark" || (theme === "system" && systemDark);
@@ -31,41 +33,45 @@ function applyTheme(theme: Theme) {
   root.classList.toggle("dark", isDark);
 }
 
+interface ThemeStore {
+  theme: Theme;
+  setTheme: (theme: Theme) => void;
+}
+
+const useThemeStore = create<ThemeStore>()(
+  persist(
+    (set) => ({
+      theme: readLegacyTheme(),
+      setTheme: (theme) => {
+        applyTheme(theme);
+        set({ theme });
+      },
+    }),
+    {
+      name: STORAGE_KEY,
+      partialize: (state) => ({ theme: state.theme }),
+      onRehydrateStorage: () => (state) => {
+        if (state && isValidTheme(state.theme)) {
+          applyTheme(state.theme);
+        }
+      },
+    },
+  ),
+);
+
 export function setTheme(theme: Theme): void {
-  cachedTheme = theme;
-  try {
-    localStorage.setItem(STORAGE_KEY, theme);
-  } catch {
-    // ignore storage errors
-  }
-  applyTheme(theme);
-  emitChange();
-}
-
-function subscribe(callback: () => void): () => void {
-  listeners.add(callback);
-  return () => listeners.delete(callback);
-}
-
-function getSnapshot(): Theme {
-  return cachedTheme;
-}
-
-function getServerSnapshot(): Theme {
-  return "system";
+  useThemeStore.getState().setTheme(theme);
 }
 
 export function useTheme() {
-  const theme = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  const theme = useThemeStore((state) => state.theme);
 
   useEffect(() => {
-    // Apply theme on mount
     applyTheme(theme);
 
-    // Listen for system theme changes
     const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
     const handleChange = () => {
-      if (cachedTheme === "system") {
+      if (useThemeStore.getState().theme === "system") {
         applyTheme("system");
       }
     };
@@ -75,7 +81,7 @@ export function useTheme() {
   }, [theme]);
 
   const setThemeValue = useCallback((newTheme: Theme) => {
-    setTheme(newTheme);
+    useThemeStore.getState().setTheme(newTheme);
   }, []);
 
   return { theme, setTheme: setThemeValue };
@@ -83,5 +89,5 @@ export function useTheme() {
 
 // Initialize theme on load
 if (typeof window !== "undefined") {
-  applyTheme(cachedTheme);
+  applyTheme(useThemeStore.getState().theme);
 }

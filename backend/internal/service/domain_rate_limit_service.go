@@ -3,60 +3,59 @@ package service
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"net"
-	"regexp"
-	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"gist/backend/internal/model"
 	"gist/backend/internal/repository"
 	"gist/backend/pkg/logger"
 )
 
-// DomainRateLimitDTO represents a domain rate limit for API responses.
-type DomainRateLimitDTO struct {
-	ID              string    `json:"id"`
-	Host            string    `json:"host"`
-	IntervalSeconds int       `json:"intervalSeconds"`
-	CreatedAt       time.Time `json:"createdAt"`
-	UpdatedAt       time.Time `json:"updatedAt"`
+func normalizeHost(host string) string {
+	return strings.ToLower(strings.TrimSpace(host))
 }
 
-// isValidHost checks if the host is a valid IP, localhost, or a domain with at least one dot.
+// isValidHost validates a host name (supports IPs, single-label Docker/LAN hosts like "rsshub",
+// standard domains, and IDN hostnames) while rejecting whitespace, control chars, or URL delimiters.
 func isValidHost(host string) bool {
-	host = strings.TrimSpace(host)
-	if host == "" {
+	host = normalizeHost(host)
+	if host == "" || len(host) > 253 {
 		return false
 	}
-	if len(host) > 253 {
-		return false
-	}
-	if host == "localhost" {
-		return true
-	}
-	// Check if it's an IP
 	if ip := net.ParseIP(host); ip != nil {
 		return true
 	}
-	// RFC 1123 compliant domain regex that requires at least one dot
-	var domainRegex = regexp.MustCompile(`^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$`)
-	return domainRegex.MatchString(host)
+	if strings.HasPrefix(host, ".") || strings.HasSuffix(host, ".") || strings.Contains(host, "..") {
+		return false
+	}
+	for _, r := range host {
+		if unicode.IsSpace(r) || unicode.IsControl(r) {
+			return false
+		}
+		switch r {
+		case '/', '\\', '?', '#', '@', ':', '[', ']':
+			return false
+		}
+	}
+	for label := range strings.SplitSeq(host, ".") {
+		if label == "" || len(label) > 63 || strings.HasPrefix(label, "-") || strings.HasSuffix(label, "-") {
+			return false
+		}
+	}
+	return true
 }
 
 // DomainRateLimitService provides domain rate limit management.
 type DomainRateLimitService interface {
-	// GetInterval returns the interval for a host in seconds.
-	// Returns 0 if not configured (no rate limiting).
 	GetInterval(ctx context.Context, host string) int
-	// GetIntervalDuration returns the interval as time.Duration.
 	GetIntervalDuration(ctx context.Context, host string) time.Duration
-	// SetInterval creates or updates the interval for a host.
-	SetInterval(ctx context.Context, host string, seconds int) error
-	// DeleteInterval removes the interval configuration for a host.
+	SetInterval(ctx context.Context, host string, seconds int) (model.DomainRateLimit, error)
 	DeleteInterval(ctx context.Context, host string) error
-	// List returns all configured domain rate limits.
-	List(ctx context.Context) ([]DomainRateLimitDTO, error)
+	List(ctx context.Context) ([]model.DomainRateLimit, error)
 }
 
 type domainRateLimitService struct {
@@ -65,14 +64,14 @@ type domainRateLimitService struct {
 
 // NewDomainRateLimitService creates a new domain rate limit service.
 func NewDomainRateLimitService(repo repository.DomainRateLimitRepository) DomainRateLimitService {
-	return &domainRateLimitService{
-		repo: repo,
-	}
+	return &domainRateLimitService{repo: repo}
 }
 
-// GetInterval returns the interval for a host in seconds.
-// Returns 0 if not configured (no rate limiting).
 func (s *domainRateLimitService) GetInterval(ctx context.Context, host string) int {
+	host = normalizeHost(host)
+	if host == "" {
+		return 0
+	}
 	limit, err := s.repo.GetByHost(ctx, host)
 	if err == nil && limit != nil {
 		return limit.IntervalSeconds
@@ -80,75 +79,60 @@ func (s *domainRateLimitService) GetInterval(ctx context.Context, host string) i
 	return 0
 }
 
-// GetIntervalDuration returns the interval as time.Duration.
 func (s *domainRateLimitService) GetIntervalDuration(ctx context.Context, host string) time.Duration {
-	seconds := s.GetInterval(ctx, host)
-	return time.Duration(seconds) * time.Second
+	return time.Duration(s.GetInterval(ctx, host)) * time.Second
 }
 
-// SetInterval creates or updates the interval for a host.
-func (s *domainRateLimitService) SetInterval(ctx context.Context, host string, seconds int) error {
-	if !isValidHost(host) {
-		return ErrInvalid
+func (s *domainRateLimitService) SetInterval(ctx context.Context, host string, seconds int) (model.DomainRateLimit, error) {
+	normalized := normalizeHost(host)
+	if !isValidHost(normalized) {
+		return model.DomainRateLimit{}, ErrInvalid
 	}
 	if seconds < 0 {
 		seconds = 0
 	}
 
-	// Check if it exists
-	existing, err := s.repo.GetByHost(ctx, host)
+	existing, err := s.repo.GetByHost(ctx, normalized)
 	if err != nil {
-		return err
+		return model.DomainRateLimit{}, err
 	}
 
 	if existing != nil {
-		err := s.repo.Update(ctx, host, seconds)
-		if err != nil {
-			logger.Error("domain rate limit update failed", "module", "service", "action", "update", "resource", "domain_rate_limit", "result", "failed", "host", host, "error", err)
-			return err
+		if err := s.repo.Update(ctx, normalized, seconds); err != nil {
+			logger.Error("domain rate limit update failed", "module", "service", "action", "update", "resource", "domain_rate_limit", "result", "failed", "host", normalized, "error", err)
+			return model.DomainRateLimit{}, err
 		}
-		logger.Info("domain rate limit updated", "module", "service", "action", "update", "resource", "domain_rate_limit", "result", "ok", "host", host, "interval_seconds", seconds)
-		return nil
+		existing.IntervalSeconds = seconds
+		existing.UpdatedAt = time.Now().UTC()
+		logger.Info("domain rate limit updated", "module", "service", "action", "update", "resource", "domain_rate_limit", "result", "ok", "host", normalized, "interval_seconds", seconds)
+		return *existing, nil
 	}
-	_, err = s.repo.Create(ctx, host, seconds)
+
+	created, err := s.repo.Create(ctx, normalized, seconds)
 	if err != nil {
-		logger.Error("domain rate limit create failed", "module", "service", "action", "create", "resource", "domain_rate_limit", "result", "failed", "host", host, "error", err)
-		return err
+		logger.Error("domain rate limit create failed", "module", "service", "action", "create", "resource", "domain_rate_limit", "result", "failed", "host", normalized, "error", err)
+		return model.DomainRateLimit{}, err
 	}
-	logger.Info("domain rate limit created", "module", "service", "action", "create", "resource", "domain_rate_limit", "result", "ok", "host", host, "interval_seconds", seconds)
-	return nil
+	logger.Info("domain rate limit created", "module", "service", "action", "create", "resource", "domain_rate_limit", "result", "ok", "host", normalized, "interval_seconds", seconds)
+	return *created, nil
 }
 
-// DeleteInterval removes the interval configuration for a host.
 func (s *domainRateLimitService) DeleteInterval(ctx context.Context, host string) error {
-	if err := s.repo.Delete(ctx, host); err != nil {
-		logger.Error("domain rate limit delete failed", "module", "service", "action", "delete", "resource", "domain_rate_limit", "result", "failed", "host", host, "error", err)
+	normalized := normalizeHost(host)
+	if normalized == "" {
+		return ErrInvalid
+	}
+	if err := s.repo.Delete(ctx, normalized); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
+		logger.Error("domain rate limit delete failed", "module", "service", "action", "delete", "resource", "domain_rate_limit", "result", "failed", "host", normalized, "error", err)
 		return err
 	}
-	logger.Info("domain rate limit deleted", "module", "service", "action", "delete", "resource", "domain_rate_limit", "result", "ok", "host", host)
+	logger.Info("domain rate limit deleted", "module", "service", "action", "delete", "resource", "domain_rate_limit", "result", "ok", "host", normalized)
 	return nil
 }
 
-// List returns all configured domain rate limits.
-func (s *domainRateLimitService) List(ctx context.Context) ([]DomainRateLimitDTO, error) {
-	limits, err := s.repo.List(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	dtos := make([]DomainRateLimitDTO, len(limits))
-	for i, limit := range limits {
-		dtos[i] = modelToDTO(limit)
-	}
-	return dtos, nil
-}
-
-func modelToDTO(m model.DomainRateLimit) DomainRateLimitDTO {
-	return DomainRateLimitDTO{
-		ID:              strconv.FormatInt(m.ID, 10),
-		Host:            m.Host,
-		IntervalSeconds: m.IntervalSeconds,
-		CreatedAt:       m.CreatedAt,
-		UpdatedAt:       m.UpdatedAt,
-	}
+func (s *domainRateLimitService) List(ctx context.Context) ([]model.DomainRateLimit, error) {
+	return s.repo.List(ctx)
 }

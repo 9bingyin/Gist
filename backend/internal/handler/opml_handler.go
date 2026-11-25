@@ -2,11 +2,14 @@ package handler
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -15,17 +18,27 @@ import (
 	"gist/backend/pkg/logger"
 )
 
-const maxOPMLSize = 5 << 20
-
 type OPMLHandler struct {
 	service     service.OPMLService
 	taskManager service.ImportTaskService
+	wg          sync.WaitGroup
 }
 
 func NewOPMLHandler(opmlService service.OPMLService, taskManager service.ImportTaskService) *OPMLHandler {
 	return &OPMLHandler{
 		service:     opmlService,
 		taskManager: taskManager,
+	}
+}
+
+// Shutdown cancels any active import task and waits for background import goroutines to exit.
+func (h *OPMLHandler) Shutdown() {
+	if h.taskManager != nil {
+		h.taskManager.Shutdown()
+	}
+	h.wg.Wait()
+	if h.service != nil {
+		h.service.Shutdown()
 	}
 }
 
@@ -46,92 +59,69 @@ func (h *OPMLHandler) RegisterRoutes(g *echo.Group) {
 // @Param file formData file false "OPML file to import"
 // @Success 200 {object} importStartedResponse
 // @Failure 400 {object} errorResponse
-// @Failure 413 {object} errorResponse
 // @Router /opml/import [post]
 func (h *OPMLHandler) Import(c echo.Context) error {
 	req := c.Request()
-	req.Body = http.MaxBytesReader(c.Response().Writer, req.Body, maxOPMLSize)
 
 	var reader io.Reader
 	contentType := req.Header.Get("Content-Type")
 	if strings.HasPrefix(contentType, "multipart/") {
 		file, err := c.FormFile("file")
 		if err != nil {
-			if err == http.ErrMissingFile {
+			if errors.Is(err, http.ErrMissingFile) {
 				return c.JSON(http.StatusBadRequest, errorResponse{Error: "missing file"})
 			}
 			return c.JSON(http.StatusBadRequest, errorResponse{Error: "invalid request"})
-		}
-		if file.Size > maxOPMLSize {
-			return c.JSON(http.StatusRequestEntityTooLarge, errorResponse{Error: "file too large"})
 		}
 		src, err := file.Open()
 		if err != nil {
 			return c.JSON(http.StatusBadRequest, errorResponse{Error: "invalid request"})
 		}
 		defer src.Close()
-		reader = io.LimitReader(src, maxOPMLSize)
+		reader = src
 	} else {
-		reader = io.LimitReader(req.Body, maxOPMLSize)
+		reader = req.Body
 	}
 
-	// Read file content into memory for background processing
 	content, err := io.ReadAll(reader)
 	if err != nil {
 		logger.Warn("opml import read failed", "module", "handler", "action", "import", "resource", "opml", "result", "failed", "error", err)
 		return c.JSON(http.StatusBadRequest, errorResponse{Error: "read file failed"})
 	}
 
-	logger.Info("opml import started", "module", "handler", "action", "import", "resource", "opml", "result", "ok", "count", len(content))
-	// Start background import
-	go h.runImport(content)
+	// Register task synchronously before returning so immediate SSE status subscriptions observe it.
+	taskID, taskCtx := h.taskManager.Start(0)
+
+	logger.Info("opml import started", "module", "handler", "action", "import", "resource", "opml", "result", "ok", "task_id", taskID, "bytes", len(content))
+	h.wg.Go(func() {
+		h.runImport(taskID, taskCtx, content)
+	})
 
 	return c.JSON(http.StatusOK, importStartedResponse{Status: "started"})
 }
 
-func (h *OPMLHandler) runImport(content []byte) {
-	reader := bytes.NewReader(content)
-
-	// Pre-count total feeds for progress
-	preReader := bytes.NewReader(content)
-	total := h.countFeedsInOPML(preReader)
-
-	// Start task and get cancellable context
-	_, ctx := h.taskManager.Start(total)
-
+func (h *OPMLHandler) runImport(taskID string, ctx context.Context, content []byte) {
 	onProgress := func(p service.ImportProgress) {
-		h.taskManager.Update(p.Current, p.Feed)
-	}
-
-	result, err := h.service.Import(ctx, reader, onProgress)
-	if err != nil {
-		// Check if cancelled
-		if ctx.Err() != nil {
-			logger.Warn("opml import cancelled", "module", "handler", "action", "import", "resource", "opml", "result", "cancelled")
-			return // Already marked as cancelled
+		if p.Status == "started" {
+			h.taskManager.SetTotal(taskID, p.Total)
+			return
 		}
-		logger.Error("opml import failed", "module", "handler", "action", "import", "resource", "opml", "result", "failed", "error", err)
-		h.taskManager.Fail(err)
-		return
+		h.taskManager.Update(taskID, p.Current, p.Feed)
 	}
 
-	// Check if cancelled before marking complete
-	if ctx.Err() != nil {
-		logger.Warn("opml import cancelled", "module", "handler", "action", "import", "resource", "opml", "result", "cancelled")
-		return
-	}
-	logger.Info("opml import completed", "module", "handler", "action", "import", "resource", "opml", "result", "ok", "folders_created", result.FoldersCreated, "folders_skipped", result.FoldersSkipped, "feeds_created", result.FeedsCreated, "feeds_skipped", result.FeedsSkipped)
-	h.taskManager.Complete(result)
-}
-
-func (h *OPMLHandler) countFeedsInOPML(reader io.Reader) int {
-	// Simple count by parsing - if fails, return 0
-	content, err := io.ReadAll(reader)
+	result, err := h.service.Import(ctx, bytes.NewReader(content), onProgress)
 	if err != nil {
-		return 0
+		if ctx.Err() != nil {
+			return
+		}
+		h.taskManager.Fail(taskID, err)
+		return
 	}
-	// Count occurrences of xmlUrl attribute (rough estimate)
-	return bytes.Count(bytes.ToLower(content), []byte("xmlurl"))
+
+	if ctx.Err() != nil {
+		return
+	}
+	h.taskManager.Complete(taskID, result)
 }
 
 // CancelImport cancels the current import task.
@@ -143,7 +133,6 @@ func (h *OPMLHandler) countFeedsInOPML(reader io.Reader) int {
 // @Router /opml/import [delete]
 func (h *OPMLHandler) CancelImport(c echo.Context) error {
 	cancelled := h.taskManager.Cancel()
-	logger.Info("opml import cancel", "module", "handler", "action", "import", "resource", "opml", "result", "ok", "cancelled", cancelled)
 	return c.JSON(http.StatusOK, importCancelledResponse{Cancelled: cancelled})
 }
 
@@ -158,15 +147,21 @@ func (h *OPMLHandler) ImportStatus(c echo.Context) error {
 	res := c.Response()
 	res.Header().Set("Content-Type", "text/event-stream")
 	res.Header().Set("Cache-Control", "no-cache")
-	res.Header().Set("Connection", "keep-alive")
+	res.Header().Set("X-Accel-Buffering", "no")
 	res.WriteHeader(http.StatusOK)
 
 	ctx := c.Request().Context()
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
-	// Send initial status immediately
-	h.sendTaskStatus(res)
+	// Send initial frame and stop immediately if already terminal.
+	task := h.taskManager.Get()
+	if err := writeTaskStatus(res, task); err != nil {
+		return nil
+	}
+	if isTerminalImportTask(task) {
+		return nil
+	}
 
 	for {
 		select {
@@ -174,26 +169,41 @@ func (h *OPMLHandler) ImportStatus(c echo.Context) error {
 			return nil
 		case <-ticker.C:
 			task := h.taskManager.Get()
-			h.sendTaskStatus(res)
-
-			// Stop streaming if task is done, error, or cancelled
-			if task != nil && (task.Status == "done" || task.Status == "error" || task.Status == "cancelled") {
+			if err := writeTaskStatus(res, task); err != nil {
+				return nil
+			}
+			if isTerminalImportTask(task) {
 				return nil
 			}
 		}
 	}
 }
 
-func (h *OPMLHandler) sendTaskStatus(res *echo.Response) {
-	task := h.taskManager.Get()
+func isTerminalImportTask(task *service.ImportTask) bool {
 	if task == nil {
-		data, _ := json.Marshal(importIdleResponse{Status: "idle"})
-		fmt.Fprintf(res, "data: %s\n\n", data)
+		return false
+	}
+	return task.Status == "done" || task.Status == "error" || task.Status == "cancelled"
+}
+
+func writeTaskStatus(res *echo.Response, task *service.ImportTask) error {
+	var (
+		data []byte
+		err  error
+	)
+	if task == nil {
+		data, err = json.Marshal(importIdleResponse{Status: "idle"})
 	} else {
-		data, _ := json.Marshal(task)
-		fmt.Fprintf(res, "data: %s\n\n", data)
+		data, err = json.Marshal(task)
+	}
+	if err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(res, "data: %s\n\n", data); err != nil {
+		return err
 	}
 	res.Flush()
+	return nil
 }
 
 // Export exports subscriptions to an OPML file.
@@ -206,10 +216,8 @@ func (h *OPMLHandler) sendTaskStatus(res *echo.Response) {
 func (h *OPMLHandler) Export(c echo.Context) error {
 	payload, err := h.service.Export(c.Request().Context())
 	if err != nil {
-		logger.Error("opml export failed", "module", "handler", "action", "export", "resource", "opml", "result", "failed", "error", err)
 		return writeServiceError(c, err)
 	}
-	logger.Info("opml export", "module", "handler", "action", "export", "resource", "opml", "result", "ok")
 	c.Response().Header().Set("Content-Disposition", `attachment; filename="gist.opml"`)
 	return c.Blob(http.StatusOK, "application/xml", payload)
 }

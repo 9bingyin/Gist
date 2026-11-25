@@ -1,8 +1,9 @@
-import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
+import { X } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { MobileFullscreenDialog } from "./MobileFullscreenDialog";
 import { ProfileSettings } from "./tabs/ProfileSettings";
+import { useIsMobile } from "@/hooks/useIsMobile";
 import { cn } from "@/lib/utils";
 
 interface ProfileModalProps {
@@ -10,30 +11,10 @@ interface ProfileModalProps {
   onOpenChange: (open: boolean) => void;
 }
 
-const MOBILE_BREAKPOINT = 768;
-
-function useMobileDetect() {
-  const [isMobile, setIsMobile] = useState(
-    typeof window !== "undefined"
-      ? window.innerWidth < MOBILE_BREAKPOINT
-      : false,
-  );
-
-  useEffect(() => {
-    const handleResize = () =>
-      setIsMobile(window.innerWidth < MOBILE_BREAKPOINT);
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, []);
-
-  return isMobile;
-}
-
 export function ProfileModal({ open, onOpenChange }: ProfileModalProps) {
   const { t } = useTranslation();
-  const isMobile = useMobileDetect();
+  const isMobile = useIsMobile();
 
-  // Mobile layout
   if (isMobile) {
     return (
       <MobileFullscreenDialog
@@ -45,6 +26,7 @@ export function ProfileModal({ open, onOpenChange }: ProfileModalProps) {
               {t("profile.title")}
             </DialogTitle>
             <button
+              type="button"
               onClick={() => onOpenChange(false)}
               className={cn(
                 "rounded-md p-1.5 shrink-0",
@@ -53,19 +35,7 @@ export function ProfileModal({ open, onOpenChange }: ProfileModalProps) {
               )}
               aria-label={t("entry.close")}
             >
-              <svg
-                className="size-5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
+              <X className="size-5" />
             </button>
           </div>
         }
@@ -75,17 +45,16 @@ export function ProfileModal({ open, onOpenChange }: ProfileModalProps) {
     );
   }
 
-  // Desktop layout
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[950px] h-[800px] max-w-[95vw] max-h-[90vh] p-0 overflow-hidden gap-0">
         <div className="flex h-full flex-col">
-          {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-border">
             <DialogTitle className="text-xl font-bold">
               {t("profile.title")}
             </DialogTitle>
             <button
+              type="button"
               onClick={() => onOpenChange(false)}
               className={cn(
                 "rounded-md p-1.5",
@@ -94,23 +63,10 @@ export function ProfileModal({ open, onOpenChange }: ProfileModalProps) {
               )}
               aria-label={t("entry.close")}
             >
-              <svg
-                className="size-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
+              <X className="size-4" />
             </button>
           </div>
 
-          {/* Content */}
           <div className="flex-1 overflow-auto px-6 py-4">
             <ProfileSettings />
           </div>

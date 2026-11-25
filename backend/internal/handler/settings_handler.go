@@ -2,40 +2,14 @@ package handler
 
 import (
 	"net/http"
-	"strconv"
 
 	"github.com/labstack/echo/v4"
 
 	"gist/backend/internal/service"
 	"gist/backend/pkg/logger"
-	"gist/backend/pkg/network"
 )
 
 // Request/Response types
-
-type aiSettingsResponse struct {
-	Provider        string         `json:"provider"`
-	APIKey          string         `json:"apiKey"`
-	BaseURL         string         `json:"baseUrl"`
-	Model           string         `json:"model"`
-	RequestOptions  map[string]any `json:"requestOptions"`
-	SummaryLanguage string         `json:"summaryLanguage"`
-	AutoTranslate   bool           `json:"autoTranslate"`
-	AutoSummary     bool           `json:"autoSummary"`
-	RateLimit       int            `json:"rateLimit"`
-}
-
-type aiSettingsRequest struct {
-	Provider        string         `json:"provider"`
-	APIKey          string         `json:"apiKey"`
-	BaseURL         string         `json:"baseUrl"`
-	Model           string         `json:"model"`
-	RequestOptions  map[string]any `json:"requestOptions"`
-	SummaryLanguage string         `json:"summaryLanguage"`
-	AutoTranslate   bool           `json:"autoTranslate"`
-	AutoSummary     bool           `json:"autoSummary"`
-	RateLimit       int            `json:"rateLimit"`
-}
 
 type aiTestRequest struct {
 	Provider       string         `json:"provider"`
@@ -49,38 +23,6 @@ type aiTestResponse struct {
 	Success bool   `json:"success"`
 	Message string `json:"message,omitempty"`
 	Error   string `json:"error,omitempty"`
-}
-
-type generalSettingsResponse struct {
-	FallbackUserAgent string `json:"fallbackUserAgent"`
-	AutoReadability   bool   `json:"autoReadability"`
-	MarkReadOnScroll  bool   `json:"markReadOnScroll"`
-}
-
-type generalSettingsRequest struct {
-	FallbackUserAgent string `json:"fallbackUserAgent"`
-	AutoReadability   bool   `json:"autoReadability"`
-	MarkReadOnScroll  bool   `json:"markReadOnScroll"`
-}
-
-type networkSettingsResponse struct {
-	Enabled  bool   `json:"enabled"`
-	Type     string `json:"type"`
-	Host     string `json:"host"`
-	Port     int    `json:"port"`
-	Username string `json:"username"`
-	Password string `json:"password"`
-	IPStack  string `json:"ipStack"`
-}
-
-type networkSettingsRequest struct {
-	Enabled  bool   `json:"enabled"`
-	Type     string `json:"type"`
-	Host     string `json:"host"`
-	Port     int    `json:"port"`
-	Username string `json:"username"`
-	Password string `json:"password"`
-	IPStack  string `json:"ipStack"`
 }
 
 type networkTestRequest struct {
@@ -98,29 +40,20 @@ type networkTestResponse struct {
 	Error   string `json:"error,omitempty"`
 }
 
-type appearanceSettingsResponse struct {
-	ContentTypes []string `json:"contentTypes"`
-}
-
-type appearanceSettingsRequest struct {
-	ContentTypes []string `json:"contentTypes"`
+type deletedCountResponse struct {
+	Deleted int64 `json:"deleted"`
 }
 
 type SettingsHandler struct {
-	service       service.SettingsService
-	clientFactory *network.ClientFactory
+	service service.SettingsService
 }
 
 func isBaseURLRequiredForProvider(provider string) bool {
 	return provider == "openai" || provider == "compatible"
 }
 
-func NewSettingsHandler(service service.SettingsService, clientFactory *network.ClientFactory) *SettingsHandler {
-	return &SettingsHandler{service: service, clientFactory: clientFactory}
-}
-
-type deletedCountResponse struct {
-	Deleted int64 `json:"deleted"`
+func NewSettingsHandler(service service.SettingsService) *SettingsHandler {
+	return &SettingsHandler{service: service}
 }
 
 func (h *SettingsHandler) RegisterRoutes(g *echo.Group) {
@@ -142,7 +75,7 @@ func (h *SettingsHandler) RegisterRoutes(g *echo.Group) {
 // @Description Get the AI provider configuration with masked API keys
 // @Tags settings
 // @Produce json
-// @Success 200 {object} aiSettingsResponse
+// @Success 200 {object} service.AISettings
 // @Failure 500 {object} errorResponse
 // @Router /settings/ai [get]
 func (h *SettingsHandler) GetAISettings(c echo.Context) error {
@@ -152,32 +85,22 @@ func (h *SettingsHandler) GetAISettings(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, errorResponse{Error: "failed to get settings"})
 	}
 
-	return c.JSON(http.StatusOK, aiSettingsResponse{
-		Provider:        settings.Provider,
-		APIKey:          settings.APIKey,
-		BaseURL:         settings.BaseURL,
-		Model:           settings.Model,
-		RequestOptions:  settings.RequestOptions,
-		SummaryLanguage: settings.SummaryLanguage,
-		AutoTranslate:   settings.AutoTranslate,
-		AutoSummary:     settings.AutoSummary,
-		RateLimit:       settings.RateLimit,
-	})
+	return c.JSON(http.StatusOK, settings)
 }
 
 // UpdateAISettings updates the AI configuration.
 // @Summary Update AI settings
-// @Description Update the AI provider configuration. Empty apiKey keeps existing key.
+// @Description Update the AI provider configuration.
 // @Tags settings
 // @Accept json
 // @Produce json
-// @Param settings body aiSettingsRequest true "AI settings"
-// @Success 200 {object} aiSettingsResponse
+// @Param settings body service.AISettings true "AI settings"
+// @Success 200 {object} service.AISettings
 // @Failure 400 {object} errorResponse
 // @Failure 500 {object} errorResponse
 // @Router /settings/ai [put]
 func (h *SettingsHandler) UpdateAISettings(c echo.Context) error {
-	var req aiSettingsRequest
+	var req service.AISettings
 	if err := c.Bind(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, errorResponse{Error: "invalid request"})
 	}
@@ -191,25 +114,12 @@ func (h *SettingsHandler) UpdateAISettings(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, errorResponse{Error: "baseUrl is required"})
 	}
 
-	settings := &service.AISettings{
-		Provider:        req.Provider,
-		APIKey:          req.APIKey,
-		BaseURL:         req.BaseURL,
-		Model:           req.Model,
-		RequestOptions:  req.RequestOptions,
-		SummaryLanguage: req.SummaryLanguage,
-		AutoTranslate:   req.AutoTranslate,
-		AutoSummary:     req.AutoSummary,
-		RateLimit:       req.RateLimit,
-	}
-
-	if err := h.service.SetAISettings(c.Request().Context(), settings); err != nil {
+	if err := h.service.SetAISettings(c.Request().Context(), &req); err != nil {
 		logger.Error("ai settings update failed", "module", "handler", "action", "update", "resource", "settings", "result", "failed", "provider", req.Provider, "error", err)
 		return c.JSON(http.StatusInternalServerError, errorResponse{Error: "failed to save settings"})
 	}
 
 	logger.Info("ai settings updated", "module", "handler", "action", "update", "resource", "settings", "result", "ok", "provider", req.Provider)
-	// Return updated settings (with masked keys)
 	return h.GetAISettings(c)
 }
 
@@ -238,6 +148,7 @@ func (h *SettingsHandler) TestAI(c echo.Context) error {
 	if isBaseURLRequiredForProvider(req.Provider) && req.BaseURL == "" {
 		return c.JSON(http.StatusBadRequest, errorResponse{Error: "baseUrl is required"})
 	}
+
 	response, err := h.service.TestAI(c.Request().Context(), req.Provider, req.APIKey, req.BaseURL, req.Model, req.RequestOptions)
 	if err != nil {
 		logger.Warn("ai settings test failed", "module", "handler", "action", "test", "resource", "settings", "result", "failed", "provider", req.Provider, "error", err)
@@ -259,7 +170,7 @@ func (h *SettingsHandler) TestAI(c echo.Context) error {
 // @Description Get general application settings including fallback user agent, auto readability, and mark-read-on-scroll
 // @Tags settings
 // @Produce json
-// @Success 200 {object} generalSettingsResponse
+// @Success 200 {object} service.GeneralSettings
 // @Failure 500 {object} errorResponse
 // @Router /settings/general [get]
 func (h *SettingsHandler) GetGeneralSettings(c echo.Context) error {
@@ -269,11 +180,7 @@ func (h *SettingsHandler) GetGeneralSettings(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, errorResponse{Error: "failed to get settings"})
 	}
 
-	return c.JSON(http.StatusOK, generalSettingsResponse{
-		FallbackUserAgent: settings.FallbackUserAgent,
-		AutoReadability:   settings.AutoReadability,
-		MarkReadOnScroll:  settings.MarkReadOnScroll,
-	})
+	return c.JSON(http.StatusOK, settings)
 }
 
 // UpdateGeneralSettings updates the general settings.
@@ -282,24 +189,18 @@ func (h *SettingsHandler) GetGeneralSettings(c echo.Context) error {
 // @Tags settings
 // @Accept json
 // @Produce json
-// @Param settings body generalSettingsRequest true "General settings"
-// @Success 200 {object} generalSettingsResponse
+// @Param settings body service.GeneralSettings true "General settings"
+// @Success 200 {object} service.GeneralSettings
 // @Failure 400 {object} errorResponse
 // @Failure 500 {object} errorResponse
 // @Router /settings/general [put]
 func (h *SettingsHandler) UpdateGeneralSettings(c echo.Context) error {
-	var req generalSettingsRequest
+	var req service.GeneralSettings
 	if err := c.Bind(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, errorResponse{Error: "invalid request"})
 	}
 
-	settings := &service.GeneralSettings{
-		FallbackUserAgent: req.FallbackUserAgent,
-		AutoReadability:   req.AutoReadability,
-		MarkReadOnScroll:  req.MarkReadOnScroll,
-	}
-
-	if err := h.service.SetGeneralSettings(c.Request().Context(), settings); err != nil {
+	if err := h.service.SetGeneralSettings(c.Request().Context(), &req); err != nil {
 		logger.Error("general settings update failed", "module", "handler", "action", "update", "resource", "settings", "result", "failed", "error", err)
 		return c.JSON(http.StatusInternalServerError, errorResponse{Error: "failed to save settings"})
 	}
@@ -320,7 +221,7 @@ func (h *SettingsHandler) ClearAnubisCookies(c echo.Context) error {
 	deleted, err := h.service.ClearAnubisCookies(c.Request().Context())
 	if err != nil {
 		logger.Error("anubis cookies clear failed", "module", "handler", "action", "clear", "resource", "settings", "result", "failed", "error", err)
-		return c.JSON(http.StatusInternalServerError, errorResponse{Error: err.Error()})
+		return c.JSON(http.StatusInternalServerError, errorResponse{Error: "failed to clear anubis cookies"})
 	}
 
 	logger.Info("anubis cookies cleared", "module", "handler", "action", "clear", "resource", "settings", "result", "ok", "count", deleted)
@@ -332,7 +233,7 @@ func (h *SettingsHandler) ClearAnubisCookies(c echo.Context) error {
 // @Description Get the network proxy configuration with masked password
 // @Tags settings
 // @Produce json
-// @Success 200 {object} networkSettingsResponse
+// @Success 200 {object} service.NetworkSettings
 // @Failure 500 {object} errorResponse
 // @Router /settings/network [get]
 func (h *SettingsHandler) GetNetworkSettings(c echo.Context) error {
@@ -342,45 +243,27 @@ func (h *SettingsHandler) GetNetworkSettings(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, errorResponse{Error: "failed to get settings"})
 	}
 
-	return c.JSON(http.StatusOK, networkSettingsResponse{
-		Enabled:  settings.Enabled,
-		Type:     settings.Type,
-		Host:     settings.Host,
-		Port:     settings.Port,
-		Username: settings.Username,
-		Password: settings.Password,
-		IPStack:  settings.IPStack,
-	})
+	return c.JSON(http.StatusOK, settings)
 }
 
 // UpdateNetworkSettings updates the network proxy configuration.
 // @Summary Update network settings
-// @Description Update the network proxy configuration. Empty password keeps existing password.
+// @Description Update the network proxy configuration.
 // @Tags settings
 // @Accept json
 // @Produce json
-// @Param settings body networkSettingsRequest true "Network settings"
-// @Success 200 {object} networkSettingsResponse
+// @Param settings body service.NetworkSettings true "Network settings"
+// @Success 200 {object} service.NetworkSettings
 // @Failure 400 {object} errorResponse
 // @Failure 500 {object} errorResponse
 // @Router /settings/network [put]
 func (h *SettingsHandler) UpdateNetworkSettings(c echo.Context) error {
-	var req networkSettingsRequest
+	var req service.NetworkSettings
 	if err := c.Bind(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, errorResponse{Error: "invalid request"})
 	}
 
-	settings := &service.NetworkSettings{
-		Enabled:  req.Enabled,
-		Type:     req.Type,
-		Host:     req.Host,
-		Port:     req.Port,
-		Username: req.Username,
-		Password: req.Password,
-		IPStack:  req.IPStack,
-	}
-
-	if err := h.service.SetNetworkSettings(c.Request().Context(), settings); err != nil {
+	if err := h.service.SetNetworkSettings(c.Request().Context(), &req); err != nil {
 		logger.Error("network settings update failed", "module", "handler", "action", "update", "resource", "settings", "result", "failed", "enabled", req.Enabled, "type", req.Type, "error", err)
 		return c.JSON(http.StatusInternalServerError, errorResponse{Error: "failed to save settings"})
 	}
@@ -394,7 +277,7 @@ func (h *SettingsHandler) UpdateNetworkSettings(c echo.Context) error {
 // @Description Get appearance settings including visible content types
 // @Tags settings
 // @Produce json
-// @Success 200 {object} appearanceSettingsResponse
+// @Success 200 {object} service.AppearanceSettings
 // @Failure 500 {object} errorResponse
 // @Router /settings/appearance [get]
 func (h *SettingsHandler) GetAppearanceSettings(c echo.Context) error {
@@ -404,7 +287,7 @@ func (h *SettingsHandler) GetAppearanceSettings(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, errorResponse{Error: "failed to get settings"})
 	}
 
-	return c.JSON(http.StatusOK, appearanceSettingsResponse{ContentTypes: settings.ContentTypes})
+	return c.JSON(http.StatusOK, settings)
 }
 
 // UpdateAppearanceSettings updates the appearance settings.
@@ -413,20 +296,18 @@ func (h *SettingsHandler) GetAppearanceSettings(c echo.Context) error {
 // @Tags settings
 // @Accept json
 // @Produce json
-// @Param settings body appearanceSettingsRequest true "Appearance settings"
-// @Success 200 {object} appearanceSettingsResponse
+// @Param settings body service.AppearanceSettings true "Appearance settings"
+// @Success 200 {object} service.AppearanceSettings
 // @Failure 400 {object} errorResponse
 // @Failure 500 {object} errorResponse
 // @Router /settings/appearance [put]
 func (h *SettingsHandler) UpdateAppearanceSettings(c echo.Context) error {
-	var req appearanceSettingsRequest
+	var req service.AppearanceSettings
 	if err := c.Bind(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, errorResponse{Error: "invalid request"})
 	}
 
-	settings := &service.AppearanceSettings{ContentTypes: req.ContentTypes}
-	if err := h.service.SetAppearanceSettings(c.Request().Context(), settings); err != nil {
-		logger.Error("appearance settings update failed", "module", "handler", "action", "update", "resource", "settings", "result", "failed", "error", err)
+	if err := h.service.SetAppearanceSettings(c.Request().Context(), &req); err != nil {
 		return writeServiceError(c, err)
 	}
 
@@ -464,21 +345,19 @@ func (h *SettingsHandler) TestNetworkProxy(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, errorResponse{Error: "valid port is required"})
 	}
 
-	// Build proxy URL from request
 	proxyType := req.Type
 	if proxyType == "" {
 		proxyType = "http"
 	}
-	var proxyURL string
-	if req.Username != "" && req.Password != "" {
-		proxyURL = proxyType + "://" + req.Username + ":" + req.Password + "@" + req.Host + ":" + itoa(req.Port)
-	} else {
-		proxyURL = proxyType + "://" + req.Host + ":" + itoa(req.Port)
-	}
 
-	// Test proxy connection using https://captive.apple.com/
-	const testURL = "https://captive.apple.com/"
-	err := h.clientFactory.TestProxyWithConfig(c.Request().Context(), proxyURL, testURL)
+	err := h.service.TestNetworkProxy(c.Request().Context(), &service.NetworkSettings{
+		Enabled:  req.Enabled,
+		Type:     proxyType,
+		Host:     req.Host,
+		Port:     req.Port,
+		Username: req.Username,
+		Password: req.Password,
+	})
 	if err != nil {
 		logger.Warn("network proxy test failed", "module", "handler", "action", "test", "resource", "settings", "result", "failed", "type", proxyType, "host", req.Host, "error", err)
 		return c.JSON(http.StatusOK, networkTestResponse{
@@ -492,8 +371,4 @@ func (h *SettingsHandler) TestNetworkProxy(c echo.Context) error {
 		Success: true,
 		Message: "Proxy connection successful",
 	})
-}
-
-func itoa(i int) string {
-	return strconv.Itoa(i)
 }

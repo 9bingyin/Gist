@@ -12,14 +12,15 @@ import {
   type AuthUser,
 } from "@/api";
 import { isNetworkError } from "@/lib/errors";
+import { queryClient } from "@/lib/queryClient";
+import { clearEntryScrollPositions } from "@/hooks/useEntryContentScroll";
+import { useTranslationStore } from "@/stores/translation-store";
+import { useLightboxStore } from "@/stores/lightbox-store";
+import { useImagePreviewStore } from "@/stores/image-preview-store";
 import i18n from "@/i18n";
 
 export type AuthState =
-  | "loading"
-  | "unauthenticated"
-  | "no-user"
-  | "authenticated"
-  | "network-error";
+  "loading" | "unauthenticated" | "no-user" | "authenticated" | "network-error";
 
 interface AuthStore {
   // State
@@ -45,6 +46,28 @@ interface AuthStore {
   setUser: (user: AuthUser) => void;
 }
 
+const sessionResetListeners = new Set<() => void>();
+
+export function registerSessionResetListener(listener: () => void): () => void {
+  sessionResetListeners.add(listener);
+  return () => {
+    sessionResetListeners.delete(listener);
+  };
+}
+
+function clearClientSessionState(): void {
+  queryClient.clear();
+  useTranslationStore.getState().clearAll();
+  useLightboxStore.getState().reset();
+  useImagePreviewStore.getState().reset();
+  clearEntryScrollPositions();
+  for (const listener of sessionResetListeners) {
+    listener();
+  }
+}
+
+let initializePromise: Promise<void> | null = null;
+
 export const useAuthStore = create<AuthStore>((set, get) => {
   // Set up unauthorized callback
   setOnUnauthorized(() => {
@@ -58,42 +81,48 @@ export const useAuthStore = create<AuthStore>((set, get) => {
     shouldRedirectToRoot: false,
 
     initialize: async () => {
-      try {
-        // Check if user exists in backend
-        const { exists } = await checkAuthStatus();
+      if (initializePromise) {
+        return initializePromise;
+      }
 
-        if (!exists) {
-          // No user registered, show register page
-          set({ state: "no-user", user: null });
-          return;
-        }
-
-        // User exists, check if we have a valid token
-        const token = getAuthToken();
-        if (!token) {
-          set({ state: "unauthenticated", user: null });
-          return;
-        }
-
-        // Try to get current user with existing token
+      initializePromise = (async () => {
         try {
-          const user = await getCurrentUser();
-          set({ state: "authenticated", user });
-        } catch (innerErr) {
-          if (isNetworkError(innerErr)) {
+          const { exists } = await checkAuthStatus();
+
+          if (!exists) {
+            set({ state: "no-user", user: null });
+            return;
+          }
+
+          const token = getAuthToken();
+          if (!token) {
+            set({ state: "unauthenticated", user: null });
+            return;
+          }
+
+          try {
+            const user = await getCurrentUser();
+            set({ state: "authenticated", user });
+          } catch (innerErr) {
+            if (isNetworkError(innerErr)) {
+              set({ state: "network-error", user: null });
+              return;
+            }
+            get().handleUnauthorized();
+          }
+        } catch (err) {
+          if (isNetworkError(err)) {
             set({ state: "network-error", user: null });
             return;
           }
-          get().handleUnauthorized();
+          console.error("Failed to initialize auth:", err);
+          set({ state: "unauthenticated", user: null });
+        } finally {
+          initializePromise = null;
         }
-      } catch (err) {
-        if (isNetworkError(err)) {
-          set({ state: "network-error", user: null });
-          return;
-        }
-        console.error("Failed to initialize auth:", err);
-        set({ state: "unauthenticated", user: null });
-      }
+      })();
+
+      return initializePromise;
     },
 
     login: async (identifier: string, password: string) => {
@@ -142,11 +171,18 @@ export const useAuthStore = create<AuthStore>((set, get) => {
         // Ignore errors, still clear local state
       }
       clearAuthToken();
-      set({ state: "unauthenticated", user: null, shouldRedirectToRoot: true });
+      clearClientSessionState();
+      set({
+        state: "unauthenticated",
+        user: null,
+        error: null,
+        shouldRedirectToRoot: true,
+      });
     },
 
     handleUnauthorized: () => {
       clearAuthToken();
+      clearClientSessionState();
       set({
         state: "unauthenticated",
         user: null,
@@ -161,6 +197,7 @@ export const useAuthStore = create<AuthStore>((set, get) => {
 
     retry: () => {
       set({ state: "loading", error: null });
+      void get().initialize();
     },
 
     clearError: () => {
@@ -172,19 +209,3 @@ export const useAuthStore = create<AuthStore>((set, get) => {
     },
   };
 });
-
-// Actions that can be called from outside React
-export const authActions = {
-  initialize: () => useAuthStore.getState().initialize(),
-  login: (identifier: string, password: string) =>
-    useAuthStore.getState().login(identifier, password),
-  register: (
-    username: string,
-    nickname: string,
-    email: string,
-    password: string,
-  ) => useAuthStore.getState().register(username, nickname, email, password),
-  logout: () => useAuthStore.getState().logout(),
-  retry: () => useAuthStore.getState().retry(),
-  setUser: (user: AuthUser) => useAuthStore.getState().setUser(user),
-};

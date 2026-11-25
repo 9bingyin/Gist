@@ -1,4 +1,4 @@
-import { useInsertionEffect, useLayoutEffect, useRef } from "react";
+import { useLayoutEffect, useRef } from "react";
 
 const DOCUMENT_SCROLL_CLASS = "mobile-document-scroll";
 const DOCUMENT_SCROLL_LOCKED_CLASS = "mobile-document-scroll-locked";
@@ -14,7 +14,7 @@ export function useMobileDocumentScrollMode({
 }: MobileDocumentScrollModeOptions): void {
   const lockedScrollY = useRef<number | null>(null);
 
-  useInsertionEffect(() => {
+  useLayoutEffect(() => {
     const root = document.documentElement;
     const body = document.body;
     const previousScrollRestoration = history.scrollRestoration;
@@ -34,7 +34,7 @@ export function useMobileDocumentScrollMode({
     };
   }, [enabled]);
 
-  useInsertionEffect(() => {
+  useLayoutEffect(() => {
     const shouldLock = enabled && locked;
     if (shouldLock) {
       lockedScrollY.current ??= window.scrollY;
@@ -44,17 +44,16 @@ export function useMobileDocumentScrollMode({
       shouldLock,
     );
     document.body.classList.toggle(DOCUMENT_SCROLL_LOCKED_CLASS, shouldLock);
-  }, [enabled, locked]);
 
-  useLayoutEffect(() => {
     if (!enabled) {
       lockedScrollY.current = null;
       return;
     }
 
-    if (locked || lockedScrollY.current === null) return;
-    const scrollY = lockedScrollY.current;
-    lockedScrollY.current = null;
-    window.scrollTo({ top: scrollY, behavior: "auto" });
+    if (!locked && lockedScrollY.current !== null) {
+      const scrollY = lockedScrollY.current;
+      lockedScrollY.current = null;
+      window.scrollTo({ top: scrollY, behavior: "auto" });
+    }
   }, [enabled, locked]);
 }

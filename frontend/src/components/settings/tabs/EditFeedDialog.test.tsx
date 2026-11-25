@@ -14,19 +14,7 @@ const { mockMutateAsync, mockOnOpenChange, mockUseUpdateFeed } = vi.hoisted(
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
-    t: (key: string, params?: Record<string, string | number>) => {
-      if (
-        params &&
-        typeof params.count !== "undefined" &&
-        typeof params.max !== "undefined"
-      ) {
-        return `${params.count} / ${params.max}`;
-      }
-      if (params && typeof params.max !== "undefined") {
-        return `${key}:${params.max}`;
-      }
-      return key;
-    },
+    t: (key: string) => key,
   }),
 }));
 
@@ -122,7 +110,7 @@ describe("EditFeedDialog", () => {
     expect(mockOnOpenChange).toHaveBeenCalledWith(false);
   });
 
-  it("超出长度限制时会禁用保存", () => {
+  it("允许提交超过 2000 字符的长提示词", async () => {
     render(
       <EditFeedDialog
         feed={buildFeed()}
@@ -131,19 +119,25 @@ describe("EditFeedDialog", () => {
       />,
     );
 
+    const longPrompt = "a".repeat(2500);
     fireEvent.change(screen.getByLabelText("feeds.summary_prompt_reminder"), {
-      target: { value: "a".repeat(2001) },
+      target: { value: longPrompt },
     });
 
-    expect(
-      screen.getByText("feeds.summary_prompt_reminder_too_long:2000"),
-    ).not.toBeNull();
-    expect(
-      (
-        screen.getByRole("button", {
-          name: "actions.save",
-        }) as HTMLButtonElement
-      ).disabled,
-    ).toBe(true);
+    const saveButton = screen.getByRole("button", {
+      name: "actions.save",
+    }) as HTMLButtonElement;
+    expect(saveButton.disabled).toBe(false);
+
+    fireEvent.click(saveButton);
+
+    await waitFor(() => {
+      expect(mockMutateAsync).toHaveBeenCalledWith({
+        id: "feed-1",
+        title: "Feed Title",
+        folderId: "folder-1",
+        summaryPromptReminder: longPrompt,
+      });
+    });
   });
 });

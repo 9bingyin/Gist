@@ -173,7 +173,8 @@
     "close": "关闭",
     "min_read": "{{mins}} 分钟阅读",
     "ai_summary": "AI 摘要",
-    "select_article": "选择一篇文章开始阅读"
+    "select_article": "选择一篇文章开始阅读",
+    "back_to_top": "回到顶部"
   },
   "ai_settings": {
     "provider": "AI 提供商",
@@ -197,7 +198,7 @@
     "request_options_hint": "JSON 对象，会合并到当前格式的请求体中",
     "request_options_invalid": "请求参数必须是合法 JSON 对象",
     "rate_limit_label": "速率限制",
-    "rate_limit_hint": "每秒最大 API 请求数，范围 1-100，默认 10",
+    "rate_limit_hint": "每秒最大 API 请求数，默认 10",
     "summary_language_hint": "AI 生成摘要和翻译使用的语言",
     "auto_translate_hint": "自动翻译非目标语言的文章",
     "auto_summary_hint": "查看文章时自动生成 AI 摘要",

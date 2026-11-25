@@ -66,7 +66,6 @@ func TestReadabilityService_Integration_FetchReadableContent(t *testing.T) {
 	require.NoError(t, err)
 
 	svc := service.NewReadabilityService(entryRepo, clientFactory, nil)
-	defer svc.Close()
 
 	for _, article := range testArticles {
 		t.Run(article.name, func(t *testing.T) {
@@ -136,7 +135,6 @@ func TestReadabilityService_Integration_CachedContent(t *testing.T) {
 	require.NoError(t, err)
 
 	svc := service.NewReadabilityService(entryRepo, clientFactory, nil)
-	defer svc.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()

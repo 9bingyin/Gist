@@ -1,4 +1,4 @@
-import { useRef, useCallback, useEffect } from "react";
+import { useRef, useEffect } from "react";
 
 export type SwipeDirection = "left" | "right" | "up" | "down";
 
@@ -8,17 +8,17 @@ interface UseSwipeGestureOptions {
   onSwipeRight?: () => void;
   onSwipeUp?: () => void;
   onSwipeDown?: () => void;
-  threshold?: number; // Minimum distance for a swipe (px)
-  velocityThreshold?: number; // Minimum velocity for a swipe (px/ms)
-  enabledDirections?: SwipeDirection[]; // Which directions to detect
-  preventScroll?: boolean; // Prevent default scroll behavior during horizontal swipe
+  threshold?: number;
+  velocityThreshold?: number;
+  enabledDirections?: SwipeDirection[];
+  preventScroll?: boolean;
   startFrom?: {
     left?: number;
     right?: number;
     top?: number;
     bottom?: number;
-  }; // Restrict gesture start area, useful for edge swipes on mobile
-  enabled?: boolean; // Whether to register touch listeners (default true)
+  };
+  enabled?: boolean;
 }
 
 interface TouchState {
@@ -27,38 +27,37 @@ interface TouchState {
   startTime: number;
   currentX: number;
   currentY: number;
-  isScrolling: boolean | null; // null = undetermined, true = vertical scroll, false = horizontal swipe
+  isScrolling: boolean | null;
 }
 
 const DIRECTION_LOCK_RATIO = 1.2;
+const DEFAULT_DIRECTIONS: SwipeDirection[] = ["left", "right", "up", "down"];
 
 export function useSwipeGesture(
   elementRef: React.RefObject<HTMLElement | null>,
   options: UseSwipeGestureOptions = {},
 ) {
-  const {
-    onSwipe,
-    onSwipeLeft,
-    onSwipeRight,
-    onSwipeUp,
-    onSwipeDown,
-    threshold = 50,
-    velocityThreshold = 0.3,
-    enabledDirections = ["left", "right", "up", "down"],
-    preventScroll = true,
-    startFrom,
-    enabled = true,
-  } = options;
-
+  const enabled = options.enabled ?? true;
+  const optionsRef = useRef(options);
   const touchState = useRef<TouchState | null>(null);
 
-  const handleTouchStart = useCallback(
-    (e: TouchEvent) => {
+  useEffect(() => {
+    optionsRef.current = options;
+  });
+
+  useEffect(() => {
+    const element = elementRef.current;
+    if (!element || !enabled) {
+      touchState.current = null;
+      return;
+    }
+
+    const handleTouchStart = (e: TouchEvent) => {
       const touch = e.touches[0];
       if (!touch) return;
 
-      const element = elementRef.current;
-      if (element && startFrom) {
+      const { startFrom } = optionsRef.current;
+      if (startFrom) {
         const rect = element.getBoundingClientRect();
         const withinLeft =
           startFrom.left === undefined ||
@@ -87,12 +86,9 @@ export function useSwipeGesture(
         currentY: touch.clientY,
         isScrolling: null,
       };
-    },
-    [elementRef, startFrom],
-  );
+    };
 
-  const handleTouchMove = useCallback(
-    (e: TouchEvent) => {
+    const handleTouchMove = (e: TouchEvent) => {
       if (!touchState.current) return;
 
       const touch = e.touches[0];
@@ -101,12 +97,10 @@ export function useSwipeGesture(
       touchState.current.currentX = touch.clientX;
       touchState.current.currentY = touch.clientY;
 
-      // Determine if this is a scroll or swipe on first significant move
       if (touchState.current.isScrolling === null) {
         const deltaX = Math.abs(touch.clientX - touchState.current.startX);
         const deltaY = Math.abs(touch.clientY - touchState.current.startY);
 
-        // Need at least 10px movement to determine direction
         if (deltaX > 10 || deltaY > 10) {
           if (deltaX > deltaY * DIRECTION_LOCK_RATIO) {
             touchState.current.isScrolling = false;
@@ -116,7 +110,9 @@ export function useSwipeGesture(
         }
       }
 
-      // If determined to be horizontal swipe and preventScroll is enabled, prevent default
+      const { preventScroll = true, enabledDirections = DEFAULT_DIRECTIONS } =
+        optionsRef.current;
+
       if (
         preventScroll &&
         touchState.current.isScrolling === false &&
@@ -125,85 +121,83 @@ export function useSwipeGesture(
       ) {
         e.preventDefault();
       }
-    },
-    [preventScroll, enabledDirections],
-  );
+    };
 
-  const handleTouchEnd = useCallback(() => {
-    if (!touchState.current) return;
+    const handleTouchEnd = () => {
+      if (!touchState.current) return;
 
-    // Don't trigger swipe if it's a scroll gesture
-    if (touchState.current.isScrolling === true) {
-      touchState.current = null;
-      return;
-    }
+      if (touchState.current.isScrolling === true) {
+        touchState.current = null;
+        return;
+      }
 
-    const deltaX = touchState.current.currentX - touchState.current.startX;
-    const deltaY = touchState.current.currentY - touchState.current.startY;
-    const deltaTime = Math.max(1, Date.now() - touchState.current.startTime); // Prevent division by zero
+      const {
+        threshold = 50,
+        velocityThreshold = 0.3,
+        enabledDirections = DEFAULT_DIRECTIONS,
+        onSwipe,
+        onSwipeLeft,
+        onSwipeRight,
+        onSwipeUp,
+        onSwipeDown,
+      } = optionsRef.current;
 
-    const absX = Math.abs(deltaX);
-    const absY = Math.abs(deltaY);
-    const velocity = Math.max(absX, absY) / deltaTime;
+      const deltaX = touchState.current.currentX - touchState.current.startX;
+      const deltaY = touchState.current.currentY - touchState.current.startY;
+      const deltaTime = Math.max(1, Date.now() - touchState.current.startTime);
 
-    let direction: SwipeDirection | null = null;
+      const absX = Math.abs(deltaX);
+      const absY = Math.abs(deltaY);
+      const velocity = Math.max(absX, absY) / deltaTime;
 
-    // Horizontal swipe detection
-    if (absX > absY * DIRECTION_LOCK_RATIO) {
-      if (absX > threshold || velocity > velocityThreshold) {
-        if (deltaX > 0 && enabledDirections.includes("right")) {
-          direction = "right";
-          onSwipeRight?.();
-        } else if (deltaX < 0 && enabledDirections.includes("left")) {
-          direction = "left";
-          onSwipeLeft?.();
+      let direction: SwipeDirection | null = null;
+
+      if (absX > absY * DIRECTION_LOCK_RATIO) {
+        if (absX > threshold || velocity > velocityThreshold) {
+          if (deltaX > 0 && enabledDirections.includes("right")) {
+            direction = "right";
+            onSwipeRight?.();
+          } else if (deltaX < 0 && enabledDirections.includes("left")) {
+            direction = "left";
+            onSwipeLeft?.();
+          }
+        }
+      } else if (absY > absX * DIRECTION_LOCK_RATIO) {
+        if (absY > threshold || velocity > velocityThreshold) {
+          if (deltaY > 0 && enabledDirections.includes("down")) {
+            direction = "down";
+            onSwipeDown?.();
+          } else if (deltaY < 0 && enabledDirections.includes("up")) {
+            direction = "up";
+            onSwipeUp?.();
+          }
         }
       }
-    }
-    // Vertical swipe detection
-    else if (absY > absX * DIRECTION_LOCK_RATIO) {
-      if (absY > threshold || velocity > velocityThreshold) {
-        if (deltaY > 0 && enabledDirections.includes("down")) {
-          direction = "down";
-          onSwipeDown?.();
-        } else if (deltaY < 0 && enabledDirections.includes("up")) {
-          direction = "up";
-          onSwipeUp?.();
-        }
+
+      if (direction) {
+        onSwipe?.(direction);
       }
-    }
 
-    if (direction) {
-      onSwipe?.(direction);
-    }
-
-    touchState.current = null;
-  }, [
-    threshold,
-    velocityThreshold,
-    enabledDirections,
-    onSwipe,
-    onSwipeLeft,
-    onSwipeRight,
-    onSwipeUp,
-    onSwipeDown,
-  ]);
-
-  useEffect(() => {
-    const element = elementRef.current;
-    if (!element || !enabled) {
       touchState.current = null;
-      return;
-    }
+    };
+
+    const handleTouchCancel = () => {
+      touchState.current = null;
+    };
 
     element.addEventListener("touchstart", handleTouchStart, { passive: true });
     element.addEventListener("touchmove", handleTouchMove, { passive: false });
     element.addEventListener("touchend", handleTouchEnd, { passive: true });
+    element.addEventListener("touchcancel", handleTouchCancel, {
+      passive: true,
+    });
 
     return () => {
+      touchState.current = null;
       element.removeEventListener("touchstart", handleTouchStart);
       element.removeEventListener("touchmove", handleTouchMove);
       element.removeEventListener("touchend", handleTouchEnd);
+      element.removeEventListener("touchcancel", handleTouchCancel);
     };
-  }, [elementRef, enabled, handleTouchStart, handleTouchMove, handleTouchEnd]);
+  }, [elementRef, enabled]);
 }

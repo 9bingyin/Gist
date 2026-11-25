@@ -1,32 +1,40 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
+import { Pencil, RefreshCw, Rss, Trash2 } from "lucide-react";
 import { useFeeds } from "@/hooks/useFeeds";
+import {
+  REFRESH_STATUS_QUERY_KEY,
+  useRefreshStatusQuery,
+} from "@/hooks/useRefreshStatus";
 import { deleteFeeds, refreshAllFeeds, ApiError } from "@/api";
 import { cn } from "@/lib/utils";
-import {
-  formatDate,
-  formatDateTime,
-  compareStrings,
-  getSortIcon,
-} from "@/lib/table-utils";
+import { formatDate, formatDateTime, compareStrings } from "@/lib/table-utils";
 import { EditFeedDialog } from "./EditFeedDialog";
+import {
+  SortableTableHeader,
+  TableCheckbox,
+  type SortDirection,
+} from "./SortableTableHeader";
 import type { Feed } from "@/types/api";
 
 type SortField = "title" | "createdAt" | "updatedAt";
-type SortDirection = "asc" | "desc";
 
 export function FeedsSettings() {
   const { t } = useTranslation();
   const { data: feeds = [], isLoading, refetch } = useFeeds();
+  const { data: refreshStatus } = useRefreshStatusQuery();
   const queryClient = useQueryClient();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isTriggeringRefresh, setIsTriggeringRefresh] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sortField, setSortField] = useState<SortField>("title");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [editingFeed, setEditingFeed] = useState<Feed | null>(null);
+
+  const isRefreshing =
+    isTriggeringRefresh || Boolean(refreshStatus?.isRefreshing);
 
   const sortedFeeds = useMemo(() => {
     return [...feeds].sort((a, b) => {
@@ -51,13 +59,6 @@ export function FeedsSettings() {
     }
   };
 
-  const renderSortIcon = (field: SortField) => {
-    const icon = getSortIcon(sortField, field, sortDirection);
-    const className =
-      sortField === field ? "ml-1" : "ml-1 text-muted-foreground/50";
-    return <span className={className}>{icon}</span>;
-  };
-
   const handleSelectAll = () => {
     if (selectedIds.size === feeds.length) {
       setSelectedIds(new Set());
@@ -78,20 +79,28 @@ export function FeedsSettings() {
 
   const handleRefreshAll = async () => {
     setError(null);
-    setIsRefreshing(true);
+    setIsTriggeringRefresh(true);
     try {
       await refreshAllFeeds();
-      queryClient.invalidateQueries({ queryKey: ["entries"] });
-      queryClient.invalidateQueries({ queryKey: ["unreadCounts"] });
-      queryClient.invalidateQueries({ queryKey: ["feeds"] });
+      // Immediately re-fetch refreshStatus so fast 1500ms polling and UI feedback start right away
+      queryClient.setQueryData(REFRESH_STATUS_QUERY_KEY, (old: unknown) => ({
+        ...(typeof old === "object" && old !== null ? old : {}),
+        isRefreshing: true,
+      }));
+      await queryClient.invalidateQueries({
+        queryKey: REFRESH_STATUS_QUERY_KEY,
+      });
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
         setError(t("feeds.refresh_in_progress"));
+        await queryClient.invalidateQueries({
+          queryKey: REFRESH_STATUS_QUERY_KEY,
+        });
       } else {
         setError(t("feeds.refresh_failed"));
       }
     } finally {
-      setIsRefreshing(false);
+      setIsTriggeringRefresh(false);
     }
   };
 
@@ -104,6 +113,7 @@ export function FeedsSettings() {
       await deleteFeeds(Array.from(selectedIds));
       setSelectedIds(new Set());
       await refetch();
+      queryClient.invalidateQueries({ queryKey: ["entries"] });
       queryClient.invalidateQueries({ queryKey: ["folders"] });
       queryClient.invalidateQueries({ queryKey: ["unreadCounts"] });
     } catch {
@@ -117,6 +127,24 @@ export function FeedsSettings() {
   const isPartialSelected =
     selectedIds.size > 0 && selectedIds.size < feeds.length;
 
+  const columns = useMemo(
+    () => [
+      { field: "title" as const, label: t("feeds.name") },
+      {
+        field: "createdAt" as const,
+        label: t("feeds.subscribe_date"),
+        className: "hidden sm:table-cell w-28",
+      },
+      {
+        field: "updatedAt" as const,
+        label: t("feeds.last_update"),
+        className: "hidden sm:table-cell w-36",
+      },
+      { label: t("feeds.actions"), className: "w-16" },
+    ],
+    [t],
+  );
+
   if (isLoading) {
     return (
       <div className="flex h-40 items-center justify-center">
@@ -127,8 +155,7 @@ export function FeedsSettings() {
 
   return (
     <div className="space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-muted-foreground">
           {t("feeds.subscribed_feeds", { count: feeds.length })}
         </h3>
@@ -143,19 +170,9 @@ export function FeedsSettings() {
               "disabled:cursor-not-allowed disabled:opacity-50",
             )}
           >
-            <svg
+            <RefreshCw
               className={cn("size-4", isRefreshing && "animate-spin")}
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-              />
-            </svg>
+            />
             <span>
               {isRefreshing ? t("feeds.refreshing") : t("feeds.refresh_all")}
             </span>
@@ -170,19 +187,7 @@ export function FeedsSettings() {
               "disabled:cursor-not-allowed disabled:opacity-50",
             )}
           >
-            <svg
-              className="size-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-              />
-            </svg>
+            <Trash2 className="size-4" />
             <span>
               {isDeleting
                 ? t("feeds.deleting")
@@ -192,88 +197,29 @@ export function FeedsSettings() {
         </div>
       </div>
 
-      {/* Error message */}
       {error && (
         <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
           {error}
         </div>
       )}
 
-      {/* Table */}
       {feeds.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border bg-muted/20 p-8 text-center">
           <p className="text-sm text-muted-foreground">{t("feeds.no_feeds")}</p>
         </div>
       ) : (
         <div className="overflow-x-auto rounded-lg border border-border">
-          <table className="w-full min-w-[600px] text-sm">
-            <thead className="bg-muted/50">
-              <tr>
-                <th className="w-10 px-3 py-2 text-left">
-                  <button
-                    type="button"
-                    onClick={handleSelectAll}
-                    className={cn(
-                      "flex size-4 items-center justify-center rounded border transition-colors",
-                      isAllSelected
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : isPartialSelected
-                          ? "border-primary bg-primary/50 text-primary-foreground"
-                          : "border-border bg-background hover:border-primary/50",
-                    )}
-                  >
-                    {(isAllSelected || isPartialSelected) && (
-                      <svg
-                        className="size-3"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={3}
-                          d={isPartialSelected ? "M5 12h14" : "M5 13l4 4L19 7"}
-                        />
-                      </svg>
-                    )}
-                  </button>
-                </th>
-                <th className="px-3 py-2 text-left font-medium text-muted-foreground">
-                  <button
-                    type="button"
-                    onClick={() => handleSort("title")}
-                    className="flex items-center hover:text-foreground transition-colors"
-                  >
-                    {t("feeds.name")}
-                    {renderSortIcon("title")}
-                  </button>
-                </th>
-                <th className="hidden sm:table-cell w-28 px-3 py-2 text-left font-medium text-muted-foreground">
-                  <button
-                    type="button"
-                    onClick={() => handleSort("createdAt")}
-                    className="flex items-center hover:text-foreground transition-colors"
-                  >
-                    {t("feeds.subscribe_date")}
-                    {renderSortIcon("createdAt")}
-                  </button>
-                </th>
-                <th className="hidden sm:table-cell w-36 px-3 py-2 text-left font-medium text-muted-foreground">
-                  <button
-                    type="button"
-                    onClick={() => handleSort("updatedAt")}
-                    className="flex items-center hover:text-foreground transition-colors"
-                  >
-                    {t("feeds.last_update")}
-                    {renderSortIcon("updatedAt")}
-                  </button>
-                </th>
-                <th className="w-16 px-3 py-2 text-left font-medium text-muted-foreground">
-                  {t("feeds.actions")}
-                </th>
-              </tr>
-            </thead>
+          <table className="w-full text-sm">
+            <SortableTableHeader
+              columns={columns}
+              sortField={sortField}
+              sortDirection={sortDirection}
+              onSort={handleSort}
+              isAllSelected={isAllSelected}
+              isPartialSelected={isPartialSelected}
+              onSelectAll={handleSelectAll}
+              selectAllLabel={t("feeds.name")}
+            />
             <tbody className="divide-y divide-border">
               {sortedFeeds.map((feed: Feed) => {
                 const isSelected = selectedIds.has(feed.id);
@@ -286,32 +232,11 @@ export function FeedsSettings() {
                     )}
                   >
                     <td className="px-3 py-2">
-                      <button
-                        type="button"
-                        onClick={() => handleSelect(feed.id)}
-                        className={cn(
-                          "flex size-4 items-center justify-center rounded border transition-colors",
-                          isSelected
-                            ? "border-primary bg-primary text-primary-foreground"
-                            : "border-border bg-background hover:border-primary/50",
-                        )}
-                      >
-                        {isSelected && (
-                          <svg
-                            className="size-3"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={3}
-                              d="M5 13l4 4L19 7"
-                            />
-                          </svg>
-                        )}
-                      </button>
+                      <TableCheckbox
+                        checked={isSelected}
+                        onToggle={() => handleSelect(feed.id)}
+                        ariaLabel={feed.title}
+                      />
                     </td>
                     <td className="max-w-[200px] px-3 py-2">
                       <div className="flex items-center gap-2">
@@ -323,19 +248,7 @@ export function FeedsSettings() {
                           />
                         ) : (
                           <div className="flex size-4 shrink-0 items-center justify-center rounded bg-muted text-muted-foreground">
-                            <svg
-                              className="size-3"
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={1.5}
-                                d="M6 5c7.18 0 13 5.82 13 13M6 11a7 7 0 017 7m-6 0a1 1 0 11-2 0 1 1 0 012 0z"
-                              />
-                            </svg>
+                            <Rss className="size-3" strokeWidth={1.5} />
                           </div>
                         )}
                         <span
@@ -361,20 +274,9 @@ export function FeedsSettings() {
                           "text-muted-foreground hover:bg-muted hover:text-foreground",
                         )}
                         title={t("feeds.edit")}
+                        aria-label={`${t("feeds.edit")} ${feed.title}`}
                       >
-                        <svg
-                          className="size-4"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                          />
-                        </svg>
+                        <Pencil className="size-4" />
                       </button>
                     </td>
                   </tr>
