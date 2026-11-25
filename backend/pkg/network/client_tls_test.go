@@ -1,8 +1,10 @@
 package network_test
 
 import (
+	"bytes"
 	"context"
 	"crypto/x509"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -11,6 +13,7 @@ import (
 
 	"github.com/Noooste/azuretls-client"
 	tls "github.com/Noooste/utls"
+	"github.com/andybalholm/brotli"
 	"github.com/stretchr/testify/require"
 
 	"gist/backend/pkg/network"
@@ -66,6 +69,50 @@ func TestClientFactory_NewAzureSession_IgnoresStaleDynamicPin(t *testing.T) {
 		require.NoError(t, response.CloseBody())
 	})
 	require.Equal(t, http.StatusOK, response.StatusCode)
+}
+
+func TestOpenAzureResponseBody_HTTP2Brotli(t *testing.T) {
+	const content = "<article><p>The Linux kernel disables LLVM Profi.</p></article>"
+	var compressed bytes.Buffer
+	writer := brotli.NewWriter(&compressed)
+	_, err := io.WriteString(writer, content)
+	require.NoError(t, err)
+	require.NoError(t, writer.Close())
+
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.Header().Set("Content-Encoding", "br")
+		_, _ = w.Write(compressed.Bytes())
+	}))
+	server.EnableHTTP2 = true
+	server.StartTLS()
+	t.Cleanup(server.Close)
+
+	roots := x509.NewCertPool()
+	roots.AddCert(server.Certificate())
+	factory := network.NewClientFactory(nil, nil)
+	session, err := factory.NewAzureSession(t.Context(), time.Second)
+	require.NoError(t, err)
+	t.Cleanup(session.Close)
+	baseModifyConfig := session.ModifyConfig
+	session.ModifyConfig = func(config *tls.Config) error {
+		if err := baseModifyConfig(config); err != nil {
+			return err
+		}
+		config.RootCAs = roots
+		return nil
+	}
+
+	response, err := session.Do(&azuretls.Request{Url: server.URL, IgnoreBody: true})
+	require.NoError(t, err)
+	body, err := network.OpenAzureResponseBody(response)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, body.Close()) })
+	require.Equal(t, 2, response.HttpResponse.ProtoMajor)
+	require.False(t, response.HttpResponse.Uncompressed)
+	decoded, err := io.ReadAll(body)
+	require.NoError(t, err)
+	require.Equal(t, content, string(decoded))
 }
 
 func TestClientFactory_NewAzureSession_RejectsUntrustedCertificate(t *testing.T) {

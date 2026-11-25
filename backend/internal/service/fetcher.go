@@ -22,6 +22,9 @@ const (
 	maxHTMLBodyBytes   int64 = 50 << 20 // 50 MB for readability HTML
 	maxIconBodyBytes   int64 = 20 << 20 // 20 MB for icons
 	maxAnubisBodyBytes int64 = 5 << 20  // 5 MB for Anubis challenge HTML
+
+	// Advertising gzip makes fhttp decode all HTTP/1 codings itself, buffering deflate entirely.
+	azureStreamAcceptEncoding = "br, zstd"
 )
 
 var errResponseTooLarge = errors.New("response body exceeds safety limit")
@@ -250,7 +253,9 @@ func doSingleAzureFetch(
 	cookie string,
 	anubisRetries int,
 ) (*azureFetchResult, string, bool, error) {
-	session, err := opts.ClientFactory.NewAzureSession(ctx, opts.Timeout)
+	fetchCtx, cancel := context.WithTimeout(ctx, opts.Timeout)
+	defer cancel()
+	session, err := opts.ClientFactory.NewAzureSession(fetchCtx, opts.Timeout)
 	if err != nil {
 		return nil, "", false, err
 	}
@@ -275,7 +280,11 @@ func doSingleAzureFetch(
 	if err != nil {
 		return nil, "", false, err
 	}
-	defer resp.CloseBody()
+	src, err := network.OpenAzureResponseBody(resp)
+	if err != nil {
+		return nil, "", false, err
+	}
+	defer src.Close()
 
 	effectiveURL := opts.URL
 	if strings.TrimSpace(resp.Url) != "" {
@@ -290,14 +299,9 @@ func doSingleAzureFetch(
 		readLimit = maxAnubisBodyBytes
 	}
 
-	var body []byte
-	if resp.RawBody != nil {
-		body, err = readLimited(resp.RawBody, readLimit)
-		if err != nil {
-			return nil, "", false, err
-		}
-	} else {
-		body = resp.Body
+	body, err := readLimited(src, readLimit)
+	if err != nil {
+		return nil, "", false, err
 	}
 
 	// Detect Anubis before failing on status code.

@@ -6,11 +6,13 @@ require (
 	codeberg.org/readeck/go-readability/v2 v2.1.1
 	github.com/Noooste/azuretls-client v1.13.2
 	github.com/Noooste/utls v1.3.21
+	github.com/andybalholm/brotli v1.2.1
 	github.com/anthropics/anthropic-sdk-go v1.45.0
 	github.com/bwmarrin/snowflake v0.3.0
 	github.com/gabriel-vasile/mimetype v1.4.13
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
+	github.com/klauspost/compress v1.18.7
 	github.com/labstack/echo/v4 v4.16.6
 	github.com/mmcdole/gofeed v1.3.0
 	github.com/openai/openai-go/v3 v3.37.0
@@ -32,7 +34,6 @@ require (
 	github.com/Noooste/uquic-go v1.0.5 // indirect
 	github.com/Noooste/websocket v1.0.3 // indirect
 	github.com/PuerkitoBio/goquery v1.12.0 // indirect
-	github.com/andybalholm/brotli v1.2.1 // indirect
 	github.com/andybalholm/cascadia v1.3.3 // indirect
 	github.com/araddon/dateparse v0.0.0-20210429162001-6b43995a97de // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
@@ -59,7 +60,6 @@ require (
 	github.com/google/gopacket v1.1.19 // indirect
 	github.com/invopop/jsonschema v0.13.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
-	github.com/klauspost/compress v1.18.7 // indirect
 	github.com/labstack/gommon v0.5.0 // indirect
 	github.com/mailru/easyjson v0.9.2 // indirect
 	github.com/mattn/go-colorable v0.1.15 // indirect

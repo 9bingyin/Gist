@@ -1,6 +1,8 @@
 package service_test
 
 import (
+	"bytes"
+	"compress/zlib"
 	"context"
 	"io"
 	"net/http"
@@ -20,13 +22,10 @@ var testPNGData = []byte{0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A}
 
 func readProxyResult(t *testing.T, res *service.ProxyResult) []byte {
 	t.Helper()
-	if res.Body != nil {
-		defer res.Body.Close()
-		data, err := io.ReadAll(res.Body)
-		require.NoError(t, err)
-		return data
-	}
-	return res.Data
+	defer res.Body.Close()
+	data, err := io.ReadAll(res.Body)
+	require.NoError(t, err)
+	return data
 }
 
 func TestBuildReferer(t *testing.T) {
@@ -136,6 +135,49 @@ func TestProxyService_FetchImage_UpstreamRejected(t *testing.T) {
 
 	_, err := svc.FetchImage(context.Background(), server.URL+"/img.png", "")
 	require.ErrorIs(t, err, service.ErrUpstreamRejected)
+}
+
+func TestProxyService_FetchImage_StreamsHTTP1Deflate(t *testing.T) {
+	image := append(bytes.Clone(testPNGData), make([]byte, 8192)...)
+	finish := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		w.Header().Set("Content-Encoding", "deflate")
+		writer := zlib.NewWriter(w)
+		defer writer.Close()
+		_, _ = writer.Write(image)
+		_ = writer.Flush()
+		w.(http.Flusher).Flush()
+		select {
+		case <-finish:
+		case <-r.Context().Done():
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+	svc := service.NewProxyService(network.NewClientFactory(nil, nil), nil)
+	result, err := svc.FetchImage(ctx, server.URL, "")
+	require.NoError(t, err)
+	close(finish)
+	require.Equal(t, image, readProxyResult(t, result))
+}
+
+func TestProxyService_FetchImage_BodyTimeout(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		_, _ = w.Write(testPNGData)
+		w.(http.Flusher).Flush()
+		<-r.Context().Done()
+	}))
+	t.Cleanup(server.Close)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
+	defer cancel()
+	svc := service.NewProxyService(network.NewClientFactory(nil, nil), nil)
+	_, err := svc.FetchImage(ctx, server.URL, "")
+	require.ErrorIs(t, err, service.ErrRequestTimeout)
 }
 
 func TestProxyService_FetchImage_Timeout(t *testing.T) {

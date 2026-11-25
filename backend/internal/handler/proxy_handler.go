@@ -4,7 +4,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 
@@ -68,32 +67,28 @@ func (h *ProxyHandler) ProxyImage(c echo.Context) error {
 		}
 	}
 
+	host := network.ExtractHost(imageURL)
 	result, err := h.proxyService.FetchImage(c.Request().Context(), imageURL, refererURL)
 	if err != nil {
-		logger.Warn("proxy image fetch failed", "module", "handler", "action", "fetch", "resource", "proxy", "result", "failed", "host", network.ExtractHost(imageURL), "error", err)
+		logger.Warn("proxy image fetch failed", "module", "handler", "action", "fetch", "resource", "proxy", "result", "failed", "host", host, "error", err)
 		return h.handleServiceError(c, err)
 	}
-	if result.Body != nil {
-		defer result.Body.Close()
-	}
+	defer result.Body.Close()
 
-	logger.Debug("proxy image fetched", "module", "handler", "action", "fetch", "resource", "proxy", "result", "ok", "host", network.ExtractHost(imageURL), "content_type", strings.ToLower(result.ContentType))
-	c.Response().Header().Set("Content-Type", result.ContentType)
-	c.Response().Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d", cacheMaxAge))
-	c.Response().Header().Set("X-Content-Type-Options", "nosniff")
+	header := c.Response().Header()
+	header.Set("Cache-Control", fmt.Sprintf("public, max-age=%d", cacheMaxAge))
+	header.Set("X-Content-Type-Options", "nosniff")
 	if strings.EqualFold(result.ContentType, "image/svg+xml") {
-		c.Response().Header().Set("Content-Security-Policy", svgContentSecurityPolicy)
+		header.Set("Content-Security-Policy", svgContentSecurityPolicy)
 	}
 
-	if result.Body != nil {
-		c.Response().WriteHeader(http.StatusOK)
-		if _, err := io.Copy(c.Response().Writer, result.Body); err != nil {
-			logger.Debug("proxy image stream write failed", "module", "handler", "action", "fetch", "resource", "proxy", "result", "failed", "host", network.ExtractHost(imageURL), "error", err)
-		}
-		return nil
+	if err := c.Stream(http.StatusOK, result.ContentType, result.Body); err != nil {
+		logger.Debug("proxy image stream failed", "module", "handler", "action", "fetch", "resource", "proxy", "result", "failed", "host", host, "error", err)
+		// Headers are already committed; abort so clients cannot cache a partial image as complete.
+		panic(http.ErrAbortHandler)
 	}
-
-	return c.Blob(http.StatusOK, result.ContentType, result.Data)
+	logger.Debug("proxy image fetched", "module", "handler", "action", "fetch", "resource", "proxy", "result", "ok", "host", host, "content_type", strings.ToLower(result.ContentType))
+	return nil
 }
 
 func (h *ProxyHandler) handleServiceError(c echo.Context, err error) error {

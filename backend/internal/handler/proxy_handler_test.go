@@ -3,13 +3,18 @@ package handler_test
 import (
 	"encoding/base64"
 	"errors"
+	"io"
 	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
+	"testing/iotest"
 
 	"gist/backend/internal/handler"
 	"gist/backend/internal/service"
 	"gist/backend/internal/service/mock"
 
+	"github.com/labstack/echo/v4/middleware"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
@@ -28,7 +33,7 @@ func TestProxyHandler_ProxyImage_Success(t *testing.T) {
 
 	mockService.EXPECT().
 		FetchImage(gomock.Any(), imageURL, refererURL).
-		Return(&service.ProxyResult{Data: []byte("image-data"), ContentType: "image/png"}, nil)
+		Return(&service.ProxyResult{Body: io.NopCloser(strings.NewReader("image-data")), ContentType: "image/png"}, nil)
 
 	e := newTestEcho()
 	req := newJSONRequest(http.MethodGet, "/proxy/image/"+encoded+"?ref="+refEncoded, nil)
@@ -53,11 +58,11 @@ func TestProxyHandler_ProxyImage_SVGSecurityHeaders(t *testing.T) {
 
 	imageURL := "https://example.com/img.svg"
 	encoded := base64.URLEncoding.EncodeToString([]byte(imageURL))
-	svgData := []byte(`<svg xmlns="http://www.w3.org/2000/svg"></svg>`)
+	svgData := `<svg xmlns="http://www.w3.org/2000/svg"></svg>`
 
 	mockService.EXPECT().
 		FetchImage(gomock.Any(), imageURL, "").
-		Return(&service.ProxyResult{Data: svgData, ContentType: "image/svg+xml"}, nil)
+		Return(&service.ProxyResult{Body: io.NopCloser(strings.NewReader(svgData)), ContentType: "image/svg+xml"}, nil)
 
 	e := newTestEcho()
 	req := newJSONRequest(http.MethodGet, "/proxy/image/"+encoded, nil)
@@ -69,7 +74,29 @@ func TestProxyHandler_ProxyImage_SVGSecurityHeaders(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Equal(t, "image/svg+xml", rec.Header().Get("Content-Type"))
 	require.Equal(t, "default-src 'none'; style-src 'unsafe-inline'; script-src 'none'; sandbox", rec.Header().Get("Content-Security-Policy"))
-	require.Equal(t, string(svgData), rec.Body.String())
+	require.Equal(t, svgData, rec.Body.String())
+}
+
+func TestProxyHandler_ProxyImage_TruncatedStream(t *testing.T) {
+	mockService := mock.NewMockProxyService(gomock.NewController(t))
+	imageURL := "https://example.com/img.png"
+	encoded := base64.URLEncoding.EncodeToString([]byte(imageURL))
+	body := io.MultiReader(strings.NewReader(strings.Repeat("x", 8192)), iotest.ErrReader(io.ErrUnexpectedEOF))
+	mockService.EXPECT().FetchImage(gomock.Any(), imageURL, "").Return(&service.ProxyResult{
+		Body: io.NopCloser(body), ContentType: "image/png",
+	}, nil)
+
+	e := newTestEcho()
+	e.Use(middleware.Recover())
+	handler.NewProxyHandlerHelper(mockService).RegisterRoutes(e.Group(""))
+	server := httptest.NewServer(e)
+	t.Cleanup(server.Close)
+
+	resp, err := server.Client().Get(server.URL + "/proxy/image/" + encoded)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	_, err = io.ReadAll(resp.Body)
+	require.ErrorIs(t, err, io.ErrUnexpectedEOF)
 }
 
 func TestProxyHandler_ProxyImage_MissingEncoded(t *testing.T) {

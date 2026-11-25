@@ -37,7 +37,6 @@ var (
 )
 
 type ProxyResult struct {
-	Data        []byte
 	Body        io.ReadCloser
 	ContentType string
 }
@@ -58,25 +57,20 @@ func NewProxyService(clientFactory *network.ClientFactory, anubisSolver AnubisSo
 	}
 }
 
-type sessionStreamCloser struct {
-	reader  io.Reader
-	rawBody io.Closer
+type sessionStream struct {
+	io.Reader
+	body    io.ReadCloser
 	session *azuretls.Session
+	cancel  context.CancelFunc
 }
 
-func (s *sessionStreamCloser) Read(p []byte) (int, error) {
-	return s.reader.Read(p)
-}
-
-func (s *sessionStreamCloser) Close() error {
-	var err error
-	if s.rawBody != nil {
-		err = s.rawBody.Close()
+func (s *sessionStream) Close() error {
+	s.cancel()
+	defer s.session.Close()
+	if s.body != nil {
+		return s.body.Close()
 	}
-	if s.session != nil {
-		s.session.Close()
-	}
-	return err
+	return nil
 }
 
 func (s *proxyService) FetchImage(ctx context.Context, imageURL, refererURL string) (*ProxyResult, error) {
@@ -88,6 +82,7 @@ func (s *proxyService) FetchImage(ctx context.Context, imageURL, refererURL stri
 	referer := buildReferer(refererURL, parsedURL)
 	baseHeaders := azuretls.OrderedHeaders{
 		{"accept", "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"},
+		{"accept-encoding", azureStreamAcceptEncoding},
 		{"accept-language", "zh-CN,zh;q=0.9"},
 		{"referer", referer},
 		{"sec-ch-ua", config.ChromeSecChUa},
@@ -143,14 +138,17 @@ func (s *proxyService) doFetchOnce(
 	cookie string,
 	retryCount int,
 ) (*ProxyResult, string, bool, error) {
-	session, err := s.clientFactory.NewAzureSession(ctx, proxyTimeout)
+	fetchCtx, cancel := context.WithTimeout(ctx, proxyTimeout)
+	session, err := s.clientFactory.NewAzureSession(fetchCtx, proxyTimeout)
 	if err != nil {
-		return nil, "", false, fmt.Errorf("%w: %v", ErrFetchFailed, err)
+		cancel()
+		return nil, "", false, proxyFetchError(err)
 	}
-	keepSessionOpen := false
+	stream := &sessionStream{session: session, cancel: cancel}
+	handedOff := false
 	defer func() {
-		if !keepSessionOpen {
-			session.Close()
+		if !handedOff {
+			_ = stream.Close()
 		}
 	}()
 
@@ -174,20 +172,14 @@ func (s *proxyService) doFetchOnce(
 		if errors.Is(err, network.ErrBlockedAddress) || errors.Is(err, network.ErrInvalidURL) {
 			return nil, "", false, fmt.Errorf("%w: %v", ErrInvalidURL, err)
 		}
-		if isTimeoutError(err) {
-			logger.Warn("proxy fetch timeout", "module", "service", "action", "fetch", "resource", "proxy", "result", "failed", "host", host, "error", err)
-			return nil, "", false, fmt.Errorf("%w: %v", ErrRequestTimeout, err)
-		}
 		logger.Warn("proxy fetch failed", "module", "service", "action", "fetch", "resource", "proxy", "result", "failed", "host", host, "error", err)
-		return nil, "", false, fmt.Errorf("%w: %v", ErrFetchFailed, err)
+		return nil, "", false, proxyFetchError(err)
 	}
 
-	closeResp := true
-	defer func() {
-		if closeResp {
-			_ = resp.CloseBody()
-		}
-	}()
+	stream.body, err = network.OpenAzureResponseBody(resp)
+	if err != nil {
+		return nil, "", false, proxyFetchError(err)
+	}
 
 	effectiveURL := imageURL
 	if strings.TrimSpace(resp.Url) != "" {
@@ -202,14 +194,9 @@ func (s *proxyService) doFetchOnce(
 	// If response looks like HTML or a non-200 error, read a bounded buffer to check for Anubis first.
 	isLikelyHTML := strings.Contains(upstreamCT, "text/html") || strings.Contains(upstreamCT, "application/xhtml")
 	if resp.StatusCode != http.StatusOK || (isLikelyHTML && s.anubis != nil) {
-		var body []byte
-		if resp.RawBody != nil {
-			body, err = readLimited(resp.RawBody, maxAnubisBodyBytes)
-			if err != nil {
-				return nil, "", false, fmt.Errorf("%w: %v", ErrFetchFailed, err)
-			}
-		} else {
-			body = resp.Body
+		body, err := readLimited(stream.body, maxAnubisBodyBytes)
+		if err != nil {
+			return nil, "", false, proxyFetchError(err)
 		}
 
 		if s.anubis != nil {
@@ -240,31 +227,21 @@ func (s *proxyService) doFetchOnce(
 			logger.Warn("proxy invalid image", "module", "service", "action", "fetch", "resource", "proxy", "result", "failed", "host", host, "error", err)
 			return nil, "", false, err
 		}
-		return &ProxyResult{
-			Data:        body,
-			Body:        io.NopCloser(bytes.NewReader(body)),
-			ContentType: contentType,
-		}, "", false, nil
+		return &ProxyResult{Body: io.NopCloser(bytes.NewReader(body)), ContentType: contentType}, "", false, nil
 	}
 
 	// Streaming path for normal 200 image responses: sniff only the header prefix and stream the rest.
-	var src io.Reader
-	if resp.RawBody != nil {
-		src = resp.RawBody
-	} else {
-		src = bytes.NewReader(resp.Body)
-	}
-
+	var src io.Reader = stream.body
 	prefix, err := readAtMost(src, proxySniffBytes)
 	if err != nil {
-		return nil, "", false, fmt.Errorf("%w: %v", ErrFetchFailed, err)
+		return nil, "", false, proxyFetchError(err)
 	}
 
 	// Check for Anubis when server omitted Content-Type on an HTML challenge page.
 	if s.anubis != nil && bytes.Contains(prefix, []byte("anubis_challenge")) {
 		rest, err := readLimited(src, maxAnubisBodyBytes-int64(len(prefix)))
 		if err != nil {
-			return nil, "", false, fmt.Errorf("%w: %v", ErrFetchFailed, err)
+			return nil, "", false, proxyFetchError(err)
 		}
 		fullBody := append(prefix, rest...)
 		newCookie, anubisErr := trySolveAnubisChallenge(ctx, s.anubis, fullBody, effectiveURL, cookiesFromMap(resp.Cookies), requestHeaders, retryCount)
@@ -290,30 +267,27 @@ func (s *proxyService) doFetchOnce(
 	if err != nil && looksLikeXML(prefix, upstreamCT) {
 		// SVG files with long XML comments/headers may need a larger probe window.
 		more, readErr := readAtMost(src, proxyMaxSVGProbe-len(prefix))
-		if readErr == nil && len(more) > 0 {
-			prefix = append(prefix, more...)
-			contentType, err = detectProxyImageContentType(prefix)
+		if readErr != nil {
+			return nil, "", false, proxyFetchError(readErr)
 		}
+		prefix = append(prefix, more...)
+		contentType, err = detectProxyImageContentType(prefix)
 	}
 	if err != nil {
 		logger.Warn("proxy invalid image", "module", "service", "action", "fetch", "resource", "proxy", "result", "failed", "host", host, "error", err)
 		return nil, "", false, err
 	}
 
-	// Hand ownership of resp.RawBody and session to the caller via ProxyResult.Body.
-	closeResp = false
-	keepSessionOpen = true
+	stream.Reader = io.MultiReader(bytes.NewReader(prefix), src)
+	handedOff = true
+	return &ProxyResult{Body: stream, ContentType: contentType}, "", false, nil
+}
 
-	stream := &sessionStreamCloser{
-		reader:  io.MultiReader(bytes.NewReader(prefix), src),
-		rawBody: resp.RawBody,
-		session: session,
+func proxyFetchError(err error) error {
+	if isTimeoutError(err) {
+		return fmt.Errorf("%w: %w", ErrRequestTimeout, err)
 	}
-
-	return &ProxyResult{
-		Body:        stream,
-		ContentType: contentType,
-	}, "", false, nil
+	return fmt.Errorf("%w: %w", ErrFetchFailed, err)
 }
 
 func readAtMost(r io.Reader, n int) ([]byte, error) {

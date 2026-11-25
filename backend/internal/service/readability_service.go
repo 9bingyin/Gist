@@ -148,6 +148,7 @@ func (s *readabilityService) fetchWithChrome(ctx context.Context, targetURL stri
 
 	headers := azuretls.OrderedHeaders{
 		{"accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"},
+		{"accept-encoding", azureStreamAcceptEncoding},
 		{"accept-language", "zh-CN,zh;q=0.9"},
 		{"cache-control", "max-age=0"},
 		{"priority", "u=0, i"},
