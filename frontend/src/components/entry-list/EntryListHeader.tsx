@@ -89,9 +89,9 @@ export function EntryListHeader({
           className="flex size-8 items-center justify-center rounded-md transition-colors hover:bg-item-hover"
         >
           {unreadOnly ? (
-            <CircleFilledIcon className="size-5" />
+            <CircleFilledIcon className="size-4" />
           ) : (
-            <CircleOutlineIcon className="size-5" />
+            <CircleOutlineIcon className="size-4" />
           )}
         </button>
         <button
