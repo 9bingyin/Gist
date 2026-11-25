@@ -70,6 +70,17 @@ func TestNewRouter_SwaggerDisabled(t *testing.T) {
 	require.True(t, hasRoute(e, http.MethodGet, "/api/proxy/image/:encoded"))
 }
 
+func TestNewRouter_UsesDirectPeerIP(t *testing.T) {
+	e := newTestRouter(t, false)
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.RemoteAddr = "192.0.2.10:54321"
+	req.Header.Set(echo.HeaderXForwardedFor, "192.0.2.20")
+	req.Header.Set(echo.HeaderXRealIP, "192.0.2.30")
+
+	ctx := e.NewContext(req, httptest.NewRecorder())
+	require.Equal(t, "192.0.2.10", ctx.RealIP())
+}
+
 func TestNewRouter_LogoutRouteIsPublic(t *testing.T) {
 	e := newTestRouter(t, false)
 
